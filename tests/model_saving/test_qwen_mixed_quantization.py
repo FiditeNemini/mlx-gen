@@ -8,27 +8,27 @@ class QuantizableModule:
         return self
 
 
-def test_qwen_q4_keeps_conditioning_paths_unquantized():
+class Tensor:
+    def __init__(self, shape):
+        self.shape = shape
+
+
+def test_qwen_q4_uses_q8_image_modulation():
     module = QuantizableModule()
 
-    skipped_paths = [
+    assert QwenWeightDefinition.quantization_predicate("transformer_blocks.0.img_mod_linear", module, 4) == {"bits": 8}
+
+
+def test_qwen_q4_quantizes_bulk_and_small_transformer_paths():
+    module = QuantizableModule()
+
+    quantized_paths = [
         "img_in",
         "txt_in",
         "time_text_embed.timestep_embedder.linear_1",
         "time_text_embed.timestep_embedder.linear_2",
-        "transformer_blocks.0.img_mod_linear",
         "norm_out.linear",
         "proj_out",
-    ]
-
-    for path in skipped_paths:
-        assert QwenWeightDefinition.quantization_predicate(path, module, 4) is False
-
-
-def test_qwen_q4_quantizes_bulk_transformer_paths():
-    module = QuantizableModule()
-
-    quantized_paths = [
         "transformer_blocks.0.attn.to_q",
         "transformer_blocks.0.attn.add_v_proj",
         "transformer_blocks.0.img_ff.mlp_in",
@@ -73,13 +73,24 @@ def test_qwen_q4_loaded_legacy_layout_keeps_legacy_quantization_predicate():
     assert predicate("img_in", module, 4) is True
 
 
-def test_qwen_q4_loaded_mixed_layout_uses_mixed_quantization_predicate():
+def test_qwen_q4_loaded_img_mod_q8_layout_uses_mixed_quantization_predicate():
     module = QuantizableModule()
     weights = LoadedWeights(
         components={
             "transformer": {
-                "img_in": {"weight": object(), "bias": object()},
-                "transformer_blocks": [{"txt_mod_linear": {"weight": object(), "scales": object()}}],
+                "img_in": {"weight": Tensor((3072, 8)), "scales": Tensor((3072, 1))},
+                "transformer_blocks": [
+                    {
+                        "img_mod_linear": {
+                            "weight": Tensor((18432, 768)),
+                            "scales": Tensor((18432, 48)),
+                        },
+                        "txt_mod_linear": {
+                            "weight": Tensor((18432, 384)),
+                            "scales": Tensor((18432, 48)),
+                        },
+                    }
+                ],
             }
         },
         meta_data=MetaData(quantization_level=4),
@@ -87,17 +98,23 @@ def test_qwen_q4_loaded_mixed_layout_uses_mixed_quantization_predicate():
 
     predicate = QwenWeightDefinition.quantization_predicate_for_loaded_weights(weights=weights, bits=4)
 
-    assert predicate("img_in", module, 4) is False
+    assert predicate("img_in", module, 4) is True
+    assert predicate("transformer_blocks.0.img_mod_linear", module, 4) == {"bits": 8}
     assert predicate("transformer_blocks.0.txt_mod_linear", module, 4) is True
 
 
-def test_qwen_q4_loaded_post1_mixed_layout_keeps_txt_mod_unquantized():
+def test_qwen_q4_loaded_bf16_img_mod_layout_uses_bf16_img_mod_predicate():
     module = QuantizableModule()
     weights = LoadedWeights(
         components={
             "transformer": {
                 "img_in": {"weight": object(), "bias": object()},
-                "transformer_blocks": [{"txt_mod_linear": {"weight": object(), "bias": object()}}],
+                "transformer_blocks": [
+                    {
+                        "img_mod_linear": {"weight": object(), "bias": object()},
+                        "txt_mod_linear": {"weight": object(), "scales": object()},
+                    }
+                ],
             }
         },
         meta_data=MetaData(quantization_level=4),
@@ -106,5 +123,30 @@ def test_qwen_q4_loaded_post1_mixed_layout_keeps_txt_mod_unquantized():
     predicate = QwenWeightDefinition.quantization_predicate_for_loaded_weights(weights=weights, bits=4)
 
     assert predicate("img_in", module, 4) is False
+    assert predicate("transformer_blocks.0.img_mod_linear", module, 4) is False
+    assert predicate("transformer_blocks.0.txt_mod_linear", module, 4) is True
+
+
+def test_qwen_q4_loaded_post1_bf16_mixed_layout_keeps_txt_mod_unquantized():
+    module = QuantizableModule()
+    weights = LoadedWeights(
+        components={
+            "transformer": {
+                "img_in": {"weight": object(), "bias": object()},
+                "transformer_blocks": [
+                    {
+                        "img_mod_linear": {"weight": object(), "bias": object()},
+                        "txt_mod_linear": {"weight": object(), "bias": object()},
+                    }
+                ],
+            }
+        },
+        meta_data=MetaData(quantization_level=4),
+    )
+
+    predicate = QwenWeightDefinition.quantization_predicate_for_loaded_weights(weights=weights, bits=4)
+
+    assert predicate("img_in", module, 4) is False
+    assert predicate("transformer_blocks.0.img_mod_linear", module, 4) is False
     assert predicate("transformer_blocks.0.txt_mod_linear", module, 4) is False
     assert predicate("transformer_blocks.0.attn.to_q", module, 4) is True
