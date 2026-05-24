@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Qwen Image Edit q4 saving**: Use mixed q4 quantization for Qwen transformers by keeping conditioning, modulation, and output projections at higher precision while quantizing the bulk attention and feed-forward layers.
 - **FLUX.2 Klein Edit guidance**: Allow `--guidance > 1.0` for FLUX.2 Klein edits by checking the resolved FLUX.2 model config instead of requiring a base model name; defaults remain unchanged.
 
+### 🧰 DX & Maintenance
+
+- **AbstractVision package**: Publish this fork as `abstractvision-mflux` on PyPI while preserving the `mflux` Python module and CLI command names.
+
 ---
 
 ## [0.17.4] - 2026-03-28
