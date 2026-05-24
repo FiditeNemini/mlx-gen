@@ -17,7 +17,6 @@ def test_qwen_q4_keeps_conditioning_paths_unquantized():
         "time_text_embed.timestep_embedder.linear_1",
         "time_text_embed.timestep_embedder.linear_2",
         "transformer_blocks.0.img_mod_linear",
-        "transformer_blocks.0.txt_mod_linear",
         "norm_out.linear",
         "proj_out",
     ]
@@ -34,6 +33,7 @@ def test_qwen_q4_quantizes_bulk_transformer_paths():
         "transformer_blocks.0.attn.add_v_proj",
         "transformer_blocks.0.img_ff.mlp_in",
         "transformer_blocks.0.txt_ff.mlp_out",
+        "transformer_blocks.0.txt_mod_linear",
     ]
 
     for path in quantized_paths:

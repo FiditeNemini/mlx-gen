@@ -85,7 +85,7 @@ class QwenWeightDefinition:
         if path.startswith("time_text_embed."):
             return True
 
-        return ".img_mod_linear" in path or ".txt_mod_linear" in path
+        return ".img_mod_linear" in path
 
     @staticmethod
     def _should_use_mixed_q4(weights: LoadedWeights | None) -> bool:
