@@ -76,10 +76,35 @@ def test_qwen_q4_loaded_legacy_layout_keeps_legacy_quantization_predicate():
 def test_qwen_q4_loaded_mixed_layout_uses_mixed_quantization_predicate():
     module = QuantizableModule()
     weights = LoadedWeights(
-        components={"transformer": {"img_in": {"weight": object(), "bias": object()}}},
+        components={
+            "transformer": {
+                "img_in": {"weight": object(), "bias": object()},
+                "transformer_blocks": [{"txt_mod_linear": {"weight": object(), "scales": object()}}],
+            }
+        },
         meta_data=MetaData(quantization_level=4),
     )
 
     predicate = QwenWeightDefinition.quantization_predicate_for_loaded_weights(weights=weights, bits=4)
 
     assert predicate("img_in", module, 4) is False
+    assert predicate("transformer_blocks.0.txt_mod_linear", module, 4) is True
+
+
+def test_qwen_q4_loaded_post1_mixed_layout_keeps_txt_mod_unquantized():
+    module = QuantizableModule()
+    weights = LoadedWeights(
+        components={
+            "transformer": {
+                "img_in": {"weight": object(), "bias": object()},
+                "transformer_blocks": [{"txt_mod_linear": {"weight": object(), "bias": object()}}],
+            }
+        },
+        meta_data=MetaData(quantization_level=4),
+    )
+
+    predicate = QwenWeightDefinition.quantization_predicate_for_loaded_weights(weights=weights, bits=4)
+
+    assert predicate("img_in", module, 4) is False
+    assert predicate("transformer_blocks.0.txt_mod_linear", module, 4) is False
+    assert predicate("transformer_blocks.0.attn.to_q", module, 4) is True

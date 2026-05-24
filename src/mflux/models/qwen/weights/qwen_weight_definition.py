@@ -73,6 +73,9 @@ class QwenWeightDefinition:
     @staticmethod
     def quantization_predicate_for_loaded_weights(weights: LoadedWeights | None, bits: int | None):
         if bits == 4 and QwenWeightDefinition._should_use_mixed_q4(weights):
+            if QwenWeightDefinition._has_unquantized_txt_mod_linear(weights):
+                return QwenWeightDefinition._post1_mixed_q4_quantization_predicate
+
             return QwenWeightDefinition.quantization_predicate
 
         return QwenWeightDefinition._quantize_all_predicate
@@ -116,6 +119,31 @@ class QwenWeightDefinition:
             else:
                 return False
         return True
+
+    @staticmethod
+    def _has_unquantized_txt_mod_linear(weights: LoadedWeights | None) -> bool:
+        if weights is None:
+            return False
+
+        transformer = weights.components.get("transformer")
+        if not isinstance(transformer, dict):
+            return False
+
+        txt_mod_path = "transformer_blocks.0.txt_mod_linear"
+        return QwenWeightDefinition._has_nested_key(
+            transformer,
+            f"{txt_mod_path}.weight",
+        ) and not QwenWeightDefinition._has_nested_key(
+            transformer,
+            f"{txt_mod_path}.scales",
+        )
+
+    @staticmethod
+    def _post1_mixed_q4_quantization_predicate(path: str, module, bits: int | None = None) -> bool:
+        if bits == 4 and ".txt_mod_linear" in path:
+            return False
+
+        return QwenWeightDefinition.quantization_predicate(path, module, bits)
 
     @staticmethod
     def _quantize_all_predicate(path: str, module, bits: int | None = None) -> bool:
