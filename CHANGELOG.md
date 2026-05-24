@@ -28,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.17.5.post2] - 2026-05-25
+
+### 🐛 Bug Fixes
+
+- **Qwen Image q4 saving**: Keep Qwen image-stream modulation (`*.img_mod_linear`) in BF16 but quantize text-stream modulation (`*.txt_mod_linear`) with the rest of the q4 transformer. This preserves coherent Qwen q4 outputs while making newly saved q4 checkpoints smaller than the `0.17.5.post1` mixed-q4 layout.
+
+### 📝 Compatibility
+
+- Existing `0.17.5.post1` Qwen mixed-q4 checkpoints continue to load. Re-save Qwen Image / Qwen Image Edit q4 checkpoints with `0.17.5.post2` to get the smaller layout.
+
+---
+
 ## [0.17.5.post1] - 2026-05-24
 
 ### 🐛 Bug Fixes
