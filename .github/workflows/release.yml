@@ -1,52 +1,160 @@
-name: Create Release and Publish to PyPI
+name: Release
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
-      confirm:
-        description: 'Type "publish" to confirm release'
+      version:
+        description: "Version to validate or publish. Must match pyproject.toml."
         required: true
         type: string
+      publish:
+        description: "Publish to PyPI using trusted publishing."
+        required: true
+        type: boolean
+        default: false
+      publish_confirmation:
+        description: "Required when publish=true: publish-abstractvision-mflux-<version>"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  build:
+    name: Validate and build distributions
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: read
-
+    outputs:
+      version: ${{ steps.release-meta.outputs.version }}
+      should_publish: ${{ steps.release-meta.outputs.should_publish }}
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Need full history for git operations
-
-      - name: Validate confirmation
-        run: |
-          if [ "${{ github.event.inputs.confirm }}" != "publish" ]; then
-            echo "❌ Must type 'publish' to confirm release"
-            exit 1
-          fi
+          fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade uv twine toml requests
-          uv pip install --system -e . --no-deps
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-
-      - name: Run release script
+      - id: release-meta
+        name: Validate release metadata
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          INPUT_CONFIRMATION: ${{ inputs.publish_confirmation }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
-          python -m mflux.release.release_script
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          import tomllib
+          import urllib.error
+          import urllib.request
+
+          package_name = "abstractvision-mflux"
+          pyproject = tomllib.loads(Path("pyproject.toml").read_text())
+          project = pyproject["project"]
+          version = project["version"]
+          if project["name"] != package_name:
+              raise SystemExit(f"Expected package name {package_name!r}, got {project['name']!r}")
+
+          event_name = os.environ["GITHUB_EVENT_NAME"]
+          ref_type = os.environ["GITHUB_REF_TYPE"]
+          ref_name = os.environ["GITHUB_REF_NAME"]
+          input_version = os.environ.get("INPUT_VERSION") or version
+          input_publish = os.environ.get("INPUT_PUBLISH") == "true"
+          confirmation = os.environ.get("INPUT_CONFIRMATION") or ""
+
+          if input_version != version:
+              raise SystemExit(f"Input version {input_version!r} does not match pyproject.toml version {version!r}")
+
+          expected_tag = f"v{version}"
+          if ref_type == "tag" and ref_name != expected_tag:
+              raise SystemExit(f"Tag {ref_name!r} does not match expected tag {expected_tag!r}")
+
+          changelog = Path("CHANGELOG.md").read_text()
+          if f"## [{version}]" not in changelog:
+              raise SystemExit(f"CHANGELOG.md is missing a release entry for {version}")
+
+          should_publish = (event_name == "push" and ref_type == "tag") or input_publish
+          expected_confirmation = f"publish-{package_name}-{version}"
+          if input_publish and confirmation != expected_confirmation:
+              raise SystemExit(
+                  f"publish=true requires publish_confirmation={expected_confirmation!r}"
+              )
+
+          release_url = f"https://pypi.org/pypi/{package_name}/{version}/json"
+          version_exists = False
+          try:
+              with urllib.request.urlopen(release_url, timeout=15) as response:
+                  json.load(response)
+                  version_exists = True
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+
+          if should_publish and version_exists:
+              raise SystemExit(f"{package_name}=={version} already exists on PyPI")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"version={version}", file=output)
+              print(f"should_publish={str(should_publish).lower()}", file=output)
+
+          print(f"Package: {package_name}")
+          print(f"Version: {version}")
+          print(f"Should publish: {should_publish}")
+          print(f"PyPI version already exists: {version_exists}")
+          PY
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Check distributions
+        run: uvx twine check dist/*
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist/*
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: needs.build.outputs.should_publish == 'true'
+    environment:
+      name: pypi
+      url: https://pypi.org/project/abstractvision-mflux/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true
