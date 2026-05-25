@@ -65,6 +65,8 @@ class ModelCardSaver:
             "## Usage",
             "",
             "```bash",
+            "python -m pip install -U mlx-gen",
+            "",
             f"mlxgen download --model {repo_id}",
             "",
             "mlxgen generate \\",

@@ -2,6 +2,8 @@
 
 `mlxgen prepare` creates a `README.md` model card in the prepared model folder. The generated card cites the source model, mflux, MLX-Gen, the exact `mlx-gen` version used to generate the card, the quantization policy, and the default contributor attribution to [@lpalbou](https://huggingface.co/lpalbou).
 
+Generated cards include `python -m pip install -U mlx-gen` in the usage block so Hugging Face readers can copy and paste a complete baseline command without needing uv. Repository development and release workflows still use uv.
+
 Use `mlxgen prepare` before upload whenever you want to publish a quantized MLX-Gen folder. `mlxgen download` only fills the local Hugging Face cache and does not create an uploadable prepared folder.
 
 ## Prepare A Model Folder

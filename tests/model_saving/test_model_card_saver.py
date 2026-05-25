@@ -48,6 +48,7 @@ def test_model_card_for_qwen_q4_documents_mixed_policy(tmp_path):
     assert "- mixed-q4-q8" in card
     assert "q8 for Qwen `*.img_mod_linear` transformer modulation layers" in card
     assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card
+    assert "python -m pip install -U mlx-gen" in card
     assert "mlxgen download --model AbstractFramework/qwen-image-edit-2511-4bit" in card
     assert "not a Diffusers or Transformers `from_pretrained()` checkpoint" in card
     assert f"Generated with `mlx-gen {VersionUtil.get_mflux_version()}`" in card

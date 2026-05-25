@@ -33,7 +33,7 @@ mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantiz
 mlxgen download --model depth-pro
 ```
 
-`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local MLX-Gen model folder and writes a Hugging Face `README.md` model card that records the `mlx-gen` generator version. `mlxgen generate` does not accept `--path` for model preparation; use `--output` for generated image files.
+`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local MLX-Gen model folder and writes a Hugging Face `README.md` model card that records the `mlx-gen` generator version and includes `python -m pip install -U mlx-gen` for copy/pasteable public usage. `mlxgen generate` does not accept `--path` for model preparation; use `--output` for generated image files.
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands; it is not the authorization mechanism.
 

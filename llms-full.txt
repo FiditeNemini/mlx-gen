@@ -173,7 +173,7 @@ The q8 path was not changed by the mixed-q4 work. Qwen q8 uses the standard MLX-
 
 ## Hugging Face Publishing
 
-Prepared model folders include a generated Hugging Face `README.md` card. The card records the source model, compatibility notes, quantization policy, and exact `mlx-gen` version used to generate it. Upload the folder with a command such as:
+Prepared model folders include a generated Hugging Face `README.md` card. The card records the source model, compatibility notes, quantization policy, and exact `mlx-gen` version used to generate it. Generated cards include `python -m pip install -U mlx-gen` in the usage block for copy/pasteable public installation; repository development and release workflows still use uv. Upload the folder with a command such as:
 
 ```sh
 huggingface-cli upload AbstractFramework/qwen-image-edit-2511-4bit ./models/qwen-image-edit-2511-4bit .
