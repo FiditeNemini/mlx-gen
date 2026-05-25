@@ -359,7 +359,7 @@ Each checkpoint zip (e.g., `0000030_checkpoint.zip`) is a self-contained snapsho
 
 ## Output files
 
-Use `--output` to set the output filename. When generating multiple seeds or images, MFLUX appends suffixes automatically.
+Use `--output` to set the output filename. Generation replaces the requested output path by default. Use `--replace false` or `--no-replace` to preserve an existing file and write to the next suffixed filename.
 ```sh
 mflux-generate-z-image-turbo \
   --model z-image-turbo \

@@ -95,6 +95,30 @@ def test_fibo_edit_save_keeps_prompt_json_and_exports_metadata_separately(tmp_pa
     assert json.loads(metadata_path.read_text())["prompt"] == prompt
 
 
+def test_save_replaces_existing_output_by_default(tmp_path):
+    output_path = tmp_path / "generated.png"
+    Image.new("RGB", (8, 8), "black").save(output_path)
+
+    generated_image = GeneratedImage(
+        image=Image.new("RGB", (16, 16), "white"),
+        model_config=ModelConfig.qwen_image(),
+        seed=42,
+        prompt="test prompt",
+        steps=20,
+        guidance=3.5,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        height=16,
+        width=16,
+    )
+
+    generated_image.save(path=output_path)
+
+    assert Image.open(output_path).size == (16, 16)
+    assert not (tmp_path / "generated_1.png").exists()
+
+
 def test_fibo_edit_prompt_json_tracks_final_output_name_when_image_exists(tmp_path, capsys):
     output_path = tmp_path / "fibo_edit_output.png"
     output_path.write_bytes(b"existing image")
@@ -127,4 +151,4 @@ def test_fibo_edit_prompt_json_tracks_final_output_name_when_image_exists(tmp_pa
     assert final_prompt_path.exists()
     assert not (tmp_path / "fibo_edit_output.json").exists()
     assert json.loads(final_prompt_path.read_text()) == json.loads(prompt)
-    assert f"Output path exists; saving image to {final_output_path}" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""

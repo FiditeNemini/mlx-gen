@@ -66,14 +66,16 @@ def _save_edit_result(
             path=out_path,
             pixel_image=rgba_pil,
             export_json_metadata=args.metadata,
+            overwrite=args.replace,
         )
         if args.matte_output is not None:
             image.save(
                 path=args.matte_output.format(seed=seed),
                 export_json_metadata=False,
+                overwrite=args.replace,
             )
     else:
-        image.save(path=out_path, export_json_metadata=args.metadata)
+        image.save(path=out_path, export_json_metadata=args.metadata, overwrite=args.replace)
 
 
 def main():

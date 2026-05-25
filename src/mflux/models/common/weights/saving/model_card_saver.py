@@ -185,6 +185,55 @@ class ModelCardSaver:
                 ]
             )
 
+        if bits == 4 and "ernie" in terms:
+            return "\n".join(
+                [
+                    "This is an MLX q4 checkpoint for ERNIE Image Turbo. MLX-Gen uses full "
+                    "4-bit quantization for ERNIE modules where MLX supports quantization, "
+                    "without the Qwen-specific mixed q4/q8 policy:",
+                    "",
+                    "- q4 for quantizable ERNIE transformer modules.",
+                    "- q4 for quantizable ERNIE text-encoder modules.",
+                    "- q4 for quantizable ERNIE VAE attention modules.",
+                    "- BF16 for norms, convolutions, and other non-quantizable parameters.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for compatibility notes and measured ERNIE q4/q8 behavior.",
+                    "",
+                    "Prepared ERNIE folders contain the ordinary text-to-image generation stack. "
+                    "ERNIE Prompt Enhancer files are not bundled in this checkpoint.",
+                ]
+            )
+
+        if bits == 8 and "ernie" in terms:
+            return "\n".join(
+                [
+                    "This is an MLX q8 checkpoint for ERNIE Image Turbo. MLX-Gen uses "
+                    "8-bit quantization for ERNIE modules where MLX supports quantization:",
+                    "",
+                    "- q8 for quantizable ERNIE transformer modules.",
+                    "- q8 for quantizable ERNIE text-encoder modules.",
+                    "- q8 for quantizable ERNIE VAE attention modules.",
+                    "- BF16 for norms, convolutions, and other non-quantizable parameters.",
+                    "",
+                    "Current validation also supports full ERNIE q4 where MLX supports "
+                    "quantization; no mixed q4/q8 policy is required.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for compatibility notes and measured ERNIE q4/q8 behavior.",
+                    "",
+                    "Prepared ERNIE folders contain the ordinary text-to-image generation stack. "
+                    "ERNIE Prompt Enhancer files are not bundled in this checkpoint.",
+                ]
+            )
+
+        if bits is None and "ernie" in terms:
+            return (
+                "This checkpoint stores MLX-Gen ERNIE Image Turbo generation weights without an explicit "
+                "quantization level. Prepared ERNIE folders contain the ordinary text-to-image generation "
+                "stack; ERNIE Prompt Enhancer files are not bundled in this checkpoint."
+            )
+
         if bits == 8:
             section = (
                 "This is an MLX q8 checkpoint. Quantizable modules are saved at 8-bit where "

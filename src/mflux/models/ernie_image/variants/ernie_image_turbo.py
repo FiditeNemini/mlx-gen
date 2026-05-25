@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import mlx.core as mx
@@ -22,6 +23,7 @@ class ErnieImageTurbo(nn.Module):
     vae: ErnieImageVAE
     transformer: ErnieImageTransformer2DModel
     text_encoder: Mistral3TextEncoder
+    prompt_enhancer: nn.Module | None
 
     def __init__(
         self,
@@ -54,12 +56,22 @@ class ErnieImageTurbo(nn.Module):
         image_strength: float | None = None,
         scheduler: str | None = None,
         use_pe: bool = False,
+        pe_system_prompt: str | None = None,
+        pe_temperature: float = 0.6,
+        pe_top_p: float = 0.95,
+        pe_max_new_tokens: int | None = None,
     ) -> Image.Image:
         del image_path, image_strength, scheduler
         if use_pe:
-            raise NotImplementedError(
-                "ERNIE Prompt Enhancer is not ported to MLX-Gen yet. "
-                "Run with use_pe=False, or pre-enhance the prompt before calling generate_image()."
+            prompt = self._enhance_prompt(
+                prompt=prompt,
+                width=width,
+                height=height,
+                seed=seed,
+                system_prompt=pe_system_prompt,
+                temperature=pe_temperature,
+                top_p=pe_top_p,
+                max_new_tokens=pe_max_new_tokens,
             )
         guidance = 1.0 if guidance is None else float(guidance)
         config = Config(
@@ -146,6 +158,52 @@ class ErnieImageTurbo(nn.Module):
             num_valid = int(mx.sum(output.attention_mask[0]).item())
             text_hiddens.append(hidden[0, :num_valid, :])
         return text_hiddens
+
+    def _enhance_prompt(
+        self,
+        prompt: str,
+        width: int,
+        height: int,
+        seed: int,
+        system_prompt: str | None,
+        temperature: float,
+        top_p: float,
+        max_new_tokens: int | None,
+    ) -> str:
+        self._ensure_prompt_enhancer()
+        tokenizer = self.tokenizers["ernie_prompt_enhancer"].tokenizer
+        user_content = json.dumps({"prompt": prompt, "width": width, "height": height}, ensure_ascii=False)
+        messages = []
+        if system_prompt is not None:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_content})
+
+        input_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+        tokenized = tokenizer(
+            input_text,
+            add_special_tokens=False,
+            truncation=True,
+            padding=False,
+            max_length=tokenizer.model_max_length,
+        )
+        input_ids = mx.array([tokenized["input_ids"]], dtype=mx.int32)
+        output_ids = self.prompt_enhancer.generate(
+            input_ids=input_ids,
+            max_new_tokens=max_new_tokens or tokenizer.model_max_length,
+            eos_token_id=tokenizer.eos_token_id,
+            temperature=temperature,
+            top_p=top_p,
+            seed=seed,
+        )
+        generated_ids = output_ids[0, input_ids.shape[1] :].tolist()
+        if tokenizer.eos_token_id in generated_ids:
+            generated_ids = generated_ids[: generated_ids.index(tokenizer.eos_token_id)]
+        enhanced = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        return enhanced or prompt
+
+    def _ensure_prompt_enhancer(self) -> None:
+        if self.prompt_enhancer is None:
+            ErnieImageInitializer.init_prompt_enhancer(self)
 
     @staticmethod
     def _pad_text(text_hiddens: list[mx.array]) -> tuple[mx.array, mx.array]:

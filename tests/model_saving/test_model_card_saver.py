@@ -111,13 +111,38 @@ def test_model_card_for_ernie_documents_bf16_usage(tmp_path):
     assert "base_model: baidu/ERNIE-Image-Turbo" in card
     assert "license: apache-2.0" in card
     assert "- ernie-image-turbo" in card
-    assert "This checkpoint stores MLX-Gen weights without an explicit quantization level." in card
+    assert "This checkpoint stores MLX-Gen ERNIE Image Turbo generation weights" in card
+    assert "Prompt Enhancer files are not bundled" in card
     assert "--width 512" in card
     assert "--height 512" in card
     assert "--steps 8" in card
     assert "--guidance 1" in card
     assert "Prepared and contributed by" in card
     assert "Quantized and contributed by" not in card
+
+
+def test_model_card_for_ernie_q4_documents_full_quantization_policy(tmp_path):
+    card = ModelCardSaver.render_model_card(str(tmp_path / "ernie-image-turbo-4bit"), ErnieImageTurbo(), 4)
+
+    assert "This is an MLX q4 checkpoint for ERNIE Image Turbo." in card
+    assert "without the Qwen-specific mixed q4/q8 policy" in card
+    assert "q4 for quantizable ERNIE transformer modules" in card
+    assert "q4 for quantizable ERNIE text-encoder modules" in card
+    assert "q4 for quantizable ERNIE VAE attention modules" in card
+    assert "Prompt Enhancer files are not bundled" in card
+
+
+def test_model_card_for_ernie_q8_mentions_q4_is_supported_without_mixed_policy(tmp_path):
+    card = ModelCardSaver.render_model_card(str(tmp_path / "ernie-image-turbo-8bit"), ErnieImageTurbo(), 8)
+
+    assert "This is an MLX q8 checkpoint" in card
+    assert "q8 for quantizable ERNIE transformer modules" in card
+    assert "q8 for quantizable ERNIE text-encoder modules" in card
+    assert "q8 for quantizable ERNIE VAE attention modules" in card
+    assert "full ERNIE q4 where MLX supports quantization" in card
+    assert "no mixed q4/q8 policy is required" in card
+    assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card
+    assert "Prompt Enhancer files are not bundled" in card
 
 
 def test_model_card_for_qwen_q8_explains_q4_policy_is_not_used(tmp_path):

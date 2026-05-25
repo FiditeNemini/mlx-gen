@@ -57,7 +57,11 @@ def main():
                 heatmap_layer_indices=args.heatmap_layer_indices,
             )
             # 4. Save the image and heatmap
-            image.save_with_heatmap(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
+            image.save_with_heatmap(
+                path=args.output.format(seed=seed),
+                export_json_metadata=args.metadata,
+                overwrite=args.replace,
+            )
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)
     finally:

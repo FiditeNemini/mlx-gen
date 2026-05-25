@@ -250,6 +250,32 @@ def test_model_arg_not_in_file(mflux_generate_parser, mflux_generate_minimal_arg
 
 
 @pytest.mark.fast
+def test_replace_defaults_to_true(mflux_generate_parser, mflux_generate_minimal_argv):
+    with patch("sys.argv", mflux_generate_minimal_argv):
+        args = mflux_generate_parser.parse_args()
+
+    assert args.replace is True
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("value", ["true", "1", "yes", "on"])
+def test_replace_accepts_true_values(mflux_generate_parser, mflux_generate_minimal_argv, value):
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--replace", value]):
+        args = mflux_generate_parser.parse_args()
+
+    assert args.replace is True
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("flag", [["--replace", "false"], ["--no-replace"]])
+def test_replace_accepts_false_values(mflux_generate_parser, mflux_generate_minimal_argv, flag):
+    with patch("sys.argv", mflux_generate_minimal_argv + flag):
+        args = mflux_generate_parser.parse_args()
+
+    assert args.replace is False
+
+
+@pytest.mark.fast
 def test_model_arg_in_file(mflux_generate_parser, mflux_generate_minimal_argv, base_metadata_dict, temp_dir):
     metadata_file = temp_dir / "model.json"
     with metadata_file.open("wt") as m:

@@ -22,8 +22,8 @@ outside chat history.
 1. Finish the [model integration roadmap](planned/0001_model_integration_roadmap.md) in priority
    order, starting with automated publication audits, supported q4/q8 validation, and
    gated-derivative hygiene.
-2. Continue ERNIE-Image/Turbo after the initial BF16 Turbo text-to-image port: add stronger
-   Diffusers parity tests, Prompt Enhancer scope, non-turbo validation, and q4/q8 research.
+2. Continue ERNIE-Image/Turbo after the Turbo text-to-image, Prompt Enhancer, and q4/q8
+   validation work: add stronger Diffusers parity tests and non-turbo validation.
 3. Treat Wan2.2 TI2V 5B as the first serious T2V/I2V backend candidate, with SeedVR2 as the
    lower-risk existing-code video utility track.
 
@@ -61,5 +61,6 @@ No deprecated backlog items yet.
 - Added 2026-05-25 collection follow-up: several q8 and non-turbo Z-Image repos still need to be
   added to the Hugging Face `AbstractFramework / mlx-gen` collection once collection write
   permission is available.
-- Added 2026-05-25 ERNIE follow-up: initial ERNIE Image Turbo BF16 text-to-image support exists;
-  remaining work is parity coverage, Prompt Enhancer, non-turbo ERNIE-Image, and quantization.
+- Added 2026-05-25 ERNIE follow-up: ERNIE Image Turbo text-to-image support exists with BF16,
+  q8, q4, and optional Prompt Enhancer validation; remaining work is parity coverage and
+  non-turbo ERNIE-Image.

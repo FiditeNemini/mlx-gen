@@ -45,13 +45,25 @@ mlxgen generate \
 
 ## Output File Already Exists
 
-Generation commands do not overwrite an existing output path by default. If `--output image.png` already exists, MLX-Gen saves the new image as `image_1.png`, then `image_2.png`, and prints the final path.
+Generation commands replace the requested output path by default. If `--output image.png` already exists, MLX-Gen writes the new image to `image.png`.
 
-If the image you open has old dimensions or metadata, check the suffixed output path printed by the command.
+Use `--replace false` or `--no-replace` when you want to preserve an existing output file. In that mode, MLX-Gen writes the new image as `image_1.png`, then `image_2.png`, and continues silently.
 
-## ERNIE Rejects Image Inputs Or Prompt Enhancer
+## ERNIE Prompt Enhancer Files Are Missing
 
-MLX-Gen currently supports ERNIE Image Turbo as BF16 text-to-image generation. `--image`, `--images`, image-to-image/edit tasks, and `--use-prompt-enhancer` fail intentionally so applications do not accidentally run a different workflow from the one requested.
+`--use-prompt-enhancer` requires ERNIE's `pe/` and `pe_tokenizer/` files. The default ERNIE download skips those files to keep ordinary generation setup smaller.
+
+Run:
+
+```sh
+mlxgen download --model baidu/ERNIE-Image-Turbo --all-files
+```
+
+Then retry generation with `--use-prompt-enhancer`.
+
+## ERNIE Rejects Image Inputs
+
+MLX-Gen currently supports ERNIE Image Turbo as BF16, q8, or q4 text-to-image generation. `--image`, `--images`, and image-to-image/edit tasks fail intentionally so applications do not accidentally run a different workflow from the one requested.
 
 ## `generate --path` Fails
 

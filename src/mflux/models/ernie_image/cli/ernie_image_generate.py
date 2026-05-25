@@ -17,18 +17,33 @@ def main():
         "--use-prompt-enhancer",
         "--use-pe",
         action="store_true",
-        help="Use ERNIE's Prompt Enhancer. Not available in MLX-Gen yet.",
+        help="Use ERNIE's Prompt Enhancer. Requires a full ERNIE Image Turbo snapshot with pe/ files.",
+    )
+    parser.add_argument(
+        "--prompt-enhancer-system-prompt",
+        default=None,
+        help="Optional system prompt passed to ERNIE's Prompt Enhancer.",
+    )
+    parser.add_argument(
+        "--prompt-enhancer-temperature",
+        type=float,
+        default=0.6,
+        help="Sampling temperature for ERNIE's Prompt Enhancer. Default is 0.6.",
+    )
+    parser.add_argument(
+        "--prompt-enhancer-top-p",
+        type=float,
+        default=0.95,
+        help="Nucleus sampling top-p for ERNIE's Prompt Enhancer. Default is 0.95.",
+    )
+    parser.add_argument(
+        "--prompt-enhancer-max-new-tokens",
+        type=int,
+        default=None,
+        help="Maximum Prompt Enhancer tokens. Default is the PE tokenizer model_max_length.",
     )
     parser.add_output_arguments()
     args = parser.parse_args()
-
-    if args.quantize is not None:
-        parser.error("ERNIE quantized generation is not enabled yet. Use the BF16 source or prepared BF16 weights.")
-    if args.use_prompt_enhancer:
-        parser.error(
-            "ERNIE Prompt Enhancer is not ported to MLX-Gen yet. "
-            "Remove --use-prompt-enhancer, or pre-enhance the prompt before generation."
-        )
 
     if args.guidance is None:
         args.guidance = 1.0
@@ -66,8 +81,12 @@ def main():
                 num_inference_steps=args.steps,
                 negative_prompt=args.negative_prompt,
                 use_pe=args.use_prompt_enhancer,
+                pe_system_prompt=args.prompt_enhancer_system_prompt,
+                pe_temperature=args.prompt_enhancer_temperature,
+                pe_top_p=args.prompt_enhancer_top_p,
+                pe_max_new_tokens=args.prompt_enhancer_max_new_tokens,
             )
-            image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
+            image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)
     finally:

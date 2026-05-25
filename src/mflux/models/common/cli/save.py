@@ -36,8 +36,6 @@ def main():
         elif "z-image" in model_name_lower or "zimage" in model_name_lower:
             model_class = ZImage
         elif "ernie" in model_name_lower:
-            if args.quantize is not None:
-                parser.error("ERNIE quantized prepare is not enabled yet. Prepare BF16 weights without --quantize.")
             model_class = ErnieImageTurbo
         elif "flux2" in model_name_lower or "flux.2" in model_name_lower:
             model_class = Flux2Klein

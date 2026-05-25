@@ -69,6 +69,7 @@ def main():
                 image=image,
                 path=args.output.format(seed=seed),
                 export_json_metadata=args.metadata,
+                overwrite=args.replace,
             )
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)

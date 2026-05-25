@@ -46,6 +46,15 @@ def positive_float(value: str) -> float:
     return parsed
 
 
+def boolean_flag_value(value: str) -> bool:
+    normalized = value.lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"'{value}' is not a valid boolean value")
+
+
 # fmt: off
 class CommandLineParser(argparse.ArgumentParser):
 
@@ -168,6 +177,8 @@ class CommandLineParser(argparse.ArgumentParser):
     def add_output_arguments(self) -> None:
         self.add_argument("--metadata", action="store_true", help="Export image metadata as a JSON file.")
         self.add_argument("--output", type=str, default="image.png", help="The filename for the output image. Default is \"image.png\".")
+        self.add_argument("--replace", type=boolean_flag_value, nargs="?", const=True, default=True, help="Replace the target output file when it already exists. Use --replace false or --no-replace to keep the existing file and save to a suffixed path. Default is true.")
+        self.add_argument("--no-replace", action="store_false", dest="replace", help="Do not replace an existing output file; save to the next suffixed filename instead.")
         self.add_argument('--stepwise-image-output-dir', type=str, default=None, help='[EXPERIMENTAL] Output dir to write step-wise images and their final composite image to. This feature may change in future versions.')
 
     def add_image_outpaint_arguments(self, required=False) -> None:

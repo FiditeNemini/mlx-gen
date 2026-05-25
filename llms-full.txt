@@ -13,11 +13,11 @@ Some internals currently remain under `mflux.*`; new application code should use
 - `docs/architecture.md`: package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
 - `docs/api.md`: public `mlxgen` command surface, generation router, model-management commands, and Python integration boundary.
 - `docs/model-management.md`: cache-only runtime policy, `download` versus `prepare`, Depth Pro, and `DownloadRequiredError`.
-- `docs/quantization.md`: MLX-Gen prepared folder compatibility, Qwen mixed q4/q8 policy, and ERNIE BF16-only initial support.
+- `docs/quantization.md`: MLX-Gen prepared folder compatibility, Qwen mixed q4/q8 policy, and ERNIE q8/q4 validation.
 - `docs/huggingface-publishing.md`: generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - `docs/python-integration.md`: in-process use, AbstractVision integration, progress limitations, and threading guidance.
 - `docs/faq.md`: common questions about `prepare`, downloads, package naming, and compatibility.
-- `docs/troubleshooting.md`: missing files, local path classification, existing-output suffixes, `generate --path`, ERNIE small-resolution and unsupported-input behavior, LoRA, and `hf_transfer`.
+- `docs/troubleshooting.md`: missing files, local path classification, output replacement, `generate --path`, ERNIE Prompt Enhancer files, ERNIE small-resolution and unsupported-input behavior, LoRA, and `hf_transfer`.
 - `docs/release.md`: GitHub Release and PyPI trusted publishing workflow.
 - `ACKNOWLEDGEMENTS.md`: upstream mflux credit and post-fork maintainership.
 - `CONTRIBUTING.md`: development setup, checks, documentation expectations, and pull-request scope.
@@ -162,11 +162,11 @@ mlxgen generate \
   --output image.png
 ```
 
-For local ERNIE folders whose names cannot be classified, pass `--family ernie-image`. The ERNIE port is text-to-image only and uses BF16 source or prepared weights. Image inputs, image-to-image/edit tasks, Prompt Enhancer, and quantization are rejected until those paths are ported and validated. Width or height below 384px is not recommended because very small ERNIE outputs can crop or truncate subjects.
+For local ERNIE folders whose names cannot be classified, pass `--family ernie-image`. The ERNIE port is text-to-image only and supports BF16 source weights plus prepared q8/q4 folders. ERNIE Prompt Enhancer is available with `--use-prompt-enhancer` when a full source snapshot with `pe/` and `pe_tokenizer/` files is present. Image inputs and image-to-image/edit tasks are rejected until those paths are ported and validated. Width or height below 384px is not recommended because very small ERNIE outputs can crop or truncate subjects.
 
 `mlxgen generate` does not accept `--path` to create model folders. Use `mlxgen prepare --model ... --path ... --quantize ...` for model preparation and use `--output` to choose the generated image path.
 
-Generation commands do not overwrite an existing output file by default. If the requested `--output` path already exists, MLX-Gen saves the new image to the next suffixed path, such as `image_1.png`, and prints the final path.
+Generation commands replace the requested `--output` path by default. Use `--replace false` or `--no-replace` to preserve an existing file and save to the next suffixed path.
 
 ---
 
@@ -186,7 +186,7 @@ This Qwen policy applies to q4 prepared folders only, including Qwen Image and Q
 
 The q8 path was not changed by the mixed-q4 work. Qwen q8 uses the standard MLX-Gen/mflux quantization flow: quantizable modules are saved at 8-bit where supported, while VAE weights and non-quantizable layers remain BF16. Other model families use their existing model-specific quantization predicates.
 
-ERNIE Image Turbo quantization is intentionally disabled in the initial port. Use BF16 source or prepared weights and omit `--quantize`; ERNIE q4/q8 layouts will require separate validation before publication. Default ERNIE downloads fetch the BF16 generation components MLX-Gen currently uses and do not fetch the Prompt Enhancer model unless `mlxgen download --all-files` is requested.
+ERNIE Image Turbo supports BF16, q8, and q4 text-to-image generation. ERNIE q4 uses full MLX quantization for quantizable ERNIE transformer, text-encoder, and VAE attention modules; norms, convolutions, and other non-quantizable parameters remain BF16. Current validation does not require a Qwen-style mixed q4/q8 ERNIE policy. Default ERNIE downloads fetch the BF16 generation components MLX-Gen currently uses and do not fetch the Prompt Enhancer model unless `mlxgen download --all-files` is requested. Prepared ERNIE q8/q4 folders contain the ordinary text-to-image generation stack and do not bundle Prompt Enhancer files.
 
 ---
 
@@ -241,7 +241,7 @@ If a local path cannot be classified, add `--family`.
 
 If `generate --path` fails, use `mlxgen prepare --model ... --path ... --quantize ...` to create a model folder or `--output` to choose the generated image path.
 
-If the requested `--output` image already exists, MLX-Gen writes the new image to the next suffixed filename and prints that final path.
+If the requested `--output` image already exists, MLX-Gen replaces it by default. Use `--replace false` or `--no-replace` to write to the next suffixed filename instead.
 
 If a LoRA is missing, download it or pass a local `.safetensors` path. Missing user-requested LoRAs are required and are not silently ignored.
 

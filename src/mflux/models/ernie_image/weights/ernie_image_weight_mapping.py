@@ -122,3 +122,56 @@ class ErnieImageWeightMapping(WeightMapping):
                 from_pattern=["language_model.model.layers.{layer}.mlp.down_proj.weight"],
             ),
         ]
+
+    @staticmethod
+    def get_prompt_enhancer_mapping() -> list[WeightTarget]:
+        return [
+            WeightTarget(
+                to_pattern="embed_tokens.weight",
+                from_pattern=["model.embed_tokens.weight"],
+            ),
+            WeightTarget(
+                to_pattern="norm.weight",
+                from_pattern=["model.norm.weight"],
+            ),
+            WeightTarget(
+                to_pattern="lm_head.weight",
+                from_pattern=["lm_head.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.input_layernorm.weight",
+                from_pattern=["model.layers.{layer}.input_layernorm.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.post_attention_layernorm.weight",
+                from_pattern=["model.layers.{layer}.post_attention_layernorm.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.self_attn.q_proj.weight",
+                from_pattern=["model.layers.{layer}.self_attn.q_proj.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.self_attn.k_proj.weight",
+                from_pattern=["model.layers.{layer}.self_attn.k_proj.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.self_attn.v_proj.weight",
+                from_pattern=["model.layers.{layer}.self_attn.v_proj.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.self_attn.o_proj.weight",
+                from_pattern=["model.layers.{layer}.self_attn.o_proj.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.mlp.gate_proj.weight",
+                from_pattern=["model.layers.{layer}.mlp.gate_proj.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.mlp.up_proj.weight",
+                from_pattern=["model.layers.{layer}.mlp.up_proj.weight"],
+            ),
+            WeightTarget(
+                to_pattern="layers.{layer}.mlp.down_proj.weight",
+                from_pattern=["model.layers.{layer}.mlp.down_proj.weight"],
+            ),
+        ]

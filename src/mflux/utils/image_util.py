@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 class ImageUtil:
     @staticmethod
-    def resolve_output_path(path: str | Path, overwrite: bool = False) -> Path:
+    def resolve_output_path(path: str | Path, overwrite: bool = True) -> Path:
         file_path = Path(path)
         if overwrite:
             return file_path
@@ -231,7 +231,7 @@ class ImageUtil:
         path: str | Path,
         metadata: dict | None = None,
         export_json_metadata: bool = False,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> None:
         file_path = ImageUtil.resolve_output_path(path=path, overwrite=overwrite)
         file_path.parent.mkdir(parents=True, exist_ok=True)

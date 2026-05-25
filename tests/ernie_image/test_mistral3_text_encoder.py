@@ -1,15 +1,21 @@
 import math
+from types import SimpleNamespace
 
 import mlx.core as mx
 import numpy as np
 import pytest
 
+from mflux.models.ernie_image.ernie_image_initializer import ErnieImageInitializer
 from mflux.models.ernie_image.model.mistral3_text_encoder.attention import Mistral3Attention
+from mflux.models.ernie_image.model.mistral3_text_encoder.causal_lm import Mistral3CausalLM
 from mflux.models.ernie_image.model.mistral3_text_encoder.rope import Mistral3YarnRotaryEmbedding
 from mflux.models.ernie_image.model.mistral3_text_encoder.text_encoder import Mistral3TextEncoder
 from mflux.models.ernie_image.scheduler import ErnieImageScheduler
 from mflux.models.ernie_image.tokenizer import ErnieImageTokenizer
-from mflux.models.ernie_image.weights.ernie_image_weight_definition import ErnieImageWeightDefinition
+from mflux.models.ernie_image.weights.ernie_image_weight_definition import (
+    ErnieImagePromptEnhancerWeightDefinition,
+    ErnieImageWeightDefinition,
+)
 from mflux.models.ernie_image.weights.ernie_image_weight_mapping import ErnieImageWeightMapping
 
 
@@ -33,6 +39,11 @@ class DummyRawTokenizer:
         if add_special_tokens:
             ids = [self.bos_token_id, *ids]
         return {"input_ids": ids}
+
+
+class DummyQuantizableModule:
+    def to_quantized(self):
+        return self
 
 
 @pytest.mark.fast
@@ -178,6 +189,53 @@ def test_ernie_weight_definition_uses_custom_tokenizer():
     assert len(tokenizers) == 1
     assert tokenizer_definition.encoder_class is ErnieImageTokenizer
     assert tokenizer_definition.padding == "longest"
+
+
+@pytest.mark.fast
+def test_ernie_quantization_predicate_quantizes_supported_modules():
+    assert ErnieImageWeightDefinition.quantization_predicate("transformer.layers.0.mlp.up_proj", DummyQuantizableModule(), 4)
+    assert not ErnieImageWeightDefinition.quantization_predicate("transformer.layers.0.norm", object(), 4)
+
+
+@pytest.mark.fast
+def test_prompt_enhancer_definition_uses_pe_components():
+    component = ErnieImagePromptEnhancerWeightDefinition.get_components()[0]
+    tokenizer = ErnieImagePromptEnhancerWeightDefinition.get_tokenizers()[0]
+
+    assert component.name == "prompt_enhancer"
+    assert component.hf_subdir == "pe"
+    assert tokenizer.name == "ernie_prompt_enhancer"
+    assert tokenizer.hf_subdir == "pe_tokenizer"
+    assert {"pe/*.safetensors", "pe_tokenizer/*"}.issubset(
+        set(ErnieImagePromptEnhancerWeightDefinition.get_download_patterns())
+    )
+
+
+@pytest.mark.fast
+def test_prompt_enhancer_weight_mapping_uses_causal_lm_keys():
+    mapping = ErnieImageWeightMapping.get_prompt_enhancer_mapping()
+    targets = {target.to_pattern for target in mapping}
+
+    assert "embed_tokens.weight" in targets
+    assert "lm_head.weight" in targets
+    assert "layers.{layer}.self_attn.q_proj.weight" in targets
+
+
+@pytest.mark.fast
+def test_prompt_enhancer_local_path_missing_pe_fails_before_loading(tmp_path):
+    model = SimpleNamespace(model_path=str(tmp_path))
+
+    with pytest.raises(FileNotFoundError, match="Prompt Enhancer files were not found"):
+        ErnieImageInitializer.init_prompt_enhancer(model)
+
+
+@pytest.mark.fast
+def test_mistral3_causal_lm_argmax_sampling():
+    logits = mx.array([[0.1, 0.3, 0.2]], dtype=mx.float32)
+
+    next_token = Mistral3CausalLM._next_token(logits=logits, temperature=1.0, top_p=1.0)
+
+    assert next_token.tolist() == [[1]]
 
 
 @pytest.mark.fast

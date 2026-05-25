@@ -359,9 +359,25 @@ def test_ernie_rejects_edit_task(capsys):
     assert "text-to-image only" in capsys.readouterr().err
 
 
-def test_ernie_cli_rejects_prompt_enhancer_before_loading_model(monkeypatch, capsys):
+def test_ernie_cli_passes_prompt_enhancer_options(monkeypatch):
     from mflux.models.ernie_image.cli import ernie_image_generate
 
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeErnieImageTurbo:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(ernie_image_generate, "ErnieImageTurbo", FakeErnieImageTurbo)
+    monkeypatch.setattr(ernie_image_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -372,13 +388,21 @@ def test_ernie_cli_rejects_prompt_enhancer_before_loading_model(monkeypatch, cap
             "--prompt",
             "hello",
             "--use-prompt-enhancer",
+            "--prompt-enhancer-temperature",
+            "0.7",
+            "--prompt-enhancer-top-p",
+            "0.9",
+            "--prompt-enhancer-max-new-tokens",
+            "12",
         ],
     )
 
-    with pytest.raises(SystemExit):
-        ernie_image_generate.main()
+    ernie_image_generate.main()
 
-    assert "Prompt Enhancer is not ported" in capsys.readouterr().err
+    assert observed["generate"]["use_pe"] is True
+    assert observed["generate"]["pe_temperature"] == 0.7
+    assert observed["generate"]["pe_top_p"] == 0.9
+    assert observed["generate"]["pe_max_new_tokens"] == 12
 
 
 def test_main_without_args_prints_top_level_help(monkeypatch, capsys):

@@ -65,7 +65,9 @@ mlxgen generate \
   --output image.png
 ```
 
-The ERNIE port is text-to-image only. It uses BF16 source or prepared weights; `--image`, `--images`, image-to-image/edit tasks, `--use-prompt-enhancer`, and `--quantize` are intentionally rejected until those paths are ported and validated.
+The ERNIE port is text-to-image only. It supports BF16 source weights and prepared q8/q4 folders. Image inputs and image-to-image/edit tasks are intentionally rejected until those paths are ported and validated.
+
+ERNIE's optional Prompt Enhancer is available with `--use-prompt-enhancer` when the full source snapshot is present. The default `mlxgen download --model baidu/ERNIE-Image-Turbo` command downloads only generation components; run `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before using Prompt Enhancer. Prepared q8/q4 ERNIE folders created by `mlxgen prepare` do not include Prompt Enhancer files.
 
 ## Model Management Commands
 
@@ -83,6 +85,8 @@ mlxgen prepare \
 ```
 
 Use `prepare` when you need the local saved-weight folder. It is the public MLX-Gen workflow for creating quantized model folders and generated Hugging Face cards.
+
+Generation output replaces the requested `--output` path by default. Use `--replace false` or `--no-replace` to preserve an existing file and save to a suffixed filename.
 
 ## Python Integration
 

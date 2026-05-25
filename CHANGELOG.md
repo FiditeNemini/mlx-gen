@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ERNIE q8/q4 preparation and generation**: `mlxgen prepare --model baidu/ERNIE-Image-Turbo --quantize 8|4` now creates loadable prepared folders, and ERNIE generation can run from those q8/q4 folders.
+- **ERNIE Prompt Enhancer**: `mflux-generate-ernie-image` / `mlxgen generate` can now run ERNIE's optional Prompt Enhancer when a full source snapshot with `pe/` and `pe_tokenizer/` files is available.
+
+### Changed
+
+- **Output replacement default**: Generation saves now replace the requested output path by default. Use `--replace false` or `--no-replace` to preserve existing files and write a suffixed output.
+- **ERNIE q4 policy**: ERNIE q4 uses full MLX quantization for quantizable ERNIE modules; current validation does not require a Qwen-style mixed q4/q8 policy.
+
 ## [0.18.4] - 2026-05-25
 
 ### Added

@@ -47,11 +47,31 @@ No. Prepared MLX-Gen folders use the MLX/mflux saved-weight layout and MLX quant
 
 ## Can I Quantize ERNIE Image Turbo?
 
-Not yet. The initial ERNIE Image Turbo port supports BF16 text-to-image generation. MLX-Gen rejects ERNIE `--quantize` requests until q4/q8 layouts have been tested and documented.
+Yes. ERNIE Image Turbo supports q8 and q4 prepared folders:
+
+```sh
+mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-8bit --quantize 8
+mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-4bit --quantize 4
+```
+
+ERNIE q4 uses full MLX quantization for quantizable ERNIE modules. It does not currently require the Qwen mixed q4/q8 policy.
 
 ## Does ERNIE Image Turbo Support Image Input Or Prompt Enhancer?
 
-Not yet. MLX-Gen rejects ERNIE image-to-image/edit inputs and `--use-prompt-enhancer` instead of silently ignoring them. Pre-enhance prompts outside MLX-Gen if you need that workflow before the Prompt Enhancer model is ported.
+Prompt Enhancer is supported for ERNIE Image Turbo when the full source snapshot is available:
+
+```sh
+mlxgen download --model baidu/ERNIE-Image-Turbo --all-files
+
+mlxgen generate \
+  --model baidu/ERNIE-Image-Turbo \
+  --prompt "A ceramic mug" \
+  --use-prompt-enhancer
+```
+
+ERNIE image-to-image/edit inputs are still rejected instead of silently ignoring them.
+
+Prepared ERNIE q8/q4 folders do not bundle Prompt Enhancer files; use the full source snapshot path or the Hugging Face repo after `mlxgen download --all-files` when you need `--use-prompt-enhancer`.
 
 ## Why Do Some Imports Or Paths Still Say `mflux`?
 

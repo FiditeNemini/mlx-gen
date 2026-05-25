@@ -102,11 +102,11 @@ class GeneratedImage:
         self,
         path: str | Path,
         export_json_metadata: bool = False,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> None:
         from mflux.utils.image_util import ImageUtil
 
-        final_path = self._resolve_output_path_with_notice(path=path, overwrite=overwrite)
+        final_path = ImageUtil.resolve_output_path(path=path, overwrite=overwrite)
 
         if self._should_save_fibo_prompt_sidecar():
             self._save_prompt_file(final_path, overwrite=True)
@@ -118,11 +118,11 @@ class GeneratedImage:
         path: str | Path,
         pixel_image: PIL.Image.Image,
         export_json_metadata: bool = False,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> None:
         from mflux.utils.image_util import ImageUtil
 
-        final_path = self._resolve_output_path_with_notice(path=path, overwrite=overwrite)
+        final_path = ImageUtil.resolve_output_path(path=path, overwrite=overwrite)
 
         if self._should_save_fibo_prompt_sidecar():
             self._save_prompt_file(final_path, overwrite=True)
@@ -133,7 +133,7 @@ class GeneratedImage:
         self,
         path: str | Path,
         export_json_metadata: bool = False,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> None:
         # Save the main image
         self.save(path=path, export_json_metadata=export_json_metadata, overwrite=overwrite)
@@ -148,7 +148,7 @@ class GeneratedImage:
         self,
         path: str | Path,
         export_json_metadata: bool = False,
-        overwrite: bool = False,
+        overwrite: bool = True,
     ) -> None:
         if self.concept_heatmap:
             from mflux.utils.image_util import ImageUtil
@@ -167,16 +167,6 @@ class GeneratedImage:
         if not self.redux_image_strengths:
             return None
         return [round(scale, 2) for scale in self.redux_image_strengths]
-
-    @staticmethod
-    def _resolve_output_path_with_notice(path: str | Path, overwrite: bool) -> Path:
-        from mflux.utils.image_util import ImageUtil
-
-        requested_path = Path(path)
-        final_path = ImageUtil.resolve_output_path(path=requested_path, overwrite=overwrite)
-        if final_path != requested_path:
-            print(f"Output path exists; saving image to {final_path}")
-        return final_path
 
     def _should_save_fibo_prompt_sidecar(self) -> bool:
         name = self.model_config.model_name

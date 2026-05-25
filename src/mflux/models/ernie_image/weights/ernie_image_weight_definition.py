@@ -67,5 +67,49 @@ class ErnieImageWeightDefinition:
 
     @staticmethod
     def quantization_predicate(path: str, module, bits: int | None = None) -> bool:
-        del path, module, bits
-        return False
+        del path, bits
+        return hasattr(module, "to_quantized")
+
+
+class ErnieImagePromptEnhancerWeightDefinition:
+    @staticmethod
+    def get_components() -> List[ComponentDefinition]:
+        return [
+            ComponentDefinition(
+                name="prompt_enhancer",
+                hf_subdir="pe",
+                num_layers=26,
+                loading_mode="single",
+                precision=ModelConfig.precision,
+                mapping_getter=ErnieImageWeightMapping.get_prompt_enhancer_mapping,
+            ),
+        ]
+
+    @staticmethod
+    def get_tokenizers() -> List[TokenizerDefinition]:
+        return [
+            TokenizerDefinition(
+                name="ernie_prompt_enhancer",
+                hf_subdir="pe_tokenizer",
+                tokenizer_class="AutoTokenizer",
+                encoder_class=ErnieImageTokenizer,
+                max_length=2048,
+                padding="longest",
+                add_special_tokens=False,
+                download_patterns=["pe_tokenizer/*"],
+            ),
+        ]
+
+    @staticmethod
+    def get_download_patterns() -> List[str]:
+        return [
+            "pe/*.safetensors",
+            "pe/*.json",
+            "pe/*.jinja",
+            "pe_tokenizer/*",
+        ]
+
+    @staticmethod
+    def quantization_predicate(path: str, module, bits: int | None = None) -> bool:
+        del path, bits
+        return hasattr(module, "to_quantized")

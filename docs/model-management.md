@@ -82,16 +82,18 @@ Use `mlxgen prepare` when:
 - you want a generated Hugging Face model card;
 - you want a folder that another application, such as AbstractVision, can reference without depending on the original repository name.
 
-ERNIE Image Turbo can be downloaded or prepared in BF16:
+ERNIE Image Turbo can be downloaded, prepared in BF16, or prepared as q8/q4:
 
 ```sh
 mlxgen download --model baidu/ERNIE-Image-Turbo
 mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo
+mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-8bit --quantize 8
+mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-4bit --quantize 4
 ```
 
-The default ERNIE download pattern fetches the BF16 generation components MLX-Gen currently uses: tokenizer, text encoder, transformer, VAE, scheduler metadata, and repository metadata. It does not fetch ERNIE's Prompt Enhancer model because Prompt Enhancer inference is not ported yet. Use `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` only when you explicitly want to archive the full upstream repository.
+The default ERNIE download pattern fetches the BF16 generation components used by ordinary text-to-image generation: tokenizer, text encoder, transformer, VAE, scheduler metadata, and repository metadata. It does not fetch ERNIE's Prompt Enhancer model. Use `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before generation when you plan to pass `--use-prompt-enhancer`.
 
-Do not pass `--quantize` for ERNIE yet. MLX-Gen rejects ERNIE quantized prepare/generation until the quantization policy has been validated.
+ERNIE q8 and q4 prepared folders load through the same `mlxgen generate` flow. q4 uses full MLX quantization for quantizable ERNIE modules; MLX-Gen does not currently need a Qwen-style mixed q4/q8 ERNIE policy. Prepared ERNIE folders contain the text-to-image generation stack; they do not bundle Prompt Enhancer files.
 
 ## Depth Pro
 

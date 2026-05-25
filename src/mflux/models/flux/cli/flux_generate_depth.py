@@ -56,7 +56,7 @@ def main():
             )
 
             # 4. Save the image
-            image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
+            image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)
     except DownloadRequiredError as exc:
         print(exc)
         raise SystemExit(1) from None
