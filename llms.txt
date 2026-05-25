@@ -10,6 +10,7 @@ MLX-Gen is an MLX-native generative image runtime derived from mflux and publish
 - [docs/quantization.md](docs/quantization.md): q4/q8 save behavior, including Qwen mixed q4/q8 checkpoints.
 - [docs/huggingface-publishing.md](docs/huggingface-publishing.md): generated model cards, upload flow, and Hugging Face collection membership.
 - [docs/python-integration.md](docs/python-integration.md): current Python API expectations, AbstractVision integration notes, progress limitations, and threading guidance.
+- [docs/release.md](docs/release.md): GitHub Release and PyPI trusted publishing workflow.
 - [docs/troubleshooting.md](docs/troubleshooting.md): common missing-artifact, local-path, LoRA, and `hf_transfer` issues.
 - [CHANGELOG.md](CHANGELOG.md): release history.
 

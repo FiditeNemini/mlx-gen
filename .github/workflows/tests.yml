@@ -1,4 +1,4 @@
-name: Fast Tests
+name: CI
 
 on:
   pull_request:
@@ -6,10 +6,18 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  fast-tests:
-    runs-on: macos-14  # Apple Silicon runner (M1)
-    
+  lint-build:
+    name: Lint and build package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,16 +29,33 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
 
-      - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e .
-          uv pip install pytest
+      - name: Run ruff
+        run: uvx ruff check src tests
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Check distributions
+        run: uvx twine check dist/*
+
+  fast-tests:
+    name: Fast tests
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      MFLUX_PRESERVE_TEST_OUTPUT: "1"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Run fast tests
-        run: |
-          source .venv/bin/activate
-          python -m pytest -m fast -v
+        run: uv run --extra dev pytest -m fast -v

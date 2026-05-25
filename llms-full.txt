@@ -84,6 +84,29 @@ huggingface-cli upload lpalbou/qwen-image-edit-2511-4bit ./models/qwen-image-edi
 
 Hugging Face collection membership is managed separately from model-card metadata. After upload, use the Hugging Face UI or `huggingface_hub.HfApi.add_collection_item` with the collection slug from the collection URL. The recommended collection for current published checkpoints is AbstractFramework / mlx-gen.
 
+## Release
+
+MLX-Gen publishes Python distributions to PyPI and attaches the same distributions to a GitHub Release through `.github/workflows/release.yml`.
+
+PyPI trusted publishing must be configured for PyPI project `mlx-gen`, repository `lpalbou/mlx-gen`, workflow filename `release.yml`, and GitHub environment `pypi`. The workflow uses OpenID Connect through `pypa/gh-action-pypi-publish`; it does not require a long-lived PyPI API token.
+
+The release workflow runs fast tests on macOS, validates package name, version, changelog entry, tag name, and duplicate PyPI versions, builds distributions with `uv build`, validates them with `twine check`, creates a GitHub Release with the wheel and source distribution when publishing, and publishes the same artifacts to PyPI through trusted publishing.
+
+Run a non-publishing rehearsal with:
+
+```sh
+gh workflow run release.yml \
+  -f version=<version> \
+  -f publish=false
+```
+
+The preferred release path is a version tag:
+
+```sh
+git tag v<version>
+git push origin main --tags
+```
+
 ## CLI Usage
 
 Use `mlxgen generate` as the smart router:
