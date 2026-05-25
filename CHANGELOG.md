@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-05-25
+
+### Changed
+
+- **Generated model-card namespace**: Hugging Face model cards created by `mlxgen prepare` now default usage examples to `AbstractFramework/<repo-name>`.
+- **Copy/paste model-card usage**: Generated cards now include `python -m pip install -U mlx-gen` before the `mlxgen download` and `mlxgen generate` commands.
+
+### Removed
+
+- **Generated collection recommendation**: Generated cards no longer emit a "Recommended Hugging Face collection" sentence. Collection membership remains a separate Hugging Face publishing step.
+
+### Documentation
+
+- Clarify that public generated cards use pip for baseline installation while repository development and release workflows continue to use uv.
+
+---
+
 ## [0.18.1] - 2026-05-25
 
 ### Changed

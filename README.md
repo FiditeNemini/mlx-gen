@@ -142,7 +142,7 @@ The commands have different outputs:
 
 `mlxgen download` and `mlxgen prepare` are the commands that authorize network access. If you have Hugging Face's accelerated transfer backend available, you can optionally prefix those commands with `HF_HUB_ENABLE_HF_TRANSFER=1` for faster downloads.
 
-`mlxgen prepare` also writes a Hugging Face `README.md` model card into the prepared folder. The generated card cites the original model, mflux, MLX-Gen, the `mlx-gen` version that generated the card, the quantization policy, and the default contributor attribution.
+`mlxgen prepare` also writes a Hugging Face `README.md` model card into the prepared folder. The generated card cites the original model, mflux, MLX-Gen, the `mlx-gen` version that generated the card, the quantization policy, and the default contributor attribution. Public card examples default to `AbstractFramework/<repo-name>` and include `python -m pip install -U mlx-gen` so Hugging Face readers can copy and paste a complete baseline setup.
 
 If a required artifact is missing, MLX-Gen raises `DownloadRequiredError` with the exact command to run. See [docs/model-management.md](docs/model-management.md) for details and [docs/python-integration.md](docs/python-integration.md) for in-process usage.
 
@@ -153,7 +153,7 @@ If a required artifact is missing, MLX-Gen raises `DownloadRequiredError` with t
 - [API and CLI](docs/api.md): public command surface, Python integration notes, and compatibility entry points.
 - [Model management](docs/model-management.md): explicit `download` and `prepare` behavior, runtime cache policy, and model-card creation.
 - [Quantization](docs/quantization.md): q4/q8 behavior and Qwen mixed q4/q8 policy.
-- [Hugging Face publishing](docs/huggingface-publishing.md): generated model cards, upload flow, and collection membership.
+- [Hugging Face publishing](docs/huggingface-publishing.md): generated model cards, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - [FAQ](docs/faq.md): common questions about `prepare`, downloads, package naming, and compatibility.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime errors.
 

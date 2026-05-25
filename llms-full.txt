@@ -14,7 +14,7 @@ Some internals currently remain under `mflux.*`; new application code should use
 - `docs/api.md`: public `mlxgen` command surface, generation router, model-management commands, and Python integration boundary.
 - `docs/model-management.md`: cache-only runtime policy, `download` versus `prepare`, Depth Pro, and `DownloadRequiredError`.
 - `docs/quantization.md`: MLX-Gen prepared folder compatibility and Qwen mixed q4/q8 policy.
-- `docs/huggingface-publishing.md`: generated model cards, upload flow, and collection membership.
+- `docs/huggingface-publishing.md`: generated model cards, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - `docs/python-integration.md`: in-process use, AbstractVision integration, progress limitations, and threading guidance.
 - `docs/faq.md`: common questions about `prepare`, downloads, package naming, and compatibility.
 - `docs/troubleshooting.md`: missing files, local path classification, `generate --path`, LoRA, and `hf_transfer`.
@@ -114,7 +114,7 @@ Download Depth Pro weights from Apple:
 mlxgen download --model depth-pro
 ```
 
-`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local folder at `--path`, applies the requested quantization when `--quantize` is provided, and writes a generated model card. The model card records the `mlx-gen` version that generated it.
+`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local folder at `--path`, applies the requested quantization when `--quantize` is provided, and writes a generated model card. The model card records the `mlx-gen` version that generated it, defaults usage examples to `AbstractFramework/<repo-name>`, and includes `python -m pip install -U mlx-gen` for copy/pasteable public installation.
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands. It is not required to authorize network access.
 
