@@ -38,7 +38,7 @@ The error includes actionable command fields such as `download_command` and, whe
 
 ## Quantization Policy
 
-Quantization is model-specific. The Qwen q4 path uses a mixed q4/q8 policy because fully q4 Qwen checkpoints can lose coherent generative behavior. Other model families keep their existing quantization predicates unless their model behavior requires a dedicated policy.
+Quantization is model-specific. Qwen and ERNIE q4 paths use mixed q4/q8 policies because fully q4 checkpoints can lose coherent generative behavior for those model families. Other model families keep their existing quantization predicates unless their model behavior requires a dedicated policy.
 
 See [Quantization](quantization.md) for the current rules.
 

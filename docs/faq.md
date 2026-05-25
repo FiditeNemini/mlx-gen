@@ -54,7 +54,7 @@ mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo
 mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-4bit --quantize 4
 ```
 
-ERNIE q4 uses full MLX quantization for quantizable ERNIE modules. It does not currently require the Qwen mixed q4/q8 policy.
+ERNIE q4 uses a model-specific mixed q4/q8 policy. Fully q4 ERNIE checkpoints can drift from BF16/q8 behavior, so MLX-Gen keeps Mistral3 text linears plus selected ERNIE transformer attention-output and conditioning paths at q8.
 
 ## Does ERNIE Image Turbo Support Image Input Or Prompt Enhancer?
 

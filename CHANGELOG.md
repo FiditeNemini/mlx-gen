@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Output replacement default**: Generation saves now replace the requested output path by default. Use `--replace false` or `--no-replace` to preserve existing files and write a suffixed output.
-- **ERNIE q4 policy**: ERNIE q4 uses full MLX quantization for quantizable ERNIE modules; current validation does not require a Qwen-style mixed q4/q8 policy.
+- **ERNIE q4 policy**: ERNIE q4 now uses a model-specific mixed q4/q8 policy. q8 is used for Mistral3 text/Prompt Enhancer linears plus ERNIE transformer V/O attention, conditioning/output linears, and VAE attention, while transformer Q/K and feed-forward modules remain q4.
 
 ## [0.18.4] - 2026-05-25
 

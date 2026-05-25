@@ -90,5 +90,5 @@ mlxgen generate \
 
 - See [Model Management](model-management.md) for the full download, prepare, and runtime failure contract.
 - See [API And CLI](api.md) for the supported command surface and Python integration notes.
-- See [Quantization](quantization.md) for q4/q8 behavior and Qwen mixed q4/q8 policy.
+- See [Quantization](quantization.md) for q4/q8 behavior and current Qwen/ERNIE mixed q4/q8 policies.
 - See [Troubleshooting](troubleshooting.md) when a required artifact is missing or a local path cannot be classified.

@@ -152,7 +152,7 @@ If a required artifact is missing, MLX-Gen raises `DownloadRequiredError` with t
 - [Architecture](docs/architecture.md): package shape, command boundaries, model-file lifecycle, and runtime failure contract.
 - [API and CLI](docs/api.md): public command surface, Python integration notes, and compatibility entry points.
 - [Model management](docs/model-management.md): explicit `download` and `prepare` behavior, runtime cache policy, and model-card creation.
-- [Quantization](docs/quantization.md): q4/q8 behavior and Qwen mixed q4/q8 policy.
+- [Quantization](docs/quantization.md): q4/q8 behavior and current Qwen/ERNIE mixed q4/q8 policies.
 - [Hugging Face publishing](docs/huggingface-publishing.md): generated model cards, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - [FAQ](docs/faq.md): common questions about `prepare`, downloads, package naming, and compatibility.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime errors.

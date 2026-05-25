@@ -188,13 +188,15 @@ class ModelCardSaver:
         if bits == 4 and "ernie" in terms:
             return "\n".join(
                 [
-                    "This is an MLX q4 checkpoint for ERNIE Image Turbo. MLX-Gen uses full "
-                    "4-bit quantization for ERNIE modules where MLX supports quantization, "
-                    "without the Qwen-specific mixed q4/q8 policy:",
+                    "This is an MLX mixed q4/q8 checkpoint for ERNIE Image Turbo. Fully q4 "
+                    "ERNIE checkpoints can drift from BF16/q8 behavior, so MLX-Gen uses a "
+                    "model-specific mixed policy:",
                     "",
-                    "- q4 for quantizable ERNIE transformer modules.",
-                    "- q4 for quantizable ERNIE text-encoder modules.",
-                    "- q4 for quantizable ERNIE VAE attention modules.",
+                    "- q4 for ERNIE transformer Q/K attention projections and feed-forward modules.",
+                    "- q8 for ERNIE transformer V/O attention projections.",
+                    "- q8 for ERNIE text projection, timestep embedding, AdaLN modulation, final norm, and final projection.",
+                    "- q8 for Mistral3 text-encoder and Prompt Enhancer linears.",
+                    "- q8 for quantizable ERNIE VAE attention modules.",
                     "- BF16 for norms, convolutions, and other non-quantizable parameters.",
                     "",
                     f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
@@ -216,8 +218,8 @@ class ModelCardSaver:
                     "- q8 for quantizable ERNIE VAE attention modules.",
                     "- BF16 for norms, convolutions, and other non-quantizable parameters.",
                     "",
-                    "Current validation also supports full ERNIE q4 where MLX supports "
-                    "quantization; no mixed q4/q8 policy is required.",
+                    "ERNIE q4 uses a model-specific mixed q4/q8 policy because fully q4 "
+                    "checkpoints can drift from BF16/q8 behavior.",
                     "",
                     f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
                     "for compatibility notes and measured ERNIE q4/q8 behavior.",
@@ -315,7 +317,7 @@ class ModelCardSaver:
         tags = ["mlx", "mlx-gen", "mflux", "apple-silicon"]
         if bits is not None:
             tags.append(f"{bits}-bit")
-        if bits == 4 and "qwen" in terms:
+        if bits == 4 and ("qwen" in terms or "ernie" in terms):
             tags.extend(["mixed-q4", "mixed-q4-q8"])
         if "qwen" in terms:
             tags.extend(["qwen", "qwen-image"])

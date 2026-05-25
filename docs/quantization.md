@@ -29,11 +29,14 @@ mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo
 mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-4bit --quantize 4
 ```
 
-ERNIE q4 uses full MLX quantization for modules where MLX supports quantization. Current validation did not show the Qwen-style q4 quality failure, so ERNIE does not use a mixed q4/q8 policy.
+ERNIE q4 uses a model-specific mixed q4/q8 policy. Fully q4 ERNIE checkpoints can drift from BF16/q8 behavior, especially on text-heavy poster prompts, so MLX-Gen keeps the sensitive text-conditioning and attention-output paths at q8:
 
-- q4/q8 for quantizable ERNIE transformer modules.
-- q4/q8 for quantizable ERNIE text-encoder modules.
-- q4/q8 for quantizable ERNIE VAE attention modules.
+- q4 for ERNIE transformer Q/K attention projections.
+- q4 for ERNIE transformer feed-forward modules.
+- q8 for ERNIE transformer V/O attention projections.
+- q8 for ERNIE text projection, timestep embedding, AdaLN modulation, final norm, and final projection.
+- q8 for Mistral3 text-encoder and Prompt Enhancer linears.
+- q8 for quantizable ERNIE VAE attention modules.
 - BF16 for norms, convolutions, and other non-quantizable parameters.
 
 Local validation on Apple Silicon with 512x512, 8 steps, guidance 1:
@@ -42,9 +45,12 @@ Local validation on Apple Silicon with 512x512, 8 steps, guidance 1:
 | --- | ---: | ---: | ---: | --- |
 | BF16 source generation components | ~22.4 GiB | 23.5 GiB | 6.38 s | Fastest at 512px, largest memory footprint. |
 | q8 prepared folder | 12 GiB | 12.9 GiB | 7.57 s | About half the memory footprint. |
-| q4 prepared folder | 6.2 GiB | 7.2 GiB | 9.31 s | Smallest footprint; coherent output in validation. |
+| full q4 experimental folder | 6.2 GiB | 7.2 GiB | 9.31 s | Too much visual drift on controlled poster tests; not recommended. |
+| mixed q4/q8 prepared folder | 8.2 GiB | 9.34 GiB | 7.83 s | Default q4 policy; preserves BF16/q8 behavior more closely. |
 
-At 1024x1024 with 8 steps and guidance 1, q8 generated in 84.69 s with 12.9 GiB peak RSS, and q4 generated in 78.94 s with 7.2 GiB peak RSS. Speed is workload-sensitive, but q4 is the best memory-footprint option and remains usable for full-resolution ERNIE Turbo generation.
+At 1024x1024 with 8 steps and guidance 1, q8 generated in 84.69 s with 12.9 GiB peak RSS, and the older full-q4 experimental layout generated in 78.94 s with 7.2 GiB peak RSS. The mixed q4/q8 default should be used for new ERNIE q4 folders because the full-q4 layout does not preserve quality reliably.
+
+On a controlled 512x512 poster prompt with seed 123, q8 stayed close to BF16 while full q4 visibly changed text color and composition. Mean absolute pixel error against q8 was 26.00 for full q4 and 12.03 for mixed q4/q8. Across a 3-seed poster repeat, full q4 averaged 33.48 MAE against q8 while mixed q4/q8 averaged 16.39 MAE.
 
 Prepared ERNIE q8/q4 folders contain the ordinary text-to-image generation components. ERNIE Prompt Enhancer remains an optional full-source-snapshot feature and is not bundled into prepared quantized folders.
 

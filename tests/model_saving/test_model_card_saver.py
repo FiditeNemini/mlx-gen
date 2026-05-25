@@ -121,26 +121,27 @@ def test_model_card_for_ernie_documents_bf16_usage(tmp_path):
     assert "Quantized and contributed by" not in card
 
 
-def test_model_card_for_ernie_q4_documents_full_quantization_policy(tmp_path):
+def test_model_card_for_ernie_q4_documents_mixed_policy(tmp_path):
     card = ModelCardSaver.render_model_card(str(tmp_path / "ernie-image-turbo-4bit"), ErnieImageTurbo(), 4)
 
-    assert "This is an MLX q4 checkpoint for ERNIE Image Turbo." in card
-    assert "without the Qwen-specific mixed q4/q8 policy" in card
-    assert "q4 for quantizable ERNIE transformer modules" in card
-    assert "q4 for quantizable ERNIE text-encoder modules" in card
-    assert "q4 for quantizable ERNIE VAE attention modules" in card
+    assert "This is an MLX mixed q4/q8 checkpoint for ERNIE Image Turbo." in card
+    assert "- mixed-q4" in card
+    assert "- mixed-q4-q8" in card
+    assert "q4 for ERNIE transformer Q/K attention projections and feed-forward modules" in card
+    assert "q8 for ERNIE transformer V/O attention projections" in card
+    assert "q8 for Mistral3 text-encoder and Prompt Enhancer linears" in card
+    assert "q8 for quantizable ERNIE VAE attention modules" in card
     assert "Prompt Enhancer files are not bundled" in card
 
 
-def test_model_card_for_ernie_q8_mentions_q4_is_supported_without_mixed_policy(tmp_path):
+def test_model_card_for_ernie_q8_mentions_q4_uses_mixed_policy(tmp_path):
     card = ModelCardSaver.render_model_card(str(tmp_path / "ernie-image-turbo-8bit"), ErnieImageTurbo(), 8)
 
     assert "This is an MLX q8 checkpoint" in card
     assert "q8 for quantizable ERNIE transformer modules" in card
     assert "q8 for quantizable ERNIE text-encoder modules" in card
     assert "q8 for quantizable ERNIE VAE attention modules" in card
-    assert "full ERNIE q4 where MLX supports quantization" in card
-    assert "no mixed q4/q8 policy is required" in card
+    assert "ERNIE q4 uses a model-specific mixed q4/q8 policy" in card
     assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card
     assert "Prompt Enhancer files are not bundled" in card
 

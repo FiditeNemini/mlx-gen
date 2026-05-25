@@ -14,6 +14,7 @@ from mflux.models.ernie_image.scheduler import ErnieImageScheduler
 from mflux.models.ernie_image.tokenizer import ErnieImageTokenizer
 from mflux.models.ernie_image.weights.ernie_image_weight_definition import (
     ErnieImagePromptEnhancerWeightDefinition,
+    ErnieImageQuantizationPolicy,
     ErnieImageWeightDefinition,
 )
 from mflux.models.ernie_image.weights.ernie_image_weight_mapping import ErnieImageWeightMapping
@@ -42,6 +43,10 @@ class DummyRawTokenizer:
 
 
 class DummyQuantizableModule:
+    def __init__(self, shape: tuple[int, ...] | None = None):
+        if shape is not None:
+            self.weight = SimpleNamespace(shape=shape)
+
     def to_quantized(self):
         return self
 
@@ -193,8 +198,41 @@ def test_ernie_weight_definition_uses_custom_tokenizer():
 
 @pytest.mark.fast
 def test_ernie_quantization_predicate_quantizes_supported_modules():
-    assert ErnieImageWeightDefinition.quantization_predicate("transformer.layers.0.mlp.up_proj", DummyQuantizableModule(), 4)
+    assert ErnieImageWeightDefinition.quantization_predicate("layers.0.mlp.up_proj", DummyQuantizableModule(), 4)
     assert not ErnieImageWeightDefinition.quantization_predicate("transformer.layers.0.norm", object(), 4)
+
+
+@pytest.mark.fast
+def test_ernie_q4_policy_promotes_sensitive_paths_to_q8():
+    q8_paths = [
+        ("layers.0.self_attn.q_proj", None),
+        ("layers.0.mlp.up_proj", (9216, 3072)),
+        ("text_proj", None),
+        ("time_embedding.linear_1", None),
+        ("adaLN_modulation.linear", None),
+        ("final_norm.linear", None),
+        ("final_linear", None),
+        ("layers.0.self_attention.to_v", None),
+        ("layers.0.self_attention.to_out.0", None),
+        ("decoder.mid_block.attentions.0.to_v", None),
+    ]
+
+    for path, shape in q8_paths:
+        assert ErnieImageQuantizationPolicy.predicate(path, DummyQuantizableModule(shape), 4) == {"bits": 8}
+
+
+@pytest.mark.fast
+def test_ernie_q4_policy_keeps_bulk_transformer_at_q4():
+    q4_paths = [
+        "layers.0.self_attention.to_q",
+        "layers.0.self_attention.to_k",
+        "layers.0.mlp.gate_proj",
+        "layers.0.mlp.up_proj",
+        "layers.0.mlp.linear_fc2",
+    ]
+
+    for path in q4_paths:
+        assert ErnieImageQuantizationPolicy.predicate(path, DummyQuantizableModule((12288, 4096)), 4) is True
 
 
 @pytest.mark.fast

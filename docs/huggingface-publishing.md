@@ -44,7 +44,7 @@ HfApi().add_collection_item(
 
 ## Compatibility Wording
 
-For Qwen q4 checkpoints, the generated card describes the mixed q4/q8 policy used to preserve generative quality. For ERNIE q4 checkpoints, the generated card describes the full q4 policy used for quantizable ERNIE modules. For q8 checkpoints, the card states that the standard MLX-Gen/mflux q8 path is used.
+For Qwen and ERNIE q4 checkpoints, the generated card describes the mixed q4/q8 policy used to preserve generative quality. For q8 checkpoints, the card states that the standard MLX-Gen/mflux q8 path is used.
 
 See [Quantization](quantization.md) for the current Qwen and ERNIE q4/q8 policies.
 

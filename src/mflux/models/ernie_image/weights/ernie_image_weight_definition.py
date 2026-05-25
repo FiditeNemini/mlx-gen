@@ -67,8 +67,7 @@ class ErnieImageWeightDefinition:
 
     @staticmethod
     def quantization_predicate(path: str, module, bits: int | None = None) -> bool:
-        del path, bits
-        return hasattr(module, "to_quantized")
+        return ErnieImageQuantizationPolicy.predicate(path, module, bits)
 
 
 class ErnieImagePromptEnhancerWeightDefinition:
@@ -111,5 +110,62 @@ class ErnieImagePromptEnhancerWeightDefinition:
 
     @staticmethod
     def quantization_predicate(path: str, module, bits: int | None = None) -> bool:
-        del path, bits
-        return hasattr(module, "to_quantized")
+        return ErnieImageQuantizationPolicy.predicate(path, module, bits)
+
+
+class ErnieImageQuantizationPolicy:
+    @staticmethod
+    def predicate(path: str, module, bits: int | None = None) -> bool | dict[str, int]:
+        if not hasattr(module, "to_quantized"):
+            return False
+
+        if bits == 4 and ErnieImageQuantizationPolicy._uses_q8_for_ernie_q4(path, module):
+            return {"bits": 8}
+
+        return True
+
+    @staticmethod
+    def _uses_q8_for_ernie_q4(path: str, module) -> bool:
+        if ErnieImageQuantizationPolicy._is_mistral3_text_path(path, module):
+            return True
+
+        if ErnieImageQuantizationPolicy._is_transformer_conditioning_path(path):
+            return True
+
+        return ErnieImageQuantizationPolicy._is_transformer_value_output_attention_path(
+            path
+        ) or ErnieImageQuantizationPolicy._is_vae_attention_path(path)
+
+    @staticmethod
+    def _is_mistral3_text_path(path: str, module) -> bool:
+        if not path.startswith("layers."):
+            return False
+
+        if ".self_attn." in path:
+            return True
+
+        if ".mlp." not in path:
+            return False
+
+        shape = getattr(getattr(module, "weight", None), "shape", None)
+        return bool(shape and (3072 in shape or 9216 in shape))
+
+    @staticmethod
+    def _is_transformer_conditioning_path(path: str) -> bool:
+        return (
+            path == "text_proj"
+            or path.startswith("time_embedding.")
+            or path == "adaLN_modulation.linear"
+            or path == "final_norm.linear"
+            or path == "final_linear"
+        )
+
+    @staticmethod
+    def _is_transformer_value_output_attention_path(path: str) -> bool:
+        return ".self_attention.to_v" in path or ".self_attention.to_out" in path
+
+    @staticmethod
+    def _is_vae_attention_path(path: str) -> bool:
+        return path.startswith("encoder.mid_block.attentions.") or path.startswith(
+            "decoder.mid_block.attentions."
+        )

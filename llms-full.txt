@@ -13,7 +13,7 @@ Some internals currently remain under `mflux.*`; new application code should use
 - `docs/architecture.md`: package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
 - `docs/api.md`: public `mlxgen` command surface, generation router, model-management commands, and Python integration boundary.
 - `docs/model-management.md`: cache-only runtime policy, `download` versus `prepare`, Depth Pro, and `DownloadRequiredError`.
-- `docs/quantization.md`: MLX-Gen prepared folder compatibility, Qwen mixed q4/q8 policy, and ERNIE q8/q4 validation.
+- `docs/quantization.md`: MLX-Gen prepared folder compatibility and current Qwen/ERNIE mixed q4/q8 policies.
 - `docs/huggingface-publishing.md`: generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - `docs/python-integration.md`: in-process use, AbstractVision integration, progress limitations, and threading guidance.
 - `docs/faq.md`: common questions about `prepare`, downloads, package naming, and compatibility.
@@ -186,7 +186,7 @@ This Qwen policy applies to q4 prepared folders only, including Qwen Image and Q
 
 The q8 path was not changed by the mixed-q4 work. Qwen q8 uses the standard MLX-Gen/mflux quantization flow: quantizable modules are saved at 8-bit where supported, while VAE weights and non-quantizable layers remain BF16. Other model families use their existing model-specific quantization predicates.
 
-ERNIE Image Turbo supports BF16, q8, and q4 text-to-image generation. ERNIE q4 uses full MLX quantization for quantizable ERNIE transformer, text-encoder, and VAE attention modules; norms, convolutions, and other non-quantizable parameters remain BF16. Current validation does not require a Qwen-style mixed q4/q8 ERNIE policy. Default ERNIE downloads fetch the BF16 generation components MLX-Gen currently uses and do not fetch the Prompt Enhancer model unless `mlxgen download --all-files` is requested. Prepared ERNIE q8/q4 folders contain the ordinary text-to-image generation stack and do not bundle Prompt Enhancer files.
+ERNIE Image Turbo supports BF16, q8, and q4 text-to-image generation. ERNIE q4 uses a model-specific mixed q4/q8 policy: q4 for transformer Q/K attention and transformer feed-forward modules; q8 for Mistral3 text/Prompt Enhancer linears plus ERNIE transformer V/O attention, conditioning/output linears, and VAE attention; BF16 for norms, convolutions, and other non-quantizable parameters. Default ERNIE downloads fetch the BF16 generation components MLX-Gen currently uses and do not fetch the Prompt Enhancer model unless `mlxgen download --all-files` is requested. Prepared ERNIE q8/q4 folders contain the ordinary text-to-image generation stack and do not bundle Prompt Enhancer files.
 
 ---
 
