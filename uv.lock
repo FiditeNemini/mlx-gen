@@ -1113,7 +1113,7 @@ wheels = [
 
 [[package]]
 name = "mlx-gen"
-version = "0.17.5.post4"
+version = "0.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "filelock" },
