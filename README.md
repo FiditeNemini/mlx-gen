@@ -11,7 +11,7 @@ Run state-of-the-art generative image models locally with native MLX.
 > [!IMPORTANT]
 > MLX-Gen is an independent project derived from [mflux](https://github.com/filipstrand/mflux). It is not an upstream mflux release, though it currently keeps the mflux runtime architecture, model code layout, and `mflux-*` CLI compatibility while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
 >
-> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including Qwen/FLUX.2 image editing, quantized model packaging, local model loading, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
+> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
 
 ### Table of contents
 
@@ -34,7 +34,13 @@ MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux), whic
 
 The immediate reason for the independent package is practical: MLX-Gen can iterate faster on compatibility fixes and capabilities that affect real usage, including Qwen Image/Edit quantization layouts, FLUX.2 edit behavior, local model packaging, PyPI release cadence, and Apple Silicon validation. Some of those changes are proposed upstream as small PRs; others may remain MLX-Gen-specific as the project direction diverges.
 
+MLX-Gen also exists to power [AbstractVision](https://pypi.org/project/abstractvision/), the generative vision layer used with [AbstractCore](https://pypi.org/project/abstractcore/) in the wider [AbstractFramework](https://pypi.org/project/abstractframework/) ecosystem. That gives the package its own product requirements while keeping general fixes available for upstream mflux contributions where practical.
+
 For now, most internals still live under `mflux.*` and CLI commands remain `mflux-*` for compatibility. New application code may import through `mlxgen`, which aliases the same runtime while giving downstream projects a stable MLX-Gen dependency surface.
+
+The project intentionally keeps mflux vocabulary in parts of the codebase, metadata, and command surface while that remains useful. This preserves compatibility for existing users and keeps a possible merge-back path open if the two projects converge again.
+
+Most credit for the current codebase goes to Filip Strand and the original mflux contributors. Changes introduced after the MLX-Gen fork are maintained here by Laurent-Philippe Albou / AbstractVision.
 
 ---
 
@@ -198,7 +204,7 @@ MLX-Gen exists because of the great work of:
 - ByteDance, @numz and @adrientoupet for the [SeedVR2 project](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler)
 - Hugging Face for the [Diffusers library implementations](https://github.com/huggingface/diffusers) 
 - Depth Pro authors for the [Depth Pro model](https://github.com/apple/ml-depth-pro?tab=readme-ov-file#citation)
-- [mflux](https://github.com/filipstrand/mflux), its maintainer, contributors, and testers. MLX-Gen is currently based on that codebase and will keep acknowledging that foundation even as it evolves independently.
+- [mflux](https://github.com/filipstrand/mflux), Filip Strand, and the original mflux contributors and testers. MLX-Gen is currently based on that codebase and will keep acknowledging that foundation even as it evolves independently. Post-fork MLX-Gen changes are maintained by Laurent-Philippe Albou / AbstractVision.
 
 ---
 
