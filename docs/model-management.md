@@ -48,10 +48,10 @@ Use `mlxgen prepare` when you want a reusable local folder, usually with quantiz
 mlxgen prepare \
   --model Qwen/Qwen-Image \
   --path ./models/qwen-image-8bit \
-  -q 8
+  --quantize 8
 ```
 
-`prepare` loads the source model, applies the requested quantization when `-q` / `--quantize` is provided, writes the MLX-Gen saved-weight layout to `--path`, and writes a Hugging Face `README.md` model card into that folder.
+`prepare` loads the source model, applies the requested quantization when `--quantize` is provided, writes the MLX-Gen saved-weight layout to `--path`, and writes a Hugging Face `README.md` model card into that folder.
 
 Then generate from the local folder:
 
@@ -78,7 +78,7 @@ Use `mlxgen download` when:
 Use `mlxgen prepare` when:
 
 - you want a local path such as `./models/qwen-image-8bit`;
-- you want quantized weights with `-q 4` or `-q 8`;
+- you want quantized weights with `--quantize 4` or `--quantize 8`;
 - you want a generated Hugging Face model card;
 - you want a folder that another application, such as AbstractVision, can reference without depending on the original repository name.
 

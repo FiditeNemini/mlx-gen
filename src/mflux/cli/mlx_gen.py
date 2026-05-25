@@ -103,7 +103,7 @@ def _reject_prepare_path_in_generate(
         prepare_command.extend(["--model", args.model])
     prepare_command.extend(["--path", path])
     if quantize is not None:
-        prepare_command.extend(["-q", quantize])
+        prepare_command.extend(["--quantize", quantize])
 
     parser.error(
         "--path prepares a local model folder and is not a generation option. "
@@ -143,7 +143,7 @@ def _top_level_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  mlxgen generate --model z-image-turbo --prompt 'A puffin standing on a cliff'\n"
             "  mlxgen download --model Qwen/Qwen-Image\n"
-            "  mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit -q 8\n"
+            "  mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8\n"
             "\n"
             "Use 'mlxgen <command> --help' for command-specific options."
         ),
@@ -215,7 +215,7 @@ def _parser() -> argparse.ArgumentParser:
         epilog=(
             "Common generation options are forwarded to the selected backend, including --prompt, "
             "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
-            "--negative-prompt, --quantize/-q, --lora-paths, --lora-scales, --metadata, "
+            "--negative-prompt, --quantize, --lora-paths, --lora-scales, --metadata, "
             "--config-from-metadata/-C, and --output."
         ),
     )

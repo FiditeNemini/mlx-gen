@@ -38,7 +38,7 @@ Prepare a reusable local folder with quantized weights and a generated Hugging F
 mlxgen prepare \
   --model Qwen/Qwen-Image \
   --path ./models/qwen-image-8bit \
-  -q 8
+  --quantize 8
 ```
 
 Use `mlxgen prepare` when you need a local model folder. There is no separate MLX-Gen `save` workflow in the public documentation.
@@ -57,7 +57,7 @@ mlxgen generate \
   --height 500 \
   --seed 42 \
   --steps 9 \
-  -q 8
+  --quantize 8
 ```
 
 Run generation from a prepared local folder:

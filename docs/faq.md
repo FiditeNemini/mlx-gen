@@ -4,13 +4,13 @@
 
 Use `mlxgen prepare`.
 
-`prepare` is the public MLX-Gen workflow for creating a reusable local model folder. It can quantize the model with `-q` / `--quantize` and writes a Hugging Face `README.md` model card into the prepared folder.
+`prepare` is the public MLX-Gen workflow for creating a reusable local model folder. It can quantize the model with `--quantize` and writes a Hugging Face `README.md` model card into the prepared folder.
 
 ```sh
 mlxgen prepare \
   --model Qwen/Qwen-Image \
   --path ./models/qwen-image-8bit \
-  -q 8
+  --quantize 8
 ```
 
 New MLX-Gen integrations should not call a separate save workflow; use `mlxgen prepare`.
@@ -28,7 +28,7 @@ No. `mlxgen generate` is only for inference. It does not accept `--path` for mod
 To create a model folder, use:
 
 ```sh
-mlxgen prepare --model black-forest-labs/FLUX.2-klein-4B --path models/flux.2-klein-4b-4bit -q 4
+mlxgen prepare --model black-forest-labs/FLUX.2-klein-4B --path models/flux.2-klein-4b-4bit --quantize 4
 ```
 
 To choose the output image path during generation, use `--output`.

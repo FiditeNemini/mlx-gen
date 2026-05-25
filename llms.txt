@@ -29,7 +29,7 @@ Explicit preparation commands:
 
 ```sh
 mlxgen download --model Qwen/Qwen-Image
-mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit -q 8
+mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8
 mlxgen download --model depth-pro
 ```
 

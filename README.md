@@ -89,7 +89,7 @@ mlxgen generate \
   --height 500 \
   --seed 42 \
   --steps 9 \
-  -q 8
+  --quantize 8
 ```
 
 ![Puffin](src/mflux/assets/puffin.png)
@@ -126,7 +126,7 @@ mlxgen download --model Qwen/Qwen-Image
 mlxgen prepare \
   --model Qwen/Qwen-Image \
   --path ./models/qwen-image-8bit \
-  -q 8
+  --quantize 8
 
 # Download the direct Apple Depth Pro weights used by depth workflows.
 mlxgen download --model depth-pro

@@ -14,11 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Generate/prepare confusion**: `mlxgen generate --path ...` now fails with an actionable message that points to `mlxgen prepare --model ... --path ... -q ...` and explains that image outputs use `--output`.
+- **Generate/prepare confusion**: `mlxgen generate --path ...` now fails with an actionable message that points to `mlxgen prepare --model ... --path ... --quantize ...` and explains that image outputs use `--output`.
 
 ### Documentation
 
-- Clarify that `mlxgen prepare` is the public MLX-Gen workflow for creating reusable local quantized model folders and generated Hugging Face cards.
+- Clarify that `mlxgen prepare` is the public MLX-Gen workflow for creating reusable local quantized model folders and generated Hugging Face cards, and prefer long-form flags such as `--quantize` in public examples.
 
 ## [0.18.0] - 2026-05-25
 

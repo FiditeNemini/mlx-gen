@@ -122,7 +122,7 @@ def test_generate_with_path_reports_prepare_command(capsys):
     error_output = capsys.readouterr().err
     assert "--path prepares a local model folder" in error_output
     assert (
-        "mlxgen prepare --model black-forest-labs/FLUX.2-klein-4B --path models/flux.2-klein-4b-4bit -q 4"
+        "mlxgen prepare --model black-forest-labs/FLUX.2-klein-4B --path models/flux.2-klein-4b-4bit --quantize 4"
     ) in error_output
     assert "--output" in error_output
 

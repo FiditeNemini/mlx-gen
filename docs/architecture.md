@@ -26,7 +26,7 @@ This boundary is important for embedded workflow systems such as AbstractVision:
 Source model files usually come from Hugging Face. They can be used in two ways:
 
 1. Cache the source files with `mlxgen download` and run by alias or repository id.
-2. Create a reusable MLX-Gen folder with `mlxgen prepare --model ... --path ... -q ...`.
+2. Create a reusable MLX-Gen folder with `mlxgen prepare --model ... --path ... --quantize ...`.
 
 Prepared folders use the MLX/mflux saved-weight layout. They may contain MLX quantization tensors and generated Hugging Face model cards. They are intended for MLX-Gen and compatible mflux code, not direct Diffusers or Transformers loading.
 

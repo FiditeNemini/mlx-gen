@@ -105,7 +105,7 @@ Prepare a reusable local MLX-Gen folder:
 mlxgen prepare \
   --model Qwen/Qwen-Image \
   --path ./models/qwen-image-8bit \
-  -q 8
+  --quantize 8
 ```
 
 Download Depth Pro weights from Apple:
@@ -114,7 +114,7 @@ Download Depth Pro weights from Apple:
 mlxgen download --model depth-pro
 ```
 
-`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local folder at `--path`, applies the requested quantization when `-q` / `--quantize` is provided, and writes a generated model card.
+`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local folder at `--path`, applies the requested quantization when `--quantize` is provided, and writes a generated model card.
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands. It is not required to authorize network access.
 
@@ -132,7 +132,7 @@ mlxgen generate \
   --height 500 \
   --seed 42 \
   --steps 9 \
-  -q 8
+  --quantize 8
 ```
 
 For image editing:
@@ -149,7 +149,7 @@ mlxgen generate \
 
 If a local model path or custom repository name cannot be classified, pass `--family qwen`, `--family flux2`, `--family fibo`, or `--family z-image`.
 
-`mlxgen generate` does not accept `--path` to create model folders. Use `mlxgen prepare --model ... --path ... -q ...` for model preparation and use `--output` to choose the generated image path.
+`mlxgen generate` does not accept `--path` to create model folders. Use `mlxgen prepare --model ... --path ... --quantize ...` for model preparation and use `--output` to choose the generated image path.
 
 ---
 
@@ -157,7 +157,7 @@ If a local model path or custom repository name cannot be classified, pass `--fa
 
 MLX-Gen prepares quantized model folders with the mflux/MLX layout used for local inference. These folders are designed for MLX-Gen and compatible mflux code, not Diffusers or Transformers `from_pretrained()` checkpoints.
 
-Qwen Image and Qwen Image Edit use a mixed q4/q8 policy when prepared with `-q 4`:
+Qwen Image and Qwen Image Edit use a mixed q4/q8 policy when prepared with `--quantize 4`:
 
 - q4 for most Qwen transformer attention, feed-forward, and projection linears.
 - q8 for Qwen `*.img_mod_linear` transformer modulation layers.
@@ -218,7 +218,7 @@ If MLX-Gen says it will not download files during generation, run the command sh
 
 If a local path cannot be classified, add `--family`.
 
-If `generate --path` fails, use `mlxgen prepare --model ... --path ... -q ...` to create a model folder or `--output` to choose the generated image path.
+If `generate --path` fails, use `mlxgen prepare --model ... --path ... --quantize ...` to create a model folder or `--output` to choose the generated image path.
 
 If a LoRA is missing, download it or pass a local `.safetensors` path. Missing user-requested LoRAs are required and are not silently ignored.
 

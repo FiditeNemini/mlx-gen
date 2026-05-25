@@ -8,7 +8,7 @@ Common commands:
 
 ```sh
 mlxgen download --model Qwen/Qwen-Image
-mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit -q 8
+mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8
 mlxgen download --model depth-pro
 ```
 
@@ -33,7 +33,7 @@ Supported router families are `qwen`, `flux2`, `fibo`, and `z-image`.
 To prepare a quantized model folder:
 
 ```sh
-mlxgen prepare --model black-forest-labs/FLUX.2-klein-4B --path models/flux.2-klein-4b-4bit -q 4
+mlxgen prepare --model black-forest-labs/FLUX.2-klein-4B --path models/flux.2-klein-4b-4bit --quantize 4
 ```
 
 To choose the generated image path, use `--output` with `mlxgen generate`.

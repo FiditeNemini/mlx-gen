@@ -10,7 +10,7 @@ Use `mlxgen prepare` before upload whenever you want to publish a quantized MLX-
 mlxgen prepare \
   --model Qwen/Qwen-Image-Edit-2511 \
   --path ./models/qwen-image-edit-2511-4bit \
-  -q 4
+  --quantize 4
 ```
 
 The prepared folder contains the MLX-Gen saved-weight layout plus the generated `README.md` model card.
