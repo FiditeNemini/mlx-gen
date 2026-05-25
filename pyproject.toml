@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 default-excludes = true
-module-name = "mflux"
+module-name = ["mflux", "mlxgen"]
 namespace = true
 source-exclude = [
     "**/assets/**",
@@ -13,7 +13,7 @@ source-exclude = [
 ]
 
 [project]
-name = "abstractvision-mflux"
+name = "mlx-gen"
 version = "0.17.5.post2"
 description = "MLX native implementations of state-of-the-art generative image models."
 readme = "README.md"

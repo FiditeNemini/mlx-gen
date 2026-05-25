@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Existing all-q4 and `0.17.5.post1` Qwen BF16 mixed-q4 checkpoints continue to load. Re-save Qwen Image / Qwen Image Edit q4 checkpoints with `0.17.5.post2` to get the smaller q4/q8 layout.
 
+### 🧰 DX & Maintenance
+
+- **Package distribution**: Rename this fork's PyPI distribution to `mlx-gen` while preserving the `mflux` Python module and CLI command names, and add `mlxgen` as a lightweight import alias.
+
 ---
 
 ## [0.17.5.post1] - 2026-05-24

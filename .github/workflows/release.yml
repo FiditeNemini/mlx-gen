@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       publish_confirmation:
-        description: "Required when publish=true: publish-abstractvision-mflux-<version>"
+        description: "Required when publish=true: publish-mlx-gen-<version>"
         required: false
         type: string
 
@@ -67,7 +67,7 @@ jobs:
           import urllib.error
           import urllib.request
 
-          package_name = "abstractvision-mflux"
+          package_name = "mlx-gen"
           pyproject = tomllib.loads(Path("pyproject.toml").read_text())
           project = pyproject["project"]
           version = project["version"]
@@ -142,7 +142,7 @@ jobs:
     if: needs.build.outputs.should_publish == 'true'
     environment:
       name: pypi
-      url: https://pypi.org/project/abstractvision-mflux/
+      url: https://pypi.org/project/mlx-gen/
     permissions:
       contents: read
       id-token: write

@@ -17,82 +17,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "abstractvision-mflux"
-version = "0.17.5.post2"
-source = { editable = "." }
-dependencies = [
-    { name = "filelock" },
-    { name = "fonttools" },
-    { name = "hf-transfer" },
-    { name = "huggingface-hub" },
-    { name = "matplotlib" },
-    { name = "mlx", version = "0.30.3", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
-    { name = "mlx", version = "0.31.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "opencv-python" },
-    { name = "piexif" },
-    { name = "pillow" },
-    { name = "platformdirs" },
-    { name = "protobuf" },
-    { name = "regex" },
-    { name = "requests" },
-    { name = "safetensors" },
-    { name = "sentencepiece" },
-    { name = "tokenizers", marker = "python_full_version >= '3.13'" },
-    { name = "toml" },
-    { name = "torch" },
-    { name = "tqdm" },
-    { name = "transformers" },
-    { name = "twine" },
-    { name = "urllib3" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "matplotlib" },
-    { name = "mlx", version = "0.30.3", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
-    { name = "mlx", version = "0.31.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
-    { name = "pytest" },
-    { name = "pytest-timer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "filelock", specifier = ">=3.20.1" },
-    { name = "fonttools", specifier = ">=4.60.2" },
-    { name = "hf-transfer", specifier = ">=0.1.9,<1.0" },
-    { name = "huggingface-hub", specifier = ">=1.1.6,<2.0" },
-    { name = "matplotlib", specifier = ">=3.9.2,<4.0" },
-    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">3.10,<4.0" },
-    { name = "mlx", marker = "sys_platform == 'darwin'", specifier = ">=0.27.0,<0.32.0" },
-    { name = "mlx", marker = "sys_platform == 'darwin' and extra == 'dev'", specifier = "==0.31.0" },
-    { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux'", specifier = ">=0.30.3,<0.32.0" },
-    { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux' and extra == 'dev'", specifier = "==0.30.3" },
-    { name = "numpy", specifier = ">=2.0.1,<3.0" },
-    { name = "opencv-python", specifier = ">=4.10.0,<5.0" },
-    { name = "piexif", specifier = ">=1.1.3,<2.0" },
-    { name = "pillow", specifier = ">=12.1.1" },
-    { name = "platformdirs", specifier = ">=4.0,<5.0" },
-    { name = "protobuf", specifier = ">=4.25.0,<8.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0,<9.0" },
-    { name = "pytest-timer", marker = "extra == 'dev'", specifier = ">=1.0,<2.0" },
-    { name = "regex", specifier = ">=2024.11.6" },
-    { name = "requests", specifier = ">=2.32.4" },
-    { name = "safetensors", specifier = ">=0.4.4,<1.0" },
-    { name = "sentencepiece", specifier = ">=0.2.1,<1.0" },
-    { name = "tokenizers", marker = "python_full_version >= '3.13'", specifier = ">=0.20.3" },
-    { name = "toml", specifier = ">=0.10.2,<1.0" },
-    { name = "torch", specifier = ">=2.7.1,<3.0" },
-    { name = "torch", marker = "python_full_version >= '3.13'", specifier = ">=2.8.0,<3.0" },
-    { name = "tqdm", specifier = ">=4.66.5,<5.0" },
-    { name = "transformers", specifier = ">=5.0.0,<6.0" },
-    { name = "twine", specifier = ">=6.1.0,<7.0" },
-    { name = "urllib3", specifier = ">=2.6.0" },
-]
-provides-extras = ["dev"]
-
-[[package]]
 name = "anyio"
 version = "4.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1186,6 +1110,82 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/63/a0ffea24ee9b1f8967c8ea685c1c7d943112130aad633a3bd780bb381966/mlx_cuda_13-0.30.3-py3-none-manylinux_2_35_aarch64.whl", hash = "sha256:eaecb79cc8ce4c0ddbc802b8f244ecdee38ba1de32aa8105477df9936f35bc7e", size = 65780796, upload-time = "2026-01-14T01:16:27.699Z" },
     { url = "https://files.pythonhosted.org/packages/07/3c/fa9baab3c148fe0811c7f1d9d10966036e596480f4c54e9863cfdfd41970/mlx_cuda_13-0.30.3-py3-none-manylinux_2_35_x86_64.whl", hash = "sha256:9d02d95435bda50ad52572d4a3873479eb3072895c98053ee3efa7f476e64cb6", size = 68127545, upload-time = "2026-01-14T01:16:31.641Z" },
 ]
+
+[[package]]
+name = "mlx-gen"
+version = "0.17.5.post2"
+source = { editable = "." }
+dependencies = [
+    { name = "filelock" },
+    { name = "fonttools" },
+    { name = "hf-transfer" },
+    { name = "huggingface-hub" },
+    { name = "matplotlib" },
+    { name = "mlx", version = "0.30.3", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
+    { name = "mlx", version = "0.31.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "opencv-python" },
+    { name = "piexif" },
+    { name = "pillow" },
+    { name = "platformdirs" },
+    { name = "protobuf" },
+    { name = "regex" },
+    { name = "requests" },
+    { name = "safetensors" },
+    { name = "sentencepiece" },
+    { name = "tokenizers", marker = "python_full_version >= '3.13'" },
+    { name = "toml" },
+    { name = "torch" },
+    { name = "tqdm" },
+    { name = "transformers" },
+    { name = "twine" },
+    { name = "urllib3" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "matplotlib" },
+    { name = "mlx", version = "0.30.3", source = { registry = "https://pypi.org/simple" }, extra = ["cuda13"], marker = "sys_platform == 'linux'" },
+    { name = "mlx", version = "0.31.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "pytest" },
+    { name = "pytest-timer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "filelock", specifier = ">=3.20.1" },
+    { name = "fonttools", specifier = ">=4.60.2" },
+    { name = "hf-transfer", specifier = ">=0.1.9,<1.0" },
+    { name = "huggingface-hub", specifier = ">=1.1.6,<2.0" },
+    { name = "matplotlib", specifier = ">=3.9.2,<4.0" },
+    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">3.10,<4.0" },
+    { name = "mlx", marker = "sys_platform == 'darwin'", specifier = ">=0.27.0,<0.32.0" },
+    { name = "mlx", marker = "sys_platform == 'darwin' and extra == 'dev'", specifier = "==0.31.0" },
+    { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux'", specifier = ">=0.30.3,<0.32.0" },
+    { name = "mlx", extras = ["cuda13"], marker = "sys_platform == 'linux' and extra == 'dev'", specifier = "==0.30.3" },
+    { name = "numpy", specifier = ">=2.0.1,<3.0" },
+    { name = "opencv-python", specifier = ">=4.10.0,<5.0" },
+    { name = "piexif", specifier = ">=1.1.3,<2.0" },
+    { name = "pillow", specifier = ">=12.1.1" },
+    { name = "platformdirs", specifier = ">=4.0,<5.0" },
+    { name = "protobuf", specifier = ">=4.25.0,<8.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0,<9.0" },
+    { name = "pytest-timer", marker = "extra == 'dev'", specifier = ">=1.0,<2.0" },
+    { name = "regex", specifier = ">=2024.11.6" },
+    { name = "requests", specifier = ">=2.32.4" },
+    { name = "safetensors", specifier = ">=0.4.4,<1.0" },
+    { name = "sentencepiece", specifier = ">=0.2.1,<1.0" },
+    { name = "tokenizers", marker = "python_full_version >= '3.13'", specifier = ">=0.20.3" },
+    { name = "toml", specifier = ">=0.10.2,<1.0" },
+    { name = "torch", specifier = ">=2.7.1,<3.0" },
+    { name = "torch", marker = "python_full_version >= '3.13'", specifier = ">=2.8.0,<3.0" },
+    { name = "tqdm", specifier = ">=4.66.5,<5.0" },
+    { name = "transformers", specifier = ">=5.0.0,<6.0" },
+    { name = "twine", specifier = ">=6.1.0,<7.0" },
+    { name = "urllib3", specifier = ">=2.6.0" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "mlx-metal"

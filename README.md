@@ -1,6 +1,6 @@
 ![image](src/mflux/assets/logo.jpg)
 
-[![AbstractVision MFLUX](https://img.shields.io/pypi/v/abstractvision-mflux?label=AbstractVision%20MFLUX&logo=pypi&logoColor=white)](https://pypi.org/project/abstractvision-mflux/)
+[![mlx-gen](https://img.shields.io/pypi/v/mlx-gen?label=mlx-gen&logo=pypi&logoColor=white)](https://pypi.org/project/mlx-gen/)
 [![MLX](https://img.shields.io/pypi/v/mlx?label=MLX&logo=pypi&logoColor=white)](https://pypi.org/project/mlx/)
 [![CI](https://github.com/lpalbou/mflux/actions/workflows/tests.yml/badge.svg)](https://github.com/lpalbou/mflux/actions/workflows/tests.yml)
 
@@ -30,10 +30,10 @@ MFLUX is a line-by-line MLX port of several state-of-the-art generative image mo
 If you haven't already, [install `uv`](https://github.com/astral-sh/uv?tab=readme-ov-file#installation), then run:
 
 ```sh
-uv tool install --upgrade abstractvision-mflux
+uv tool install --upgrade mlx-gen
 ```
 
-This AbstractVision fork is published on PyPI as `abstractvision-mflux`, while the installed Python module and CLI commands remain `mflux`.
+This fork is published on PyPI as `mlx-gen`. The canonical Python module and CLI commands remain `mflux`, with a lightweight `mlxgen` import alias for application code.
 
 After installation, the following command shows all available MFLUX CLI commands: 
 
@@ -67,10 +67,10 @@ Create a standalone `generate.py` script with inline `uv` dependencies:
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#   "abstractvision-mflux",
+#   "mlx-gen",
 # ]
 # ///
-from mflux.models.z_image import ZImageTurbo
+from mlxgen.models.z_image import ZImageTurbo
 
 model = ZImageTurbo(quantize=8)
 image = model.generate_image(
@@ -98,7 +98,7 @@ For more Python API inspiration, look at the [CLI entry points](src/mflux/models
 If you encounter a `ValueError: Fast download using 'hf_transfer' is enabled (HF_HUB_ENABLE_HF_TRANSFER=1) but 'hf_transfer' package is not available`, you can install MFLUX with the `hf_transfer` package included:
 
 ```sh
-uv tool install --upgrade abstractvision-mflux --with hf_transfer
+uv tool install --upgrade mlx-gen --with hf_transfer
 ```
 
 This will enable faster model downloads from Hugging Face.
@@ -109,7 +109,7 @@ This will enable faster model downloads from Hugging Face.
 <summary>DGX / NVIDIA (uv tool install)</summary>
 
 ```sh
-uv tool install --python 3.13 abstractvision-mflux
+uv tool install --python 3.13 mlx-gen
 ```
 </details>
 
