@@ -59,6 +59,8 @@ class ModelCardSaver:
             "",
             f"Requires `mlx-gen >= {VersionUtil.get_mflux_version()}`.",
             "",
+            f"Generated with `mlx-gen {VersionUtil.get_mflux_version()}`.",
+            "",
             "Use the `mlxgen` command and Python import path for new MLX-Gen projects.",
             "",
             "## Usage",

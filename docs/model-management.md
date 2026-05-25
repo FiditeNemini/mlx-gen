@@ -51,7 +51,7 @@ mlxgen prepare \
   --quantize 8
 ```
 
-`prepare` loads the source model, applies the requested quantization when `--quantize` is provided, writes the MLX-Gen saved-weight layout to `--path`, and writes a Hugging Face `README.md` model card into that folder.
+`prepare` loads the source model, applies the requested quantization when `--quantize` is provided, writes the MLX-Gen saved-weight layout to `--path`, and writes a Hugging Face `README.md` model card into that folder. The card records the `mlx-gen` version that generated it.
 
 Then generate from the local folder:
 
@@ -65,7 +65,7 @@ mlxgen generate \
 
 If the local folder name does not clearly identify the model family, add `--family` during generation. The supported router families are `qwen`, `flux2`, `fibo`, and `z-image`.
 
-The generated card records the source model, MLX-Gen compatibility, mflux attribution, quantization policy, and default contributor attribution. See [Hugging Face Publishing](huggingface-publishing.md) for upload and collection guidance.
+The generated card records the source model, MLX-Gen compatibility, mflux attribution, generator version, quantization policy, and default contributor attribution. See [Hugging Face Publishing](huggingface-publishing.md) for upload and collection guidance.
 
 ## Choosing Download Or Prepare
 

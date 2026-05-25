@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from mflux.models.common.weights.saving.model_card_saver import ModelCardSaver
 from mflux.models.common.weights.saving.model_saver import ModelSaver
+from mflux.utils.version_util import VersionUtil
 
 
 class QwenImageEdit:
@@ -49,6 +50,7 @@ def test_model_card_for_qwen_q4_documents_mixed_policy(tmp_path):
     assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card
     assert "mlxgen download --model lpalbou/qwen-image-edit-2511-4bit" in card
     assert "not a Diffusers or Transformers `from_pretrained()` checkpoint" in card
+    assert f"Generated with `mlx-gen {VersionUtil.get_mflux_version()}`" in card
     assert "https://github.com/filipstrand/mflux" in card
     assert "https://github.com/lpalbou/mlx-gen" in card
     assert "https://huggingface.co/lpalbou" in card

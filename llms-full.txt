@@ -114,7 +114,7 @@ Download Depth Pro weights from Apple:
 mlxgen download --model depth-pro
 ```
 
-`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local folder at `--path`, applies the requested quantization when `--quantize` is provided, and writes a generated model card.
+`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local folder at `--path`, applies the requested quantization when `--quantize` is provided, and writes a generated model card. The model card records the `mlx-gen` version that generated it.
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands. It is not required to authorize network access.
 
@@ -173,7 +173,7 @@ The q8 path was not changed by the mixed-q4 work. Qwen q8 uses the standard MLX-
 
 ## Hugging Face Publishing
 
-Prepared model folders include a generated Hugging Face `README.md` card. Upload the folder with a command such as:
+Prepared model folders include a generated Hugging Face `README.md` card. The card records the source model, compatibility notes, quantization policy, and exact `mlx-gen` version used to generate it. Upload the folder with a command such as:
 
 ```sh
 huggingface-cli upload lpalbou/qwen-image-edit-2511-4bit ./models/qwen-image-edit-2511-4bit .
