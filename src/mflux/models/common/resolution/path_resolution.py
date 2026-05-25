@@ -5,6 +5,7 @@ from pathlib import Path
 from huggingface_hub import snapshot_download
 from huggingface_hub.constants import HF_HUB_CACHE
 
+from mflux.models.common.download_policy import downloads_enabled, raise_download_required
 from mflux.models.common.resolution.actions import PathAction, Rule
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,8 @@ class PathResolution:
             # Fallback to standard snapshot_download (shouldn't happen if _check passed)
             return Path(snapshot_download(repo_id=path, allow_patterns=patterns, local_files_only=True))
         if action == PathAction.HUGGINGFACE:
+            if not downloads_enabled():
+                raise_download_required(path)
             print(f"Downloading model from HuggingFace: {path}...")
             return Path(snapshot_download(repo_id=path, allow_patterns=patterns))
         if action == PathAction.ERROR:

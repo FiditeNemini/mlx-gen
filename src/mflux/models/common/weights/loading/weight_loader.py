@@ -8,10 +8,16 @@ from typing import TYPE_CHECKING
 import mlx.core as mx
 import torch
 from huggingface_hub import snapshot_download
+from huggingface_hub.utils import LocalEntryNotFoundError
 from mlx.utils import tree_unflatten
 from safetensors.torch import load_file as torch_load_file
 
 from mflux.cli.defaults.defaults import MFLUX_CACHE_DIR
+from mflux.models.common.download_policy import (
+    downloads_enabled,
+    raise_direct_url_download_required,
+    raise_download_required,
+)
 from mflux.models.common.resolution.path_resolution import PathResolution
 from mflux.models.common.weights.loading.loaded_weights import LoadedWeights, MetaData
 from mflux.models.common.weights.loading.weight_definition import ComponentDefinition
@@ -30,7 +36,13 @@ class WeightLoader:
         repo_id: str,
         file_pattern: str = "*.safetensors",
     ) -> LoadedWeights:
-        root_path = Path(snapshot_download(repo_id=repo_id, allow_patterns=[file_pattern, "config.json"]))
+        patterns = [file_pattern, "config.json"]
+        try:
+            root_path = Path(snapshot_download(repo_id=repo_id, allow_patterns=patterns, local_files_only=True))
+        except LocalEntryNotFoundError:
+            if not downloads_enabled():
+                raise_download_required(repo_id)
+            root_path = Path(snapshot_download(repo_id=repo_id, allow_patterns=patterns))
         weights, q_level, version = WeightLoader._load_component(root_path, component)
         return LoadedWeights(
             components={component.name: weights},
@@ -176,6 +188,8 @@ class WeightLoader:
         file_path = cache_dir / filename
 
         if not file_path.exists():
+            if not downloads_enabled():
+                raise_direct_url_download_required(component_name, url)
             logger.info(f"Downloading {component_name} weights from {url}...")
             try:
                 urllib.request.urlretrieve(url, file_path)

@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 from huggingface_hub.utils import LocalEntryNotFoundError
 
+from mflux.models.common.download_policy import allow_downloads
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 
 
@@ -37,7 +38,7 @@ class TestLoraResolutionRegistry:
 class TestLoraResolutionHuggingFace:
     @pytest.mark.fast
     @patch("mflux.models.common.resolution.lora_resolution.snapshot_download")
-    def test_huggingface_repo_downloads_when_not_cached(self, mock_download, tmp_path):
+    def test_huggingface_repo_downloads_when_explicitly_enabled(self, mock_download, tmp_path):
         lora_file = tmp_path / "lora.safetensors"
         lora_file.touch()
         # First call (cache check) raises, second call (download) succeeds
@@ -46,13 +47,28 @@ class TestLoraResolutionHuggingFace:
             str(tmp_path),
         ]
 
-        result = LoraResolution.resolve(path="org/lora-repo")
+        with allow_downloads():
+            result = LoraResolution.resolve(path="org/lora-repo")
 
         assert mock_download.call_count == 2
         # First call should have local_files_only=True
         first_call = mock_download.call_args_list[0]
         assert first_call[1].get("local_files_only") is True
         assert result == str(lora_file)
+
+    @pytest.mark.fast
+    @patch("mflux.models.common.resolution.lora_resolution.snapshot_download")
+    def test_huggingface_repo_requires_explicit_download_when_not_cached(self, mock_download):
+        mock_download.side_effect = LocalEntryNotFoundError("Not cached")
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            LoraResolution.resolve(path="org/lora-repo")
+
+        error = str(exc_info.value)
+        assert "MLX-Gen will not download LoRA files during generation" in error
+        assert "mlxgen download --model org/lora-repo" in error
+        assert mock_download.call_count == 1
+        assert mock_download.call_args_list[0].kwargs["local_files_only"] is True
 
     @pytest.mark.fast
     @patch("mflux.models.common.resolution.lora_resolution.snapshot_download")
@@ -90,7 +106,7 @@ class TestLoraResolutionHuggingFace:
             str(tmp_path),
         ]
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError) as exc_info, allow_downloads():
             LoraResolution.resolve(path="org/multi-lora-repo")
 
         error_msg = str(exc_info.value)
@@ -125,7 +141,8 @@ class TestLoraResolutionHuggingFace:
             str(tmp_path),
         ]
 
-        result = LoraResolution.resolve(path="org/single-lora-repo")
+        with allow_downloads():
+            result = LoraResolution.resolve(path="org/single-lora-repo")
 
         assert result == str(lora_file)
 
@@ -146,14 +163,14 @@ class TestLoraResolutionPaths:
         assert result == []
 
     @pytest.mark.fast
-    def test_resolve_paths_filters_invalid(self, tmp_path):
+    def test_resolve_paths_raises_for_invalid(self, tmp_path):
         valid_lora = tmp_path / "valid.safetensors"
         valid_lora.touch()
 
-        result = LoraResolution.resolve_paths(paths=[str(valid_lora), "invalid-path"])
+        with pytest.raises(FileNotFoundError) as exc_info:
+            LoraResolution.resolve_paths(paths=[str(valid_lora), "invalid-path"])
 
-        assert len(result) == 1
-        assert result[0] == str(valid_lora)
+        assert "LoRA file not found" in str(exc_info.value)
 
 
 class TestLoraResolutionScales:

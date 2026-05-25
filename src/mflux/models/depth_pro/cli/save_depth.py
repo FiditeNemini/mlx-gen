@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.common.download_policy import DownloadRequiredError
 from mflux.models.depth_pro.model.depth_pro import DepthPro
 
 
@@ -10,9 +11,13 @@ def main():
     parser.add_save_depth_arguments()
     args = parser.parse_args()
 
-    # 1. Create the depth map
-    depth_pro = DepthPro(quantize=args.quantize)
-    depth_result = depth_pro.create_depth_map(image_path=args.image_path)
+    try:
+        # 1. Create the depth map
+        depth_pro = DepthPro(quantize=args.quantize)
+        depth_result = depth_pro.create_depth_map(image_path=args.image_path)
+    except DownloadRequiredError as exc:
+        print(exc)
+        raise SystemExit(1) from None
 
     # 2. Save the depth map with the same name + _depth suffix
     image_path = Path(args.image_path)

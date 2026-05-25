@@ -1,0 +1,32 @@
+# MLX-Gen
+
+MLX-Gen is an MLX-native generative image runtime derived from mflux and published as the `mlx-gen` Python package. It keeps the current mflux runtime architecture and compatibility commands while adding faster release cadence, Qwen/FLUX.2 compatibility fixes, explicit model preparation, and AbstractVision-oriented integration behavior.
+
+## Key Documents
+
+- [README.md](README.md): installation, project relationship to mflux, main CLI examples, supported model families, and acknowledgements.
+- [docs/model-management.md](docs/model-management.md): cache-only runtime policy, explicit `mlxgen download` and `mlxgen prepare` flows, Depth Pro download command, and `DownloadRequiredError`.
+- [docs/python-integration.md](docs/python-integration.md): current Python API expectations, AbstractVision integration notes, progress limitations, and threading guidance.
+- [docs/troubleshooting.md](docs/troubleshooting.md): common missing-artifact, local-path, LoRA, and `hf_transfer` issues.
+- [CHANGELOG.md](CHANGELOG.md): release history.
+
+## Important Runtime Contract
+
+Generation and Python model construction are cache-only by default. MLX-Gen does not download model, tokenizer, LoRA, or Depth Pro files during runtime generation. Missing artifacts raise `DownloadRequiredError` with an exact explicit command to run.
+
+Explicit preparation commands:
+
+```sh
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen download --model Qwen/Qwen-Image
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit -q 8
+mlxgen download --model depth-pro
+```
+
+## Code Entry Points
+
+- `src/mflux/cli/mlx_gen.py`: smart `mlxgen` command router plus explicit `download` and `prepare`.
+- `src/mflux/models/common/download_policy.py`: download policy, explicit command helpers, and `DownloadRequiredError`.
+- `src/mflux/models/common/resolution/path_resolution.py`: cache-only Hugging Face model path resolution.
+- `src/mflux/models/common/tokenizer/tokenizer_loader.py`: cache-only tokenizer resolution.
+- `src/mflux/models/common/resolution/lora_resolution.py`: cache-only LoRA resolution.
+- `src/mflux/models/common/weights/loading/weight_loader.py`: weight loading, including direct URL policy for Depth Pro.

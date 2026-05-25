@@ -7,6 +7,7 @@ from huggingface_hub import snapshot_download
 from huggingface_hub.utils import LocalEntryNotFoundError
 
 from mflux.cli.defaults.defaults import MFLUX_LORA_CACHE_DIR
+from mflux.models.common.download_policy import DownloadRequiredError, downloads_enabled
 from mflux.models.common.resolution.actions import LoraAction, Rule
 
 logger = logging.getLogger(__name__)
@@ -40,15 +41,7 @@ class LoraResolution:
     def resolve_paths(paths: list[str] | None) -> list[str]:
         if not paths:
             return []
-        return [r for path in paths if (r := LoraResolution._try_resolve(path)) is not None]
-
-    @staticmethod
-    def _try_resolve(path: str) -> str | None:
-        try:
-            return LoraResolution.resolve(path)
-        except FileNotFoundError as e:
-            print(f"⚠️  {e}")
-            return None
+        return [LoraResolution.resolve(path) for path in paths]
 
     @staticmethod
     def resolve_scales(scales: list[float] | None, num_paths: int) -> list[float]:
@@ -162,11 +155,16 @@ class LoraResolution:
             repo_id, filename = LoraResolution._split_collection_path(path)
             return LoraResolution._load_collection_from_cache(repo_id, filename)
         if action == LoraAction.HUGGINGFACE_COLLECTION:
+            if not downloads_enabled():
+                repo_id, _filename = LoraResolution._split_collection_path(path)
+                raise DownloadRequiredError(repo_id, artifact="LoRA")
             repo_id, filename = LoraResolution._split_collection_path(path)
             return LoraResolution._download_collection(repo_id, filename)
         if action == LoraAction.HUGGINGFACE_REPO_CACHED:
             return LoraResolution._load_repo_from_cache(path)
         if action == LoraAction.HUGGINGFACE_REPO:
+            if not downloads_enabled():
+                raise DownloadRequiredError(path, artifact="LoRA")
             return LoraResolution._download_repo(path)
         if action == LoraAction.ERROR:
             raise FileNotFoundError(

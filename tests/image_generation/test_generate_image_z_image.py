@@ -44,6 +44,5 @@ class TestImageGeneratorZImage:
             quantize=8,
             lora_paths=["renderartist/Technically-Color-Z-Image-Turbo"],
             lora_scales=[0.5],
-            clear_lora_cache_pattern="Technically-Color",  # Test fresh LoRA download works
             mismatch_threshold=0.35,  # LoRA tests have higher variance
         )

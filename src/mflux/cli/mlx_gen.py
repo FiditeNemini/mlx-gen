@@ -1,11 +1,15 @@
 import argparse
 import json
+import shlex
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from huggingface_hub import snapshot_download
+
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.download_policy import allow_downloads, is_huggingface_repo_id
 from mflux.utils.exceptions import ModelConfigError
 
 
@@ -26,11 +30,20 @@ class _Route:
 
 
 def main() -> None:
-    invocation = _resolve_invocation(_normalize_command(sys.argv[1:]))
+    argv = sys.argv[1:]
+    if argv and argv[0] in {"download", "prepare"}:
+        _run_model_command(argv)
+        return
+
+    invocation = _resolve_invocation(_normalize_command(argv))
     previous_argv = sys.argv
     try:
         sys.argv = invocation.argv
-        invocation.target_main()
+        try:
+            invocation.target_main()
+        except FileNotFoundError as exc:
+            print(exc)
+            raise SystemExit(1) from None
     finally:
         sys.argv = previous_argv
 
@@ -186,6 +199,119 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _run_model_command(argv: list[str]) -> None:
+    command = argv[0]
+    if command == "download":
+        _download_model(argv[1:])
+        return
+    if command == "prepare":
+        _prepare_model(argv[1:])
+        return
+    raise AssertionError("unreachable")
+
+
+def _download_model(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="mlxgen download",
+        description="Explicitly download a Hugging Face model snapshot into the local cache.",
+    )
+    parser.add_argument("--model", "-m", required=True, help="Model alias or Hugging Face repo id.")
+    parser.add_argument("--base-model", default=None, help="Base model hint for custom repositories.")
+    parser.add_argument(
+        "--all-files",
+        action="store_true",
+        help="Download the full repository instead of the MLX-Gen weight/tokenizer patterns.",
+    )
+    args = parser.parse_args(argv)
+
+    if _is_depth_pro_download(args.model):
+        _download_depth_pro()
+        return
+
+    model_config = _model_config(args.model, base_model=args.base_model)
+    repo_id = model_config.model_name if model_config is not None else args.model
+    if not is_huggingface_repo_id(repo_id):
+        parser.error(f"--model must resolve to a Hugging Face repo id for download. Got: {repo_id!r}")
+
+    patterns = None if args.all_files else _download_patterns(model_config, repo_id)
+    print(f"Downloading {repo_id} into the Hugging Face cache...")
+    with allow_downloads():
+        path = snapshot_download(repo_id=repo_id, allow_patterns=patterns)
+    print(f"Downloaded snapshot: {path}")
+    print("You can now run generation without a runtime download, for example:")
+    print(
+        "  mlxgen generate --model "
+        f"{shlex.quote(repo_id)} --prompt 'A product photo of a ceramic teapot' --output image.png"
+    )
+
+
+def _is_depth_pro_download(model: str) -> bool:
+    normalized = model.strip().lower().replace("_", "-")
+    return normalized in {"depth-pro", "apple/depth-pro"}
+
+
+def _download_depth_pro() -> None:
+    from mflux.models.common.weights.loading.weight_loader import WeightLoader
+    from mflux.models.depth_pro.weights.depth_pro_weight_definition import DepthProWeightDefinition
+
+    component = DepthProWeightDefinition.get_components()[0]
+    if component.download_url is None:
+        raise RuntimeError("Depth Pro download URL is not configured.")
+
+    print("Downloading Depth Pro weights into the MLX-Gen cache...")
+    with allow_downloads():
+        path = WeightLoader._download_from_url(component.download_url, component.name)
+    print(f"Downloaded Depth Pro weights: {path}")
+
+
+def _prepare_model(argv: list[str]) -> None:
+    from mflux.models.common.cli.save import main as save_main
+
+    previous_argv = sys.argv
+    try:
+        sys.argv = ["mflux-save", *argv]
+        with allow_downloads():
+            save_main()
+    finally:
+        sys.argv = previous_argv
+
+
+def _download_patterns(model_config: ModelConfig | None, repo_id: str) -> list[str] | None:
+    if model_config is None:
+        return None
+
+    aliases = set(model_config.aliases)
+    model_key = _model_key(model_config.model_name, model_config.base_model, repo_id)
+    weight_definition = _weight_definition_for(aliases, model_key)
+    if weight_definition is None:
+        return None
+
+    patterns = list(weight_definition.get_download_patterns())
+    for tokenizer in weight_definition.get_tokenizers():
+        patterns.extend(tokenizer.download_patterns or [f"{tokenizer.hf_subdir}/**"])
+    return sorted(set(patterns))
+
+
+def _weight_definition_for(aliases: set[str], model_key: str):
+    if _is_qwen(aliases, model_key):
+        from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
+
+        return QwenWeightDefinition
+    if _is_flux2(aliases, model_key):
+        from mflux.models.flux2.weights.flux2_weight_definition import Flux2KleinWeightDefinition
+
+        return Flux2KleinWeightDefinition
+    if _is_fibo(aliases, model_key):
+        from mflux.models.fibo.weights.fibo_weight_definition import FIBOWeightDefinition
+
+        return FIBOWeightDefinition
+    if _is_z_image(aliases, model_key):
+        from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightDefinition
+
+        return ZImageWeightDefinition
+    return None
+
+
 def _collect_images(args: argparse.Namespace) -> list[str]:
     images = []
     if args.image_path is not None:
@@ -259,11 +385,11 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
     raise AssertionError("unreachable")
 
 
-def _model_config(model: str | None) -> ModelConfig | None:
+def _model_config(model: str | None, base_model: str | None = None) -> ModelConfig | None:
     if model is None:
         return None
     try:
-        return ModelConfig.from_name(model)
+        return ModelConfig.from_name(model, base_model=base_model)
     except ModelConfigError:
         return None
 

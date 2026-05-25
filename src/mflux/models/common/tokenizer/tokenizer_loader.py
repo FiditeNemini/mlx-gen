@@ -5,6 +5,7 @@ import transformers
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import LocalEntryNotFoundError
 
+from mflux.models.common.download_policy import DownloadRequiredError, downloads_enabled, explicit_download_hint
 from mflux.models.common.tokenizer.tokenizer import (
     BaseTokenizer,
     LanguageTokenizer,
@@ -103,6 +104,14 @@ class TokenizerLoader:
                 return fallback_path
 
         if is_hf_repo and saw_cached_snapshot:
+            if not downloads_enabled():
+                TokenizerLoader._raise_missing_tokenizer_error(
+                    model_path=model_path,
+                    hf_subdir=hf_subdir,
+                    fallback_subdirs=fallback_subdirs,
+                    is_hf_repo=is_hf_repo,
+                    saw_cached_snapshot=saw_cached_snapshot,
+                )
             refreshed_root_path, download_error = TokenizerLoader._refresh_hf_root_path(
                 model_path=model_path,
                 patterns=patterns,
@@ -179,6 +188,8 @@ class TokenizerLoader:
                 )
             )
         except LocalEntryNotFoundError:
+            if not downloads_enabled():
+                raise DownloadRequiredError(model_path, artifact="tokenizer") from None
             root_path, download_error = TokenizerLoader._download_hf_root_path(
                 model_path=model_path,
                 patterns=patterns,
@@ -319,7 +330,7 @@ class TokenizerLoader:
             else:
                 message = (
                     f"No usable tokenizer files were found for Hugging Face repo '{model_path}'. "
-                    f"Checked {checked_summary}."
+                    f"Checked {checked_summary}.\n{explicit_download_hint(model_path, artifact='tokenizer')}"
                 )
         else:
             message = (
@@ -328,6 +339,8 @@ class TokenizerLoader:
 
         if download_error is not None:
             raise FileNotFoundError(message) from download_error
+        if is_hf_repo:
+            raise DownloadRequiredError(model_path, artifact="tokenizer", message=message)
         raise FileNotFoundError(message)
 
     @staticmethod

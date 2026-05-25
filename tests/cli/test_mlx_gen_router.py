@@ -5,6 +5,7 @@ import pytest
 
 from mflux.cli import mlx_gen
 from mflux.cli.mlx_gen import RouterInvocation
+from mflux.models.common.download_policy import downloads_enabled
 
 
 def test_routes_qwen_image_to_text_or_image_generation():
@@ -288,3 +289,83 @@ def test_main_restores_sys_argv(monkeypatch):
 
     assert observed == [routed_argv]
     assert sys.argv == original_argv
+
+
+def test_main_prints_download_hint_without_traceback(monkeypatch, capsys):
+    def fake_main():
+        raise FileNotFoundError("MLX-Gen will not download model files during generation.")
+
+    monkeypatch.setattr(
+        mlx_gen,
+        "_resolve_invocation",
+        lambda argv: RouterInvocation("mflux-generate-qwen", fake_main, ["mflux-generate-qwen"]),
+    )
+    monkeypatch.setattr(sys, "argv", ["mlxgen", "generate", "--model", "Qwen/Qwen-Image"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        mlx_gen.main()
+
+    assert exc_info.value.code == 1
+    assert "MLX-Gen will not download model files during generation" in capsys.readouterr().out
+
+
+def test_download_command_enables_downloads_temporarily(monkeypatch, capsys):
+    calls = []
+
+    def fake_snapshot_download(*, repo_id, allow_patterns):
+        calls.append((repo_id, allow_patterns, downloads_enabled()))
+        return "/tmp/hf-cache/snapshot"
+
+    monkeypatch.setattr(mlx_gen, "snapshot_download", fake_snapshot_download)
+
+    mlx_gen._download_model(["--model", "Qwen/Qwen-Image"])
+
+    assert calls
+    assert calls[0][0] == "Qwen/Qwen-Image"
+    assert calls[0][1] is not None
+    assert calls[0][2] is True
+    assert downloads_enabled() is False
+    assert "mlxgen generate --model" in capsys.readouterr().out
+
+
+def test_prepare_command_routes_to_save_with_downloads_enabled(monkeypatch):
+    observed = []
+
+    def fake_save_main():
+        observed.append((sys.argv[:], downloads_enabled()))
+
+    monkeypatch.setattr("mflux.models.common.cli.save.main", fake_save_main)
+
+    mlx_gen._prepare_model(["--model", "Qwen/Qwen-Image", "--path", "../models/qwen-image-8bit", "-q", "8"])
+
+    assert observed == [
+        (
+            ["mflux-save", "--model", "Qwen/Qwen-Image", "--path", "../models/qwen-image-8bit", "-q", "8"],
+            True,
+        )
+    ]
+    assert downloads_enabled() is False
+
+
+def test_depth_pro_download_command_enables_direct_url_download(monkeypatch, capsys, tmp_path):
+    calls = []
+
+    def fake_download_from_url(url, component_name):
+        calls.append((url, component_name, downloads_enabled()))
+        return tmp_path / component_name / "depth_pro.pt"
+
+    monkeypatch.setattr(
+        "mflux.models.common.weights.loading.weight_loader.WeightLoader._download_from_url", fake_download_from_url
+    )
+
+    mlx_gen._download_model(["--model", "depth-pro"])
+
+    assert calls == [
+        (
+            "https://ml-site.cdn-apple.com/models/depth-pro/depth_pro.pt",
+            "depth_pro",
+            True,
+        )
+    ]
+    assert downloads_enabled() is False
+    assert "Downloaded Depth Pro weights" in capsys.readouterr().out

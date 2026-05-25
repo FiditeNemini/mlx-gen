@@ -1,8 +1,9 @@
 import os
-import shutil
 from pathlib import Path
 
-from mflux.cli.defaults.defaults import MFLUX_LORA_CACHE_DIR
+import pytest
+
+from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.z_image import ZImageTurbo
 from mflux.utils.image_compare import ImageCompare
 
@@ -21,14 +22,13 @@ class ImageGeneratorZImageTestHelper:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         mismatch_threshold: float | None = None,
-        clear_lora_cache_pattern: str | None = None,
     ):
         reference_image_path = ImageGeneratorZImageTestHelper.resolve_path(reference_image_path)
         output_image_path = ImageGeneratorZImageTestHelper.resolve_path(output_image_path)
 
-        # Clear cached LoRA to test download functionality
-        if clear_lora_cache_pattern:
-            ImageGeneratorZImageTestHelper.clear_cached_lora(clear_lora_cache_pattern)
+        if lora_paths:
+            for lora_path in lora_paths:
+                ImageGeneratorZImageTestHelper.require_cached_lora(lora_path)
 
         try:
             model = ZImageTurbo(
@@ -58,20 +58,11 @@ class ImageGeneratorZImageTestHelper:
                 os.remove(output_image_path)
 
     @staticmethod
-    def clear_cached_lora(pattern: str) -> None:
-        cache_dir = MFLUX_LORA_CACHE_DIR
-        if not cache_dir.exists():
-            return
-
-        # Look for directories matching the pattern (HuggingFace style: models--repo--name)
-        for item in cache_dir.iterdir():
-            if pattern.lower() in item.name.lower():
-                if item.is_dir():
-                    print(f"🗑️  Clearing cached LoRA directory: {item}")
-                    shutil.rmtree(item)
-                elif item.is_file() or item.is_symlink():
-                    print(f"🗑️  Clearing cached LoRA file: {item}")
-                    item.unlink()
+    def require_cached_lora(path: str) -> None:
+        try:
+            LoraResolution.resolve(path)
+        except FileNotFoundError as exc:
+            pytest.skip(f"LoRA is not cached. Run the command from the error first: {exc}")
 
     @staticmethod
     def resolve_path(path) -> Path | None:

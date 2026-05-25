@@ -1,6 +1,7 @@
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.common.download_policy import DownloadRequiredError
 from mflux.models.flux.latent_creator.flux_latent_creator import FluxLatentCreator
 from mflux.models.flux.variants.depth.flux_depth import Flux1Depth
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
@@ -22,23 +23,24 @@ def main():
     if args.guidance is None:
         args.guidance = ui_defaults.DEFAULT_DEPTH_GUIDANCE
 
-    # 1. Load the model
-    flux = Flux1Depth(
-        quantize=args.quantize,
-        model_path=args.model_path,
-        lora_paths=args.lora_paths,
-        lora_scales=args.lora_scales,
-    )
-
-    # 2. Register callbacks
-    memory_saver = CallbackManager.register_callbacks(
-        args=args,
-        model=flux,
-        latent_creator=FluxLatentCreator,
-        enable_depth_saver=True,
-    )
-
+    memory_saver = None
     try:
+        # 1. Load the model
+        flux = Flux1Depth(
+            quantize=args.quantize,
+            model_path=args.model_path,
+            lora_paths=args.lora_paths,
+            lora_scales=args.lora_scales,
+        )
+
+        # 2. Register callbacks
+        memory_saver = CallbackManager.register_callbacks(
+            args=args,
+            model=flux,
+            latent_creator=FluxLatentCreator,
+            enable_depth_saver=True,
+        )
+
         for seed in args.seed:
             # 3. Generate an image for each seed value
             image = flux.generate_image(
@@ -55,6 +57,9 @@ def main():
 
             # 4. Save the image
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
+    except DownloadRequiredError as exc:
+        print(exc)
+        raise SystemExit(1) from None
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)
     finally:

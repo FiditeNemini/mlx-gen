@@ -5,26 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.17.5] - 2026-04-10
+## [0.17.5.post3] - 2026-05-25
 
-### 🐛 Bug Fixes
+### Changed
 
-- **Qwen Image Edit `mflux-save`**: Route Qwen edit model names to `QwenImageEdit` and save through the same path as inference so VisionTransformer (`encoder.visual`) weights are written. Saving with `QwenImage` previously omitted those weights and led to random vision encoders after reload.
-- **Battery saver callback**: Harden Apple Silicon battery detection when `system_profiler` is missing and resolve the helper script via absolute paths.
+- **Explicit model preparation**: Runtime generation and Python model construction no longer download missing model, tokenizer, LoRA, or Depth Pro files. Missing artifacts now raise `DownloadRequiredError` with the exact `mlxgen download` or `mlxgen prepare` command to run.
+- **Smart MLX-Gen commands**: Add `mlxgen download` and `mlxgen prepare` as explicit preparation flows. `mlxgen download --model depth-pro` handles the direct Apple Depth Pro weights.
+- **LoRA handling**: User-requested LoRAs are required; missing LoRA files now fail instead of being silently ignored.
 
-### 📝 Documentation
+### Documentation
 
-- **Related projects**: Clarify that MindCraft Studio is a macOS app built on mflux.
-
-### 🧰 DX & Maintenance
-
-- **Dependencies**: Relax the `protobuf` upper bound to allow current 7.x releases while keeping a safe ceiling below 8.0.
-
-### 👩‍💻 Contributors
-
-- **@anthonywu**
-- **@f-gibellini**
-- **@JiwaniZakir**
+- Document cache-only runtime behavior, Python integration expectations, AbstractVision usage context, and explicit model-management workflows.
 
 ---
 
@@ -57,6 +48,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🧰 DX & Maintenance
 
 - **AbstractVision package**: Publish this fork as `abstractvision-mflux` on PyPI while preserving the `mflux` Python module and CLI command names.
+
+---
+
+## [0.17.5] - 2026-04-10
+
+### 🐛 Bug Fixes
+
+- **Qwen Image Edit `mflux-save`**: Route Qwen edit model names to `QwenImageEdit` and save through the same path as inference so VisionTransformer (`encoder.visual`) weights are written. Saving with `QwenImage` previously omitted those weights and led to random vision encoders after reload.
+- **Battery saver callback**: Harden Apple Silicon battery detection when `system_profiler` is missing and resolve the helper script via absolute paths.
+
+### 📝 Documentation
+
+- **Related projects**: Clarify that MindCraft Studio is a macOS app built on mflux.
+
+### 🧰 DX & Maintenance
+
+- **Dependencies**: Relax the `protobuf` upper bound to allow current 7.x releases while keeping a safe ceiling below 8.0.
+
+### 👩‍💻 Contributors
+
+- **@anthonywu**
+- **@f-gibellini**
+- **@JiwaniZakir**
 
 ---
 

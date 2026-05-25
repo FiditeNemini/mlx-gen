@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from mflux.cli.defaults.defaults import MFLUX_CACHE_DIR
 from mflux.models.depth_pro.model.depth_pro import DepthPro
 from mflux.utils.image_compare import ImageCompare
 
@@ -12,6 +13,10 @@ class TestDepthPro:
     @pytest.mark.skipif(platform.system() == "Linux", reason="Linux-specific MLX core library failure")
     @pytest.mark.slow
     def test_depth_pro_generation(self):
+        depth_pro_weights = MFLUX_CACHE_DIR / "depth_pro" / "depth_pro.pt"
+        if not depth_pro_weights.exists():
+            pytest.skip("Depth Pro weights are not cached. Run `mlxgen download --model depth-pro` first.")
+
         # Resolve paths
         resource_dir = Path(__file__).parent.parent / "resources"
         input_image_path = resource_dir / "reference_controlnet_dev_lora.png"

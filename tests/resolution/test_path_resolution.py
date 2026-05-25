@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from mflux.models.common.download_policy import allow_downloads
 from mflux.models.common.resolution.path_resolution import PathResolution
 
 
@@ -75,13 +76,33 @@ class TestPathResolutionLocal:
 class TestPathResolutionHuggingFace:
     @pytest.mark.fast
     @patch("mflux.models.common.resolution.path_resolution.snapshot_download")
-    def test_huggingface_format_downloads_when_not_cached(self, mock_download, tmp_path):
-        # No cache exists, so snapshot_download is called once to download
+    def test_huggingface_format_requires_explicit_download_when_not_cached(self, mock_download):
+        with pytest.raises(FileNotFoundError) as exc_info:
+            PathResolution.resolve(path="org/model")
+
+        assert "will not download model files during generation" in str(exc_info.value)
+        assert "mlxgen download --model org/model" in str(exc_info.value)
+        mock_download.assert_not_called()
+
+    @pytest.mark.fast
+    @patch("mflux.models.common.resolution.path_resolution.snapshot_download")
+    def test_ambient_env_does_not_enable_runtime_downloads(self, mock_download, monkeypatch):
+        monkeypatch.setenv("MLX_GEN_ALLOW_DOWNLOAD", "1")
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            PathResolution.resolve(path="org/model")
+
+        assert "will not download model files during generation" in str(exc_info.value)
+        mock_download.assert_not_called()
+
+    @pytest.mark.fast
+    @patch("mflux.models.common.resolution.path_resolution.snapshot_download")
+    def test_huggingface_format_downloads_when_explicitly_enabled(self, mock_download, tmp_path):
         mock_download.return_value = str(tmp_path / "cached")
 
-        result = PathResolution.resolve(path="org/model")
+        with allow_downloads():
+            result = PathResolution.resolve(path="org/model")
 
-        # Called once (download only - cache check uses _find_complete_cached_snapshot)
         assert mock_download.call_count == 1
         call_kwargs = mock_download.call_args[1]
         assert "local_files_only" not in call_kwargs
@@ -105,7 +126,8 @@ class TestPathResolutionHuggingFace:
     def test_huggingface_passes_patterns(self, mock_download, tmp_path):
         mock_download.return_value = str(tmp_path / "cached")
 
-        PathResolution.resolve(path="org/model", patterns=["*.bin", "*.json"])
+        with allow_downloads():
+            PathResolution.resolve(path="org/model", patterns=["*.bin", "*.json"])
 
         call_kwargs = mock_download.call_args[1]
         assert call_kwargs["allow_patterns"] == ["*.bin", "*.json"]

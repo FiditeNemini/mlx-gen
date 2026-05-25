@@ -1,0 +1,43 @@
+# Troubleshooting
+
+## MLX-Gen Will Not Download Files During Generation
+
+This is expected. Runtime generation is cache-only. Run the command shown in the error message, then retry the generation.
+
+Common commands:
+
+```sh
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen download --model Qwen/Qwen-Image
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit -q 8
+mlxgen download --model depth-pro
+```
+
+## Local Path Cannot Be Classified
+
+When using a local model path, MLX-Gen may not be able to infer the model family from the folder name. Add `--family`:
+
+```sh
+mlxgen generate \
+  --model ./models/qwen-image-8bit \
+  --family qwen \
+  --prompt "A clean studio product photo" \
+  --output image.png
+```
+
+Supported router families are `qwen`, `flux2`, `fibo`, and `z-image`.
+
+## LoRA Is Missing
+
+User-requested LoRAs are required. MLX-Gen no longer ignores a missing LoRA and continues without it. Download the LoRA repository or use a local `.safetensors` file path.
+
+```sh
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen download --model RiverZ/normal-lora --all-files
+```
+
+## hf_transfer Error
+
+If `HF_HUB_ENABLE_HF_TRANSFER=1` is enabled but the `hf_transfer` package is unavailable, install MLX-Gen with the extra package available to the environment:
+
+```sh
+uv tool install --upgrade mlx-gen --with hf_transfer
+```

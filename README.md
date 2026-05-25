@@ -18,6 +18,7 @@ Run state-of-the-art generative image models locally with native MLX.
 - [Relationship to mflux](#relationship-to-mflux)
 - [💡 Philosophy](#-philosophy)
 - [💿 Installation](#-installation)
+- [Model Downloads](#model-downloads)
 - [🎨 Models](#-models)
 - [✨ Features](#-features)
 - [🌱 Related projects](#related-projects)
@@ -70,6 +71,8 @@ uv tool list
 To generate your first image, use `mlxgen generate` and choose the model with `--model`:
 
 ```
+mlxgen download --model z-image-turbo
+
 mlxgen generate \
   --model z-image-turbo \
   --prompt "A puffin standing on a cliff" \
@@ -87,6 +90,8 @@ The same router is also available as `mlx-gen`, `mlxgen-generate`, and `mlx-gene
 For image editing, pass input images with `--image` or `--images`; MLX-Gen routes to the right backend from the model and image inputs:
 
 ```sh
+mlxgen download --model lpalbou/qwen-image-edit-2511-4bit
+
 mlxgen generate \
   --model lpalbou/qwen-image-edit-2511-4bit \
   --image input.png \
@@ -98,7 +103,27 @@ mlxgen generate \
 
 If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family fibo`, or `--family z-image`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
 
-The first time you run this, the model will automatically download which can take some time. See the [model section](#-models) for the different options and features, and the [common README](src/mflux/models/common/README.md) for shared CLI patterns and examples.
+### Model Downloads
+
+MLX-Gen does not download model, tokenizer, LoRA, or Depth Pro files during generation. Generation is cache-only by default so applications can run predictable workflows without a network transfer starting in the middle of a job.
+
+Use one of these explicit preparation commands before generation:
+
+```sh
+# Download the required Hugging Face snapshot into the local cache.
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen download --model Qwen/Qwen-Image
+
+# Save a reusable local MLX-Gen model folder, optionally quantized.
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen prepare \
+  --model Qwen/Qwen-Image \
+  --path ./models/qwen-image-8bit \
+  -q 8
+
+# Download the direct Apple Depth Pro weights used by depth workflows.
+mlxgen download --model depth-pro
+```
+
+If a required artifact is missing, MLX-Gen raises `DownloadRequiredError` with the exact command to run. See [docs/model-management.md](docs/model-management.md) for details and [docs/python-integration.md](docs/python-integration.md) for in-process usage.
 
 <details>
 <summary>Python API</summary>
@@ -129,6 +154,7 @@ image.save("puffin.png")
 Run it with:
 
 ```sh
+mlxgen download --model z-image-turbo
 uv run generate.py
 ```
 

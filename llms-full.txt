@@ -1,0 +1,123 @@
+# MLX-Gen Full Documentation Context
+
+## Project Summary
+
+MLX-Gen is an MLX-native generative image runtime derived from mflux and published as the `mlx-gen` Python package. It preserves mflux compatibility while adding independent release cadence, Qwen Image/Edit support, FLUX.2 fixes, quantized model packaging, local model loading behavior, and AbstractVision integration needs.
+
+Most internals currently remain under `mflux.*`; new application code may import through `mlxgen` where aliases exist. Existing `mflux-*` CLI commands remain available for compatibility.
+
+## Relationship To mflux
+
+MLX-Gen started as a fork of `filipstrand/mflux`. Most credit for the current codebase goes to Filip Strand and the original mflux contributors. Changes after the fork are maintained in this project. The project keeps mflux vocabulary where useful for compatibility and possible upstream merge-back, while it may diverge as its own package.
+
+## Runtime Download Policy
+
+MLX-Gen generation is cache-only by default. It will not download model weights, tokenizers, LoRAs, or Depth Pro weights during generation or ordinary Python model construction.
+
+This is required for embedded workflow engines such as AbstractVision: a complex job should not unexpectedly start a large network transfer. Missing files raise `DownloadRequiredError`, which is also a `FileNotFoundError` for compatibility.
+
+The exception exposes:
+
+- `repo_id`
+- `artifact`
+- `download_command`
+- `prepare_command` when a local prepared folder is applicable
+
+## Explicit Model Management
+
+Download a Hugging Face snapshot into the local cache:
+
+```sh
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen download --model Qwen/Qwen-Image
+```
+
+Download a known alias:
+
+```sh
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen download --model z-image-turbo
+```
+
+Prepare a reusable local MLX-Gen folder:
+
+```sh
+HF_HUB_ENABLE_HF_TRANSFER=1 mlxgen prepare \
+  --model Qwen/Qwen-Image \
+  --path ./models/qwen-image-8bit \
+  -q 8
+```
+
+Download Depth Pro weights from Apple:
+
+```sh
+mlxgen download --model depth-pro
+```
+
+## CLI Usage
+
+Use `mlxgen generate` as the smart router:
+
+```sh
+mlxgen generate \
+  --model z-image-turbo \
+  --prompt "A puffin standing on a cliff" \
+  --width 1280 \
+  --height 500 \
+  --seed 42 \
+  --steps 9 \
+  -q 8
+```
+
+For image editing:
+
+```sh
+mlxgen generate \
+  --model lpalbou/qwen-image-edit-2511-4bit \
+  --image input.png \
+  --prompt "Turn the room into a pencil sketch" \
+  --steps 20 \
+  --seed 42 \
+  --output edited.png
+```
+
+If a local model path or custom repository name cannot be classified, pass `--family qwen`, `--family flux2`, `--family fibo`, or `--family z-image`.
+
+## Python Integration
+
+Python callers should prepare models before constructing runtime model objects.
+
+```python
+from mflux.models.common.download_policy import DownloadRequiredError
+from mlxgen.models.z_image import ZImageTurbo
+
+try:
+    model = ZImageTurbo(quantize=8)
+except DownloadRequiredError as exc:
+    print(exc.download_command)
+    raise
+```
+
+Applications should surface the exception message or command fields and stop the workflow.
+
+## AbstractVision
+
+MLX-Gen is intended to be the Apple Silicon / MLX dependency for AbstractVision while AbstractVision remains cross-platform.
+
+Current responsibilities:
+
+- AbstractVision owns provider-neutral request objects, artifact storage, capability checks, and AbstractCore plugin integration.
+- MLX-Gen owns MLX model loading, model-family behavior, local quantized formats, and runtime compatibility fixes.
+- MLX-Gen fails early when required local artifacts are missing so AbstractVision can surface an actionable remediation message.
+
+## Troubleshooting
+
+If MLX-Gen says it will not download files during generation, run the command shown in the error and retry.
+
+If a local path cannot be classified, add `--family`.
+
+If a LoRA is missing, download it or pass a local `.safetensors` path. Missing user-requested LoRAs are required and are not silently ignored.
+
+If `HF_HUB_ENABLE_HF_TRANSFER=1` fails because `hf_transfer` is missing, install MLX-Gen with:
+
+```sh
+uv tool install --upgrade mlx-gen --with hf_transfer
+```
