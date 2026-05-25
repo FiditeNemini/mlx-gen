@@ -11,7 +11,7 @@ Run state-of-the-art generative image models locally with native MLX.
 > [!IMPORTANT]
 > MLX-Gen is an independent project derived from [mflux](https://github.com/filipstrand/mflux). It is not an upstream mflux release, though it currently keeps the mflux runtime architecture, model code layout, and `mflux-*` CLI compatibility while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
 >
-> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
+> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
 
 ### Table of contents
 
@@ -67,10 +67,11 @@ After installation, the following command shows all available CLI commands:
 uv tool list 
 ```
 
-To generate your first image using, for example, the z-image-turbo model, run
+To generate your first image, use `mlxgen generate` and choose the model with `--model`:
 
 ```
-mflux-generate-z-image-turbo \
+mlxgen generate \
+  --model z-image-turbo \
   --prompt "A puffin standing on a cliff" \
   --width 1280 \
   --height 500 \
@@ -80,6 +81,22 @@ mflux-generate-z-image-turbo \
 ```
 
 ![Puffin](src/mflux/assets/puffin.png)
+
+The same router is also available as `mlx-gen`, `mlxgen-generate`, and `mlx-generate`.
+
+For image editing, pass input images with `--image` or `--images`; MLX-Gen routes to the right backend from the model and image inputs:
+
+```sh
+mlxgen generate \
+  --model lpalbou/qwen-image-edit-2511-4bit \
+  --image input.png \
+  --prompt "Turn the room into a pencil sketch" \
+  --steps 20 \
+  --seed 42 \
+  --output edited.png
+```
+
+If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family fibo`, or `--family z-image`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
 
 The first time you run this, the model will automatically download which can take some time. See the [model section](#-models) for the different options and features, and the [common README](src/mflux/models/common/README.md) for shared CLI patterns and examples.
 

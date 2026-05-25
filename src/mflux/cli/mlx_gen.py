@@ -1,0 +1,364 @@
+import argparse
+import json
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+
+from mflux.models.common.config import ModelConfig
+from mflux.utils.exceptions import ModelConfigError
+
+
+@dataclass(frozen=True)
+class RouterInvocation:
+    target_name: str
+    target_main: Callable[[], None]
+    argv: list[str]
+
+
+@dataclass(frozen=True)
+class _Route:
+    target_name: str
+    target_main: Callable[[], None]
+    image_argument: str | None
+    requires_image: bool
+    model_override: str | None = None
+
+
+def main() -> None:
+    invocation = _resolve_invocation(_normalize_command(sys.argv[1:]))
+    previous_argv = sys.argv
+    try:
+        sys.argv = invocation.argv
+        invocation.target_main()
+    finally:
+        sys.argv = previous_argv
+
+
+def _resolve_invocation(argv: list[str]) -> RouterInvocation:
+    args, forwarded = _parse_router_args(argv)
+    images = _collect_images(args)
+    route = _resolve_route(args, image_count=len(images))
+    if route.requires_image and not images:
+        _parser().error(f"{route.target_name} requires --image or --images.")
+
+    forwarded_model = route.model_override or args.model
+    normalized_argv = [route.target_name]
+    if forwarded_model is not None:
+        normalized_argv.extend(["--model", forwarded_model])
+    if route.image_argument is not None and images:
+        normalized_argv.append(route.image_argument)
+        normalized_argv.extend(images)
+    normalized_argv.extend(forwarded)
+
+    return RouterInvocation(
+        target_name=route.target_name,
+        target_main=route.target_main,
+        argv=normalized_argv,
+    )
+
+
+def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
+    parser = _parser()
+    args, forwarded = parser.parse_known_args(argv)
+    metadata = _read_metadata_config(parser, argv)
+    if args.model is None:
+        args.model = metadata.get("model")
+    args.metadata_images = _metadata_images(metadata)
+    args.task = _normalize_task(args.task)
+    args.has_image_strength = _option_was_provided(argv, "--image-strength")
+    if args.model is None:
+        parser.error("--model is required so mlx-gen can choose the right backend, unless metadata provides it.")
+    return args, forwarded
+
+
+def _normalize_command(argv: list[str]) -> list[str]:
+    if argv and argv[0] in {"generate", "gen"}:
+        return argv[1:]
+    return argv
+
+
+def _normalize_task(task: str) -> str:
+    aliases = {
+        "txt2img": "text-to-image",
+        "img2img": "image-to-image",
+    }
+    return aliases.get(task, task)
+
+
+def _option_was_provided(argv: list[str], option_name: str) -> bool:
+    for token in argv:
+        if token == option_name or token.startswith(f"{option_name}="):
+            return True
+    return False
+
+
+def _read_metadata_config(parser: argparse.ArgumentParser, argv: list[str]) -> dict:
+    metadata_path = _metadata_path(argv)
+    if metadata_path is None:
+        return {}
+    try:
+        with metadata_path.open("rt") as metadata_file:
+            metadata = json.load(metadata_file)
+    except (OSError, json.JSONDecodeError) as exc:
+        parser.error(f"Could not read --config-from-metadata {metadata_path}: {exc}")
+    if not isinstance(metadata, dict):
+        parser.error(f"--config-from-metadata {metadata_path} must contain a JSON object.")
+    return metadata
+
+
+def _metadata_path(argv: list[str]) -> Path | None:
+    for index, token in enumerate(argv):
+        if token in {"--config-from-metadata", "-C"}:
+            if index + 1 >= len(argv):
+                return None
+            return Path(argv[index + 1])
+        if token.startswith("--config-from-metadata="):
+            return Path(token.split("=", 1)[1])
+    return None
+
+
+def _metadata_images(metadata: dict) -> list[str]:
+    image_paths = metadata.get("image_paths")
+    if isinstance(image_paths, list):
+        return [str(path) for path in image_paths]
+    if isinstance(image_paths, str):
+        return [image_paths]
+
+    image_path = metadata.get("image_path")
+    if isinstance(image_path, str):
+        return [image_path]
+    return []
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mlxgen generate",
+        description=(
+            "Generate or edit images with MLX-Gen. The command routes to the right model backend "
+            "from --model and from whether input images are supplied."
+        ),
+        epilog=(
+            "Common generation options are forwarded to the selected backend, including --prompt, "
+            "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
+            "--negative-prompt, --quantize/-q, --lora-paths, --lora-scales, --metadata, "
+            "--config-from-metadata/-C, and --output."
+        ),
+    )
+    parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")
+    parser.add_argument(
+        "--family",
+        choices=["qwen", "flux2", "fibo", "z-image"],
+        default=None,
+        help="Override model-family detection for local paths or custom repo names.",
+    )
+    parser.add_argument(
+        "--task",
+        choices=["auto", "text-to-image", "txt2img", "image-to-image", "img2img", "edit"],
+        default="auto",
+        help="Override automatic routing. Default: auto.",
+    )
+    parser.add_argument(
+        "--image",
+        "--input-image",
+        "-i",
+        dest="images",
+        action="append",
+        default=[],
+        help="Input image for image-to-image or edit. Repeat for multi-image edit.",
+    )
+    parser.add_argument(
+        "--images",
+        "--input-images",
+        "--image-paths",
+        dest="image_groups",
+        nargs="+",
+        action="append",
+        default=[],
+        help="One or more input images for editing.",
+    )
+    parser.add_argument(
+        "--image-path",
+        dest="image_path",
+        default=None,
+        help="Compatibility alias for a single input image.",
+    )
+    return parser
+
+
+def _collect_images(args: argparse.Namespace) -> list[str]:
+    images = []
+    if args.image_path is not None:
+        images.append(args.image_path)
+    images.extend(args.images)
+    for group in args.image_groups:
+        images.extend(group)
+    return images or args.metadata_images
+
+
+def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
+    model_config = _model_config(args.model)
+    aliases = set(model_config.aliases) if model_config is not None else set()
+    model_name = model_config.model_name if model_config is not None else args.model
+    model_key = _model_key(model_name, args.model)
+    has_images = image_count > 0
+    has_multiple_images = image_count > 1
+    explicit_img2img = args.task == "image-to-image" or args.has_image_strength
+
+    if args.family == "qwen":
+        if args.task == "edit" or _is_qwen_edit(aliases, model_key) or (has_multiple_images and not explicit_img2img):
+            return _qwen_edit_route()
+        return _qwen_route()
+
+    if args.family == "flux2":
+        if args.task == "edit" or (args.task == "auto" and has_images and not explicit_img2img):
+            return _flux2_edit_route()
+        return _flux2_route()
+
+    if args.family == "fibo":
+        if args.task == "edit" or _is_fibo_edit(aliases, model_key):
+            return _fibo_edit_route()
+        return _fibo_route()
+
+    if args.family == "z-image":
+        if _is_z_image_turbo(aliases, model_key):
+            return _z_image_turbo_route()
+        return _z_image_route()
+
+    if _is_qwen_edit(aliases, model_key) or (args.task == "edit" and _is_qwen(aliases, model_key)):
+        return _qwen_edit_route(model_override=None if _is_qwen_edit(aliases, model_key) else "qwen-image-edit")
+
+    if _is_qwen(aliases, model_key):
+        if args.task == "text-to-image":
+            return _qwen_route()
+        if explicit_img2img or (args.task == "auto" and not has_multiple_images):
+            return _qwen_route()
+        return _qwen_edit_route(model_override="qwen-image-edit")
+
+    if _is_flux2(aliases, model_key):
+        if args.task == "edit" or (args.task == "auto" and has_images and not explicit_img2img):
+            return _flux2_edit_route()
+        return _flux2_route()
+
+    if _is_fibo_edit(aliases, model_key) or (args.task == "edit" and _is_fibo(aliases, model_key)):
+        return _fibo_edit_route(model_override=None if _is_fibo_edit(aliases, model_key) else "fibo-edit")
+
+    if _is_fibo(aliases, model_key):
+        return _fibo_route()
+
+    if _is_z_image_turbo(aliases, model_key):
+        return _z_image_turbo_route()
+
+    if _is_z_image(aliases, model_key):
+        return _z_image_route()
+
+    _parser().error(
+        f"Could not infer a supported backend from --model {args.model!r}. "
+        "Use a model name containing qwen, flux2/flux.2/klein, fibo, or z-image, or pass --family."
+    )
+    raise AssertionError("unreachable")
+
+
+def _model_config(model: str | None) -> ModelConfig | None:
+    if model is None:
+        return None
+    try:
+        return ModelConfig.from_name(model)
+    except ModelConfigError:
+        return None
+
+
+def _model_key(*parts: str | None) -> str:
+    return " ".join(part for part in parts if part).lower().replace("_", "-")
+
+
+def _has_alias(aliases: set[str], *needles: str) -> bool:
+    return bool(aliases.intersection(needles))
+
+
+def _is_qwen(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "qwen-image", "qwen-image-edit") or "qwen" in model_key
+
+
+def _is_qwen_edit(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "qwen-image-edit") or ("qwen" in model_key and "edit" in model_key)
+
+
+def _is_flux2(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("flux2") or alias.startswith("klein") for alias in aliases) or any(
+        token in model_key for token in ("flux2", "flux.2", "klein")
+    )
+
+
+def _is_fibo(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("fibo") for alias in aliases) or "fibo" in model_key
+
+
+def _is_fibo_edit(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "fibo-edit", "fibo-edit-rmbg") or ("fibo" in model_key and "edit" in model_key)
+
+
+def _is_z_image(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "z-image") or "z-image" in model_key or "zimage" in model_key
+
+
+def _is_z_image_turbo(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "z-image-turbo") or (
+        ("z-image" in model_key or "zimage" in model_key) and "turbo" in model_key
+    )
+
+
+def _qwen_route() -> _Route:
+    from mflux.models.qwen.cli.qwen_image_generate import main as target_main
+
+    return _Route("mflux-generate-qwen", target_main, "--image-path", requires_image=False)
+
+
+def _qwen_edit_route(model_override: str | None = None) -> _Route:
+    from mflux.models.qwen.cli.qwen_image_edit_generate import main as target_main
+
+    return _Route(
+        "mflux-generate-qwen-edit", target_main, "--image-paths", requires_image=True, model_override=model_override
+    )
+
+
+def _flux2_route() -> _Route:
+    from mflux.models.flux2.cli.flux2_generate import main as target_main
+
+    return _Route("mflux-generate-flux2", target_main, "--image-path", requires_image=False)
+
+
+def _flux2_edit_route() -> _Route:
+    from mflux.models.flux2.cli.flux2_edit_generate import main as target_main
+
+    return _Route("mflux-generate-flux2-edit", target_main, "--image-paths", requires_image=True)
+
+
+def _fibo_route() -> _Route:
+    from mflux.models.fibo.cli.fibo_generate import main as target_main
+
+    return _Route("mflux-generate-fibo", target_main, "--image-path", requires_image=False)
+
+
+def _fibo_edit_route(model_override: str | None = None) -> _Route:
+    from mflux.models.fibo.cli.fibo_edit import main as target_main
+
+    return _Route(
+        "mflux-generate-fibo-edit", target_main, "--image-path", requires_image=True, model_override=model_override
+    )
+
+
+def _z_image_route() -> _Route:
+    from mflux.models.z_image.cli.z_image_generate import main as target_main
+
+    return _Route("mflux-generate-z-image", target_main, "--image-path", requires_image=False)
+
+
+def _z_image_turbo_route() -> _Route:
+    from mflux.models.z_image.cli.z_image_turbo_generate import main as target_main
+
+    return _Route("mflux-generate-z-image-turbo", target_main, "--image-path", requires_image=False)
+
+
+if __name__ == "__main__":
+    main()

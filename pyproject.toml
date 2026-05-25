@@ -75,6 +75,10 @@ homepage = "https://github.com/lpalbou/mlx-gen"
 upstream = "https://github.com/filipstrand/mflux"
 
 [project.scripts]
+mlxgen = "mflux.cli.mlx_gen:main"
+mlxgen-generate = "mflux.cli.mlx_gen:main"
+mlx-gen = "mflux.cli.mlx_gen:main"
+mlx-generate = "mflux.cli.mlx_gen:main"
 mflux-generate = "mflux.models.flux.cli.flux_generate:main"
 mflux-generate-flux2 = "mflux.models.flux2.cli.flux2_generate:main"
 mflux-generate-flux2-edit = "mflux.models.flux2.cli.flux2_edit_generate:main"
