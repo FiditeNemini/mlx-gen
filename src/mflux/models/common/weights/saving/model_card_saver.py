@@ -8,6 +8,8 @@ class ModelCardSaver:
     CONTRIBUTOR = "[@lpalbou](https://huggingface.co/lpalbou)"
     DEFAULT_NAMESPACE = "lpalbou"
     DEFAULT_COLLECTION = "AbstractFramework / mlx-gen"
+    PROJECT_URL = "https://github.com/lpalbou/mlx-gen"
+    QUANTIZATION_DOC_URL = "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md"
 
     @staticmethod
     def save_model_card(base_path: str, model: Any, bits: int | None) -> None:
@@ -39,7 +41,7 @@ class ModelCardSaver:
             (
                 f"This repository contains MLX-Gen saved weights for `{model_name}`. "
                 "The checkpoint is designed for local Apple Silicon inference with "
-                "[`mlx-gen`](https://github.com/lpalbou/mlx-gen)."
+                f"[`mlx-gen`]({ModelCardSaver.PROJECT_URL})."
             ),
             "",
             "It uses the mflux/MLX saved-weight layout and MLX quantization tensors. "
@@ -115,6 +117,9 @@ class ModelCardSaver:
                     "- q4 for group64-compatible Qwen text-encoder language linears.",
                     "- q8 for group64-compatible Qwen text-encoder visual linears.",
                     "- BF16 for the VAE, norms, embeddings, and linears that are not MLX group64-compatible.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for the current mixed q4/q8 policy and compatibility notes.",
                 ]
             )
 
@@ -125,13 +130,18 @@ class ModelCardSaver:
                 "layers remain BF16."
             )
             if "qwen" in terms:
-                section += " The Qwen-specific mixed q4/q8 policy only applies when saving Qwen models at 4 bits."
+                section += (
+                    " The Qwen-specific mixed q4/q8 policy only applies when preparing Qwen models "
+                    f"with `--quantize 4`; see the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL})."
+                )
             return section
 
         if bits is not None:
             return (
                 f"This is an MLX {bits}-bit checkpoint. Model-specific quantization predicates "
-                "may keep unsupported layers unquantized or at a different precision."
+                "may keep unsupported layers unquantized or at a different precision. "
+                f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                "for compatibility notes."
             )
 
         return "This checkpoint stores MLX-Gen weights without an explicit quantization level."

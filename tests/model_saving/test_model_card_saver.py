@@ -46,6 +46,7 @@ def test_model_card_for_qwen_q4_documents_mixed_policy(tmp_path):
     assert "- mixed-q4" in card
     assert "- mixed-q4-q8" in card
     assert "q8 for Qwen `*.img_mod_linear` transformer modulation layers" in card
+    assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card
     assert "mlxgen download --model lpalbou/qwen-image-edit-2511-4bit" in card
     assert "not a Diffusers or Transformers `from_pretrained()` checkpoint" in card
     assert "https://github.com/filipstrand/mflux" in card
@@ -71,3 +72,5 @@ def test_model_card_for_qwen_q8_explains_q4_policy_is_not_used(tmp_path):
 
     assert "This is an MLX q8 checkpoint" in card
     assert "Qwen-specific mixed q4/q8 policy only applies" in card
+    assert "with `--quantize 4`" in card
+    assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card

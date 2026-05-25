@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Clarify that `mlxgen prepare` is the public MLX-Gen workflow for creating reusable local quantized model folders and generated Hugging Face cards, and prefer long-form flags such as `--quantize` in public examples.
+- Generated model cards now link to the MLX-Gen project and quantization documentation when describing quantized checkpoint policies.
 
 ## [0.18.0] - 2026-05-25
 
