@@ -154,13 +154,13 @@ def test_transformer_weight_mapping_uses_diffusers_ernie_names():
 
 
 @pytest.mark.fast
-def test_ernie_weight_definition_downloads_full_source_snapshot():
+def test_ernie_weight_definition_downloads_bf16_generation_snapshot():
     patterns = set(ErnieImageWeightDefinition.get_download_patterns())
 
-    assert "text_encoder/**" in patterns
-    assert "transformer/**" in patterns
-    assert "vae/**" in patterns
-    assert "pe/**" in patterns
+    assert "text_encoder/*.safetensors" in patterns
+    assert "transformer/*.safetensors" in patterns
+    assert "vae/*.safetensors" in patterns
+    assert "pe/*.safetensors" not in patterns
 
 
 @pytest.mark.fast
@@ -172,8 +172,10 @@ def test_ernie_weight_definition_loads_full_generation_components():
 
 @pytest.mark.fast
 def test_ernie_weight_definition_uses_custom_tokenizer():
-    tokenizer_definition = ErnieImageWeightDefinition.get_tokenizers()[0]
+    tokenizers = ErnieImageWeightDefinition.get_tokenizers()
+    tokenizer_definition = tokenizers[0]
 
+    assert len(tokenizers) == 1
     assert tokenizer_definition.encoder_class is ErnieImageTokenizer
     assert tokenizer_definition.padding == "longest"
 

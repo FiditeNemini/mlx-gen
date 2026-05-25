@@ -65,7 +65,7 @@ mlxgen generate \
   --output image.png
 ```
 
-The initial ERNIE port is text-to-image only. It uses BF16 source or prepared weights; `--quantize` is intentionally disabled for ERNIE until a verified quantization policy exists.
+The ERNIE port is text-to-image only. It uses BF16 source or prepared weights; `--image`, `--images`, image-to-image/edit tasks, `--use-prompt-enhancer`, and `--quantize` are intentionally rejected until those paths are ported and validated.
 
 ## Model Management Commands
 

@@ -49,6 +49,10 @@ No. Prepared MLX-Gen folders use the MLX/mflux saved-weight layout and MLX quant
 
 Not yet. The initial ERNIE Image Turbo port supports BF16 text-to-image generation. MLX-Gen rejects ERNIE `--quantize` requests until q4/q8 layouts have been tested and documented.
 
+## Does ERNIE Image Turbo Support Image Input Or Prompt Enhancer?
+
+Not yet. MLX-Gen rejects ERNIE image-to-image/edit inputs and `--use-prompt-enhancer` instead of silently ignoring them. Pre-enhance prompts outside MLX-Gen if you need that workflow before the Prompt Enhancer model is ported.
+
 ## Why Do Some Imports Or Paths Still Say `mflux`?
 
 MLX-Gen is currently built on the mflux codebase. Some internal modules and compatibility entry points still use `mflux.*` names while the public package and command surface evolve under `mlx-gen` and `mlxgen`.

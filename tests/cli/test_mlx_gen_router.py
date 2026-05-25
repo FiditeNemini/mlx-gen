@@ -327,6 +327,60 @@ def test_ernie_family_override_routes_local_folder():
     ]
 
 
+def test_ernie_rejects_image_inputs(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "baidu/ERNIE-Image-Turbo",
+                "--image",
+                "input.png",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "text-to-image only" in capsys.readouterr().err
+
+
+def test_ernie_rejects_edit_task(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "baidu/ERNIE-Image-Turbo",
+                "--task",
+                "edit",
+                "--prompt",
+                "replace the mug",
+            ]
+        )
+
+    assert "text-to-image only" in capsys.readouterr().err
+
+
+def test_ernie_cli_rejects_prompt_enhancer_before_loading_model(monkeypatch, capsys):
+    from mflux.models.ernie_image.cli import ernie_image_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-ernie-image",
+            "--model",
+            "baidu/ERNIE-Image-Turbo",
+            "--prompt",
+            "hello",
+            "--use-prompt-enhancer",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        ernie_image_generate.main()
+
+    assert "Prompt Enhancer is not ported" in capsys.readouterr().err
+
+
 def test_main_without_args_prints_top_level_help(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["mlxgen"])
 
@@ -414,14 +468,13 @@ def test_download_command_uses_ernie_source_patterns(monkeypatch):
         "LICENSE",
         "README.md",
         "model_index.json",
-        "scheduler/**",
-        "tokenizer/**",
-        "pe_tokenizer/**",
-        "text_encoder/**",
-        "transformer/**",
-        "vae/**",
-        "pe/**",
+        "scheduler/*.json",
+        "tokenizer/*",
+        "text_encoder/*.safetensors",
+        "transformer/*.safetensors",
+        "vae/*.safetensors",
     }.issubset(set(calls[0][1]))
+    assert "pe/*.safetensors" not in calls[0][1]
 
 
 def test_prepare_command_routes_to_save_with_downloads_enabled(monkeypatch):

@@ -89,6 +89,8 @@ mlxgen download --model baidu/ERNIE-Image-Turbo
 mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo
 ```
 
+The default ERNIE download pattern fetches the BF16 generation components MLX-Gen currently uses: tokenizer, text encoder, transformer, VAE, scheduler metadata, and repository metadata. It does not fetch ERNIE's Prompt Enhancer model because Prompt Enhancer inference is not ported yet. Use `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` only when you explicitly want to archive the full upstream repository.
+
 Do not pass `--quantize` for ERNIE yet. MLX-Gen rejects ERNIE quantized prepare/generation until the quantization policy has been validated.
 
 ## Depth Pro

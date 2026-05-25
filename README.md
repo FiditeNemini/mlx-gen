@@ -225,7 +225,7 @@ MLX-Gen supports the following model families. They have different strengths and
 |[Z-Image](src/mflux/models/z_image/README.md) | Nov 2025 | 6B | Distilled & Base | Yes | Fast, small, very good quality and realism. |
 |[FLUX.2](src/mflux/models/flux2/README.md) | Jan 2026 | 4B & 9B | Distilled & Base | Yes | Fastest + smallest with very good quality and edit capabilities. |
 |[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |
-| ERNIE Image Turbo | Mar 2026 | 6B class | Distilled | No | Fast Apache 2.0 text-to-image model from Baidu. Initial MLX-Gen support is BF16 text-to-image; quantization and prompt enhancer support are not enabled yet. Use 384px+ outputs for reliable composition. |
+| ERNIE Image Turbo | Mar 2026 | 6B class | Distilled | No | Fast Apache 2.0 text-to-image model from Baidu. MLX-Gen support is BF16 text-to-image; image input, quantization, and Prompt Enhancer support are not enabled yet. Use 384px+ outputs for reliable composition. |
 |[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |
 |[Qwen Image](src/mflux/models/qwen/README.md) | Aug 2025+ | 20B | Base | No | Large model (slower); strong prompt understanding and world knowledge. Has edit capabilities |
 |[Depth Pro](src/mflux/models/depth_pro/README.md) | Oct 2024 | — | — | No | Very fast and accurate depth estimation model from Apple. |

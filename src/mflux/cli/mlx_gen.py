@@ -417,6 +417,7 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
         return _z_image_route()
 
     if args.family == "ernie-image":
+        _reject_ernie_image_inputs(args, has_images)
         return _ernie_route()
 
     if _is_qwen_edit(aliases, model_key) or (args.task == "edit" and _is_qwen(aliases, model_key)):
@@ -447,6 +448,7 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
         return _z_image_route()
 
     if _is_ernie(aliases, model_key):
+        _reject_ernie_image_inputs(args, has_images)
         return _ernie_route()
 
     _parser().error(
@@ -507,6 +509,14 @@ def _is_z_image_turbo(aliases: set[str], model_key: str) -> bool:
 
 def _is_ernie(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("ernie") for alias in aliases) or "ernie" in model_key
+
+
+def _reject_ernie_image_inputs(args: argparse.Namespace, has_images: bool) -> None:
+    if args.task in {"image-to-image", "edit"} or has_images or args.has_image_strength:
+        _parser().error(
+            "ERNIE Image Turbo currently supports text-to-image only in MLX-Gen. "
+            "Remove --image/--images/--image-strength, or choose an image-to-image/edit backend."
+        )
 
 
 def _qwen_route() -> _Route:

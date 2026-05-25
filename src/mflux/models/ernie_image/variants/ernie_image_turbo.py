@@ -55,7 +55,12 @@ class ErnieImageTurbo(nn.Module):
         scheduler: str | None = None,
         use_pe: bool = False,
     ) -> Image.Image:
-        del image_path, image_strength, scheduler, use_pe
+        del image_path, image_strength, scheduler
+        if use_pe:
+            raise NotImplementedError(
+                "ERNIE Prompt Enhancer is not ported to MLX-Gen yet. "
+                "Run with use_pe=False, or pre-enhance the prompt before calling generate_image()."
+            )
         guidance = 1.0 if guidance is None else float(guidance)
         config = Config(
             width=width,

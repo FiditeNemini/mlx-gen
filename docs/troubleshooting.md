@@ -43,6 +43,10 @@ mlxgen generate \
   --output image.png
 ```
 
+## ERNIE Rejects Image Inputs Or Prompt Enhancer
+
+MLX-Gen currently supports ERNIE Image Turbo as BF16 text-to-image generation. `--image`, `--images`, image-to-image/edit tasks, and `--use-prompt-enhancer` fail intentionally so applications do not accidentally run a different workflow from the one requested.
+
 ## `generate --path` Fails
 
 `--path` belongs to `mlxgen prepare`, where it names the local model folder to create. It is not a generation option.

@@ -13,11 +13,22 @@ def main():
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     parser.add_image_generator_arguments(supports_metadata_config=True)
+    parser.add_argument(
+        "--use-prompt-enhancer",
+        "--use-pe",
+        action="store_true",
+        help="Use ERNIE's Prompt Enhancer. Not available in MLX-Gen yet.",
+    )
     parser.add_output_arguments()
     args = parser.parse_args()
 
     if args.quantize is not None:
         parser.error("ERNIE quantized generation is not enabled yet. Use the BF16 source or prepared BF16 weights.")
+    if args.use_prompt_enhancer:
+        parser.error(
+            "ERNIE Prompt Enhancer is not ported to MLX-Gen yet. "
+            "Remove --use-prompt-enhancer, or pre-enhance the prompt before generation."
+        )
 
     if args.guidance is None:
         args.guidance = 1.0
@@ -54,6 +65,7 @@ def main():
                 guidance=args.guidance,
                 num_inference_steps=args.steps,
                 negative_prompt=args.negative_prompt,
+                use_pe=args.use_prompt_enhancer,
             )
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata)
     except (StopImageGenerationException, PromptFileReadError) as exc:

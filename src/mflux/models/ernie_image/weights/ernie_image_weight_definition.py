@@ -47,16 +47,6 @@ class ErnieImageWeightDefinition:
                 add_special_tokens=True,
                 download_patterns=["tokenizer/*"],
             ),
-            TokenizerDefinition(
-                name="ernie_prompt_enhancer",
-                hf_subdir="pe_tokenizer",
-                tokenizer_class="AutoTokenizer",
-                encoder_class=ErnieImageTokenizer,
-                max_length=512,
-                padding="longest",
-                add_special_tokens=True,
-                download_patterns=["pe_tokenizer/*"],
-            ),
         ]
 
     @staticmethod
@@ -65,13 +55,14 @@ class ErnieImageWeightDefinition:
             "LICENSE",
             "README.md",
             "model_index.json",
-            "scheduler/**",
-            "tokenizer/**",
-            "pe_tokenizer/**",
-            "text_encoder/**",
-            "transformer/**",
-            "vae/**",
-            "pe/**",
+            "scheduler/*.json",
+            "tokenizer/*",
+            "text_encoder/*.safetensors",
+            "text_encoder/*.json",
+            "transformer/*.safetensors",
+            "transformer/*.json",
+            "vae/*.safetensors",
+            "vae/*.json",
         ]
 
     @staticmethod
