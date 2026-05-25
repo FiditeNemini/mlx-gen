@@ -99,10 +99,10 @@ The same router is also available as `mlx-gen`, `mlxgen-generate`, and `mlx-gene
 For image editing, pass input images with `--image` or `--images`; MLX-Gen routes to the right backend from the model and image inputs:
 
 ```sh
-mlxgen download --model lpalbou/qwen-image-edit-2511-4bit
+mlxgen download --model AbstractFramework/qwen-image-edit-2511-4bit
 
 mlxgen generate \
-  --model lpalbou/qwen-image-edit-2511-4bit \
+  --model AbstractFramework/qwen-image-edit-2511-4bit \
   --image input.png \
   --prompt "Turn the room into a pencil sketch" \
   --steps 20 \

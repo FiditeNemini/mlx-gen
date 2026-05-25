@@ -18,10 +18,10 @@ The prepared folder contains the MLX-Gen saved-weight layout plus the generated 
 The prepared folder can then be uploaded to Hugging Face:
 
 ```sh
-huggingface-cli upload lpalbou/qwen-image-edit-2511-4bit ./models/qwen-image-edit-2511-4bit .
+huggingface-cli upload AbstractFramework/qwen-image-edit-2511-4bit ./models/qwen-image-edit-2511-4bit .
 ```
 
-The generated usage block uses the default `lpalbou/<repo-name>` repository id. Edit that line before upload if you publish under another namespace.
+The generated usage block uses the default `AbstractFramework/<repo-name>` repository id.
 
 ## Collections
 
@@ -34,13 +34,11 @@ from huggingface_hub import HfApi
 
 HfApi().add_collection_item(
     collection_slug="<collection-slug>",
-    item_id="lpalbou/qwen-image-edit-2511-4bit",
+    item_id="AbstractFramework/qwen-image-edit-2511-4bit",
     item_type="model",
     exists_ok=True,
 )
 ```
-
-The recommended collection for the current published checkpoints is AbstractFramework / mlx-gen.
 
 ## Compatibility Wording
 

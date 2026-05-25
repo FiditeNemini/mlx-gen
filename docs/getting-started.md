@@ -78,7 +78,7 @@ Pass one or more input images to the same `generate` command. MLX-Gen routes to 
 
 ```sh
 mlxgen generate \
-  --model lpalbou/qwen-image-edit-2511-4bit \
+  --model AbstractFramework/qwen-image-edit-2511-4bit \
   --image input.png \
   --prompt "Turn the room into a pencil sketch" \
   --steps 20 \

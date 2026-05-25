@@ -139,7 +139,7 @@ For image editing:
 
 ```sh
 mlxgen generate \
-  --model lpalbou/qwen-image-edit-2511-4bit \
+  --model AbstractFramework/qwen-image-edit-2511-4bit \
   --image input.png \
   --prompt "Turn the room into a pencil sketch" \
   --steps 20 \
@@ -176,10 +176,10 @@ The q8 path was not changed by the mixed-q4 work. Qwen q8 uses the standard MLX-
 Prepared model folders include a generated Hugging Face `README.md` card. The card records the source model, compatibility notes, quantization policy, and exact `mlx-gen` version used to generate it. Upload the folder with a command such as:
 
 ```sh
-huggingface-cli upload lpalbou/qwen-image-edit-2511-4bit ./models/qwen-image-edit-2511-4bit .
+huggingface-cli upload AbstractFramework/qwen-image-edit-2511-4bit ./models/qwen-image-edit-2511-4bit .
 ```
 
-Hugging Face collection membership is managed separately from model-card metadata. After upload, use the Hugging Face UI or `huggingface_hub.HfApi.add_collection_item` with the collection slug from the collection URL. The recommended collection for current published checkpoints is AbstractFramework / mlx-gen.
+Hugging Face collection membership is managed separately from model-card metadata. After upload, use the Hugging Face UI or `huggingface_hub.HfApi.add_collection_item` with the collection slug from the collection URL.
 
 ---
 

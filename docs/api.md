@@ -35,7 +35,7 @@ For edits, pass an image:
 
 ```sh
 mlxgen generate \
-  --model lpalbou/qwen-image-edit-2511-4bit \
+  --model AbstractFramework/qwen-image-edit-2511-4bit \
   --image input.png \
   --prompt "Turn the room into a pencil sketch" \
   --output edited.png
