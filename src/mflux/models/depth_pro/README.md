@@ -1,5 +1,5 @@
 # Depth Pro
-This directory contains MFLUX’s MLX implementation of **Depth Pro** (Apple’s monocular depth model), used for generating depth maps from images. Depth maps can be used by the FLUX depth tool (`mflux-generate-depth`) to constrain image generation.
+This directory contains MLX-Gen's MLX implementation of **Depth Pro** (Apple's monocular depth model), used for generating depth maps from images. Depth maps can be used by FLUX depth workflows to constrain image generation.
 
 ![Depth Pro Example](../../assets/depth_pro_example.jpg)
 *Example images from [Unsplash](https://unsplash.com/photos/VotK70bRo0U) and [Unsplash](https://unsplash.com/photos/Q3QJbt9f54g)*
@@ -11,11 +11,7 @@ Depth Pro weights are downloaded explicitly:
 mlxgen download --model depth-pro
 ```
 
-To generate and export the depth map from an image (without running image generation), run:
-
-```sh
-mflux-save-depth --image-path "your_image.jpg" -q 8
-```
+To generate and export the depth map from an image without running image generation, use the Python API:
 
 <details>
 <summary>Python API</summary>

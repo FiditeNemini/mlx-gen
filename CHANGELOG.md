@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Generated Hugging Face model cards**: `mlxgen prepare` and `mflux-save` now write a `README.md` model card into prepared model folders with source-model attribution, mflux and MLX-Gen compatibility notes, quantization details, contributor attribution, and collection guidance.
+- **Generated Hugging Face model cards**: `mlxgen prepare` now writes a `README.md` model card into prepared model folders with source-model attribution, mflux and MLX-Gen compatibility notes, quantization details, contributor attribution, and collection guidance.
 
 ### Changed
 

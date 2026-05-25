@@ -173,14 +173,9 @@ mflux-generate-depth \
   --steps 20
 ```
 
-To generate and export the depth map from an image without triggering the image generation, run the following command:
+To generate and export the depth map from an image without triggering image generation, use the Depth Pro Python API documented in [Depth Pro](../depth_pro/README.md).
 
-```bash
-mflux-save-depth --image-path "your_image.jpg" -q 8
-```
-
-This will create a depth map and save it with the same name as your image but with a "_depth" suffix (e.g., "your_image_depth.png").
-Quantization is supported for the Depth Pro model, however, output quality can very depend on the input image. 
+Quantization is supported for the Depth Pro model, however output quality can vary depending on the input image.
 
 > [!WARNING]
 > Note: The Depth Pro model requires an additional 1.9GB download from Apple. Download it explicitly before generation with `mlxgen download --model depth-pro`.

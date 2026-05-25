@@ -52,6 +52,8 @@ def test_model_card_for_qwen_q4_documents_mixed_policy(tmp_path):
     assert "https://github.com/lpalbou/mlx-gen" in card
     assert "https://huggingface.co/lpalbou" in card
     assert "Recommended Hugging Face collection: AbstractFramework / mlx-gen" in card
+    assert "mflux-save" not in card
+    assert "mflux-*" not in card
 
 
 def test_model_card_for_q8_keeps_standard_quantization_wording(tmp_path):

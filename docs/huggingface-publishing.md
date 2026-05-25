@@ -1,6 +1,6 @@
 # Hugging Face Publishing
 
-`mlxgen prepare` and `mflux-save` create a `README.md` model card in the prepared model folder. The generated card cites the source model, mflux, MLX-Gen, the quantization policy, and the default contributor attribution to [@lpalbou](https://huggingface.co/lpalbou).
+`mlxgen prepare` creates a `README.md` model card in the prepared model folder. The generated card cites the source model, mflux, MLX-Gen, the quantization policy, and the default contributor attribution to [@lpalbou](https://huggingface.co/lpalbou).
 
 ## Prepare A Model Folder
 

@@ -57,8 +57,7 @@ class ModelCardSaver:
             "",
             f"Requires `mlx-gen >= {VersionUtil.get_mflux_version()}`.",
             "",
-            "The installed Python modules currently include both `mlxgen` and `mflux`; "
-            "the legacy `mflux-*` CLI commands remain installed for compatibility.",
+            "Use the `mlxgen` command and Python import path for new MLX-Gen projects.",
             "",
             "## Usage",
             "",

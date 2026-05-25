@@ -3,7 +3,7 @@
 This README covers stable, shared patterns. For model-specific usage, see each model README and the model list in the top-level `README.md`.
 
 > [!NOTE]
-> MFLUX supports many CLI combinations. The quickest way to get a correct command is to ask a coding agent (Cursor, Claude Code, or similar), e.g. “Can you help me generate an image using z-image?” When in doubt, check the current CLI entrypoints for up-to-date support.
+> MLX-Gen supports many CLI combinations. The quickest way to get a correct command is to ask a coding agent (Cursor, Claude Code, or similar), e.g. “Can you help me generate an image using z-image?” When in doubt, check the current CLI entrypoints for up-to-date support.
 
 ### Quick navigation
 
@@ -58,7 +58,7 @@ image.save("dog.png")
 ### Saving a quantized model
 
 ```sh
-mflux-save \
+mlxgen prepare \
   --path "/Users/me/models/z-image-turbo_8bit" \
   --model z-image-turbo \
   --quantize 8
@@ -79,7 +79,7 @@ model.save_model("/Users/me/models/z-image-turbo_8bit")
 You can optionally include LoRAs when saving:
 
 ```sh
-mflux-save \
+mlxgen prepare \
   --path "/Users/me/models/z-image-turbo_8bit" \
   --model z-image-turbo \
   --quantize 8 \
@@ -105,7 +105,7 @@ model.save_model("/Users/me/models/z-image-turbo_8bit")
 </details>
 
 > [!WARNING]
-> Quantized models saved with mflux < v0.6.0 are incompatible with newer versions. Re-save using `mflux-save`.
+> Quantized models saved with mflux < v0.6.0 are incompatible with newer versions. Re-save using `mlxgen prepare`.
 
 ---
 
@@ -605,9 +605,9 @@ image.save("coastal_dusk.png")
 
 Use the model READMEs for exact command names and options. General utilities that work across models:
 
-- **Model management**: `mflux-save`, `mflux-info`, `mflux-lora-library`
+- **Model management**: `mlxgen download`, `mlxgen prepare`
 - **Training**: `mflux-train`
-- **Utilities**: `mflux-save-depth`
+- **Utilities**: depth map extraction and metadata inspection
 
 For model-specific generation commands (Flux, Flux2, Qwen, Z-Image, FIBO) and specialized features (ControlNet, depth, fill, Redux, in-context editing, kontext, concept attention, upscaling), see the respective model READMEs and the top-level `README.md`.
 
@@ -621,6 +621,6 @@ MFLUX provides ZSH shell completions for all CLI commands. Install with:
 mflux-completions
 ```
 
-Then reload your shell (`exec zsh`) and enjoy tab completion for all mflux commands, options, and arguments. Completions include smart suggestions for model names, quantization levels, LoRA styles, and file paths.
+Then reload your shell (`exec zsh`) and enjoy tab completion for installed commands, options, and arguments. Completions include smart suggestions for model names, quantization levels, LoRA styles, and file paths.
 
 For detailed installation instructions, troubleshooting, and advanced usage, see [`src/mflux/cli/completions/README.md`](../../cli/completions/README.md).

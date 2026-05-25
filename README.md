@@ -9,7 +9,7 @@
 Run state-of-the-art generative image models locally with native MLX.
 
 > [!IMPORTANT]
-> MLX-Gen is an independent project derived from [mflux](https://github.com/filipstrand/mflux). It is not an upstream mflux release, though it currently keeps the mflux runtime architecture, model code layout, and `mflux-*` CLI compatibility while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
+> MLX-Gen is an independent project derived from [mflux](https://github.com/filipstrand/mflux). It is not an upstream mflux release, though it currently keeps the mflux runtime architecture and model code layout while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
 >
 > The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
 
@@ -37,11 +37,11 @@ The immediate reason for the independent package is practical: MLX-Gen can itera
 
 MLX-Gen also exists to power [AbstractVision](https://pypi.org/project/abstractvision/), the generative vision layer used with [AbstractCore](https://pypi.org/project/abstractcore/) in the wider [AbstractFramework](https://pypi.org/project/abstractframework/) ecosystem. That gives the package its own product requirements while keeping general fixes available for upstream mflux contributions where practical.
 
-For now, most internals still live under `mflux.*` and CLI commands remain `mflux-*` for compatibility. New application code may import through `mlxgen`, which aliases the same runtime while giving downstream projects a stable MLX-Gen dependency surface.
+For now, some internals still live under `mflux.*` while MLX-Gen evolves from its forked base. New application code should use the `mlxgen` command and import path.
 
-The project intentionally keeps mflux vocabulary in parts of the codebase, metadata, and command surface while that remains useful. This preserves compatibility for existing users and keeps a possible merge-back path open if the two projects converge again.
+The project intentionally keeps mflux vocabulary in parts of the codebase and metadata while that remains useful. This preserves compatibility for existing users and keeps a possible merge-back path open if the two projects converge again.
 
-Most credit for the current codebase goes to Filip Strand and the original mflux contributors. Changes introduced after the MLX-Gen fork are maintained here by Laurent-Philippe Albou / AbstractVision.
+Most credit for the current codebase goes to Filip Strand and the original mflux contributors. Changes introduced after the MLX-Gen fork are maintained here by Laurent-Philippe Albou / AbstractVision. See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) for project credits.
 
 ---
 
@@ -60,7 +60,7 @@ If you haven't already, [install `uv`](https://github.com/astral-sh/uv?tab=readm
 uv tool install --upgrade mlx-gen
 ```
 
-This package is published on PyPI as `mlx-gen`. The Python import for application code is `mlxgen`; the original `mflux` module and `mflux-*` CLI commands remain available for compatibility.
+This package is published on PyPI as `mlx-gen`. The Python import for application code is `mlxgen`.
 
 After installation, the following command shows all available CLI commands:
 

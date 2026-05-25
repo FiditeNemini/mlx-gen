@@ -47,9 +47,7 @@ mlxgen generate \
   --output image.png
 ```
 
-`mflux-save` remains available for compatibility and uses the same explicit download permission as `mlxgen prepare`.
-
-`mlxgen prepare` and `mflux-save` write a Hugging Face `README.md` model card into the prepared folder. The card records the source model, MLX-Gen compatibility, mflux attribution, quantization policy, and default contributor attribution.
+`mlxgen prepare` writes a Hugging Face `README.md` model card into the prepared folder. The card records the source model, MLX-Gen compatibility, mflux attribution, quantization policy, and default contributor attribution.
 
 ## Depth Pro
 
@@ -59,7 +57,7 @@ Depth workflows use Apple Depth Pro weights from a direct URL rather than a Hugg
 mlxgen download --model depth-pro
 ```
 
-After that, `mflux-save-depth` and depth generation can run without starting a network transfer.
+After that, depth generation can run without starting a network transfer.
 
 ## Runtime Failure Contract
 

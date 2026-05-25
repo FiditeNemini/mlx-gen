@@ -2,13 +2,15 @@
 
 ## Project Summary
 
-MLX-Gen is an MLX-native generative image runtime derived from mflux and published as the `mlx-gen` Python package. It preserves mflux compatibility while adding independent release cadence, Qwen Image/Edit support, FLUX.2 fixes, quantized model packaging, local model loading behavior, and AbstractVision integration needs.
+MLX-Gen is an MLX-native generative image runtime derived from mflux and published as the `mlx-gen` Python package. It preserves the mflux foundation while adding independent release cadence, Qwen Image/Edit support, FLUX.2 fixes, quantized model packaging, local model loading behavior, and AbstractVision integration needs.
 
-Most internals currently remain under `mflux.*`; new application code may import through `mlxgen` where aliases exist. Existing `mflux-*` CLI commands remain available for compatibility.
+Some internals currently remain under `mflux.*`; new application code should use the `mlxgen` command and import path.
 
 ## Relationship To mflux
 
 MLX-Gen started as a fork of `filipstrand/mflux`. Most credit for the current codebase goes to Filip Strand and the original mflux contributors. Changes after the fork are maintained in this project. The project keeps mflux vocabulary where useful for compatibility and possible upstream merge-back, while it may diverge as its own package.
+
+See `ACKNOWLEDGEMENTS.md` for upstream mflux credit, post-fork maintainership, and model/community acknowledgements.
 
 ## Runtime Download Policy
 
@@ -54,7 +56,7 @@ mlxgen download --model depth-pro
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands. It is not required to authorize network access.
 
-`mlxgen prepare` and `mflux-save` write a Hugging Face `README.md` model card into the prepared folder. The card records the source model, MLX-Gen compatibility, mflux attribution, quantization policy, and default contributor attribution.
+`mlxgen prepare` writes a Hugging Face `README.md` model card into the prepared folder. The card records the source model, MLX-Gen compatibility, mflux attribution, quantization policy, and default contributor attribution.
 
 ## Quantization
 
