@@ -11,7 +11,7 @@ Run state-of-the-art generative image and video models locally with native MLX.
 > [!IMPORTANT]
 > MLX-Gen is an independent project forked from [mflux](https://github.com/filipstrand/mflux). It is currently built on the mflux codebase, with full credit to Filip Strand and the original contributors, while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
 >
-> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, ERNIE Image Turbo support, Wan text-to-video experiments, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
+> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, ERNIE Image Turbo support, Wan video experiments, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
 
 ### Table of contents
 
@@ -146,7 +146,7 @@ mlxgen generate \
   --output video.mp4
 ```
 
-The I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated.
+The I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated. See [API And CLI](docs/api.md) for low-resolution text-to-video and image-to-video example outputs.
 
 If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
 

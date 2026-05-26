@@ -23,6 +23,16 @@ MFLUX_PRESERVE_TEST_OUTPUT=1 uv run pytest -q
 
 For documentation-only changes, check that links and command examples match the current CLI help.
 
+Wan full-model parity checks are opt-in because they require the cached Wan source snapshot and enough local memory:
+
+```sh
+MFLUX_RUN_LOCAL_WAN_PARITY=1 MFLUX_PRESERVE_TEST_OUTPUT=1 uv run pytest tests/wan/test_wan_local_parity.py -q
+```
+
+Set `MFLUX_WAN_PARITY_MODEL=/path/to/local/Wan2.2-TI2V-5B-Diffusers` when you want to validate against a specific local snapshot or prepared folder.
+
+These checks validate component parity for the Wan transformer and VAE encoder. They do not replace visual review or full generation parity checks.
+
 ## Documentation Expectations
 
 User-facing behavior should be documented in the core docs:

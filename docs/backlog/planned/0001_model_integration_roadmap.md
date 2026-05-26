@@ -196,6 +196,8 @@ than a renamed fork.
   creates an MP4 from the local source snapshot.
 - `uv run mlxgen generate --model Wan-AI/Wan2.2-TI2V-5B-Diffusers --task image-to-video --image ...`
   creates an MP4 using first-frame latent conditioning.
+- `MFLUX_RUN_LOCAL_WAN_PARITY=1 uv run pytest tests/wan/test_wan_local_parity.py -q`
+  validates the full Wan transformer and VAE encoder against Diffusers-generated fixtures.
 - New model cards continue to include source model, mflux acknowledgement, MLX-Gen version,
   quantization policy, AbstractFramework namespace examples, and contributor attribution.
 
@@ -213,7 +215,11 @@ than a renamed fork.
 - [x] Add optional ERNIE Prompt Enhancer support for full source snapshots.
 - [x] Add initial Wan2.2 TI2V text-to-video backend and MP4 output.
 - [x] Port Wan image-to-video first-frame latent conditioning.
+- [x] Add opt-in Wan full-model parity fixtures for transformer and VAE encoder checks.
 - [ ] Improve Wan video quality/performance validation beyond tiny smoke runs.
+- [ ] Add Wan prompt-embedding parity and VAE decode parity fixtures.
+- [ ] Add one full short Wan Diffusers-vs-MLX generation comparison for the same prompt, seed,
+      dimensions, frames, steps, and guidance.
 - [ ] Validate Wan q8/q4 preparation and decide whether a mixed quantization policy is needed.
 - [ ] Add stronger ERNIE Diffusers comparison tests and non-turbo scope.
 - [ ] Decide whether SeedVR2 should be unified under `mlxgen prepare` before larger video ports.

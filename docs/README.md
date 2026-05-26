@@ -4,7 +4,7 @@ MLX-Gen is an MLX-native generative image and video runtime forked from mflux. I
 
 ## Guides
 
-- [Getting started](getting-started.md): install MLX-Gen, inspect the CLI, prepare model files, and run a first generation or edit.
+- [Getting started](getting-started.md): install MLX-Gen, inspect the CLI, prepare model files, run a first generation or edit, and inspect low-resolution Wan video examples.
 - [Architecture](architecture.md): package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
 - [API and CLI](api.md): public `mlxgen` command surface, generation router behavior, image/video examples, model-management commands, and Python integration boundary.
 - [Model management](model-management.md): explicit download and prepare workflows, cache-only runtime behavior, and Depth Pro downloads.

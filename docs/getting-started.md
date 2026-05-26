@@ -126,6 +126,14 @@ mlxgen generate \
 
 Wan image-to-video uses the Diffusers first-frame latent-conditioning path. Treat current Wan video support as experimental: the pipeline can produce MP4 output, but quality, speed, and practical defaults still need broader validation.
 
+Low-resolution examples:
+
+![Wan2.2 TI2V 256px text-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-t2v-256-17f-12steps-contact-sheet.png)
+
+![Wan2.2 TI2V first-frame image-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-i2v-bateau-128-5f-2steps-contact-sheet.png)
+
+These examples show the current wiring and output format. Use larger dimensions, more frames, and more inference steps for practical video quality checks.
+
 ## Next Steps
 
 - See [Model Management](model-management.md) for the full download, prepare, and runtime failure contract.

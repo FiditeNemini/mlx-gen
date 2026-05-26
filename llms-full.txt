@@ -2,14 +2,14 @@
 
 ## Project Summary
 
-MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding independent release cadence, Qwen Image/Edit support, ERNIE Image Turbo support, initial Wan2.2 text-to-video support, FLUX.2 fixes, quantized model packaging, local model loading behavior, generated Hugging Face model cards, and AbstractVision integration needs.
+MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding independent release cadence, Qwen Image/Edit support, ERNIE Image Turbo support, initial Wan2.2 text-to-video and first-frame image-to-video support, FLUX.2 fixes, quantized model packaging, local model loading behavior, generated Hugging Face model cards, and AbstractVision integration needs.
 
 Some internals currently remain under `mflux.*`; new application code should use the `mlxgen` command and import path.
 
 ## Document Index
 
 - `README.md`: installation, quick start, model families, project relationship, and acknowledgements.
-- `docs/getting-started.md`: install, inspect `mlxgen --help`, prepare model files, generate images, edit images, and generate Wan text-to-video.
+- `docs/getting-started.md`: install, inspect `mlxgen --help`, prepare model files, generate images, edit images, and run Wan video examples.
 - `docs/architecture.md`: package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
 - `docs/api.md`: public `mlxgen` command surface, generation router, model-management commands, and Python integration boundary.
 - `docs/model-management.md`: cache-only runtime policy, `download` versus `prepare`, Depth Pro, and `DownloadRequiredError`.
@@ -184,6 +184,25 @@ mlxgen generate \
 
 Wan image-to-video uses the Diffusers first-frame latent-conditioning path rather than ordinary image-to-image latent initialization. It VAE-encodes one input frame, masks first-frame timesteps, and reinserts the condition before decode. Multi-image/video interpolation is not enabled.
 
+Example image-to-video command:
+
+```sh
+mlxgen generate \
+  --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
+  --task image-to-video \
+  --image input.png \
+  --prompt "A slow cinematic camera move from the input frame" \
+  --width 256 \
+  --height 256 \
+  --frames 17 \
+  --steps 12 \
+  --guidance 5 \
+  --fps 8 \
+  --output video.mp4
+```
+
+Low-resolution text-to-video and first-frame image-to-video example panels live in `docs/assets/generation/`. They show that the current paths produce nonblank MP4 output, but they are not quality benchmarks.
+
 Generation commands replace the requested `--output` path by default. Use `--replace false` or `--no-replace` to preserve an existing file and save to the next suffixed path.
 
 ---
@@ -300,7 +319,13 @@ git push origin main --tags
 
 ## Project Participation
 
-Contributors should use `uv`, keep pull requests focused, document user-facing behavior in the core docs, and prefer `mlxgen` commands in new documentation.
+Contributors should use `uv`, keep pull requests focused, document user-facing behavior in the core docs, and prefer `mlxgen` commands in new documentation. Wan full-model parity checks are opt-in because they require the cached source snapshot:
+
+```sh
+MFLUX_RUN_LOCAL_WAN_PARITY=1 MFLUX_PRESERVE_TEST_OUTPUT=1 uv run pytest tests/wan/test_wan_local_parity.py -q
+```
+
+Those checks validate component parity for the Wan transformer and VAE encoder. They do not replace visual review or full generation parity checks.
 
 Security issues should be reported privately through the repository security advisory flow when available. Do not include secrets, private model tokens, or proprietary model artifacts in public reports.
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Wan local parity fixtures**: Add opt-in full-model Wan component-parity tests for the MLX transformer path and VAE encoder path against Diffusers-generated fixtures.
+
+### Documentation
+
+- Add low-resolution Wan text-to-video and first-frame image-to-video example panels to the user docs, with the current quality caveat kept explicit.
+
 ## [0.18.5] - 2026-05-26
 
 ### Added

@@ -66,5 +66,6 @@ No deprecated backlog items yet.
   q8, q4, and optional Prompt Enhancer validation; remaining work is parity coverage and
   non-turbo ERNIE-Image.
 - Added 2026-05-26 Wan follow-up: initial Wan2.2 TI2V text-to-video and first-frame
-  image-to-video support exists with MP4 output and focused tests; remaining work is quality
-  validation, quantized validation, progress/cancel APIs, and broader Diffusers parity.
+  image-to-video support exists with MP4 output, focused tests, and opt-in full-model parity
+  fixtures for the Wan transformer and VAE encoder; remaining work is quality validation,
+  quantized validation, progress/cancel APIs, and broader Diffusers parity.

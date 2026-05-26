@@ -121,13 +121,13 @@ mlxgen generate \
 
 The I2V path follows Diffusers first-frame latent conditioning: the first frame is VAE-encoded, kept active through denoising with a timestep mask, and reinserted before decode. Multi-image/video interpolation is not enabled.
 
-Current smoke examples:
+Low-resolution example outputs:
 
 ![Wan2.2 TI2V 256px text-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-t2v-256-17f-12steps-contact-sheet.png)
 
 ![Wan2.2 TI2V first-frame image-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-i2v-bateau-128-5f-2steps-contact-sheet.png)
 
-These are implementation smoke artifacts, not quality benchmarks. Use larger dimensions, more frames, and more inference steps for practical outputs.
+These examples show that the text-to-video and first-frame image-to-video paths produce nonblank MP4 output. They are not quality benchmarks. Use larger dimensions, more frames, and more inference steps for practical outputs.
 
 ## Model Management Commands
 
