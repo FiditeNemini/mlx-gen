@@ -120,12 +120,12 @@ mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
   --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
-  --width 128 \
-  --height 128 \
-  --frames 5 \
-  --steps 4 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
@@ -137,16 +137,18 @@ mlxgen generate \
   --task image-to-video \
   --image input.png \
   --prompt "A slow cinematic camera move from the input frame" \
-  --width 256 \
-  --height 256 \
-  --frames 17 \
-  --steps 12 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
-The I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated. See [API And CLI](docs/api.md) for low-resolution text-to-video and image-to-video example outputs.
+The I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated. Tiny settings such as 128px or a handful of frames are useful only for wiring tests and can produce abstract green frames even with upstream Diffusers.
+
+See [API And CLI](docs/api.md) for spatial-scale Wan T2V/I2V sanity panels generated at 1280x704.
 
 If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
 

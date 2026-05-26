@@ -3,6 +3,7 @@ import html
 import io
 import re
 import shutil
+import sys
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -25,6 +26,13 @@ from mflux.utils.video_util import VideoUtil
 
 
 class Wan2_2_TI2V(nn.Module):
+    RECOMMENDED_WIDTH = 1280
+    RECOMMENDED_HEIGHT = 704
+    RECOMMENDED_AREA = RECOMMENDED_WIDTH * RECOMMENDED_HEIGHT
+    RECOMMENDED_FRAMES = 121
+    RECOMMENDED_STEPS = 50
+    RECOMMENDED_FPS = 24
+
     transformer: WanTransformer
     vae: Wan2_2_VAE
 
@@ -47,10 +55,10 @@ class Wan2_2_TI2V(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 50,
-        height: int = 480,
-        width: int = 832,
-        num_frames: int = 81,
-        fps: int = 16,
+        height: int = RECOMMENDED_HEIGHT,
+        width: int = RECOMMENDED_WIDTH,
+        num_frames: int = RECOMMENDED_FRAMES,
+        fps: int = RECOMMENDED_FPS,
         guidance: float | None = 5.0,
         negative_prompt: str | None = "",
         image_path: Path | str | None = None,
@@ -60,6 +68,13 @@ class Wan2_2_TI2V(nn.Module):
         height, width = self._validated_spatial_size(height=height, width=width)
         num_frames = self._validated_frame_count(num_frames)
         guidance = 5.0 if guidance is None else float(guidance)
+        self._warn_if_smoke_settings(
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            num_inference_steps=num_inference_steps,
+            fps=fps,
+        )
         batch_size = 1
         is_image_to_video = image_path is not None
 
@@ -305,6 +320,34 @@ class Wan2_2_TI2V(nn.Module):
             )
             num_frames = adjusted
         return max(num_frames, 1)
+
+    @staticmethod
+    def _warn_if_smoke_settings(
+        height: int,
+        width: int,
+        num_frames: int,
+        num_inference_steps: int,
+        fps: int,
+    ) -> None:
+        issues = []
+        if height * width < Wan2_2_TI2V.RECOMMENDED_AREA:
+            issues.append(
+                f"resolution below {Wan2_2_TI2V.RECOMMENDED_WIDTH}x{Wan2_2_TI2V.RECOMMENDED_HEIGHT}/"
+                f"{Wan2_2_TI2V.RECOMMENDED_HEIGHT}x{Wan2_2_TI2V.RECOMMENDED_WIDTH} area"
+            )
+        if num_frames < Wan2_2_TI2V.RECOMMENDED_FRAMES:
+            issues.append("frame count below 121")
+        if num_inference_steps < Wan2_2_TI2V.RECOMMENDED_STEPS:
+            issues.append("steps below 50")
+        if fps != Wan2_2_TI2V.RECOMMENDED_FPS:
+            issues.append("fps differs from 24")
+        if issues:
+            print(
+                "Wan2.2 TI2V warning: these settings are suitable only for wiring/smoke tests, not quality "
+                "validation. Upstream recommends 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. "
+                f"Detected: {', '.join(issues)}.",
+                file=sys.stderr,
+            )
 
     @staticmethod
     def _prompt_clean(text: str) -> str:

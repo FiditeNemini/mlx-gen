@@ -11,6 +11,11 @@ from mflux.models.wan.variants import Wan2_2_TI2V
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError
 from mflux.utils.prompt_util import PromptUtil
 
+WAN_DEFAULT_WIDTH = Wan2_2_TI2V.RECOMMENDED_WIDTH
+WAN_DEFAULT_HEIGHT = Wan2_2_TI2V.RECOMMENDED_HEIGHT
+WAN_DEFAULT_FRAMES = Wan2_2_TI2V.RECOMMENDED_FRAMES
+WAN_DEFAULT_FPS = Wan2_2_TI2V.RECOMMENDED_FPS
+
 
 def main() -> None:
     parser = _parser()
@@ -57,15 +62,30 @@ def _parser() -> argparse.ArgumentParser:
         description="Generate a video using Wan2.2 TI2V.",
     )
     parser.add_argument("--model", "-m", required=True, help="Wan model alias, Hugging Face repo, or local path.")
-    parser.add_argument("--image-path", default=None, help="Reserved for Wan image-to-video; not enabled yet.")
+    parser.add_argument("--image-path", default=None, help="Input image for Wan first-frame image-to-video.")
     prompt_group = parser.add_mutually_exclusive_group()
     prompt_group.add_argument("--prompt", type=str, help="Text prompt for video generation.")
     prompt_group.add_argument("--prompt-file", type=Path, help="Path to a text file containing the prompt.")
     parser.add_argument("--negative-prompt", type=str, default="", help="Negative prompt used when guidance > 1.")
-    parser.add_argument("--width", type=int, default=832, help="Video width. Adjusted down to a multiple of 32.")
-    parser.add_argument("--height", type=int, default=480, help="Video height. Adjusted down to a multiple of 32.")
-    parser.add_argument("--frames", type=int, default=81, help="Number of frames. Adjusted to 4n + 1.")
-    parser.add_argument("--fps", type=int, default=16, help="Output video frame rate.")
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=WAN_DEFAULT_WIDTH,
+        help="Video width. Adjusted down to a multiple of 32.",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=WAN_DEFAULT_HEIGHT,
+        help="Video height. Adjusted down to a multiple of 32.",
+    )
+    parser.add_argument(
+        "--frames",
+        type=int,
+        default=WAN_DEFAULT_FRAMES,
+        help="Number of frames. Adjusted to 4n + 1.",
+    )
+    parser.add_argument("--fps", type=int, default=WAN_DEFAULT_FPS, help="Output video frame rate.")
     parser.add_argument("--steps", type=int, default=50, help="Denoising steps.")
     parser.add_argument("--guidance", type=float, default=5.0, help="Classifier-free guidance scale.")
     parser.add_argument("--seed", "-s", type=int, default=None, nargs="+", help="One or more random seeds.")

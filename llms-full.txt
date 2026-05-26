@@ -166,19 +166,19 @@ For local ERNIE folders whose names cannot be classified, pass `--family ernie-i
 
 `mlxgen generate` does not accept `--path` to create model folders. Use `mlxgen prepare --model ... --path ... --quantize ...` for model preparation and use `--output` to choose the generated image or video path.
 
-Wan2.2 TI2V routes through the same command surface for text-to-video:
+Wan2.2 TI2V routes through the same command surface for text-to-video. Use the upstream TI2V-5B scale for visual quality validation:
 
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
   --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
-  --width 128 \
-  --height 128 \
-  --frames 5 \
-  --steps 4 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
@@ -192,16 +192,16 @@ mlxgen generate \
   --task image-to-video \
   --image input.png \
   --prompt "A slow cinematic camera move from the input frame" \
-  --width 256 \
-  --height 256 \
-  --frames 17 \
-  --steps 12 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
-Low-resolution text-to-video and first-frame image-to-video example panels live in `docs/assets/generation/`. They show that the current paths produce nonblank MP4 output, but they are not quality benchmarks.
+Tiny Wan settings such as 128px, 5 frames, and 4 steps are smoke tests only. Local comparison showed that those settings can produce abstract green frames with upstream Diffusers as well as MLX-Gen. Spatial-scale T2V and I2V sanity panels at 1280x704, 17 frames, and 20 steps live in `docs/assets/generation/`; they are coherent non-green outputs, not full quality benchmarks.
 
 Generation commands replace the requested `--output` path by default. Use `--replace false` or `--no-replace` to preserve an existing file and save to the next suffixed path.
 

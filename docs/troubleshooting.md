@@ -86,25 +86,25 @@ If ERNIE image-to-image does not preserve enough of the source image, increase `
 
 ## Wan Video Quality Looks Weak At Tiny Sizes
 
-Wan2.2 TI2V supports text-to-video and experimental first-frame image-to-video. Very small or very short runs are useful smoke tests, but they are not reliable quality checks.
+Wan2.2 TI2V supports text-to-video and experimental first-frame image-to-video. Very small or very short runs are useful smoke tests, but they are not quality checks. In local validation, a 128px, 5-frame, 4-step run produced abstract green frames with upstream Diffusers as well as MLX-Gen.
 
-Use at least a short multi-frame run when validating behavior:
+Use the upstream TI2V-5B settings when validating visual quality:
 
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
   --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
-  --width 128 \
-  --height 128 \
-  --frames 5 \
-  --steps 4 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
-For image-to-video, pass exactly one input image and use `--task image-to-video`. Multi-image Wan interpolation is not enabled.
+Use lower dimensions, frame counts, or step counts only to validate routing and MP4 writing. For image-to-video, pass exactly one input image and use `--task image-to-video`. Multi-image Wan interpolation is not enabled.
 
 ## `generate --path` Fails
 

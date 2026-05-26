@@ -93,12 +93,12 @@ mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
   --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
-  --width 128 \
-  --height 128 \
-  --frames 5 \
-  --steps 4 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
@@ -110,24 +110,26 @@ mlxgen generate \
   --task image-to-video \
   --image input.png \
   --prompt "A slow cinematic camera move from the input frame" \
-  --width 256 \
-  --height 256 \
-  --frames 17 \
-  --steps 12 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
 The I2V path follows Diffusers first-frame latent conditioning: the first frame is VAE-encoded, kept active through denoising with a timestep mask, and reinserted before decode. Multi-image/video interpolation is not enabled.
 
-Low-resolution example outputs:
+The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. Lower settings are useful only for routing, scheduler, and MP4 smoke tests; very small runs can produce abstract green frames even with upstream Diffusers.
 
-![Wan2.2 TI2V 256px text-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-t2v-256-17f-12steps-contact-sheet.png)
+Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
-![Wan2.2 TI2V first-frame image-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-i2v-bateau-128-5f-2steps-contact-sheet.png)
+![Wan2.2 TI2V 1280x704 text-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-t2v-1280x704-17f-20steps-contact-sheet.png)
 
-These examples show that the text-to-video and first-frame image-to-video paths produce nonblank MP4 output. They are not quality benchmarks. Use larger dimensions, more frames, and more inference steps for practical outputs.
+![Wan2.2 TI2V first-frame image-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-i2v-bateau-1280x704-17f-20steps-contact-sheet.png)
+
+These panels are not full quality benchmarks. They exist to show that the MLX-Gen T2V and I2V paths produce coherent, non-green output once the run uses the model's spatial scale.
 
 ## Model Management Commands
 

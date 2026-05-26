@@ -52,7 +52,11 @@ text-to-image, image-to-image/edit, text-to-video, and image-to-video work.
   encoding, MP4 output, `mlxgen` routing, save/download wiring, focused tests, and opt-in
   Diffusers fixture checks for transformer, VAE encode/decode, prompt embeddings, scheduler replay,
   and a tiny 3-step CFG latent denoise loop. The I2V path follows Diffusers first-frame latent
-  conditioning rather than ordinary img2img initialization.
+  conditioning rather than ordinary img2img initialization. Low-resolution Wan smoke outputs were
+  replaced in public docs after direct upstream Diffusers comparison showed that tiny settings can
+  produce abstract green frames. Current docs use upstream quality-validation settings and include
+  1280x704, 17-frame, 20-step spatial-scale sanity panels; full quality validation still needs the
+  upstream 121-frame, 50-step, 24fps regime or a deliberately documented lower-cost equivalent.
 - GLM-Image is also a real port, not an alias. Its snapshot declares `GlmImagePipeline`,
   `GlmImageTransformer2DModel`, `GlmImageForConditionalGeneration`, `GlmImageProcessor`,
   `T5EncoderModel`, and `AutoencoderKL`.
@@ -201,9 +205,8 @@ than a renamed fork.
 - `MFLUX_RUN_LOCAL_WAN_PARITY=1 uv run pytest tests/wan/test_wan_local_parity.py -q`
   validates the full Wan transformer, VAE encoder/decoder, prompt embeddings, scheduler replay,
   and a tiny 3-step CFG latent denoise loop against Diffusers-generated fixtures.
-- `uv run pytest tests/wan/test_wan_visual_assets.py -q` verifies that the committed Wan
-  text-to-video and first-frame image-to-video example panels are present, nonblank, and varied
-  across frames.
+- `uv run pytest tests/wan/test_wan_quality_settings.py -q` verifies that smoke-sized Wan runs warn
+  users instead of being presented as quality-validation settings.
 - New model cards continue to include source model, mflux acknowledgement, MLX-Gen version,
   quantization policy, AbstractFramework namespace examples, and contributor attribution.
 
@@ -224,7 +227,7 @@ than a renamed fork.
 - [x] Add opt-in Wan full-model parity fixtures for transformer and VAE encoder checks.
 - [x] Add Wan prompt-embedding parity and VAE decode parity fixtures.
 - [x] Add short deterministic Wan denoise-loop parity against Diffusers.
-- [x] Add committed Wan contact-sheet asset checks for nonblank, varied MP4 examples.
+- [x] Remove misleading tiny Wan contact-sheet examples and warn for smoke-sized runs.
 - [ ] Improve Wan video quality/performance validation beyond tiny smoke runs.
 - [ ] Add one full short Wan Diffusers-vs-MLX generation comparison for the same prompt, seed,
       dimensions, frames, steps, and guidance.

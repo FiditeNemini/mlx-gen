@@ -97,12 +97,12 @@ mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
   --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
-  --width 128 \
-  --height 128 \
-  --frames 5 \
-  --steps 4 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --seed 321 \
   --output video.mp4
 ```
@@ -115,24 +115,24 @@ mlxgen generate \
   --task image-to-video \
   --image input.png \
   --prompt "A slow cinematic camera move from the input frame" \
-  --width 256 \
-  --height 256 \
-  --frames 17 \
-  --steps 12 \
+  --width 1280 \
+  --height 704 \
+  --frames 121 \
+  --steps 50 \
   --guidance 5 \
-  --fps 8 \
+  --fps 24 \
   --output video.mp4
 ```
 
 Wan image-to-video uses the Diffusers first-frame latent-conditioning path. Treat current Wan video support as experimental: the pipeline can produce MP4 output, but quality, speed, and practical defaults still need broader validation.
 
-Low-resolution examples:
+Wan2.2 TI2V is not meaningful at tiny smoke-test settings. Runs such as 128px, 5 frames, and 4 steps can produce abstract green frames even with upstream Diffusers. Use low settings only to validate routing and MP4 writing, not visual quality.
 
-![Wan2.2 TI2V 256px text-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-t2v-256-17f-12steps-contact-sheet.png)
+Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
-![Wan2.2 TI2V first-frame image-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-i2v-bateau-128-5f-2steps-contact-sheet.png)
+![Wan2.2 TI2V 1280x704 text-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-t2v-1280x704-17f-20steps-contact-sheet.png)
 
-These examples show the current wiring and output format. Use larger dimensions, more frames, and more inference steps for practical video quality checks.
+![Wan2.2 TI2V first-frame image-to-video contact sheet](assets/generation/wan2.2-ti2v-5b-i2v-bateau-1280x704-17f-20steps-contact-sheet.png)
 
 ## Next Steps
 

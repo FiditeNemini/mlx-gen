@@ -10,11 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Wan local parity fixtures**: Add opt-in full-model Wan component-parity tests for the MLX transformer, VAE encoder/decoder, prompt-embedding paths, and a tiny 3-step CFG latent denoise loop against Diffusers-generated fixtures.
-- **Wan visual asset checks**: Add fast tests that verify the committed Wan text-to-video and first-frame image-to-video contact sheets are present, nonblank, and visually varied across frames.
+- **Wan smoke-setting warnings**: Warn when Wan generation uses tiny resolution, frame, step, or fps settings that are useful only for routing/MP4 smoke tests and not visual quality validation.
 
 ### Documentation
 
-- Add low-resolution Wan text-to-video and first-frame image-to-video example panels to the user docs, with the current quality caveat kept explicit.
+- Replace low-resolution Wan example panels with upstream TI2V-5B quality-validation settings plus 1280x704 spatial-scale sanity panels, and document that tiny runs can produce abstract green frames even with upstream Diffusers.
 
 ## [0.18.5] - 2026-05-26
 
