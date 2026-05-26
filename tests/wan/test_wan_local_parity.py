@@ -11,6 +11,11 @@ from mflux.models.wan.variants import Wan2_2_TI2V
 RESOURCE_DIR = Path(__file__).resolve().parents[1] / "resources" / "wan" / "parity"
 WAN_MODEL_ENV = "MFLUX_WAN_PARITY_MODEL"
 RUN_PARITY_ENV = "MFLUX_RUN_LOCAL_WAN_PARITY"
+WAN_PARITY_PROMPT = "A short cinematic video of a glowing orange glass sphere floating above calm teal water"
+WAN_PARITY_NEGATIVE_PROMPT = "blur, low quality, distorted, text, watermark, noisy"
+WAN_PARITY_PROMPT_LENGTH = 64
+WAN_PARITY_PROMPT_MEAN_ABS_LIMIT = 0.001
+WAN_PARITY_PROMPT_MAX_ABS_LIMIT = 0.01
 
 
 pytestmark = pytest.mark.skipif(
@@ -44,6 +49,42 @@ def test_wan_vae_encoder_matches_diffusers_fixture(wan_model):
     mx.eval(output)
 
     _assert_close(_to_np(output), expected, mean_abs_limit=0.005, max_abs_limit=0.03)
+
+
+def test_wan_vae_decode_matches_diffusers_fixture(wan_model):
+    latents = _load_mx("wan_vae_decode_normalized_input.npy").astype(ModelConfig.precision)
+    expected = _load_np("wan_vae_decode_diffusers_output.npy")
+
+    output = wan_model.vae.decode_normalized_latents(latents)
+    mx.eval(output)
+
+    _assert_close(_to_np(output), expected, mean_abs_limit=0.006, max_abs_limit=0.04)
+
+
+def test_wan_prompt_embeds_match_diffusers_fixture(wan_model):
+    expected_prompt = _load_np("wan_prompt_embeds_diffusers.npy")
+    expected_negative = _load_np("wan_negative_prompt_embeds_diffusers.npy")
+
+    prompt, negative = wan_model.encode_prompt(
+        prompt=WAN_PARITY_PROMPT,
+        negative_prompt=WAN_PARITY_NEGATIVE_PROMPT,
+        do_classifier_free_guidance=True,
+        max_sequence_length=WAN_PARITY_PROMPT_LENGTH,
+    )
+    mx.eval(prompt, negative)
+
+    _assert_close(
+        _to_np(prompt),
+        expected_prompt,
+        mean_abs_limit=WAN_PARITY_PROMPT_MEAN_ABS_LIMIT,
+        max_abs_limit=WAN_PARITY_PROMPT_MAX_ABS_LIMIT,
+    )
+    _assert_close(
+        _to_np(negative),
+        expected_negative,
+        mean_abs_limit=WAN_PARITY_PROMPT_MEAN_ABS_LIMIT,
+        max_abs_limit=WAN_PARITY_PROMPT_MAX_ABS_LIMIT,
+    )
 
 
 def _load_np(name: str) -> np.ndarray:
