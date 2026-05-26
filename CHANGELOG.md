@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Wan local parity fixtures**: Add opt-in full-model Wan component-parity tests for the MLX transformer, VAE encoder/decoder, prompt-embedding paths, and a tiny 3-step CFG latent denoise loop against Diffusers-generated fixtures.
 - **Wan smoke-setting warnings**: Warn when Wan generation uses tiny resolution, frame, step, or fps settings that are useful only for routing/MP4 smoke tests and not visual quality validation.
+- **Wan video progress**: Show a frame-based CLI progress bar during Wan text-to-video and image-to-video generation, and expose structured `WanProgressEvent` callbacks for Python callers.
 
 ### Documentation
 

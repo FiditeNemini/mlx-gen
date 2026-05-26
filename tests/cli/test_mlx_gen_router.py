@@ -613,8 +613,47 @@ def test_wan_cli_generates_video_and_respects_replace(monkeypatch, tmp_path):
     assert observed["generate"]["num_inference_steps"] == 2
     assert observed["generate"]["seed"] == 123
     assert observed["generate"]["image_path"] == str(image_path)
+    assert callable(observed["generate"]["progress_callback"])
     assert observed["save"]["path"] == "out.mp4"
     assert observed["save"]["overwrite"] is False
+
+
+def test_wan_cli_can_disable_progress(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--seed",
+            "123",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["generate"]["progress_callback"] is None
 
 
 def test_main_without_args_prints_top_level_help(monkeypatch, capsys):

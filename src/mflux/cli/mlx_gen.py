@@ -221,7 +221,7 @@ def _parser() -> argparse.ArgumentParser:
             "Common generation options are forwarded to the selected backend, including --prompt, "
             "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
             "--negative-prompt, --quantize, --lora-paths, --lora-scales, --metadata, "
-            "--config-from-metadata/-C, --output, --replace, --frames, and --fps."
+            "--config-from-metadata/-C, --output, --replace, --frames, --fps, and --progress/--no-progress."
         ),
     )
     parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")

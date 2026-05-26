@@ -139,6 +139,7 @@ At the default 24 fps, `--frames 121` produces about 5.04 seconds of video, `--f
 | `--steps` | Denoising steps. Default and recommended quality value: `50`. Lower values run faster but reduce quality. |
 | `--guidance` | Classifier-free guidance scale. Default: `5`. |
 | `--seed` | Deterministic seed. Repeat with multiple values to create multiple videos. |
+| `--progress`, `--no-progress` | Show or disable the CLI video progress bar. Progress is reported in output-frame units and also carries the current denoising step. Default: `--progress true`. |
 
 The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. Lower resolutions, frame counts, or step counts are useful for quick checks, but they should not be treated as quality settings.
 

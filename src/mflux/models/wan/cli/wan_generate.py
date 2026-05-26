@@ -4,10 +4,12 @@ import random
 import time
 from pathlib import Path
 
+from tqdm import tqdm
+
 from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import boolean_flag_value
 from mflux.models.common.config import ModelConfig
-from mflux.models.wan.variants import Wan2_2_TI2V
+from mflux.models.wan.variants import Wan2_2_TI2V, WanProgressEvent
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError
 from mflux.utils.prompt_util import PromptUtil
 
@@ -33,19 +35,24 @@ def main() -> None:
 
     try:
         for seed in args.seed:
-            video = model.generate_video(
-                seed=seed,
-                prompt=PromptUtil.read_prompt(args),
-                width=args.width,
-                height=args.height,
-                num_frames=args.frames,
-                fps=args.fps,
-                guidance=args.guidance,
-                num_inference_steps=args.steps,
-                negative_prompt=args.negative_prompt,
-                image_path=args.image_path,
-                max_sequence_length=args.max_sequence_length,
-            )
+            progress = _WanCliProgress(enabled=args.progress)
+            try:
+                video = model.generate_video(
+                    seed=seed,
+                    prompt=PromptUtil.read_prompt(args),
+                    width=args.width,
+                    height=args.height,
+                    num_frames=args.frames,
+                    fps=args.fps,
+                    guidance=args.guidance,
+                    num_inference_steps=args.steps,
+                    negative_prompt=args.negative_prompt,
+                    image_path=args.image_path,
+                    max_sequence_length=args.max_sequence_length,
+                    progress_callback=progress if args.progress else None,
+                )
+            finally:
+                progress.close()
             video.save(
                 path=args.output.format(seed=seed),
                 export_json_metadata=args.metadata,
@@ -94,6 +101,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-sequence-length", type=int, default=512, help="UMT5 prompt token length.")
     parser.add_argument("--metadata", action="store_true", help="Export video metadata as JSON.")
     parser.add_argument("--output", type=str, default="video.mp4", help='Output path. Default is "video.mp4".')
+    parser.add_argument(
+        "--progress",
+        type=boolean_flag_value,
+        nargs="?",
+        const=True,
+        default=True,
+        help="Show video frame progress. Default is true.",
+    )
+    parser.add_argument("--no-progress", action="store_false", dest="progress")
     parser.add_argument(
         "--replace",
         type=boolean_flag_value,
@@ -160,6 +176,31 @@ def _resolve_model(model: str) -> tuple[ModelConfig, str | None]:
         return ModelConfig.wan2_2_ti2v_5b(), model
     model_path = model if model_config.base_model is not None else None
     return model_config, model_path
+
+
+class _WanCliProgress:
+    def __init__(self, enabled: bool):
+        self.enabled = enabled
+        self._bar: tqdm | None = None
+        self._last_frame = 0
+
+    def __call__(self, event: WanProgressEvent) -> None:
+        if not self.enabled:
+            return
+        if self._bar is None:
+            self._bar = tqdm(total=event.total_frames, desc="Generating video", unit="frame")
+        delta = max(0, event.frame - self._last_frame)
+        if delta:
+            self._bar.update(delta)
+            self._last_frame = event.frame
+        self._bar.set_postfix_str(f"{event.phase} step {event.step}/{event.total_steps}")
+        if event.phase == "complete":
+            self.close()
+
+    def close(self) -> None:
+        if self._bar is not None:
+            self._bar.close()
+            self._bar = None
 
 
 if __name__ == "__main__":

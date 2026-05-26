@@ -33,7 +33,34 @@ The current integration path is still model-specific Python classes. A future hi
 
 ## Progress And Monitoring
 
-Existing model callbacks remain available through the mflux runtime internals. A stable, backend-facing progress event API is not yet part of MLX-Gen. Applications that need progress should treat progress reporting as best-effort unless they are integrating a specific model class and callback path.
+Existing model callbacks remain available through the mflux runtime internals. Wan video generation also exposes a direct `progress_callback` hook for applications that need frame-oriented progress.
+
+```python
+from mflux.models.wan.variants import Wan2_2_TI2V, WanProgressEvent
+
+
+def on_progress(event: WanProgressEvent) -> None:
+    print(
+        f"{event.phase}: frame {event.frame}/{event.total_frames}, "
+        f"step {event.step}/{event.total_steps}, {event.progress:.0%}"
+    )
+
+
+model = Wan2_2_TI2V(model_path="Wan-AI/Wan2.2-TI2V-5B-Diffusers")
+video = model.generate_video(
+    seed=321,
+    prompt="A slow cinematic shot of a glass sphere floating above teal water",
+    width=1280,
+    height=704,
+    num_frames=121,
+    num_inference_steps=50,
+    fps=24,
+    progress_callback=on_progress,
+)
+video.save("video.mp4")
+```
+
+Wan progress events use output-frame units so callers can display `frame / total_frames`, while also receiving the active denoising `step / total_steps`. Other backends still use their existing model-specific callback paths.
 
 ## Threading
 

@@ -5,7 +5,9 @@ import re
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import dataclass
 from pathlib import Path
 
 import mlx.core as mx
@@ -23,6 +25,21 @@ from mflux.models.wan.weights import WanWeightDefinition
 from mflux.utils.generated_video import GeneratedVideo
 from mflux.utils.image_util import ImageUtil
 from mflux.utils.video_util import VideoUtil
+
+
+@dataclass(frozen=True)
+class WanProgressEvent:
+    phase: str
+    frame: int
+    total_frames: int
+    step: int
+    total_steps: int
+
+    @property
+    def progress(self) -> float:
+        if self.total_frames <= 0:
+            return 0.0
+        return min(1.0, max(0.0, self.frame / self.total_frames))
 
 
 class Wan2_2_TI2V(nn.Module):
@@ -63,6 +80,7 @@ class Wan2_2_TI2V(nn.Module):
         negative_prompt: str | None = "",
         image_path: Path | str | None = None,
         max_sequence_length: int = 512,
+        progress_callback: Callable[[WanProgressEvent], None] | None = None,
     ) -> GeneratedVideo:
         start_time = time.time()
         height, width = self._validated_spatial_size(height=height, width=width)
@@ -74,6 +92,14 @@ class Wan2_2_TI2V(nn.Module):
             num_frames=num_frames,
             num_inference_steps=num_inference_steps,
             fps=fps,
+        )
+        self._emit_progress(
+            progress_callback,
+            phase="start",
+            frame=0,
+            total_frames=num_frames,
+            step=0,
+            total_steps=num_inference_steps,
         )
         batch_size = 1
         is_image_to_video = image_path is not None
@@ -104,7 +130,8 @@ class Wan2_2_TI2V(nn.Module):
                 width=width,
             )
 
-        for timestep in scheduler.timesteps.tolist():
+        total_steps = len(scheduler.timesteps)
+        for step_index, timestep in enumerate(scheduler.timesteps.tolist()):
             if first_frame_mask is not None and condition is not None:
                 latent_model_input = WanTimestepPolicy.apply_first_frame_condition(
                     latents=latents,
@@ -139,6 +166,18 @@ class Wan2_2_TI2V(nn.Module):
 
             latents = scheduler.step(noise_pred.astype(mx.float32), timestep, latents, return_dict=False)[0]
             mx.eval(latents)
+            self._emit_progress(
+                progress_callback,
+                phase="denoise",
+                frame=self._progress_frame_for_step(
+                    step_index=step_index,
+                    total_steps=total_steps,
+                    total_frames=num_frames,
+                ),
+                total_frames=num_frames,
+                step=step_index + 1,
+                total_steps=total_steps,
+            )
 
         if first_frame_mask is not None and condition is not None:
             latents = WanTimestepPolicy.apply_first_frame_condition(
@@ -148,7 +187,7 @@ class Wan2_2_TI2V(nn.Module):
             )
         decoded = self.vae.decode_normalized_latents(latents.astype(ModelConfig.precision))
         mx.eval(decoded)
-        return VideoUtil.to_video(
+        video = VideoUtil.to_video(
             decoded_latents=decoded,
             fps=fps,
             model_config=self.model_config,
@@ -162,6 +201,15 @@ class Wan2_2_TI2V(nn.Module):
             image_path=image_path,
             negative_prompt=negative_prompt,
         )
+        self._emit_progress(
+            progress_callback,
+            phase="complete",
+            frame=num_frames,
+            total_frames=num_frames,
+            step=total_steps,
+            total_steps=total_steps,
+        )
+        return video
 
     def encode_prompt(
         self,
@@ -320,6 +368,34 @@ class Wan2_2_TI2V(nn.Module):
             )
             num_frames = adjusted
         return max(num_frames, 1)
+
+    @staticmethod
+    def _progress_frame_for_step(step_index: int, total_steps: int, total_frames: int) -> int:
+        if total_steps <= 0 or total_frames <= 1:
+            return 0
+        return min(total_frames - 1, int(((step_index + 1) * (total_frames - 1)) / total_steps))
+
+    @staticmethod
+    def _emit_progress(
+        progress_callback: Callable[[WanProgressEvent], None] | None,
+        *,
+        phase: str,
+        frame: int,
+        total_frames: int,
+        step: int,
+        total_steps: int,
+    ) -> None:
+        if progress_callback is None:
+            return
+        progress_callback(
+            WanProgressEvent(
+                phase=phase,
+                frame=frame,
+                total_frames=total_frames,
+                step=step,
+                total_steps=total_steps,
+            )
+        )
 
     @staticmethod
     def _warn_if_smoke_settings(

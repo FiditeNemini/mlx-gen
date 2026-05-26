@@ -10,7 +10,7 @@ MLX-Gen is an MLX-native generative image and video runtime forked from mflux. I
 - [Model management](model-management.md): explicit download and prepare workflows, cache-only runtime behavior, and Depth Pro downloads.
 - [Quantization](quantization.md): current q4/q8 compatibility by model family, including validation panels and the Qwen and ERNIE mixed q4/q8 policies.
 - [Hugging Face publishing](huggingface-publishing.md): generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
-- [Python integration](python-integration.md): current in-process API, AbstractVision integration notes, progress limitations, and error handling.
+- [Python integration](python-integration.md): current in-process API, AbstractVision integration notes, Wan progress callbacks, and error handling.
 - [Release](release.md): GitHub Release and PyPI trusted publishing workflow.
 - [FAQ](faq.md): common questions about `prepare`, downloads, package naming, and compatibility.
 - [Troubleshooting](troubleshooting.md): common missing-artifact, cache, local-path, ERNIE Prompt Enhancer, small-resolution ERNIE, unsupported ERNIE edit inputs, and Wan video quality-setting limits.

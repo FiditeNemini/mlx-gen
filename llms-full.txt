@@ -15,7 +15,7 @@ Some internals currently remain under `mflux.*`; new application code should use
 - `docs/model-management.md`: cache-only runtime policy, `download` versus `prepare`, Depth Pro, and `DownloadRequiredError`.
 - `docs/quantization.md`: MLX-Gen prepared folder compatibility by model family, validation panels, and current Qwen/ERNIE mixed q4/q8 policies.
 - `docs/huggingface-publishing.md`: generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
-- `docs/python-integration.md`: in-process use, AbstractVision integration, progress limitations, and threading guidance.
+- `docs/python-integration.md`: in-process use, AbstractVision integration, Wan progress callbacks, and threading guidance.
 - `docs/faq.md`: common questions about `prepare`, downloads, package naming, and compatibility.
 - `docs/troubleshooting.md`: missing files, local path classification, output replacement, `generate --path`, ERNIE Prompt Enhancer files, ERNIE small-resolution and unsupported edit-input behavior, Wan video quality-setting limits, LoRA, and `hf_transfer`.
 - `docs/release.md`: GitHub Release and PyPI trusted publishing workflow.
@@ -268,7 +268,7 @@ Current responsibilities:
 - MLX-Gen owns MLX model loading, model-family behavior, local quantized formats, and runtime compatibility fixes.
 - MLX-Gen fails early when required local artifacts are missing so AbstractVision can surface an actionable remediation message.
 
-Existing model callbacks remain available through the mflux runtime internals. A stable, backend-facing progress event API is not yet part of MLX-Gen.
+Existing model callbacks remain available through the mflux runtime internals. Wan video generation also exposes a direct `progress_callback` hook that receives `WanProgressEvent` objects with `phase`, `frame`, `total_frames`, `step`, `total_steps`, and `progress`. Wan progress is reported in output-frame units while carrying denoising step metadata for application-level monitoring. Other backends still use their existing model-specific callback paths.
 
 ---
 
