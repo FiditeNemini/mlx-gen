@@ -12,10 +12,20 @@ The current quantized-model compatibility surface is:
 | Qwen Image Edit | Supported | Supported with mixed q4/q8 | Applies to Qwen Image Edit, 2509, and 2511 image-edit checkpoints. |
 | ERNIE Image Turbo | Supported | Supported with mixed q4/q8 | Text-to-image plus experimental single-image image-to-image. Prompt Enhancer is optional and requires a full source snapshot. |
 | FLUX.2 Klein | Supported | Supported | Standard MLX quantization policy. 9B derivatives follow the source gated/non-commercial access requirements. |
+| Bonsai Image | Not a prepared q8 folder | Ternary 2-bit pre-packed checkpoint supported | Bonsai checkpoints are already packed MLX artifacts. Use `mlxgen download` and `mlxgen generate`; do not run `prepare`. Binary 1-bit is detected but blocked until stock MLX supports 1-bit packed affine matmul. |
 | Z-Image / Z-Image Turbo | Supported | Supported | Standard MLX quantization policy with model-specific generation defaults. |
 | FIBO | Supported when source access is available | Supported when source access is available | Source repositories may require access approval before download or preparation. |
 
-MLX-Gen treats q4 quality as model-specific, not automatic. Qwen and ERNIE use mixed q4/q8 policies because fully q4 checkpoints showed unacceptable quality loss in generation validation. q8 remains the closest quantized option to BF16 when memory allows.
+MLX-Gen treats low-bit quality as model-specific, not automatic. Qwen and ERNIE use mixed q4/q8 policies because fully q4 checkpoints showed unacceptable quality loss in generation validation. Bonsai uses Prism's pre-packed ternary 2-bit transformer plus a 4-bit Qwen3 text encoder rather than MLX-Gen's `prepare` flow. q8 remains the closest prepared-folder option to BF16 when memory allows.
+
+The difference between Bonsai ternary 2-bit and MLX-Gen's mixed q4/q8 policies is mostly packaging and runtime ownership, not the quality philosophy. Both avoid blind full low-bit conversion:
+
+| Strategy | Used by | Quality-preserving rule | Representative footprint and runtime |
+| --- | --- | --- | --- |
+| Mixed q4/q8 prepared folders | Qwen Image/Edit and ERNIE Image Turbo q4 folders created by `mlxgen prepare` | q4 for bulk transformer paths, q8 for empirically sensitive linears, BF16 for non-quantizable weights and selected runtime components. | ERNIE mixed q4/q8: 8.2 GiB folder, 9.34 GiB peak RSS, 7.83 s at 512px. Qwen uses the same policy shape on larger source models. |
+| Pre-packed ternary 2-bit checkpoint | Bonsai Image 2-bit from Prism | The transformer is already packed at 2-bit, the Qwen3 text encoder is 4-bit, and the Flux2 VAE stays BF16. | Bonsai ternary: 3.6 GiB cached snapshot, 3.57 GiB peak RSS, 2.92 s at 512px. |
+
+These are not model-quality rankings across unrelated models. They show the current MLX-Gen rule: use the smallest validated layout that still stays in the same visual family as a higher-precision baseline.
 
 ## Qwen q4
 
@@ -98,6 +108,51 @@ Representative ERNIE q8 image-to-image versus Qwen Image Edit 2511 q4 comparison
 ![ERNIE Image Turbo q8 versus Qwen Image Edit 2511 q4 object replacement comparison](assets/generation/ernie-vs-qwen2511-replace-laptop.png)
 
 In the object-replacement comparison, ERNIE can introduce the requested fruit-basket concept, but it does so by reimagining the room from its encoded latent initialization. Qwen Image Edit keeps the source image active as conditioning throughout denoising and is therefore the better choice for exact layout and local-object edits.
+
+## Bonsai Image
+
+Bonsai Image support is different from ordinary q4/q8 preparation. Prism publishes Bonsai as
+ready-to-run MLX artifacts:
+
+- `prism-ml/bonsai-image-ternary-4B-mlx-2bit`: supported in MLX-Gen.
+- `prism-ml/bonsai-image-binary-4B-mlx-1bit`: detected, but not runnable on stock MLX through
+  0.31.2 because the active runtime cannot execute the required `bits=1, group_size=128` packed
+  affine matmul.
+
+Use `mlxgen download` to cache Bonsai, then generate directly:
+
+```sh
+mlxgen download --model prism-ml/bonsai-image-ternary-4B-mlx-2bit
+
+mlxgen generate \
+  --model prism-ml/bonsai-image-ternary-4B-mlx-2bit \
+  --prompt "A bonsai tree in a quiet ceramic studio, soft morning light" \
+  --width 1024 \
+  --height 1024 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 42 \
+  --output bonsai.png
+```
+
+Do not use `mlxgen prepare` for Bonsai. The repository already contains a low-bit packed
+transformer, a 4-bit Qwen3 text encoder, and a BF16 Flux2 VAE.
+
+Local comparison against FLUX.2 Klein 4B q8 on the same prompt, seed 42, guidance 1, and 4 steps:
+
+| Model | Disk footprint | 512px average time | 512px peak RSS | 1024px time | 1024px peak RSS | Notes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Bonsai ternary 2-bit | 3.6 GiB cached snapshot | 2.92 s | 3.57 GiB | 5.69 s | 3.60 GiB | Coherent image quality, same visual family as Klein 4B q8. |
+| FLUX.2 Klein 4B q8 | 22 GiB source cache, q8 applied at runtime | 3.55 s | 9.23 GiB | 6.81 s | 9.39 GiB | Strong baseline with much higher memory footprint. |
+| Bonsai binary 1-bit | 3.2 GiB cached snapshot | Not runnable | Not runnable | Not runnable | Not runnable | Waiting on stock-MLX 1-bit packed affine runtime support; latest checked stock MLX is 0.31.2. |
+
+The 512px timing values are three cold-process repeats captured with `/usr/bin/time -l`. The Klein
+baseline used on-the-fly q8 from the parent source cache because local disk space was tight during
+validation.
+
+Representative Bonsai ternary versus FLUX.2 Klein 4B q8 validation:
+
+![Bonsai ternary 2-bit versus FLUX.2 Klein 4B q8 comparison](assets/quantization/bonsai-ternary-vs-klein4b-q8.png)
 
 ## Other Quantized Families
 

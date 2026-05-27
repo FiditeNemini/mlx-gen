@@ -229,6 +229,46 @@ class ModelCardSaver:
                 ]
             )
 
+        if bits == 8 and "wan" in terms:
+            return "\n".join(
+                [
+                    "This is an MLX q8 checkpoint for Wan2.2 TI2V. MLX-Gen uses 8-bit "
+                    "quantization for Wan modules where MLX supports quantization:",
+                    "",
+                    "- q8 for quantizable Wan transformer modules.",
+                    "- q8 for quantizable Wan VAE modules.",
+                    "- BF16 for the UMT5 text encoder, scheduler metadata, tokenizer files, norms, and other "
+                    "non-quantizable parameters.",
+                    "",
+                    "Wan q4 quality and any possible mixed q4/q8 policy are still under validation. "
+                    "Prefer q8 for publishable Wan checkpoints until the q4 policy is documented.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for compatibility notes.",
+                ]
+            )
+
+        if bits == 4 and "wan" in terms:
+            return "\n".join(
+                [
+                    "This is an experimental MLX 4-bit checkpoint for Wan2.2 TI2V. Wan q4 quality is still "
+                    "under validation in MLX-Gen; do not treat this checkpoint as equivalent to BF16/q8 unless "
+                    "side-by-side video tests confirm acceptable motion and visual quality.",
+                    "",
+                    "Prefer q8 for publishable Wan checkpoints until the Wan q4 or mixed q4/q8 policy is "
+                    "documented.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for compatibility notes.",
+                ]
+            )
+
+        if bits is None and "wan" in terms:
+            return (
+                "This checkpoint stores MLX-Gen Wan2.2 TI2V weights without an explicit quantization level. "
+                "Wan supports text-to-video and experimental first-frame image-to-video generation."
+            )
+
         if bits is None and "ernie" in terms:
             return (
                 "This checkpoint stores MLX-Gen ERNIE Image Turbo generation weights without an explicit "
@@ -267,6 +307,20 @@ class ModelCardSaver:
 
     @staticmethod
     def _usage_lines(pipeline_tag: str, terms: str) -> list[str]:
+        if "wan" in terms:
+            return [
+                "  --task text-to-video \\",
+                '  --prompt "Your video prompt here" \\',
+                "  --width 1280 \\",
+                "  --height 704 \\",
+                "  --frames 121 \\",
+                "  --steps 50 \\",
+                "  --guidance 5 \\",
+                "  --fps 24 \\",
+                "  --seed 42 \\",
+                "  --output video.mp4",
+            ]
+
         if pipeline_tag == "image-to-image":
             return [
                 "  --image path_to_image.png \\",
@@ -331,12 +385,16 @@ class ModelCardSaver:
             tags.append("z-image")
         if "ernie" in terms:
             tags.extend(["ernie", "ernie-image", "ernie-image-turbo"])
+        if "wan" in terms:
+            tags.extend(["wan", "wan2.2", "video-generation", "text-to-video", "image-to-video"])
         if "fibo" in terms:
             tags.append("fibo")
         return ModelCardSaver._deduplicate(tags)
 
     @staticmethod
     def _pipeline_tag(terms: str) -> str:
+        if "wan" in terms:
+            return "text-to-video"
         if any(term in terms for term in ("edit", "kontext", "fill", "depth", "controlnet", "redux")):
             return "image-to-image"
         return "text-to-image"
@@ -389,6 +447,7 @@ class ModelCardSaver:
             or "z-image" in normalized
             or "zimage" in normalized
             or "ernie" in normalized
+            or "wan" in normalized
             or ("flux.2-klein" in normalized and "4b" in normalized)
         )
 

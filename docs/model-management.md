@@ -63,7 +63,7 @@ mlxgen generate \
   --output image.png
 ```
 
-If the local folder name does not clearly identify the model family, add `--family` during generation. The supported router families are `qwen`, `flux2`, `fibo`, `z-image`, `ernie-image`, and `wan`.
+If the local folder name does not clearly identify the model family, add `--family` during generation. The supported router families are `qwen`, `flux2`, `bonsai`, `fibo`, `z-image`, `ernie-image`, and `wan`.
 
 The generated card records the source model, MLX-Gen compatibility, mflux attribution, generator version, quantization policy, and default contributor attribution. See [Hugging Face Publishing](huggingface-publishing.md) for upload and collection guidance.
 
@@ -81,6 +81,27 @@ Use `mlxgen prepare` when:
 - you want quantized weights with `--quantize 4` or `--quantize 8`;
 - you want a generated Hugging Face model card;
 - you want a folder that another application, such as AbstractVision, can reference without depending on the original repository name.
+
+Bonsai Image is an exception to the ordinary prepare flow. The Prism Bonsai repositories are
+already packed MLX artifacts, so cache them with `download` and generate directly:
+
+```sh
+mlxgen download --model prism-ml/bonsai-image-ternary-4B-mlx-2bit
+
+mlxgen generate \
+  --model prism-ml/bonsai-image-ternary-4B-mlx-2bit \
+  --prompt "A bonsai tree in a quiet ceramic studio, soft morning light" \
+  --width 1024 \
+  --height 1024 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 42 \
+  --output bonsai.png
+```
+
+`mlxgen prepare` rejects Bonsai with a short explanation because there is no q4/q8 conversion step
+to run. The ternary 2-bit checkpoint is supported; the binary 1-bit checkpoint is detected but
+requires MLX runtime support that is not present in stock MLX through 0.31.2.
 
 ERNIE Image Turbo can be downloaded, prepared in BF16, or prepared as q8/q4:
 

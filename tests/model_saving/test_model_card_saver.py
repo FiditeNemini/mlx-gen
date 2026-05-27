@@ -29,6 +29,14 @@ class ErnieImageTurbo:
     )
 
 
+class Wan2_2_TI2V:
+    model_config = SimpleNamespace(
+        model_name="Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+        base_model="wan-video",
+        aliases=["wan2.2-ti2v-5b", "wan-video"],
+    )
+
+
 class Flux2Klein4B:
     model_config = SimpleNamespace(
         model_name="black-forest-labs/FLUX.2-klein-4B",
@@ -144,6 +152,25 @@ def test_model_card_for_ernie_q8_mentions_q4_uses_mixed_policy(tmp_path):
     assert "ERNIE q4 uses a model-specific mixed q4/q8 policy" in card
     assert "https://github.com/lpalbou/mlx-gen/blob/main/docs/quantization.md" in card
     assert "Prompt Enhancer files are not bundled" in card
+
+
+def test_model_card_for_wan_q8_uses_video_metadata_and_usage(tmp_path):
+    card = ModelCardSaver.render_model_card(str(tmp_path / "wan2.2-ti2v-5b-diffusers-8bit"), Wan2_2_TI2V(), 8)
+
+    assert "base_model: Wan-AI/Wan2.2-TI2V-5B-Diffusers" in card
+    assert "license: apache-2.0" in card
+    assert "pipeline_tag: text-to-video" in card
+    assert "- video-generation" in card
+    assert "- image-to-video" in card
+    assert "q8 for quantizable Wan transformer modules" in card
+    assert "q8 for quantizable Wan VAE modules" in card
+    assert "BF16 for the UMT5 text encoder" in card
+    assert "Wan q4 quality and any possible mixed q4/q8 policy are still under validation" in card
+    assert "--task text-to-video" in card
+    assert "--frames 121" in card
+    assert "--fps 24" in card
+    assert "--output video.mp4" in card
+    assert "--output image.png" not in card
 
 
 def test_model_card_for_qwen_q8_explains_q4_policy_is_not_used(tmp_path):

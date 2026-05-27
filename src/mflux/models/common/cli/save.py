@@ -1,3 +1,5 @@
+import inspect
+
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import allow_downloads
@@ -26,6 +28,11 @@ def main():
 
         # 1. Determine model class based on model name
         model_name_lower = args.model.lower()
+        if "bonsai" in model_name_lower:
+            parser.error(
+                "Bonsai checkpoints are already MLX-packed low-bit artifacts. "
+                "Use `mlxgen download --model ...` to cache Bonsai locally; `mlxgen prepare` is not needed."
+            )
         if "qwen" in model_name_lower and "edit" in model_name_lower:
             model_class = QwenImageEdit
         elif "qwen" in model_name_lower:
@@ -46,12 +53,14 @@ def main():
             model_class = Flux1
 
         # 2. Load, quantize and save the model
-        model = model_class(
-            quantize=args.quantize,
-            lora_paths=args.lora_paths,
-            lora_scales=args.lora_scales,
-            model_config=ModelConfig.from_name(args.model, base_model=args.base_model),
-        )
+        model_kwargs = {
+            "quantize": args.quantize,
+            "model_config": ModelConfig.from_name(args.model, base_model=args.base_model),
+        }
+        if "lora_paths" in inspect.signature(model_class).parameters:
+            model_kwargs["lora_paths"] = args.lora_paths
+            model_kwargs["lora_scales"] = args.lora_scales
+        model = model_class(**model_kwargs)
         model.save_model(args.path)
 
 

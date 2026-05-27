@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.7] - 2026-05-27
+
+### Added
+
+- **Bonsai Image ternary 2-bit support**: `mlxgen generate` can now run `prism-ml/bonsai-image-ternary-4B-mlx-2bit` directly as a FLUX.2-derived text-to-image model with Prism's pre-packed low-bit transformer, a 4-bit Qwen3 text encoder, and the Flux2 VAE.
+- **Bonsai validation docs**: Add Bonsai versus FLUX.2 Klein 4B q8 quality/speed/memory documentation, validation imagery, and comparison with MLX-Gen's mixed q4/q8 policies.
+
+### Changed
+
+- **Bonsai binary 1-bit handling**: `prism-ml/bonsai-image-binary-4B-mlx-1bit` is detected and rejected with an explicit unsupported-runtime message. The latest published stock MLX checked for this release, `0.31.2`, still does not support the required `bits=1, group_size=128` packed affine matmul.
+
 ## [0.18.6] - 2026-05-26
 
 ### Added

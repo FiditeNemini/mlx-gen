@@ -67,6 +67,7 @@ class Flux2Klein(nn.Module):
             image_strength=image_strength,
             scheduler=scheduler,
         )
+        self._configure_generation_scheduler(config)
         # 1. Encode prompt(s)
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(
             prompt=prompt,
@@ -279,3 +280,6 @@ class Flux2Klein(nn.Module):
         if AppleSiliconUtil.is_m1_or_m2():
             return predict
         return mx.compile(predict)
+
+    def _configure_generation_scheduler(self, config: Config) -> None:
+        del config

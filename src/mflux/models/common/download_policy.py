@@ -25,6 +25,8 @@ class DownloadRequiredError(FileNotFoundError):
             self.prepare_command = prepare_command
         elif message is not None:
             self.prepare_command = None
+        elif _is_prepacked_bonsai(repo_id):
+            self.prepare_command = None
         elif artifact.lower() != "lora":
             self.prepare_command = explicit_prepare_command(repo_id, path=path)
         else:
@@ -52,6 +54,14 @@ def is_huggingface_repo_id(path: str | None) -> bool:
 def explicit_download_hint(repo_id: str, *, path: str | None = None, artifact: str = "model") -> str:
     local_path = path or f"./models/{_local_model_dir_name(repo_id)}"
     download_command = explicit_download_command(repo_id, artifact=artifact)
+    if _is_prepacked_bonsai(repo_id):
+        return (
+            f"MLX-Gen will not download {artifact} files during generation.\n"
+            "Bonsai checkpoints are already packed MLX artifacts and should not be prepared.\n"
+            "Download the required files before starting the workflow:\n"
+            f"  {download_command}\n"
+            f"Then run generation again with --model {shlex.quote(repo_id)}."
+        )
     prepare_command = explicit_prepare_command(repo_id, path=local_path)
     if artifact.lower() == "lora":
         return (
@@ -112,6 +122,11 @@ def raise_direct_url_download_required(component_name: str, url: str) -> None:
 
 def _local_model_dir_name(repo_id: str) -> str:
     return Path(repo_id).name.lower().replace("_", "-")
+
+
+def _is_prepacked_bonsai(repo_id: str) -> bool:
+    model_name = Path(repo_id).name.lower()
+    return model_name.startswith("bonsai-image-") and "mlx-" in model_name
 
 
 def _component_display_name(component_name: str) -> str:

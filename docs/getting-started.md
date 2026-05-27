@@ -45,6 +45,9 @@ Use `mlxgen prepare` when you need a local model folder. There is no separate ML
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional. It can speed up explicit Hugging Face download or prepare commands when the accelerated transfer backend is available, but it is not required to authorize downloads.
 
+Bonsai Image checkpoints are already packed MLX artifacts. Use `mlxgen download` for Bonsai, not
+`mlxgen prepare`.
+
 ## Generate An Image
 
 Run generation from a cached alias or repository:
@@ -71,6 +74,22 @@ mlxgen generate \
 ```
 
 `--family` is useful when a local path or custom repository name does not contain a recognizable model-family name.
+
+Run Bonsai Image from its pre-packed ternary checkpoint:
+
+```sh
+mlxgen download --model prism-ml/bonsai-image-ternary-4B-mlx-2bit
+
+mlxgen generate \
+  --model prism-ml/bonsai-image-ternary-4B-mlx-2bit \
+  --prompt "A bonsai tree in a quiet ceramic studio, soft morning light" \
+  --width 1024 \
+  --height 1024 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 42 \
+  --output bonsai.png
+```
 
 ## Edit An Image
 
@@ -138,5 +157,5 @@ Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
 - See [Model Management](model-management.md) for the full download, prepare, and runtime failure contract.
 - See [API And CLI](api.md) for the supported command surface and Python integration notes.
-- See [Quantization](quantization.md) for q4/q8 behavior and current Qwen/ERNIE mixed q4/q8 policies.
+- See [Quantization](quantization.md) for q4/q8 behavior, Bonsai low-bit packed support, and current Qwen/ERNIE mixed q4/q8 policies.
 - See [Troubleshooting](troubleshooting.md) when a required artifact is missing or a local path cannot be classified.

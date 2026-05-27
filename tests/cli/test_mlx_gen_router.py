@@ -199,6 +199,42 @@ def test_routes_flux2_without_image_to_text_generation():
     ]
 
 
+def test_routes_bonsai_to_text_generation():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+            "--prompt",
+            "a bonsai tree in a ceramic studio",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-bonsai"
+    assert invocation.argv == [
+        "mflux-generate-bonsai",
+        "--model",
+        "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+        "--prompt",
+        "a bonsai tree in a ceramic studio",
+    ]
+
+
+def test_bonsai_rejects_image_inputs(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "bonsai-image-ternary",
+                "--image",
+                "input.png",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "Bonsai Image supports text-to-image only" in capsys.readouterr().err
+
+
 def test_task_edit_can_select_qwen_edit_from_qwen_base_model():
     invocation = mlx_gen._resolve_invocation(
         [

@@ -123,6 +123,16 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def bonsai_image_ternary() -> "ModelConfig":
+        return AVAILABLE_MODELS["bonsai-image-ternary"]
+
+    @staticmethod
+    @lru_cache
+    def bonsai_image_binary() -> "ModelConfig":
+        return AVAILABLE_MODELS["bonsai-image-binary"]
+
+    @staticmethod
+    @lru_cache
     def qwen_image() -> "ModelConfig":
         return AVAILABLE_MODELS["qwen-image"]
 
@@ -435,8 +445,66 @@ AVAILABLE_MODELS = {
             "intermediate_size": 12288,
         },
     ),
-    "qwen-image": ModelConfig(
+    "bonsai-image-ternary": ModelConfig(
         priority=15,
+        aliases=[
+            "bonsai",
+            "bonsai-image",
+            "bonsai-image-ternary",
+            "bonsai-image-2bit",
+            "bonsai-ternary",
+            "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+            "prism-ml/bonsai-image-ternary-4b-mlx-2bit",
+        ],
+        model_name="prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=False,
+        requires_sigma_shift=False,
+        transformer_overrides={
+            "num_layers": 5,
+            "num_single_layers": 20,
+            "num_attention_heads": 24,
+            "joint_attention_dim": 7680,
+        },
+        text_encoder_overrides={
+            "hidden_size": 2560,
+            "intermediate_size": 9728,
+        },
+    ),
+    "bonsai-image-binary": ModelConfig(
+        priority=16,
+        aliases=[
+            "bonsai-image-binary",
+            "bonsai-image-1bit",
+            "bonsai-binary",
+            "prism-ml/bonsai-image-binary-4B-mlx-1bit",
+            "prism-ml/bonsai-image-binary-4b-mlx-1bit",
+        ],
+        model_name="prism-ml/bonsai-image-binary-4B-mlx-1bit",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=False,
+        requires_sigma_shift=False,
+        transformer_overrides={
+            "num_layers": 5,
+            "num_single_layers": 20,
+            "num_attention_heads": 24,
+            "joint_attention_dim": 7680,
+        },
+        text_encoder_overrides={
+            "hidden_size": 2560,
+            "intermediate_size": 9728,
+        },
+    ),
+    "qwen-image": ModelConfig(
+        priority=17,
         aliases=["qwen-image", "qwen"],
         model_name="Qwen/Qwen-Image",
         base_model=None,

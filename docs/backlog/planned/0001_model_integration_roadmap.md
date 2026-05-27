@@ -40,8 +40,9 @@ text-to-image, image-to-image/edit, text-to-video, and image-to-video work.
   FIBO/Fibo-lite/Fibo-Edit 22-24 GiB, Wan2.2 TI2V 5B 32 GiB, Wan2.2 A14B 118 GiB,
   LTX-2.3-fp8 55 GiB, and CogVideoX-2B 13 GiB.
 - Local Hugging Face cache includes unsupported or partially supported candidates:
-  `zai-org/GLM-Image`, `zai-org/CogVideoX-2b`, `numz/SeedVR2_comfyUI`, and gated Bria FIBO
-  repo stubs.
+  `zai-org/GLM-Image`, `zai-org/CogVideoX-2b`, `numz/SeedVR2_comfyUI`,
+  `prism-ml/bonsai-image-ternary-4B-mlx-2bit`,
+  `prism-ml/bonsai-image-binary-4B-mlx-1bit`, and gated Bria FIBO repo stubs.
 - ERNIE-Image-Turbo has a text-to-image MLX port: tokenizer, Mistral3 text encoder,
   ErnieImageTransformer2DModel, FlowMatch-style scheduler, Flux2-style VAE wrapper, optional
   Prompt Enhancer, `mlxgen` routing, BF16 prepare/download support, and q8/q4 prepared folders.
@@ -105,6 +106,7 @@ than a renamed fork.
 | P0 | Cross-cutting | Gated and non-commercial derivative publishing policy | FLUX.2 9B derivatives now require `gated=auto`; FIBO family is gated/non-commercial. `prepare` writes local files only and cannot set HF repo settings. | Low-medium | Add release/publishing helpers or docs that run `HfApi.update_repo_settings(gated=\"auto\")`, upload upstream license files, and prevent accidental public publication of gated derivatives. |
 | P1 | T2I, I2I/edit | `briaai/FIBO`, `briaai/Fibo-lite`, `briaai/Fibo-Edit` | Backend exists; access has been granted. Source sizes are 22-24 GiB. FIBO is structured/JSON-native and trained for professional controllability; Fibo-lite targets 8-step/CFG=1 inference; Fibo-Edit targets structured edits. | Medium | Validate because this is already implemented, but do not make it the default family. It is non-commercial, gated, structured-workflow-heavy, and less broadly reusable than Qwen/FLUX/Z-Image. Publish only gated derivatives with Bria license terms. |
 | P1 | T2I | `baidu/ERNIE-Image-Turbo` and `baidu/ERNIE-Image` | Apache 2.0, 29 GiB source snapshot including Prompt Enhancer, strong card claims around text rendering, structured layout, complex instruction following, and 8-step Turbo inference. Turbo now has BF16, q8, q4, and optional Prompt Enhancer text-to-image support with real image validation; non-turbo ERNIE-Image remains open. | High | Continue the ERNIE port with Diffusers parity tests, non-turbo defaults, generated-card behavior, and AbstractVision-facing Python progress/state APIs. |
+| P1 | T2I | `prism-ml/bonsai-image-ternary-4B-mlx-2bit` | Implemented. FLUX.2 Klein-shaped architecture with `transformer-packed-mflux/`, a 4-bit Qwen3 text encoder, and BF16 Flux2 VAE. Local validation shows coherent output, lower RSS than FLUX.2 Klein 4B q8, and direct `mlxgen generate` support. | Done for ternary, medium-high for future low-bit kernels | Maintain the narrow Bonsai/FLUX.2 packed-loader path using standard MLX 2-bit affine execution, not a full Prism demo dependency. Track binary 1-bit separately because stock MLX through 0.31.2 still fails the required 1-bit probe. |
 | P2 | T2V, I2V | `Wan-AI/Wan2.2-TI2V-5B-Diffusers` | Apache 2.0, ~32 GiB, supports both text-to-video and image-to-video at 720p/24fps, and is much smaller than A14B. Initial MLX-Gen T2V and first-frame I2V support now produces MP4 output. | Very high | Continue from the first video milestone: improve quality/performance defaults, add progress/cancel events, memory caps, q4/q8 validation, and a longer Diffusers parity suite. |
 | P2 | T2I, I2I/edit | `HiDream-ai/HiDream-O1-Image` and `HiDream-ai/HiDream-O1-Image-Dev` | MIT, current search shows image-text-to-image tags, Qwen3-VL stack, and an existing `mlx-community/HiDream-O1-Image-Dev-mlx-bf16` checkpoint. | High | Worth researching after ERNIE because an MLX BF16 artifact exists, but it likely wants an MLX-VLM/provider boundary rather than a quick mflux-style port. |
 | P2 | Video-to-video/upscale | `numz/SeedVR2_comfyUI`, `ByteDance-Seed/SeedVR2-3B/7B` | SeedVR2 code exists and source is cached, but `mlxgen prepare` does not route it. | Medium-high | Make existing upscaler usable from unified CLI and prepare/card flow before larger video generation ports. It is not T2V/I2V, but it is the lowest-risk video capability already in tree. |
@@ -113,6 +115,11 @@ than a renamed fork.
 | P3 | T2I | `zai-org/GLM-Image` | MIT, cached locally, ~33 GiB, custom GLM image/VLM architecture. | Very high | Useful text-rendering/glyph candidate, but lower priority than ERNIE because downloads are lower and the custom VLM/VQ stack is significant. |
 | P3 | T2V, I2V | `Wan-AI/Wan2.2-T2V-A14B-Diffusers`, `Wan-AI/Wan2.2-I2V-A14B-Diffusers` | Apache 2.0 and strong current relevance, but each is ~118 GiB. | Very high | Defer until the 5B TI2V path proves MLX-Gen video abstractions and memory strategy. |
 | P4 | T2I/I2I or wrappers | FLUX.2-dev, FLUX.1-Kontext, Stable Diffusion 3.5, HunyuanImage 3.0, Sulphur-2, external MLX SD3 | Large or license-constrained, overlapping, or not native to current MLX-Gen abstractions. | High to very high | Track but do not prioritize. Use AbstractVision provider adapters if needed rather than forcing all ecosystems into MLX-Gen. |
+
+Related focused items:
+
+- [Bonsai ternary FLUX.2 support](../completed/0003_bonsai_ternary_flux2_support.md)
+- [Bonsai binary 1-bit runtime support](../proposed/0004_bonsai_binary_1bit_runtime_support.md)
 
 ## Requirements
 
@@ -232,6 +239,8 @@ than a renamed fork.
 - [ ] Add one full short Wan Diffusers-vs-MLX generation comparison for the same prompt, seed,
       dimensions, frames, steps, and guidance.
 - [ ] Validate Wan q8/q4 preparation and decide whether a mixed quantization policy is needed.
+- [ ] Add Bonsai ternary 2-bit support through a FLUX.2-compatible packed-loader path.
+- [ ] Reassess Bonsai binary 1-bit only after runtime support is available or accepted by ADR.
 - [ ] Add stronger ERNIE Diffusers comparison tests and non-turbo scope.
 - [ ] Decide whether SeedVR2 should be unified under `mlxgen prepare` before larger video ports.
 - [ ] Draft video backend/API ADR before expanding Wan or implementing CogVideoX.

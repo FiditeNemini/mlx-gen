@@ -41,7 +41,7 @@ mlxgen generate \
   --output edited.png
 ```
 
-Supported router families are `qwen`, `flux2`, `fibo`, `z-image`, `ernie-image`, and `wan`:
+Supported router families are `qwen`, `flux2`, `bonsai`, `fibo`, `z-image`, `ernie-image`, and `wan`:
 
 ```sh
 mlxgen generate \
@@ -51,6 +51,24 @@ mlxgen generate \
 ```
 
 Use `--config-from-metadata` / `-C` when you want the router to read fields such as `model`, `image_path`, or `image_paths` from an existing metadata file.
+
+Bonsai Image routes through the same text-to-image command surface. The supported ternary
+checkpoint is already low-bit packed, so omit `--quantize`:
+
+```sh
+mlxgen generate \
+  --model prism-ml/bonsai-image-ternary-4B-mlx-2bit \
+  --prompt "A bonsai tree in a quiet ceramic studio, soft morning light" \
+  --width 1024 \
+  --height 1024 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 42 \
+  --output bonsai.png
+```
+
+Bonsai is text-to-image only in MLX-Gen. Image input, negative prompts, and `--quantize` are
+rejected before model execution.
 
 ERNIE Image Turbo routes through the same command surface:
 

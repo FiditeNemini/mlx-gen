@@ -11,7 +11,7 @@ Run state-of-the-art generative image and video models locally with native MLX.
 > [!IMPORTANT]
 > MLX-Gen is an independent project forked from [mflux](https://github.com/filipstrand/mflux). It is currently built on the mflux codebase, with full credit to Filip Strand and the original contributors, while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
 >
-> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, ERNIE Image Turbo support, Wan video experiments, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
+> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, Wan video experiments, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
 
 ### Table of contents
 
@@ -35,7 +35,7 @@ Run state-of-the-art generative image and video models locally with native MLX.
 
 MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux), which established a clear MLX-native image generation stack. This repository preserves that foundation and remains MIT licensed.
 
-The immediate reason for the independent package is practical: MLX-Gen can iterate faster on compatibility fixes and capabilities that affect real usage, including Qwen Image/Edit quantization layouts, ERNIE Image Turbo model support, FLUX.2 edit behavior, local model packaging, PyPI release cadence, and Apple Silicon validation. Some of those changes are proposed upstream as small PRs; others may remain MLX-Gen-specific as the project direction diverges.
+The immediate reason for the independent package is practical: MLX-Gen can iterate faster on compatibility fixes and capabilities that affect real usage, including Qwen Image/Edit quantization layouts, ERNIE Image Turbo model support, Bonsai low-bit FLUX.2 support, FLUX.2 edit behavior, local model packaging, PyPI release cadence, and Apple Silicon validation. Some of those changes are proposed upstream as small PRs; others may remain MLX-Gen-specific as the project direction diverges.
 
 MLX-Gen also exists to power [AbstractVision](https://pypi.org/project/abstractvision/), the generative vision layer used with [AbstractCore](https://pypi.org/project/abstractcore/) in the wider [AbstractFramework](https://pypi.org/project/abstractframework/) ecosystem. That gives the package its own product requirements while keeping general fixes available for upstream mflux contributions where practical.
 
@@ -150,7 +150,7 @@ The I2V path follows Diffusers first-frame latent conditioning. It is not ordina
 
 See [API And CLI](docs/api.md) for spatial-scale Wan T2V/I2V sanity panels generated at 1280x704.
 
-If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
+If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family bonsai`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
 
 ### Model Downloads And Preparation
 
@@ -195,10 +195,11 @@ MLX-Gen supports reusable prepared folders for these primary quantized model fam
 | Qwen Image and Qwen Image Edit | Supported | Mixed q4/q8 | Covers Qwen Image, Qwen Image 2512, Qwen Image Edit, 2509, and 2511. |
 | ERNIE Image Turbo | Supported | Mixed q4/q8 | Text-to-image plus experimental single-image image-to-image. Prompt Enhancer is optional from a full source snapshot. |
 | FLUX.2 Klein | Supported | Supported | Standard MLX quantization. 9B derivatives follow the source gated/non-commercial access requirements. |
+| Bonsai Image | Pre-packed ternary 2-bit | Pre-packed ternary 2-bit | Use `mlxgen download` and `mlxgen generate`; do not run `prepare`. Binary 1-bit is detected but waiting on stock-MLX 1-bit runtime support. |
 | Z-Image and Z-Image Turbo | Supported | Supported | Standard MLX quantization with model-specific generation defaults. |
 | FIBO | Supported with source access | Supported with source access | Source repositories may require access approval before download or preparation. |
 
-q4 is not treated as a blind size-only conversion. Qwen and ERNIE use mixed q4/q8 policies because fully q4 checkpoints can lose generation quality; the higher-precision paths are kept where validation shows they matter. See [Quantization](docs/quantization.md) for the current rules and measurements.
+q4 and lower-bit checkpoints are not treated as blind size-only conversions. Qwen and ERNIE use mixed q4/q8 policies because fully q4 checkpoints can lose generation quality; the higher-precision paths are kept where validation shows they matter. Bonsai uses Prism's pre-packed ternary 2-bit transformer plus a 4-bit Qwen3 text encoder rather than MLX-Gen's `prepare` flow. In practice the quality strategy is similar: keep sensitive paths higher precision, then publish the smallest validated layout. See [Quantization](docs/quantization.md) for the current rules and measurements.
 
 ### Documentation
 
@@ -206,7 +207,7 @@ q4 is not treated as a blind size-only conversion. Qwen and ERNIE use mixed q4/q
 - [Architecture](docs/architecture.md): package shape, command boundaries, model-file lifecycle, and runtime failure contract.
 - [API and CLI](docs/api.md): public command surface, Python integration notes, and compatibility entry points.
 - [Model management](docs/model-management.md): explicit `download` and `prepare` behavior, runtime cache policy, and model-card creation.
-- [Quantization](docs/quantization.md): q4/q8 behavior and current Qwen/ERNIE mixed q4/q8 policies.
+- [Quantization](docs/quantization.md): q4/q8 behavior, Bonsai low-bit packed support, and current Qwen/ERNIE mixed q4/q8 policies.
 - [Hugging Face publishing](docs/huggingface-publishing.md): generated model cards, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - [FAQ](docs/faq.md): common questions about `prepare`, downloads, package naming, and compatibility.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime errors.
@@ -279,6 +280,7 @@ MLX-Gen supports the following model families. They have different strengths and
 |[Z-Image](src/mflux/models/z_image/README.md) | Nov 2025 | 6B | Distilled & Base | Yes | Fast, small, very good quality and realism. |
 | Wan2.2 TI2V | Jul 2025 | 5B | Base | No | Initial text-to-video and experimental first-frame image-to-video support. |
 |[FLUX.2](src/mflux/models/flux2/README.md) | Jan 2026 | 4B & 9B | Distilled & Base | Yes | Fastest + smallest with very good quality and edit capabilities. |
+| Bonsai Image | — | 4B | Distilled low-bit FLUX.2-derived | No | Prism low-bit text-to-image checkpoints. Ternary 2-bit runs directly in MLX-Gen; binary 1-bit is detected but blocked until stock MLX has 1-bit packed affine runtime support. |
 |[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |
 | ERNIE Image Turbo | Mar 2026 | 6B class | Distilled | No | Fast Apache 2.0 model from Baidu. MLX-Gen support covers text-to-image, experimental single-image image-to-image, BF16/q8/mixed q4 folders, and optional Prompt Enhancer from a full source snapshot. Use 384px+ outputs for reliable composition. |
 |[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |
@@ -332,6 +334,7 @@ MLX-Gen exists because of the great work of:
 - Bria for the [FIBO project](https://huggingface.co/briaai/FIBO)
 - Tongyi Lab for the [Z-Image project](https://tongyi-mai.github.io/Z-Image-blog/)
 - Baidu for the [ERNIE Image Turbo model](https://huggingface.co/baidu/ERNIE-Image-Turbo)
+- Prism ML for the [Bonsai Image low-bit MLX checkpoints](https://huggingface.co/prism-ml)
 - Qwen Team for the [Qwen Image project](https://qwen.ai/blog?id=a6f483777144685d33cd3d2af95136fcbeb57652&from=research.research-list)
 - ByteDance, @numz and @adrientoupet for the [SeedVR2 project](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler)
 - Hugging Face for the [Diffusers library implementations](https://github.com/huggingface/diffusers) 

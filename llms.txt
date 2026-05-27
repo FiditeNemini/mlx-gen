@@ -1,6 +1,6 @@
 # MLX-Gen
 
-MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding faster release cadence, Qwen/FLUX.2 compatibility fixes, ERNIE Image Turbo support, initial Wan2.2 text-to-video and first-frame image-to-video support, explicit model preparation, Hugging Face model-card generation, and AbstractVision-oriented integration behavior.
+MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding faster release cadence, Qwen/FLUX.2 compatibility fixes, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, initial Wan2.2 text-to-video and first-frame image-to-video support, explicit model preparation, Hugging Face model-card generation, and AbstractVision-oriented integration behavior.
 
 ## Key Documents
 
@@ -9,7 +9,7 @@ MLX-Gen is an MLX-native generative image and video runtime forked from mflux an
 - [docs/architecture.md](docs/architecture.md): package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
 - [docs/api.md](docs/api.md): public `mlxgen` command surface, generation router behavior, model-management commands, and Python integration boundary.
 - [docs/model-management.md](docs/model-management.md): cache-only runtime policy, explicit `mlxgen download` and `mlxgen prepare` flows, Depth Pro download command, and `DownloadRequiredError`.
-- [docs/quantization.md](docs/quantization.md): q4/q8 compatibility by model family, validation panels, and Qwen/ERNIE mixed q4/q8 checkpoints.
+- [docs/quantization.md](docs/quantization.md): low-bit compatibility by model family, validation panels, Bonsai ternary 2-bit support, comparison with Qwen/ERNIE mixed q4/q8 checkpoints, and binary 1-bit runtime limits.
 - [docs/huggingface-publishing.md](docs/huggingface-publishing.md): generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional Hugging Face collection membership.
 - [docs/python-integration.md](docs/python-integration.md): current Python API expectations, AbstractVision integration notes, Wan progress callbacks, and threading guidance.
 - [docs/release.md](docs/release.md): GitHub Release and PyPI trusted publishing workflow.
@@ -40,6 +40,7 @@ mlxgen download --model depth-pro
 ## Code Entry Points
 
 - `src/mflux/cli/mlx_gen.py`: smart `mlxgen` command router plus explicit `download` and `prepare`.
+- `src/mflux/models/bonsai_image/`: Bonsai Image ternary 2-bit text-to-image support using Prism's pre-packed FLUX.2-derived transformer, a 4-bit Qwen3 text encoder, and the Flux2 VAE. Bonsai is download/generate only; `prepare`, image input, negative prompts, and `--quantize` are rejected. Binary 1-bit is detected but blocked until stock MLX supports the required packed affine matmul; stock MLX 0.31.2 still rejects `bits=1`.
 - `src/mflux/models/ernie_image/`: ERNIE Image Turbo text-to-image and experimental single-image image-to-image runtime, tokenizer, transformer, scheduler, VAE wrapper, optional Prompt Enhancer, weights, q8/q4 quantization, and CLI. Multi-image edit is not supported. ERNIE image-to-image is best for stylization/guided variation; use Qwen Image Edit when exact source-layout preservation matters.
 - `src/mflux/models/wan/`: initial Wan2.2 TI2V text-to-video and experimental first-frame image-to-video runtime, Wan transformer/VAE/scheduler support, frame-oriented progress events, MP4 output utilities, CLI, and opt-in Diffusers parity fixtures.
 - `src/mflux/models/common/download_policy.py`: download policy, explicit command helpers, and `DownloadRequiredError`.

@@ -227,7 +227,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")
     parser.add_argument(
         "--family",
-        choices=["qwen", "flux2", "fibo", "z-image", "ernie-image", "wan"],
+        choices=["qwen", "flux2", "fibo", "z-image", "ernie-image", "wan", "bonsai"],
         default=None,
         help="Override model-family detection for local paths or custom repo names.",
     )
@@ -380,6 +380,10 @@ def _weight_definition_for(aliases: set[str], model_key: str):
         from mflux.models.flux2.weights.flux2_weight_definition import Flux2KleinWeightDefinition
 
         return Flux2KleinWeightDefinition
+    if _is_bonsai(aliases, model_key):
+        from mflux.models.bonsai_image.weights import BonsaiImageWeightDefinition
+
+        return BonsaiImageWeightDefinition
     if _is_fibo(aliases, model_key):
         from mflux.models.fibo.weights.fibo_weight_definition import FIBOWeightDefinition
 
@@ -446,6 +450,14 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
         _reject_wan_unsupported_inputs(args, image_count)
         return _wan_route(has_image=has_images)
 
+    if args.family == "bonsai":
+        _reject_bonsai_unsupported_inputs(args, image_count)
+        return _bonsai_route()
+
+    if _is_bonsai(aliases, model_key):
+        _reject_bonsai_unsupported_inputs(args, image_count)
+        return _bonsai_route()
+
     if _is_qwen_edit(aliases, model_key) or (args.task == "edit" and _is_qwen(aliases, model_key)):
         return _qwen_edit_route(model_override=None if _is_qwen_edit(aliases, model_key) else "qwen-image-edit")
 
@@ -483,7 +495,8 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
 
     _parser().error(
         f"Could not infer a supported backend from --model {args.model!r}. "
-        "Use a model name containing qwen, flux2/flux.2/klein, fibo, z-image, ernie, or wan, or pass --family."
+        "Use a model name containing qwen, flux2/flux.2/klein, bonsai, fibo, z-image, ernie, or wan, "
+        "or pass --family."
     )
     raise AssertionError("unreachable")
 
@@ -517,6 +530,10 @@ def _is_flux2(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("flux2") or alias.startswith("klein") for alias in aliases) or any(
         token in model_key for token in ("flux2", "flux.2", "klein")
     )
+
+
+def _is_bonsai(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("bonsai") for alias in aliases) or "bonsai" in model_key
 
 
 def _is_fibo(aliases: set[str], model_key: str) -> bool:
@@ -574,6 +591,15 @@ def _reject_wan_unsupported_inputs(args: argparse.Namespace, image_count: int) -
         _parser().error("Wan2.2 image-to-video accepts exactly one input image.")
     if image_count and args.task == "text-to-video":
         _parser().error("Wan2.2 text-to-video does not accept --image. Use --task image-to-video.")
+
+
+def _reject_bonsai_unsupported_inputs(args: argparse.Namespace, image_count: int) -> None:
+    if image_count:
+        _parser().error("Bonsai Image supports text-to-image only; image-to-image/edit is not supported.")
+    if args.task not in {"auto", "text-to-image", "txt2img"}:
+        _parser().error("Bonsai Image supports only text-to-image generation.")
+    if args.has_image_strength:
+        _parser().error("Bonsai Image does not support --image-strength.")
 
 
 def _qwen_route() -> _Route:
@@ -648,6 +674,12 @@ def _wan_route(has_image: bool) -> _Route:
         image_argument="--image-path" if has_image else None,
         requires_image=False,
     )
+
+
+def _bonsai_route() -> _Route:
+    from mflux.models.bonsai_image.cli.bonsai_image_generate import main as target_main
+
+    return _Route("mflux-generate-bonsai", target_main, image_argument=None, requires_image=False)
 
 
 if __name__ == "__main__":

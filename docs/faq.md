@@ -56,6 +56,29 @@ mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo
 
 ERNIE q4 uses a model-specific mixed q4/q8 policy. Fully q4 ERNIE checkpoints can drift from BF16/q8 behavior, so MLX-Gen keeps Mistral3 text linears plus selected ERNIE transformer attention-output and conditioning paths at q8.
 
+## Can I Prepare Or Quantize Bonsai Image?
+
+No. Bonsai Image repositories from Prism are already packed MLX artifacts. Use `download` and
+generate directly:
+
+```sh
+mlxgen download --model prism-ml/bonsai-image-ternary-4B-mlx-2bit
+
+mlxgen generate \
+  --model prism-ml/bonsai-image-ternary-4B-mlx-2bit \
+  --prompt "A bonsai tree in a quiet ceramic studio, soft morning light" \
+  --width 1024 \
+  --height 1024 \
+  --steps 4 \
+  --guidance 1 \
+  --output bonsai.png
+```
+
+The ternary 2-bit checkpoint is supported. The binary 1-bit checkpoint is detected and rejected
+with an explicit unsupported-runtime message until stock MLX can execute the required 1-bit packed
+affine matmul. The latest published stock MLX checked for the 0.18.7 release was 0.31.2, and it
+still rejected `bits=1`.
+
 ## Does ERNIE Image Turbo Support Image Input Or Prompt Enhancer?
 
 Prompt Enhancer is supported for ERNIE Image Turbo when the full source snapshot is available:

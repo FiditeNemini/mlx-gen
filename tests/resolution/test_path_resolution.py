@@ -86,6 +86,18 @@ class TestPathResolutionHuggingFace:
 
     @pytest.mark.fast
     @patch("mflux.models.common.resolution.path_resolution.snapshot_download")
+    def test_bonsai_missing_cache_does_not_suggest_prepare(self, mock_download):
+        with pytest.raises(FileNotFoundError) as exc_info:
+            PathResolution.resolve(path="prism-ml/bonsai-image-ternary-4B-mlx-2bit")
+
+        error = str(exc_info.value)
+        assert "mlxgen download --model prism-ml/bonsai-image-ternary-4B-mlx-2bit" in error
+        assert "already packed MLX artifacts" in error
+        assert "mlxgen prepare" not in error
+        mock_download.assert_not_called()
+
+    @pytest.mark.fast
+    @patch("mflux.models.common.resolution.path_resolution.snapshot_download")
     def test_ambient_env_does_not_enable_runtime_downloads(self, mock_download, monkeypatch):
         monkeypatch.setenv("MLX_GEN_ALLOW_DOWNLOAD", "1")
 

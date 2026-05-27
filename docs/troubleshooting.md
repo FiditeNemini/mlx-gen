@@ -24,7 +24,7 @@ mlxgen generate \
   --output image.png
 ```
 
-Supported router families are `qwen`, `flux2`, `fibo`, `z-image`, `ernie-image`, and `wan`.
+Supported router families are `qwen`, `flux2`, `bonsai`, `fibo`, `z-image`, `ernie-image`, and `wan`.
 
 ## ERNIE Images Look Cropped At Tiny Sizes
 

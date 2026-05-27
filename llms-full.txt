@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding independent release cadence, Qwen Image/Edit support, ERNIE Image Turbo support, initial Wan2.2 text-to-video and first-frame image-to-video support, FLUX.2 fixes, quantized model packaging, local model loading behavior, generated Hugging Face model cards, and AbstractVision integration needs.
+MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding independent release cadence, Qwen Image/Edit support, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, initial Wan2.2 text-to-video and first-frame image-to-video support, FLUX.2 fixes, quantized model packaging, local model loading behavior, generated Hugging Face model cards, and AbstractVision integration needs.
 
 Some internals currently remain under `mflux.*`; new application code should use the `mlxgen` command and import path.
 
@@ -13,7 +13,7 @@ Some internals currently remain under `mflux.*`; new application code should use
 - `docs/architecture.md`: package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
 - `docs/api.md`: public `mlxgen` command surface, generation router, model-management commands, and Python integration boundary.
 - `docs/model-management.md`: cache-only runtime policy, `download` versus `prepare`, Depth Pro, and `DownloadRequiredError`.
-- `docs/quantization.md`: MLX-Gen prepared folder compatibility by model family, validation panels, and current Qwen/ERNIE mixed q4/q8 policies.
+- `docs/quantization.md`: MLX-Gen low-bit compatibility by model family, validation panels, Bonsai ternary 2-bit support, comparison with current Qwen/ERNIE mixed q4/q8 policies, and binary 1-bit runtime limits.
 - `docs/huggingface-publishing.md`: generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - `docs/python-integration.md`: in-process use, AbstractVision integration, Wan progress callbacks, and threading guidance.
 - `docs/faq.md`: common questions about `prepare`, downloads, package naming, and compatibility.
@@ -118,6 +118,9 @@ mlxgen download --model depth-pro
 
 `HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands. It is not required to authorize network access.
 
+Bonsai Image checkpoints are already packed MLX artifacts. Cache Bonsai with `mlxgen download`
+and generate directly; do not use `mlxgen prepare` for Bonsai.
+
 ---
 
 ## Generation
@@ -147,7 +150,26 @@ mlxgen generate \
   --output edited.png
 ```
 
-If a local model path or custom repository name cannot be classified, pass `--family qwen`, `--family flux2`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`.
+If a local model path or custom repository name cannot be classified, pass `--family qwen`, `--family flux2`, `--family bonsai`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`.
+
+Bonsai Image is routed by `mlxgen generate` for text-to-image:
+
+```sh
+mlxgen generate \
+  --model prism-ml/bonsai-image-ternary-4B-mlx-2bit \
+  --prompt "A bonsai tree in a quiet ceramic studio, soft morning light" \
+  --width 1024 \
+  --height 1024 \
+  --steps 4 \
+  --guidance 1 \
+  --output bonsai.png
+```
+
+Bonsai ternary 2-bit is supported as a pre-packed Prism checkpoint with a low-bit transformer,
+4-bit Qwen3 text encoder, and BF16 Flux2 VAE. Bonsai rejects `prepare`, `--quantize`, negative
+prompts, and image inputs. Binary 1-bit is detected but rejected until the active MLX runtime can
+execute the required `bits=1, group_size=128` packed affine matmul; stock MLX 0.31.2 still rejects
+`bits=1`.
 
 ERNIE Image Turbo is also routed by `mlxgen generate`:
 
@@ -211,7 +233,7 @@ Generation commands replace the requested `--output` path by default. Use `--rep
 
 MLX-Gen prepares quantized model folders with the mflux/MLX layout used for local inference. These folders are designed for MLX-Gen and compatible mflux code, not Diffusers or Transformers `from_pretrained()` checkpoints.
 
-The primary q8/q4 prepared-folder compatibility surface covers Qwen Image, Qwen Image Edit, ERNIE Image Turbo, FLUX.2 Klein, Z-Image/Z-Image Turbo, and FIBO when source access is available. Qwen and ERNIE q4 folders use mixed q4/q8 policies because fully q4 checkpoints showed unacceptable generation-quality loss. FLUX.2 and Z-Image use standard MLX quantization policies. q8 remains the closest quantized option to BF16 when memory allows.
+The primary q8/q4 prepared-folder compatibility surface covers Qwen Image, Qwen Image Edit, ERNIE Image Turbo, FLUX.2 Klein, Z-Image/Z-Image Turbo, and FIBO when source access is available. Qwen and ERNIE q4 folders use mixed q4/q8 policies because fully q4 checkpoints showed unacceptable generation-quality loss. FLUX.2 and Z-Image use standard MLX quantization policies. Bonsai Image is not a prepared q4/q8 folder; the supported ternary checkpoint is a pre-packed 2-bit FLUX.2-derived transformer with a 4-bit Qwen3 text encoder and BF16 Flux2 VAE. q8 remains the closest quantized prepared-folder option to BF16 when memory allows. Bonsai 2-bit and mixed q4/q8 are similar in intent: both keep sensitive paths at a higher precision and ship the smallest layout that stayed in the same visual family as the higher-precision baseline.
 
 Qwen Image and Qwen Image Edit use a mixed q4/q8 policy when prepared with `--quantize 4`:
 
@@ -227,6 +249,15 @@ The q8 path was not changed by the mixed-q4 work. Qwen q8 uses the standard MLX-
 
 ERNIE Image Turbo supports BF16, q8, and q4 text-to-image generation plus experimental single-image image-to-image. ERNIE image-to-image initializes text-to-image denoising from encoded image latents, so it is useful for fast stylization and guided variation but not as exact as Qwen Image Edit for layout-preserving edits. ERNIE q4 uses a model-specific mixed q4/q8 policy: q4 for transformer Q/K attention and transformer feed-forward modules; q8 for Mistral3 text/Prompt Enhancer linears plus ERNIE transformer V/O attention, conditioning/output linears, and VAE attention; BF16 for norms, convolutions, and other non-quantizable parameters. Default ERNIE downloads fetch the BF16 generation components MLX-Gen currently uses and do not fetch the Prompt Enhancer model unless `mlxgen download --all-files` is requested. Prepared ERNIE q8/q4 folders contain the generation stack for text-to-image and experimental single-image image-to-image, and do not bundle Prompt Enhancer files.
 
+Bonsai local validation compares `prism-ml/bonsai-image-ternary-4B-mlx-2bit` against
+FLUX.2 Klein 4B q8 on the same prompt, seed 42, guidance 1, and 4 steps. The Bonsai ternary
+snapshot is about 3.6 GiB and averaged 2.92 s at 512px with 3.57 GiB peak RSS across three
+cold-process repeats. The Klein 4B q8 baseline used the 22 GiB source cache with q8 applied at
+runtime and averaged 3.55 s at 512px with 9.23 GiB peak RSS. At 1024px, Bonsai took 5.69 s with
+3.60 GiB peak RSS; Klein 4B q8 took 6.81 s with 9.39 GiB peak RSS. Bonsai binary 1-bit has a
+smaller cached snapshot, but does not run on stock MLX through 0.31.2 because 1-bit packed affine
+matmul support is missing.
+
 ---
 
 ## Hugging Face Publishing
@@ -239,7 +270,7 @@ huggingface-cli upload AbstractFramework/qwen-image-edit-2511-4bit ./models/qwen
 
 Hugging Face collection membership is managed separately from model-card metadata. After upload, use the Hugging Face UI or `huggingface_hub.HfApi.add_collection_item` with the collection slug from the collection URL.
 
-Generated cards mark Qwen, Z-Image, ERNIE Image Turbo, and FLUX.2 Klein 4B derivatives as Apache 2.0 when MLX-Gen can identify the source model family. FLUX.2 Klein 9B and FLUX.2 Klein base-9B derivatives are marked with the FLUX non-commercial license metadata and gated-access prompts. Configure Hugging Face repository gating separately when publishing those derivatives; model-card metadata alone does not enforce access control.
+Generated cards mark Qwen, Z-Image, ERNIE Image Turbo, and FLUX.2 Klein 4B derivatives as Apache 2.0 when MLX-Gen can identify the source model family. FLUX.2 Klein 9B and FLUX.2 Klein base-9B derivatives are marked with the FLUX non-commercial license metadata and gated-access prompts. Configure Hugging Face repository gating separately when publishing those derivatives; model-card metadata alone does not enforce access control. Bonsai pre-packed repositories are not generated by `mlxgen prepare`.
 
 ---
 

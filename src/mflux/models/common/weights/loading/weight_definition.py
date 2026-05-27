@@ -6,6 +6,7 @@ import mlx.core as mx
 from mflux.models.common.weights.mapping.weight_mapping import WeightTarget
 
 if TYPE_CHECKING:
+    from mflux.models.bonsai_image.weights.bonsai_image_weight_definition import BonsaiImageWeightDefinition
     from mflux.models.common.tokenizer.tokenizer import BaseTokenizer
     from mflux.models.depth_pro.weights.depth_pro_weight_definition import DepthProWeightDefinition
     from mflux.models.fibo.weights.fibo_weight_definition import FIBOWeightDefinition
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 
     WeightDefinitionType: TypeAlias = type[
         FluxWeightDefinition
+        | BonsaiImageWeightDefinition
         | FIBOWeightDefinition
         | FIBOVLMWeightDefinition
         | QwenWeightDefinition
