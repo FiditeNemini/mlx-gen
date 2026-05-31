@@ -2,6 +2,7 @@ import mlx.core as mx
 import numpy as np
 
 from mflux.models.common.config import ModelConfig
+from mflux.models.fibo.model.fibo_vae.common.wan_2_2_rms_norm import Wan2_2_RMSNorm
 from mflux.models.wan.model.wan_vae import Wan2_2_VAE
 from mflux.models.wan.weights.wan_weight_mapping import WanWeightMapping
 from mflux.utils.video_util import VideoUtil
@@ -35,6 +36,27 @@ def test_wan_vae_encode_normalized_first_frame_matches_i2v_condition_shape():
     mx.eval(condition)
 
     assert condition.shape == (1, 48, 1, 4, 4)
+
+
+def test_wan_vae_rms_norm_normalizes_bf16_inputs_in_fp32():
+    norm = Wan2_2_RMSNorm(dim=4, images=False)
+    x = mx.array(
+        np.linspace(-12.0, 12.0, 1 * 4 * 2 * 2 * 2, dtype=np.float32).reshape(1, 4, 2, 2, 2)
+    ).astype(mx.bfloat16)
+
+    output = norm(x)
+    mx.eval(output)
+
+    x_float = x.astype(mx.float32)
+    expected = x_float / mx.maximum(
+        mx.sqrt(mx.sum(x_float * x_float, axis=1, keepdims=True)),
+        mx.array(norm.eps, dtype=mx.float32),
+    )
+    expected = expected * norm.scale * norm.weight.reshape(1, -1, 1, 1, 1).astype(mx.float32)
+    np.testing.assert_allclose(
+        np.array(output.astype(mx.float32)),
+        np.array(expected.astype(mx.bfloat16).astype(mx.float32)),
+    )
 
 
 def test_wan_vae_mapping_includes_encoder_shortcut_weights():

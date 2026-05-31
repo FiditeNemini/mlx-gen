@@ -221,7 +221,8 @@ def _parser() -> argparse.ArgumentParser:
             "Common generation options are forwarded to the selected backend, including --prompt, "
             "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
             "--negative-prompt, --quantize, --lora-paths, --lora-scales, --metadata, "
-            "--config-from-metadata/-C, --output, --replace, --frames, --fps, and --progress/--no-progress."
+            "--config-from-metadata/-C, --output, --replace, --frames, --fps, --guidance-2, "
+            "and --progress/--no-progress."
         ),
     )
     parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")
@@ -361,7 +362,7 @@ def _download_patterns(model_config: ModelConfig | None, repo_id: str) -> list[s
 
     aliases = set(model_config.aliases)
     model_key = _model_key(model_config.model_name, model_config.base_model, repo_id)
-    weight_definition = _weight_definition_for(aliases, model_key)
+    weight_definition = _weight_definition_for(aliases, model_key, model_config)
     if weight_definition is None:
         return None
 
@@ -371,7 +372,7 @@ def _download_patterns(model_config: ModelConfig | None, repo_id: str) -> list[s
     return sorted(set(patterns))
 
 
-def _weight_definition_for(aliases: set[str], model_key: str):
+def _weight_definition_for(aliases: set[str], model_key: str, model_config: ModelConfig | None = None):
     if _is_qwen(aliases, model_key):
         from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
 
@@ -399,6 +400,8 @@ def _weight_definition_for(aliases: set[str], model_key: str):
     if _is_wan(aliases, model_key):
         from mflux.models.wan.weights import WanWeightDefinition
 
+        if model_config is not None:
+            return WanWeightDefinition.for_config(model_config)
         return WanWeightDefinition
     return None
 
@@ -584,13 +587,15 @@ def _reject_ernie_unsupported_inputs(args: argparse.Namespace, image_count: int)
 def _reject_wan_unsupported_inputs(args: argparse.Namespace, image_count: int) -> None:
     if args.task in {"edit", "text-to-image", "image-to-image"}:
         _parser().error(
-            "Wan2.2 TI2V supports text-to-video and image-to-video tasks. "
+            "Wan2.2 supports text-to-video and image-to-video tasks. "
             "Use --task text-to-video or --task image-to-video."
         )
     if image_count > 1:
         _parser().error("Wan2.2 image-to-video accepts exactly one input image.")
     if image_count and args.task == "text-to-video":
         _parser().error("Wan2.2 text-to-video does not accept --image. Use --task image-to-video.")
+    if args.task == "image-to-video" and image_count == 0:
+        _parser().error("Wan2.2 image-to-video requires --image or --image-path.")
 
 
 def _reject_bonsai_unsupported_inputs(args: argparse.Namespace, image_count: int) -> None:

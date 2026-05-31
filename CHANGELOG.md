@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.8] - 2026-05-31
+
+### Added
+
+- **Wan2.2 A14B support**: add T2V and I2V model configs, dynamic `transformer_2` weight loading, Wan2.1-style A14B VAE support, Diffusers-compatible high/low-noise boundary routing, scalar A14B timesteps, A14B concatenated image-condition latents, and optional `--guidance-2` low-noise guidance.
+- **Wan A14B docs and tests**: document TI2V-5B versus A14B defaults, local snapshot requirements, and add focused tests for A14B config, VAE mapping, I2V conditioning shape, CLI defaults, optional low-noise guidance, and guidance routing.
+- **Wan console scripts**: expose `mlxgen-generate-wan` and `mflux-generate-wan` entrypoints for direct Wan CLI checks.
+
+### Fixed
+
+- **Wan model identity safety**: unknown or generic Wan names no longer infer the TI2V-5B runtime from the generic `wan` substring. Wan requests now require an exact supported repo or a local prepared folder with a specific Wan alias.
+- **Wan prompt and default handling**: Wan generation now applies model-specific default negative prompts, spatial defaults, guidance defaults, and optional A14B low-noise guidance consistently across CLI and Python generation.
+- **Wan low-cost runs**: valid low-resolution or short Wan runs no longer emit runtime quality warnings; docs now describe those settings as quick command checks rather than quality-validation settings.
+- **Wan source/runtime mismatch guard**: Wan initialization now compares available Diffusers source configs against the selected MLX-Gen runtime before loading weights, and transformer calls fail with a clear channel mismatch before entering MLX convolution.
+
 ## [0.18.7] - 2026-05-27
 
 ### Added

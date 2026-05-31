@@ -13,7 +13,7 @@ outside chat history.
 | --- | ---: |
 | Planned | 3 |
 | Proposed | 1 |
-| Completed | 1 |
+| Completed | 2 |
 | Deprecated | 0 |
 | Recurrent | 0 |
 
@@ -33,9 +33,9 @@ outside chat history.
    gated-derivative hygiene.
 5. Continue ERNIE-Image/Turbo after the Turbo text-to-image, Prompt Enhancer, and q4/q8
    validation work: add stronger Diffusers parity tests and non-turbo validation.
-6. Continue Wan2.2 after the first text-to-video and first-frame image-to-video milestones: add
-   q8/q4 validation, stronger quality/performance checks, progress/cancel APIs, and keep SeedVR2
-   as the lower-risk existing-code video utility track.
+6. Continue Wan2.2 after the first TI2V-5B and A14B T2V/I2V milestones: add q8/q4 validation,
+   stronger quality/performance checks, progress/cancel APIs, and keep SeedVR2 as the lower-risk
+   existing-code video utility track.
 
 ## Planned ledger
 
@@ -56,6 +56,7 @@ outside chat history.
 | ID | Item | Area | Completed | Outcome |
 | --- | --- | --- | --- | --- |
 | 0003 | [Bonsai ternary FLUX.2 support](completed/0003_bonsai_ternary_flux2_support.md) | T2I, FLUX.2, low-bit packed MLX | 2026-05-27 | Added Bonsai ternary 2-bit routing, packed transformer loading, q4 Qwen3 text-encoder loading, binary 1-bit runtime gating, docs, and local quality/speed validation against FLUX.2 Klein 4B q8. |
+| 0012 | [Wan2.2 A14B T2V/I2V support](completed/0012_wan_a14b_t2v_i2v_support.md) | Video, Wan A14B, Diffusers parity | 2026-05-31 | Added T2V-A14B and I2V-A14B configs, dynamic two-transformer loading, Wan2.1-style VAE support, boundary routing, optional `--guidance-2`, fail-closed model identity checks, docs, tests, and MP4 smoke validation. |
 
 ## Deprecated ledger
 
@@ -65,6 +66,12 @@ No deprecated backlog items yet.
 
 - New backlog items must use a unique four-digit global prefix.
 - Planned items need current code reality, scope, non-goals, validation, and ADR status.
+- New model routes must follow [ADR 0001](../adr/0001_runtime_smoke_validation_for_model_routes.md):
+  do not mark support as working or release-ready without a model-backed smoke command and output
+  evidence, or an intentional unsupported-state failure.
+- Model, backend, architecture, task, and quantization resolution must follow
+  [ADR 0002](../adr/0002_no_silent_automatic_fallbacks.md): ambiguous or unsupported requests fail
+  closed unless fallback behavior is explicitly requested by the caller.
 - When implementation completes, move the item to `docs/backlog/completed/` and append completion
   evidence instead of deleting the planning history.
 - If a backlog item establishes lasting architecture policy, create or update an ADR before
@@ -107,3 +114,15 @@ No deprecated backlog items yet.
 - Rechecked 2026-05-27 stock MLX 0.31.2 for Bonsai binary 1-bit. `bits=1, group_size=128`
   quantization still fails while 2/3/4/5/6/8 succeed, so proposed item 0004 remains deferred and
   the Bonsai ternary release can proceed.
+- Added 2026-05-30 Wan A14B priority item after confirming local T2V-A14B cache and then the full
+  I2V-A14B cache. A14B is tracked separately from 5B quantization because it needs two-transformer
+  boundary routing, scalar timesteps, `flow_shift=3.0`, and a Wan2.1-style VAE.
+- Added 2026-05-30 ADR 0001 after the A14B route exposed a validation gap: new model routes now
+  require model-backed smoke proof before support or release-readiness claims. The A14B T2V route
+  has source-checkpoint MP4 smoke evidence; I2V-A14B has source-conditioned MP4 smoke evidence
+  from the complete local I2V snapshot.
+- Added 2026-05-30 ADR 0002 after Wan model resolution exposed silent default-config fallback risk:
+  model identity, backend, architecture, task, and quantization resolution now fail closed unless a
+  caller explicitly opts into fallback behavior.
+- Completed 2026-05-31 Wan2.2 A14B T2V/I2V initial support. Remaining Wan work is tracked in the
+  quantization, motion parity, and q8 performance items rather than in the A14B wiring item.

@@ -104,7 +104,7 @@ For ERNIE image-to-image, preserve the source aspect ratio when choosing `--widt
 
 ERNIE's optional Prompt Enhancer is available with `--use-prompt-enhancer` when the full source snapshot is present. The default `mlxgen download --model baidu/ERNIE-Image-Turbo` command downloads only generation components; run `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before using Prompt Enhancer. Prepared q8/q4 ERNIE folders created by `mlxgen prepare` do not include Prompt Enhancer files.
 
-Wan2.2 TI2V routes through the same command surface for text-to-video:
+Wan2.2 routes through the same command surface for video generation. TI2V-5B is the smaller text-to-video and experimental first-frame image-to-video path:
 
 ```sh
 mlxgen generate \
@@ -120,7 +120,27 @@ mlxgen generate \
   --output video.mp4
 ```
 
-Wan image-to-video uses the same command with one input image:
+T2V-A14B uses the larger two-transformer Diffusers path. `--guidance-2` is an optional
+Diffusers-compatible low-noise-stage override. With no guidance flags, MLX-Gen uses the model's
+two-stage defaults (`4` high-noise and `3` low-noise for T2V-A14B). If you set `--guidance` and
+omit `--guidance-2`, the low-noise stage follows `--guidance`:
+
+```sh
+mlxgen generate \
+  --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
+  --task text-to-video \
+  --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 4 \
+  --guidance-2 3 \
+  --fps 16 \
+  --output video.mp4
+```
+
+TI2V-5B image-to-video uses the same command with one input image:
 
 ```sh
 mlxgen generate \
@@ -137,7 +157,25 @@ mlxgen generate \
   --output video.mp4
 ```
 
-The I2V path follows Diffusers first-frame latent conditioning: the first frame is VAE-encoded, kept active through denoising with a timestep mask, and reinserted before decode. Multi-image/video interpolation is not enabled.
+A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and the Diffusers
+concatenated image-condition latent path:
+
+```sh
+mlxgen generate \
+  --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
+  --task image-to-video \
+  --image input.png \
+  --prompt "A cinematic flyby around the subject in the input image" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 3.5 \
+  --fps 16 \
+  --output video.mp4
+```
+
+The TI2V-5B I2V path follows Diffusers first-frame latent conditioning: the first frame is VAE-encoded, kept active through denoising with a timestep mask, and reinserted before decode. The separate A14B I2V model uses concatenated image-condition latents instead. Multi-image/video interpolation is not enabled.
 
 ### Wan Video Parameters
 
@@ -151,15 +189,16 @@ At the default 24 fps, `--frames 121` produces about 5.04 seconds of video, `--f
 
 | Option | Behavior |
 | --- | --- |
-| `--width`, `--height` | Accepted values are at least 32 pixels. Values are adjusted down to multiples of 32 for Wan patchification, so `1280x720` becomes `1280x704`. Use `1280x704` for landscape or `704x1280` for portrait quality validation. |
-| `--frames` | Number of output frames. Wan requires `4n + 1`; other values are adjusted to `4 * floor(frames / 4) + 1`. Default: `121`. |
-| `--fps` | MP4 playback frame rate. Any positive integer is accepted. Default and recommended value: `24`. |
-| `--steps` | Denoising steps. Default and recommended quality value: `50`. Lower values run faster but reduce quality. |
-| `--guidance` | Classifier-free guidance scale. Default: `5`. |
+| `--width`, `--height` | Accepted values are model-specific. Values are adjusted down to the selected Wan VAE/patch multiple. TI2V-5B uses multiples of 32, so `1280x720` becomes `1280x704`; A14B uses multiples of 16, so `1280x720` remains valid. |
+| `--frames` | Number of output frames. Wan requires `4n + 1`; other values are adjusted to `4 * floor(frames / 4) + 1`. TI2V-5B default: `121`; A14B default: `81`. |
+| `--fps` | MP4 playback frame rate. Any positive integer is accepted. TI2V-5B default/recommended value: `24`; A14B default/recommended value: `16`. |
+| `--steps` | Denoising steps. TI2V-5B default/recommended quality value: `50`; A14B default/recommended value: `40`. Lower values run faster but reduce quality. |
+| `--guidance` | Classifier-free guidance scale. TI2V-5B default: `5`; A14B default: `4`. |
+| `--guidance-2` | Optional low-noise guidance scale for Wan A14B `transformer_2`. If both guidance flags are omitted, model-specific two-stage defaults are used. If `--guidance` is set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`. It is rejected for single-transformer Wan models. |
 | `--seed` | Deterministic seed. Repeat with multiple values to create multiple videos. |
 | `--progress`, `--no-progress` | Show or disable the CLI video progress bar. Progress is reported in output-frame units and also carries the current denoising step. Default: `--progress true`. |
 
-The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. Lower resolutions, frame counts, or step counts are useful for quick checks, but they should not be treated as quality settings.
+The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. The upstream A14B guidance is 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Lower resolutions, frame counts, or step counts are useful for quick checks, but they should not be treated as quality settings.
 
 Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 

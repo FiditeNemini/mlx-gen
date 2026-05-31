@@ -4,6 +4,13 @@ import mlx.core as mx
 
 from mflux.models.common.resolution.config_resolution import ConfigResolution
 
+WAN_DEFAULT_NEGATIVE_PROMPT = (
+    "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，"
+    "最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，"
+    "画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，"
+    "杂乱的背景，三条腿，背景人很多，倒着走"
+)
+
 
 class ModelConfig:
     precision: mx.Dtype = mx.bfloat16
@@ -22,6 +29,7 @@ class ModelConfig:
         requires_sigma_shift: bool | None,
         transformer_overrides: dict | None = None,
         text_encoder_overrides: dict | None = None,
+        inference_aliases: list[str] | None = None,
         sigma_base_shift: float = 0.5,
         sigma_max_shift: float = 1.15,
         sigma_base_seq_len: int = 256,
@@ -40,6 +48,7 @@ class ModelConfig:
         self.priority = priority
         self.transformer_overrides = transformer_overrides or {}
         self.text_encoder_overrides = text_encoder_overrides or {}
+        self.inference_aliases = aliases if inference_aliases is None else inference_aliases
         self.sigma_base_shift = sigma_base_shift
         self.sigma_max_shift = sigma_max_shift
         self.sigma_base_seq_len = sigma_base_seq_len
@@ -190,6 +199,16 @@ class ModelConfig:
     @lru_cache
     def wan2_2_ti2v_5b() -> "ModelConfig":
         return AVAILABLE_MODELS["wan2.2-ti2v-5b"]
+
+    @staticmethod
+    @lru_cache
+    def wan2_2_t2v_a14b() -> "ModelConfig":
+        return AVAILABLE_MODELS["wan2.2-t2v-a14b"]
+
+    @staticmethod
+    @lru_cache
+    def wan2_2_i2v_a14b() -> "ModelConfig":
+        return AVAILABLE_MODELS["wan2.2-i2v-a14b"]
 
     def x_embedder_input_dim(self) -> int:
         if "Fill" in self.model_name:
@@ -674,8 +693,6 @@ AVAILABLE_MODELS = {
             "wan2.2-ti2v-5b",
             "wan2-2-ti2v-5b",
             "wan-ti2v",
-            "wan-video",
-            "wan",
         ],
         model_name="Wan-AI/Wan2.2-TI2V-5B-Diffusers",
         base_model=None,
@@ -694,6 +711,150 @@ AVAILABLE_MODELS = {
             "ffn_dim": 14336,
             "patch_size": [1, 2, 2],
             "expand_timesteps": True,
+            "has_transformer_2": False,
+            "boundary_ratio": None,
+            "flow_shift": 5.0,
+            "vae_variant": "wan22_ti2v",
+            "vae_config": {
+                "base_dim": 160,
+                "decoder_base_dim": 256,
+                "z_dim": 48,
+                "in_channels": 12,
+                "out_channels": 12,
+                "patch_size": 2,
+                "scale_factor_spatial": 16,
+                "scale_factor_temporal": 4,
+                "is_residual": True,
+            },
+            "task": "text-image-to-video",
+            "supports_image_to_video": True,
+            "default_width": 1280,
+            "default_height": 704,
+            "default_frames": 121,
+            "default_steps": 50,
+            "default_fps": 24,
+            "default_guidance": 5.0,
+            "default_negative_prompt": WAN_DEFAULT_NEGATIVE_PROMPT,
+        },
+        text_encoder_overrides={
+            "model_type": "umt5",
+            "d_model": 4096,
+            "d_ff": 10240,
+            "num_layers": 24,
+            "num_heads": 64,
+            "vocab_size": 256384,
+        },
+    ),
+    "wan2.2-t2v-a14b": ModelConfig(
+        priority=26,
+        aliases=[
+            "wan2.2-t2v-a14b",
+            "wan2-2-t2v-a14b",
+            "wan-t2v-a14b",
+            "wan-a14b-t2v",
+        ],
+        model_name="Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=True,
+        requires_sigma_shift=False,
+        transformer_overrides={
+            "in_channels": 16,
+            "out_channels": 16,
+            "num_layers": 40,
+            "num_attention_heads": 40,
+            "attention_head_dim": 128,
+            "ffn_dim": 13824,
+            "patch_size": [1, 2, 2],
+            "expand_timesteps": False,
+            "has_transformer_2": True,
+            "boundary_ratio": 0.875,
+            "flow_shift": 3.0,
+            "vae_variant": "wan21",
+            "vae_config": {
+                "base_dim": 96,
+                "decoder_base_dim": None,
+                "z_dim": 16,
+                "in_channels": 3,
+                "out_channels": 3,
+                "patch_size": 1,
+                "scale_factor_spatial": 8,
+                "scale_factor_temporal": 4,
+                "is_residual": False,
+            },
+            "task": "text-to-video",
+            "supports_image_to_video": False,
+            "default_width": 1280,
+            "default_height": 720,
+            "default_frames": 81,
+            "default_steps": 40,
+            "default_fps": 16,
+            "default_guidance": 4.0,
+            "default_guidance_2": 3.0,
+            "default_negative_prompt": WAN_DEFAULT_NEGATIVE_PROMPT,
+        },
+        text_encoder_overrides={
+            "model_type": "umt5",
+            "d_model": 4096,
+            "d_ff": 10240,
+            "num_layers": 24,
+            "num_heads": 64,
+            "vocab_size": 256384,
+        },
+    ),
+    "wan2.2-i2v-a14b": ModelConfig(
+        priority=27,
+        aliases=[
+            "wan2.2-i2v-a14b",
+            "wan2-2-i2v-a14b",
+            "wan-i2v-a14b",
+            "wan-a14b-i2v",
+        ],
+        model_name="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=True,
+        requires_sigma_shift=False,
+        transformer_overrides={
+            "in_channels": 36,
+            "out_channels": 16,
+            "num_layers": 40,
+            "num_attention_heads": 40,
+            "attention_head_dim": 128,
+            "ffn_dim": 13824,
+            "patch_size": [1, 2, 2],
+            "expand_timesteps": False,
+            "has_transformer_2": True,
+            "boundary_ratio": 0.9,
+            "flow_shift": 3.0,
+            "vae_variant": "wan21",
+            "vae_config": {
+                "base_dim": 96,
+                "decoder_base_dim": None,
+                "z_dim": 16,
+                "in_channels": 3,
+                "out_channels": 3,
+                "patch_size": 1,
+                "scale_factor_spatial": 8,
+                "scale_factor_temporal": 4,
+                "is_residual": False,
+            },
+            "task": "image-to-video",
+            "supports_image_to_video": True,
+            "default_width": 1280,
+            "default_height": 720,
+            "default_frames": 81,
+            "default_steps": 40,
+            "default_fps": 16,
+            "default_guidance": 3.5,
+            "default_guidance_2": 3.5,
+            "default_negative_prompt": WAN_DEFAULT_NEGATIVE_PROMPT,
         },
         text_encoder_overrides={
             "model_type": "umt5",

@@ -86,7 +86,7 @@ If ERNIE image-to-image does not preserve enough of the source image, increase `
 
 ## Wan Video Quality Looks Weak At Tiny Sizes
 
-Wan2.2 TI2V supports text-to-video and experimental first-frame image-to-video. Very small or very short runs are useful for quick command checks, but they are not quality settings.
+Wan2.2 supports TI2V-5B text-to-video, experimental TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B image-to-video. Very small or very short runs are useful for quick command checks, but they are not quality settings.
 
 Use the upstream TI2V-5B settings when validating visual quality:
 
@@ -106,7 +106,9 @@ mlxgen generate \
 
 Use lower dimensions, frame counts, or step counts only to validate routing and MP4 writing. For image-to-video, pass exactly one input image and use `--task image-to-video`. Multi-image Wan interpolation is not enabled.
 
-Wan uses frame-count control rather than a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds. Frame counts are normalized to `4n + 1`, and width/height are normalized to multiples of 32.
+For T2V-A14B, use 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps when validating quality. The separate I2V-A14B path requires a complete local `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and one `--image` input.
+
+Wan uses frame-count control rather than a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, and at 16 fps, 81 frames is about 5.06 seconds. Frame counts are normalized to `4n + 1`, and width/height are normalized to the selected Wan model's VAE/patch multiple.
 
 ## `generate --path` Fails
 

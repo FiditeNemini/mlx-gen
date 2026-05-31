@@ -44,6 +44,24 @@ class TestConfigResolutionExactMatch:
         assert config.model_name == "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
         assert "wan2.2-ti2v-5b" in config.aliases
 
+    @pytest.mark.fast
+    def test_exact_hf_name_match_wan2_2_t2v_a14b(self):
+        config = ConfigResolution.resolve(model_name="Wan-AI/Wan2.2-T2V-A14B-Diffusers")
+
+        assert config.model_name == "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+        assert config.base_model is None
+        assert config.transformer_overrides["in_channels"] == 16
+        assert config.transformer_overrides["vae_config"]["z_dim"] == 16
+
+    @pytest.mark.fast
+    def test_exact_hf_name_match_wan2_2_i2v_a14b(self):
+        config = ConfigResolution.resolve(model_name="Wan-AI/Wan2.2-I2V-A14B-Diffusers")
+
+        assert config.model_name == "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
+        assert config.base_model is None
+        assert config.transformer_overrides["in_channels"] == 36
+        assert config.transformer_overrides["vae_config"]["z_dim"] == 16
+
 
 class TestConfigResolutionExplicitBase:
     @pytest.mark.fast
@@ -134,6 +152,14 @@ class TestConfigResolutionInferSubstring:
         assert config.base_model == "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
         assert config.transformer_overrides["expand_timesteps"] is True
 
+    @pytest.mark.fast
+    def test_infers_wan2_2_t2v_a14b_from_local_path(self):
+        config = ConfigResolution.resolve(model_name="/models/wan2.2-t2v-a14b-q8")
+
+        assert config.base_model == "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+        assert config.transformer_overrides["expand_timesteps"] is False
+        assert config.transformer_overrides["in_channels"] == 16
+
 
 class TestConfigResolutionError:
     @pytest.mark.fast
@@ -142,6 +168,21 @@ class TestConfigResolutionError:
             ConfigResolution.resolve(model_name="totally-unknown-model")
 
         assert "Cannot infer" in str(exc_info.value)
+
+    @pytest.mark.fast
+    def test_unknown_wan_repo_does_not_infer_ti2v_from_generic_wan(self):
+        with pytest.raises(ModelConfigError):
+            ConfigResolution.resolve(model_name="Wan-AI/Wan2.2-Unknown-14B-Diffusers")
+
+    @pytest.mark.fast
+    def test_generic_wan_alias_is_ambiguous(self):
+        with pytest.raises(ModelConfigError):
+            ConfigResolution.resolve(model_name="wan")
+
+    @pytest.mark.fast
+    def test_generic_local_wan_video_folder_does_not_infer_ti2v(self):
+        with pytest.raises(ModelConfigError):
+            ConfigResolution.resolve(model_name="models/my-wan-video-folder")
 
 
 class TestConfigResolutionRules:

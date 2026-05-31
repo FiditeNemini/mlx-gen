@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from pathlib import Path
@@ -139,25 +140,18 @@ class PathResolution:
     def _is_snapshot_complete(
         snapshot_path: Path, required_subdirs: set[str], patterns: list[str] | None = None
     ) -> bool:
+        if patterns:
+            for pattern in patterns:
+                if "*.safetensors" in pattern:
+                    continue
+                if not PathResolution._pattern_has_valid_match(snapshot_path, pattern):
+                    return False
+
         if not required_subdirs:
             # No specific subdirs required - check that all patterns are satisfied
             if patterns:
                 for pattern in patterns:
-                    # Check if this specific pattern has any matches
-                    matches = list(snapshot_path.glob(pattern))
-                    if not matches:
-                        return False
-                    # Verify at least one match actually exists (handles broken symlinks)
-                    has_valid_match = False
-                    for match in matches:
-                        if match.is_symlink():
-                            if os.path.exists(match):
-                                has_valid_match = True
-                                break
-                        else:
-                            has_valid_match = True
-                            break
-                    if not has_valid_match:
+                    if not PathResolution._pattern_has_valid_match(snapshot_path, pattern):
                         return False
                 return True
             else:
@@ -168,19 +162,42 @@ class PathResolution:
             subdir_path = snapshot_path / subdir
             if not subdir_path.exists():
                 return False
-            # Check if subdir has at least one safetensors file (following symlinks)
-            has_safetensors = False
-            for f in subdir_path.iterdir():
-                if f.name.endswith(".safetensors"):
-                    # Verify the symlink target exists (handles broken symlinks)
-                    if f.is_symlink():
-                        if os.path.exists(f):
-                            has_safetensors = True
-                            break
-                    else:
-                        has_safetensors = True
-                        break
-            if not has_safetensors:
+            if not PathResolution._subdir_safetensors_complete(subdir_path):
                 return False
 
         return True
+
+    @staticmethod
+    def _pattern_has_valid_match(snapshot_path: Path, pattern: str) -> bool:
+        matches = list(snapshot_path.glob(pattern))
+        return any(PathResolution._path_exists(match) for match in matches)
+
+    @staticmethod
+    def _subdir_safetensors_complete(subdir_path: Path) -> bool:
+        index_files = sorted(subdir_path.glob("*.safetensors.index.json"))
+        if index_files:
+            return all(PathResolution._safetensors_index_complete(index_path) for index_path in index_files)
+        return any(
+            f.name.endswith(".safetensors") and PathResolution._path_exists(f)
+            for f in subdir_path.iterdir()
+        )
+
+    @staticmethod
+    def _safetensors_index_complete(index_path: Path) -> bool:
+        if not PathResolution._path_exists(index_path):
+            return False
+        try:
+            index = json.loads(index_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return False
+        weight_map = index.get("weight_map")
+        if not isinstance(weight_map, dict) or not weight_map:
+            return False
+        expected_files = set(weight_map.values())
+        return all(PathResolution._path_exists(index_path.parent / filename) for filename in expected_files)
+
+    @staticmethod
+    def _path_exists(path: Path) -> bool:
+        if path.is_symlink():
+            return os.path.exists(path)
+        return path.exists()

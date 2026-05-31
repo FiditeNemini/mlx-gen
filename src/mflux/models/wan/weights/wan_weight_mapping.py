@@ -78,7 +78,13 @@ class WanWeightMapping:
         return mapping
 
     @staticmethod
-    def get_vae_mapping() -> list[WeightTarget]:
+    def get_vae_mapping(variant: str = "wan22_ti2v") -> list[WeightTarget]:
+        if variant == "wan21":
+            return WanWeightMapping.get_wan21_vae_mapping()
+        return WanWeightMapping.get_wan22_ti2v_vae_mapping()
+
+    @staticmethod
+    def get_wan22_ti2v_vae_mapping() -> list[WeightTarget]:
         mapping = [
             *WanWeightMapping._conv3d("quant_conv", "quant_conv"),
             *WanWeightMapping._conv3d("post_quant_conv", "post_quant_conv"),
@@ -185,6 +191,112 @@ class WanWeightMapping:
         return mapping
 
     @staticmethod
+    def get_wan21_vae_mapping() -> list[WeightTarget]:
+        mapping = [
+            *WanWeightMapping._conv3d("quant_conv", "quant_conv"),
+            *WanWeightMapping._conv3d("post_quant_conv", "post_quant_conv"),
+            *WanWeightMapping._conv3d("encoder.conv_in", "encoder.conv_in"),
+            *WanWeightMapping._conv3d("encoder.conv_out", "encoder.conv_out"),
+            WeightTarget(to_pattern="encoder.norm_out.weight", from_pattern=["encoder.norm_out.gamma"]),
+            WeightTarget(
+                to_pattern="encoder.mid_block.attentions.0.norm.weight",
+                from_pattern=["encoder.mid_block.attentions.0.norm.gamma"],
+            ),
+            WeightTarget(
+                to_pattern="encoder.mid_block.attentions.0.to_qkv.weight",
+                from_pattern=["encoder.mid_block.attentions.0.to_qkv.weight"],
+                transform=WeightTransforms.transpose_conv2d_weight,
+            ),
+            WeightTarget(
+                to_pattern="encoder.mid_block.attentions.0.to_qkv.bias",
+                from_pattern=["encoder.mid_block.attentions.0.to_qkv.bias"],
+            ),
+            WeightTarget(
+                to_pattern="encoder.mid_block.attentions.0.proj.weight",
+                from_pattern=["encoder.mid_block.attentions.0.proj.weight"],
+                transform=WeightTransforms.transpose_conv2d_weight,
+            ),
+            WeightTarget(
+                to_pattern="encoder.mid_block.attentions.0.proj.bias",
+                from_pattern=["encoder.mid_block.attentions.0.proj.bias"],
+            ),
+            *WanWeightMapping._conv3d("decoder.conv_in", "decoder.conv_in"),
+            *WanWeightMapping._conv3d("decoder.conv_out", "decoder.conv_out"),
+            WeightTarget(to_pattern="decoder.norm_out.weight", from_pattern=["decoder.norm_out.gamma"]),
+            WeightTarget(
+                to_pattern="decoder.mid_block.attentions.0.norm.weight",
+                from_pattern=["decoder.mid_block.attentions.0.norm.gamma"],
+            ),
+            WeightTarget(
+                to_pattern="decoder.mid_block.attentions.0.to_qkv.weight",
+                from_pattern=["decoder.mid_block.attentions.0.to_qkv.weight"],
+                transform=WeightTransforms.transpose_conv2d_weight,
+            ),
+            WeightTarget(
+                to_pattern="decoder.mid_block.attentions.0.to_qkv.bias",
+                from_pattern=["decoder.mid_block.attentions.0.to_qkv.bias"],
+            ),
+            WeightTarget(
+                to_pattern="decoder.mid_block.attentions.0.proj.weight",
+                from_pattern=["decoder.mid_block.attentions.0.proj.weight"],
+                transform=WeightTransforms.transpose_conv2d_weight,
+            ),
+            WeightTarget(
+                to_pattern="decoder.mid_block.attentions.0.proj.bias",
+                from_pattern=["decoder.mid_block.attentions.0.proj.bias"],
+            ),
+        ]
+        for resnet in range(2):
+            mapping.extend(
+                WanWeightMapping._residual_block_mapping(
+                    hf_prefix=f"encoder.mid_block.resnets.{resnet}",
+                    to_prefix=f"encoder.mid_block.resnets.{resnet}",
+                )
+            )
+            mapping.extend(
+                WanWeightMapping._residual_block_mapping(
+                    hf_prefix=f"decoder.mid_block.resnets.{resnet}",
+                    to_prefix=f"decoder.mid_block.resnets.{resnet}",
+                )
+            )
+
+        encoder_layer = 0
+        for block in range(4):
+            for _ in range(2):
+                mapping.extend(
+                    WanWeightMapping._residual_block_mapping(
+                        hf_prefix=f"encoder.down_blocks.{encoder_layer}",
+                        to_prefix=f"encoder.down_blocks.{encoder_layer}",
+                    )
+                )
+                encoder_layer += 1
+            if block != 3:
+                mapping.extend(
+                    WanWeightMapping._resample_mapping(
+                        hf_prefix=f"encoder.down_blocks.{encoder_layer}",
+                        to_prefix=f"encoder.down_blocks.{encoder_layer}",
+                    )
+                )
+                encoder_layer += 1
+
+        for block in range(4):
+            for resnet in range(3):
+                mapping.extend(
+                    WanWeightMapping._residual_block_mapping(
+                        hf_prefix=f"decoder.up_blocks.{block}.resnets.{resnet}",
+                        to_prefix=f"decoder.up_blocks.{block}.resnets.{resnet}",
+                    )
+                )
+            if block != 3:
+                mapping.extend(
+                    WanWeightMapping._resample_mapping(
+                        hf_prefix=f"decoder.up_blocks.{block}.upsamplers.0",
+                        to_prefix=f"decoder.up_blocks.{block}.upsamplers.0",
+                    )
+                )
+        return mapping
+
+    @staticmethod
     def _attention_mapping(prefix: str) -> list[WeightTarget]:
         return [
             WeightTarget(to_pattern=f"{prefix}.{name}.weight", from_pattern=[f"{prefix}.{name}.weight"])
@@ -216,6 +328,23 @@ class WanWeightMapping:
         if needs_shortcut:
             mapping.extend(WanWeightMapping._conv3d(f"{hf_prefix}.conv_shortcut", f"{to_prefix}.conv_shortcut"))
         return mapping
+
+    @staticmethod
+    def _residual_block_mapping(hf_prefix: str, to_prefix: str) -> list[WeightTarget]:
+        return [
+            WeightTarget(to_pattern=f"{to_prefix}.norm1.weight", from_pattern=[f"{hf_prefix}.norm1.gamma"]),
+            WeightTarget(to_pattern=f"{to_prefix}.norm2.weight", from_pattern=[f"{hf_prefix}.norm2.gamma"]),
+            *WanWeightMapping._conv3d(f"{hf_prefix}.conv1", f"{to_prefix}.conv1"),
+            *WanWeightMapping._conv3d(f"{hf_prefix}.conv2", f"{to_prefix}.conv2"),
+            *WanWeightMapping._conv3d(f"{hf_prefix}.conv_shortcut", f"{to_prefix}.conv_shortcut"),
+        ]
+
+    @staticmethod
+    def _resample_mapping(hf_prefix: str, to_prefix: str) -> list[WeightTarget]:
+        return [
+            *WanWeightMapping._conv2d(f"{hf_prefix}.resample.1", f"{to_prefix}.resample_conv"),
+            *WanWeightMapping._conv3d(f"{hf_prefix}.time_conv", f"{to_prefix}.time_conv"),
+        ]
 
     @staticmethod
     def _conv3d(hf_prefix: str, to_prefix: str) -> list[WeightTarget]:

@@ -1,6 +1,7 @@
 import argparse
 import json
 import random
+import sys
 import time
 from pathlib import Path
 
@@ -17,23 +18,25 @@ WAN_DEFAULT_WIDTH = Wan2_2_TI2V.RECOMMENDED_WIDTH
 WAN_DEFAULT_HEIGHT = Wan2_2_TI2V.RECOMMENDED_HEIGHT
 WAN_DEFAULT_FRAMES = Wan2_2_TI2V.RECOMMENDED_FRAMES
 WAN_DEFAULT_FPS = Wan2_2_TI2V.RECOMMENDED_FPS
+GENERIC_WAN_ALIASES = {"wan", "wan-video"}
 
 
 def main() -> None:
     parser = _parser()
+    provided_options = _provided_options(sys.argv[1:])
     args = parser.parse_args()
-    _apply_metadata_defaults(args)
+    provided_options.update(_apply_metadata_defaults(args))
     _validate_args(parser, args)
     _apply_seed_defaults(args)
 
-    model_config, model_path = _resolve_model(args.model)
-    model = Wan2_2_TI2V(
-        model_config=model_config,
-        quantize=args.quantize,
-        model_path=model_path,
-    )
-
     try:
+        model_config, model_path = _resolve_model(args.model)
+        _apply_model_defaults(args, model_config, provided_options)
+        model = Wan2_2_TI2V(
+            model_config=model_config,
+            quantize=args.quantize,
+            model_path=model_path,
+        )
         for seed in args.seed:
             progress = _WanCliProgress(enabled=args.progress)
             try:
@@ -45,6 +48,7 @@ def main() -> None:
                     num_frames=args.frames,
                     fps=args.fps,
                     guidance=args.guidance,
+                    guidance_2=args.guidance_2,
                     num_inference_steps=args.steps,
                     negative_prompt=args.negative_prompt,
                     image_path=args.image_path,
@@ -58,7 +62,7 @@ def main() -> None:
                 export_json_metadata=args.metadata,
                 overwrite=args.replace,
             )
-    except (PromptFileReadError, FileNotFoundError, RuntimeError, ValueError, NotImplementedError) as exc:
+    except (ModelConfigError, PromptFileReadError, FileNotFoundError, RuntimeError, ValueError, NotImplementedError) as exc:
         print(exc)
         raise SystemExit(1) from None
 
@@ -66,10 +70,10 @@ def main() -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlxgen-generate-wan",
-        description="Generate a video using Wan2.2 TI2V.",
+        description="Generate a video using supported Wan2.2 models.",
     )
     parser.add_argument("--model", "-m", required=True, help="Wan model alias, Hugging Face repo, or local path.")
-    parser.add_argument("--image-path", default=None, help="Input image for Wan first-frame image-to-video.")
+    parser.add_argument("--image-path", default=None, help="Input image for Wan image-to-video models.")
     prompt_group = parser.add_mutually_exclusive_group()
     prompt_group.add_argument("--prompt", type=str, help="Text prompt for video generation.")
     prompt_group.add_argument("--prompt-file", type=Path, help="Path to a text file containing the prompt.")
@@ -78,13 +82,13 @@ def _parser() -> argparse.ArgumentParser:
         "--width",
         type=int,
         default=WAN_DEFAULT_WIDTH,
-        help="Video width. Adjusted down to a multiple of 32.",
+        help="Video width. Adjusted down to a model-specific patch multiple.",
     )
     parser.add_argument(
         "--height",
         type=int,
         default=WAN_DEFAULT_HEIGHT,
-        help="Video height. Adjusted down to a multiple of 32.",
+        help="Video height. Adjusted down to a model-specific patch multiple.",
     )
     parser.add_argument(
         "--frames",
@@ -95,6 +99,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=WAN_DEFAULT_FPS, help="Output video frame rate.")
     parser.add_argument("--steps", type=int, default=50, help="Denoising steps.")
     parser.add_argument("--guidance", type=float, default=5.0, help="Classifier-free guidance scale.")
+    parser.add_argument(
+        "--guidance-2",
+        type=float,
+        default=None,
+        help=(
+            "Optional low-noise guidance scale for Wan A14B transformer_2. "
+            "When omitted with --guidance, follows --guidance; when both are omitted, uses model defaults."
+        ),
+    )
     parser.add_argument("--seed", "-s", type=int, default=None, nargs="+", help="One or more random seeds.")
     parser.add_argument("--auto-seeds", type=int, default=-1, help="Generate N random seeds.")
     parser.add_argument("--quantize", "-q", type=int, choices=ui_defaults.QUANTIZE_CHOICES, default=None)
@@ -126,24 +139,33 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _apply_metadata_defaults(args: argparse.Namespace) -> None:
+def _apply_metadata_defaults(args: argparse.Namespace) -> set[str]:
+    provided_options = set()
     if args.config_from_metadata is None:
-        return
+        return provided_options
     metadata = json.loads(args.config_from_metadata.read_text())
     if args.prompt is None and args.prompt_file is None:
         args.prompt = metadata.get("prompt")
     if args.negative_prompt == "":
         args.negative_prompt = metadata.get("negative_prompt") or ""
+        if args.negative_prompt:
+            provided_options.add("--negative-prompt")
     if args.seed is None and metadata.get("seed") is not None:
         args.seed = [int(metadata["seed"])]
+        provided_options.add("--seed")
     if args.quantize is None:
         args.quantize = metadata.get("quantize")
+        if args.quantize is not None:
+            provided_options.add("--quantize")
     if args.image_path is None and metadata.get("image_path") is not None:
         args.image_path = metadata.get("image_path")
-    for name in ("width", "height", "frames", "fps", "steps", "guidance"):
+        provided_options.add("--image-path")
+    for name in ("width", "height", "frames", "fps", "steps", "guidance", "guidance_2"):
         value = metadata.get(name)
         if value is not None and getattr(args, name) == _parser().get_default(name):
             setattr(args, name, value)
+            provided_options.add(f"--{name.replace('_', '-')}")
+    return provided_options
 
 
 def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -172,10 +194,71 @@ def _apply_seed_defaults(args: argparse.Namespace) -> None:
 def _resolve_model(model: str) -> tuple[ModelConfig, str | None]:
     try:
         model_config = ModelConfig.from_name(model)
-    except ModelConfigError:
-        return ModelConfig.wan2_2_ti2v_5b(), model
+    except ModelConfigError as exc:
+        if "wan" in model.lower():
+            raise ModelConfigError(
+                f"Cannot infer a supported Wan model config from {model}. "
+                "Use an exact supported Wan repo or a local prepared folder whose name includes a specific Wan alias."
+            ) from exc
+        raise
+    if _uses_only_generic_wan_alias(model=model, model_config=model_config):
+        raise ModelConfigError(
+            f"Cannot infer a supported Wan model config from {model}. "
+            "Use an exact supported Wan repo or a local prepared folder whose name includes a specific Wan alias."
+        )
     model_path = model if model_config.base_model is not None else None
     return model_config, model_path
+
+
+def _uses_only_generic_wan_alias(model: str, model_config: ModelConfig) -> bool:
+    if model_config.base_model is None:
+        return False
+    model_key = model.lower().replace("_", "-")
+    specific_aliases = [alias for alias in model_config.aliases if alias not in GENERIC_WAN_ALIASES]
+    return not any(alias.lower() in model_key for alias in specific_aliases)
+
+
+def _apply_model_defaults(args: argparse.Namespace, model_config: ModelConfig, provided_options: set[str]) -> None:
+    wan_config = model_config.transformer_overrides
+    option_map = {
+        "width": ("default_width", "--width"),
+        "height": ("default_height", "--height"),
+        "frames": ("default_frames", "--frames"),
+        "fps": ("default_fps", "--fps"),
+        "steps": ("default_steps", "--steps"),
+        "guidance": ("default_guidance", "--guidance"),
+    }
+    for attr, (config_key, option_name) in option_map.items():
+        if option_name in provided_options:
+            continue
+        value = wan_config.get(config_key)
+        if value is not None:
+            setattr(args, attr, value)
+    if "--negative-prompt" not in provided_options and not args.negative_prompt:
+        args.negative_prompt = wan_config.get("default_negative_prompt", "")
+    if (
+        "--guidance-2" not in provided_options
+        and "--guidance" not in provided_options
+        and wan_config.get("default_guidance_2") is not None
+    ):
+        args.guidance_2 = wan_config["default_guidance_2"]
+
+
+def _provided_options(argv: list[str]) -> set[str]:
+    provided = set()
+    aliases = {
+        "-m": "--model",
+        "-s": "--seed",
+        "-q": "--quantize",
+        "-C": "--config-from-metadata",
+        "-B": "--battery-percentage-stop-limit",
+    }
+    for token in argv:
+        if not token.startswith("-"):
+            continue
+        option = token.split("=", 1)[0]
+        provided.add(aliases.get(option, option))
+    return provided
 
 
 class _WanCliProgress:

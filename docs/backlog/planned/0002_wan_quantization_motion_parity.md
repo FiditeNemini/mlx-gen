@@ -142,8 +142,7 @@ clear guidance before uploading or depending on quantized Wan checkpoints.
 
 - `uv run ruff check src/mflux/models/common/cli/save.py tests/cli/test_prepare_save.py`
 - `uv run pytest tests/cli/test_prepare_save.py -q`
-- `uv run pytest tests/wan/test_wan_scheduler_and_timesteps.py tests/wan/test_wan_quality_settings.py
-  tests/wan/test_wan_progress.py -q`
+- `uv run pytest tests/wan/test_wan_scheduler_and_timesteps.py tests/wan/test_wan_progress.py -q`
 - `MFLUX_RUN_LOCAL_WAN_PARITY=1 uv run pytest tests/wan/test_wan_local_parity.py -q`
 - `uv run mlxgen prepare --model Wan-AI/Wan2.2-TI2V-5B-Diffusers --quantize 8 --path
   models/wan2.2-ti2v-5b-diffusers-8bit`

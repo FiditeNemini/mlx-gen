@@ -63,6 +63,12 @@ class Wan2_2_Resample(nn.Module):
                         x = mx.transpose(x, (0, 2, 3, 1, 4, 5))
                         x = mx.reshape(x, (b, c, t * 2, h, w))
                         t = t * 2
+                else:
+                    x = self.time_conv(x)
+                    x = mx.reshape(x, (b, 2, c, t, h, w))
+                    x = mx.transpose(x, (0, 2, 3, 1, 4, 5))
+                    x = mx.reshape(x, (b, c, t * 2, h, w))
+                    t = t * 2
             x = mx.transpose(x, (0, 2, 1, 3, 4))
             x = mx.reshape(x, (b * t, c, h, w))
             x = mx.transpose(x, (0, 2, 3, 1))
@@ -97,4 +103,6 @@ class Wan2_2_Resample(nn.Module):
                 x = self.time_conv(mx.concatenate([feat_cache[idx][:, :, -1:, :, :], x], axis=2))
                 feat_cache[idx] = cache_x
                 feat_idx[0] += 1
+        elif self.mode == "downsample3d" and self.time_conv is not None and x.shape[2] >= 3:
+            x = self.time_conv(x)
         return x

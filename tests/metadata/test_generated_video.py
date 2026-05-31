@@ -1,4 +1,6 @@
 import json
+import shutil
+import subprocess
 
 import mlx.core as mx
 import numpy as np
@@ -23,6 +25,7 @@ def test_generated_video_saves_mp4_and_metadata(tmp_path):
         prompt="test video prompt",
         steps=2,
         guidance=5.0,
+        guidance_2=3.0,
         precision=mx.bfloat16,
         quantization=0,
         generation_time=1.23,
@@ -39,9 +42,14 @@ def test_generated_video_saves_mp4_and_metadata(tmp_path):
     assert metadata["frames"] == 3
     assert metadata["fps"] == 12
     assert metadata["duration_seconds"] == 0.25
+    assert metadata["guidance_2"] == 3.0
 
     first_frame = VideoUtil.extract_frame(output_path)
     assert first_frame.size == (32, 24)
+    first_frame_rgb = np.array(first_frame)
+    assert first_frame_rgb[..., 0].mean() > first_frame_rgb[..., 1].mean()
+    assert first_frame_rgb[..., 0].mean() > first_frame_rgb[..., 2].mean()
+    assert _video_codec_name(output_path) in (None, "h264")
 
 
 def test_generated_video_respects_no_replace(tmp_path):
@@ -88,3 +96,26 @@ def test_video_util_converts_decoded_latents_to_video(tmp_path):
     assert video.num_frames == 2
     assert video.first_frame().size == (16, 16)
     assert output_path.exists()
+
+
+def _video_codec_name(path) -> str | None:
+    if shutil.which("ffprobe") is None:
+        return None
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "default=nokey=1:noprint_wrappers=1",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() or None

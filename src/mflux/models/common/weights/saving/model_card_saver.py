@@ -230,9 +230,10 @@ class ModelCardSaver:
             )
 
         if bits == 8 and "wan" in terms:
+            wan_label = ModelCardSaver._wan_model_label(terms)
             return "\n".join(
                 [
-                    "This is an MLX q8 checkpoint for Wan2.2 TI2V. MLX-Gen uses 8-bit "
+                    f"This is an MLX q8 checkpoint for {wan_label}. MLX-Gen uses 8-bit "
                     "quantization for Wan modules where MLX supports quantization:",
                     "",
                     "- q8 for quantizable Wan transformer modules.",
@@ -249,9 +250,10 @@ class ModelCardSaver:
             )
 
         if bits == 4 and "wan" in terms:
+            wan_label = ModelCardSaver._wan_model_label(terms)
             return "\n".join(
                 [
-                    "This is an experimental MLX 4-bit checkpoint for Wan2.2 TI2V. Wan q4 quality is still "
+                    f"This is an experimental MLX 4-bit checkpoint for {wan_label}. Wan q4 quality is still "
                     "under validation in MLX-Gen; do not treat this checkpoint as equivalent to BF16/q8 unless "
                     "side-by-side video tests confirm acceptable motion and visual quality.",
                     "",
@@ -264,9 +266,10 @@ class ModelCardSaver:
             )
 
         if bits is None and "wan" in terms:
+            wan_label = ModelCardSaver._wan_model_label(terms)
             return (
-                "This checkpoint stores MLX-Gen Wan2.2 TI2V weights without an explicit quantization level. "
-                "Wan supports text-to-video and experimental first-frame image-to-video generation."
+                f"This checkpoint stores MLX-Gen {wan_label} weights without an explicit quantization level. "
+                "Wan supports text-to-video and selected image-to-video routes depending on the source model."
             )
 
         if bits is None and "ernie" in terms:
@@ -308,6 +311,20 @@ class ModelCardSaver:
     @staticmethod
     def _usage_lines(pipeline_tag: str, terms: str) -> list[str]:
         if "wan" in terms:
+            if "a14b" in terms:
+                return [
+                    "  --task text-to-video \\",
+                    '  --prompt "Your video prompt here" \\',
+                    "  --width 1280 \\",
+                    "  --height 720 \\",
+                    "  --frames 81 \\",
+                    "  --steps 40 \\",
+                    "  --guidance 4 \\",
+                    "  --guidance-2 3 \\",
+                    "  --fps 16 \\",
+                    "  --seed 42 \\",
+                    "  --output video.mp4",
+                ]
             return [
                 "  --task text-to-video \\",
                 '  --prompt "Your video prompt here" \\',
@@ -387,6 +404,8 @@ class ModelCardSaver:
             tags.extend(["ernie", "ernie-image", "ernie-image-turbo"])
         if "wan" in terms:
             tags.extend(["wan", "wan2.2", "video-generation", "text-to-video", "image-to-video"])
+            if "a14b" in terms:
+                tags.append("wan-a14b")
         if "fibo" in terms:
             tags.append("fibo")
         return ModelCardSaver._deduplicate(tags)
@@ -409,6 +428,14 @@ class ModelCardSaver:
         ]
         values.extend(getattr(model_config, "aliases", []) or [])
         return " ".join(str(value) for value in values if value).lower()
+
+    @staticmethod
+    def _wan_model_label(terms: str) -> str:
+        if "a14b" in terms:
+            return "Wan2.2 A14B"
+        if "ti2v" in terms or "5b" in terms:
+            return "Wan2.2 TI2V-5B"
+        return "Wan2.2"
 
     @staticmethod
     def _contributor_line(bits: int | None) -> str:

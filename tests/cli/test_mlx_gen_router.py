@@ -1,7 +1,9 @@
 import json
 import sys
+from pathlib import Path
 
 import pytest
+import toml
 
 from mflux.cli import mlx_gen
 from mflux.cli.mlx_gen import RouterInvocation
@@ -614,7 +616,7 @@ def test_wan_cli_generates_video_and_respects_replace(monkeypatch, tmp_path):
         [
             "mlxgen-generate-wan",
             "--model",
-            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
             "--prompt",
             "a city timelapse",
             "--width",
@@ -627,6 +629,8 @@ def test_wan_cli_generates_video_and_respects_replace(monkeypatch, tmp_path):
             "8",
             "--steps",
             "2",
+            "--guidance-2",
+            "1.5",
             "--seed",
             "123",
             "--image-path",
@@ -641,12 +645,14 @@ def test_wan_cli_generates_video_and_respects_replace(monkeypatch, tmp_path):
     wan_generate.main()
 
     assert observed["init"]["quantize"] is None
+    assert observed["init"]["model_config"] is wan_generate.ModelConfig.wan2_2_i2v_a14b()
     assert observed["generate"]["prompt"] == "a city timelapse"
     assert observed["generate"]["width"] == 128
     assert observed["generate"]["height"] == 128
     assert observed["generate"]["num_frames"] == 5
     assert observed["generate"]["fps"] == 8
     assert observed["generate"]["num_inference_steps"] == 2
+    assert observed["generate"]["guidance_2"] == 1.5
     assert observed["generate"]["seed"] == 123
     assert observed["generate"]["image_path"] == str(image_path)
     assert callable(observed["generate"]["progress_callback"])
@@ -690,6 +696,171 @@ def test_wan_cli_can_disable_progress(monkeypatch):
     wan_generate.main()
 
     assert observed["generate"]["progress_callback"] is None
+
+
+def test_wan_cli_applies_a14b_defaults(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a cinematic wave",
+            "--seed",
+            "123",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["init"]["model_config"] is wan_generate.ModelConfig.wan2_2_t2v_a14b()
+    assert observed["init"]["model_path"] is None
+    assert observed["generate"]["width"] == 1280
+    assert observed["generate"]["height"] == 720
+    assert observed["generate"]["num_frames"] == 81
+    assert observed["generate"]["fps"] == 16
+    assert observed["generate"]["num_inference_steps"] == 40
+    assert observed["generate"]["guidance"] == 4.0
+    assert observed["generate"]["guidance_2"] == 3.0
+    assert "低质量" in observed["generate"]["negative_prompt"]
+
+
+def test_wan_cli_applies_ti2v_5b_defaults(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--seed",
+            "123",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["init"]["model_config"] is wan_generate.ModelConfig.wan2_2_ti2v_5b()
+    assert observed["generate"]["width"] == 1280
+    assert observed["generate"]["height"] == 704
+    assert observed["generate"]["num_frames"] == 121
+    assert observed["generate"]["fps"] == 24
+    assert observed["generate"]["num_inference_steps"] == 50
+    assert observed["generate"]["guidance"] == 5.0
+    assert observed["generate"]["guidance_2"] is None
+    assert "低质量" in observed["generate"]["negative_prompt"]
+
+
+def test_wan_cli_explicit_guidance_keeps_guidance_2_diffusers_default(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a cinematic wave",
+            "--guidance",
+            "4.5",
+            "--seed",
+            "123",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["generate"]["guidance"] == 4.5
+    assert observed["generate"]["guidance_2"] is None
+
+
+def test_wan_cli_rejects_unrecognized_remote_wan_repo():
+    from mflux.models.wan.cli import wan_generate
+
+    with pytest.raises(wan_generate.ModelConfigError, match="Cannot infer a supported Wan model config"):
+        wan_generate._resolve_model("Wan-AI/Wan2.2-Unknown-14B-Diffusers")
+
+
+def test_wan_cli_rejects_generic_local_wan_inference():
+    from mflux.models.wan.cli import wan_generate
+
+    with pytest.raises(wan_generate.ModelConfigError, match="Cannot infer a supported Wan model config"):
+        wan_generate._resolve_model("models/my-wan-video-folder")
+
+
+def test_wan_cli_accepts_specific_local_wan_alias():
+    from mflux.models.wan.cli import wan_generate
+
+    model_config, model_path = wan_generate._resolve_model("models/wan2.2-ti2v-5b-8bit")
+
+    assert model_config.base_model == "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+    assert model_path == "models/wan2.2-ti2v-5b-8bit"
+
+
+def test_wan_router_target_has_console_scripts():
+    pyproject = toml.load(Path(__file__).parents[2] / "pyproject.toml")
+    scripts = pyproject["project"]["scripts"]
+
+    assert scripts["mlxgen-generate-wan"] == "mflux.models.wan.cli.wan_generate:main"
+    assert scripts["mflux-generate-wan"] == "mflux.models.wan.cli.wan_generate:main"
 
 
 def test_main_without_args_prints_top_level_help(monkeypatch, capsys):
@@ -786,6 +957,23 @@ def test_download_command_uses_ernie_source_patterns(monkeypatch):
         "vae/*.safetensors",
     }.issubset(set(calls[0][1]))
     assert "pe/*.safetensors" not in calls[0][1]
+
+
+def test_download_command_uses_a14b_wan_patterns(monkeypatch):
+    calls = []
+
+    def fake_snapshot_download(*, repo_id, allow_patterns):
+        calls.append((repo_id, allow_patterns, downloads_enabled()))
+        return "/tmp/hf-cache/wan-a14b"
+
+    monkeypatch.setattr(mlx_gen, "snapshot_download", fake_snapshot_download)
+
+    mlx_gen._download_model(["--model", "Wan-AI/Wan2.2-T2V-A14B-Diffusers"])
+
+    assert calls[0][0] == "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
+    assert calls[0][2] is True
+    assert "transformer_2/*.safetensors" in calls[0][1]
+    assert "transformer_2/*.json" in calls[0][1]
 
 
 def test_prepare_command_routes_to_save_with_downloads_enabled(monkeypatch):

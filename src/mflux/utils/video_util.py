@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
-import cv2
 import mlx.core as mx
 import numpy as np
 import PIL.Image
@@ -24,6 +24,7 @@ class VideoUtil:
         guidance: float | None,
         quantization: int,
         generation_time: float,
+        guidance_2: float | None = None,
         task: str = "text-to-video",
         image_path: str | Path | None = None,
         negative_prompt: str | None = None,
@@ -40,6 +41,7 @@ class VideoUtil:
             prompt=prompt,
             steps=steps,
             guidance=guidance,
+            guidance_2=guidance_2,
             precision=ModelConfig.precision,
             quantization=quantization,
             generation_time=generation_time,
@@ -67,46 +69,32 @@ class VideoUtil:
         file_path = ImageUtil.resolve_output_path(path=path, overwrite=overwrite)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         width, height = frames[0].size
-        writer = cv2.VideoWriter(
-            str(file_path),
-            cv2.VideoWriter_fourcc(*"mp4v"),
-            float(fps),
-            (width, height),
+        VideoUtil._save_video_with_pyav(frames=frames, file_path=file_path, fps=fps, width=width, height=height)
+
+        VideoUtil._save_metadata(
+            file_path=file_path,
+            metadata=metadata,
+            export_json_metadata=export_json_metadata,
         )
-        if not writer.isOpened():
-            raise RuntimeError(f"Could not open video writer for {file_path}")
-
-        try:
-            for frame in frames:
-                rgb = frame.convert("RGB")
-                if rgb.size != (width, height):
-                    rgb = rgb.resize((width, height), PIL.Image.Resampling.LANCZOS)
-                writer.write(cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR))
-        finally:
-            writer.release()
-
-        if export_json_metadata and metadata is not None:
-            from mflux.utils.generated_video import GeneratedVideo
-
-            GeneratedVideo.save_metadata(file_path, metadata)
 
         log.info(f"Video saved successfully at: {file_path}")
         return file_path
 
     @staticmethod
     def extract_frame(path: str | Path, index: int = 0) -> PIL.Image.Image:
-        capture = cv2.VideoCapture(str(path))
-        try:
-            if not capture.isOpened():
-                raise RuntimeError(f"Could not open video for reading: {path}")
-            capture.set(cv2.CAP_PROP_POS_FRAMES, index)
-            ok, frame = capture.read()
-            if not ok:
-                raise RuntimeError(f"Could not read frame {index} from {path}")
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            return PIL.Image.fromarray(rgb)
-        finally:
-            capture.release()
+        if index < 0:
+            raise ValueError("Frame index must be greater than or equal to zero.")
+
+        import av
+
+        with av.open(str(path)) as container:
+            if len(container.streams.video) == 0:
+                raise RuntimeError(f"Could not find a video stream in {path}")
+            video_stream = container.streams.video[0]
+            for frame_number, frame in enumerate(container.decode(video_stream)):
+                if frame_number == index:
+                    return PIL.Image.fromarray(frame.to_ndarray(format="rgb24"))
+        raise RuntimeError(f"Could not read frame {index} from {path}")
 
     @staticmethod
     def _latents_to_frames(decoded_latents: mx.array) -> list[PIL.Image.Image]:
@@ -119,3 +107,53 @@ class VideoUtil:
         frames_np = np.array(video)
         frames_np = (np.clip(frames_np, 0, 1) * 255).round().astype("uint8")
         return [PIL.Image.fromarray(frame) for frame in frames_np]
+
+    @staticmethod
+    def _save_video_with_pyav(
+        frames: list[PIL.Image.Image],
+        file_path: Path,
+        fps: int,
+        width: int,
+        height: int,
+    ) -> None:
+        import av
+
+        with NamedTemporaryFile(
+            suffix=file_path.suffix or ".mp4",
+            prefix=f".{file_path.stem}-",
+            dir=file_path.parent,
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+
+        should_replace = False
+        try:
+            container = av.open(str(temp_path), mode="w", options={"movflags": "+faststart"})
+            stream = container.add_stream("libx264", rate=fps)
+            with container:
+                stream.width = width
+                stream.height = height
+                stream.pix_fmt = "yuv420p"
+                stream.options = {"crf": "18", "preset": "medium"}
+                for frame in frames:
+                    rgb = frame.convert("RGB")
+                    if rgb.size != (width, height):
+                        rgb = rgb.resize((width, height), PIL.Image.Resampling.LANCZOS)
+                    video_frame = av.VideoFrame.from_ndarray(np.array(rgb), format="rgb24")
+                    for packet in stream.encode(video_frame):
+                        container.mux(packet)
+                for packet in stream.encode():
+                    container.mux(packet)
+            should_replace = True
+        finally:
+            if should_replace:
+                temp_path.replace(file_path)
+            elif temp_path.exists():
+                temp_path.unlink()
+
+    @staticmethod
+    def _save_metadata(file_path: Path, metadata: dict | None, export_json_metadata: bool) -> None:
+        if export_json_metadata and metadata is not None:
+            from mflux.utils.generated_video import GeneratedVideo
+
+            GeneratedVideo.save_metadata(file_path, metadata)

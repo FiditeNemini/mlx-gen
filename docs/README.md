@@ -22,5 +22,6 @@ The top-level [README](../README.md) remains the starting point for installation
 - [Acknowledgements](../ACKNOWLEDGEMENTS.md): upstream mflux credit, post-fork maintainership, and model/community acknowledgements.
 - [Changelog](../CHANGELOG.md): release history and migration notes.
 - [Contributing](../CONTRIBUTING.md): local development, checks, and pull-request expectations.
+- [Architecture Decision Records](adr/README.md): durable validation and architecture policies.
 - [Security](../SECURITY.md): vulnerability reporting and model/token safety guidance.
 - [Code of Conduct](../CODE_OF_CONDUCT.md): participation expectations.

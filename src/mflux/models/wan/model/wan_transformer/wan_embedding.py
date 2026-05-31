@@ -89,6 +89,7 @@ class WanTimeTextImageEmbedding(nn.Module):
         timestep = self.timesteps_proj(timestep)
         if timestep_seq_len is not None:
             timestep = timestep.reshape(-1, timestep_seq_len, timestep.shape[-1])
+        timestep = timestep.astype(self.time_embedder.linear_1.weight.dtype)
         temb = self.time_embedder(timestep).astype(encoder_hidden_states.dtype)
         timestep_proj = self.time_proj(nn.silu(temb))
         encoder_hidden_states = self.text_embedder(encoder_hidden_states)

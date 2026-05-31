@@ -30,6 +30,7 @@ class GeneratedVideo:
         task: str = "text-to-video",
         image_path: str | Path | None = None,
         negative_prompt: str | None = None,
+        guidance_2: float | None = None,
     ):
         if not frames:
             raise ValueError("GeneratedVideo requires at least one frame.")
@@ -40,6 +41,7 @@ class GeneratedVideo:
         self.prompt = prompt
         self.steps = steps
         self.guidance = guidance
+        self.guidance_2 = guidance_2
         self.precision = precision
         self.quantization = quantization
         self.generation_time = generation_time
@@ -86,6 +88,7 @@ class GeneratedVideo:
             "seed": self.seed,
             "steps": self.steps,
             "guidance": self.guidance if self.model_config.supports_guidance else None,
+            "guidance_2": self.guidance_2 if self.model_config.supports_guidance else None,
             "height": self.height,
             "width": self.width,
             "frames": self.num_frames,

@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding independent release cadence, Qwen Image/Edit support, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, initial Wan2.2 text-to-video and first-frame image-to-video support, FLUX.2 fixes, quantized model packaging, local model loading behavior, generated Hugging Face model cards, and AbstractVision integration needs.
+MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding independent release cadence, Qwen Image/Edit support, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, Wan2.2 TI2V-5B and A14B video support, FLUX.2 fixes, quantized model packaging, local model loading behavior, generated Hugging Face model cards, and AbstractVision integration needs.
 
 Some internals currently remain under `mflux.*`; new application code should use the `mlxgen` command and import path.
 
@@ -16,6 +16,7 @@ Some internals currently remain under `mflux.*`; new application code should use
 - `docs/quantization.md`: MLX-Gen low-bit compatibility by model family, validation panels, Bonsai ternary 2-bit support, comparison with current Qwen/ERNIE mixed q4/q8 policies, and binary 1-bit runtime limits.
 - `docs/huggingface-publishing.md`: generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - `docs/python-integration.md`: in-process use, AbstractVision integration, Wan progress callbacks, and threading guidance.
+- `docs/adr/README.md`: accepted architecture decisions, including model-backed smoke validation requirements for new model routes.
 - `docs/faq.md`: common questions about `prepare`, downloads, package naming, and compatibility.
 - `docs/troubleshooting.md`: missing files, local path classification, output replacement, `generate --path`, ERNIE Prompt Enhancer files, ERNIE small-resolution and unsupported edit-input behavior, Wan video quality-setting limits, LoRA, and `hf_transfer`.
 - `docs/release.md`: GitHub Release and PyPI trusted publishing workflow.
@@ -37,7 +38,11 @@ See `ACKNOWLEDGEMENTS.md` for upstream mflux credit, post-fork maintainership, a
 
 ## Architecture
 
-MLX-Gen keeps the MLX-native model runtime inherited from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The first supported video paths are Wan2.2 TI2V text-to-video and experimental first-frame image-to-video.
+MLX-Gen keeps the MLX-native model runtime inherited from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The supported video paths include Wan2.2 TI2V-5B text-to-video, experimental TI2V-5B first-frame image-to-video, Wan2.2 A14B text-to-video with two-transformer boundary routing, and Wan2.2 A14B image-to-video.
+
+ADR 0001 requires model-backed runtime smoke proof before new model routes are described as
+working or release-ready. Shape-only tests, mocked CLI tests, and successful weight-load tests are
+not enough for a support claim.
 
 The package shape is:
 
@@ -188,7 +193,7 @@ For local ERNIE folders whose names cannot be classified, pass `--family ernie-i
 
 `mlxgen generate` does not accept `--path` to create model folders. Use `mlxgen prepare --model ... --path ... --quantize ...` for model preparation and use `--output` to choose the generated image or video path.
 
-Wan2.2 TI2V routes through the same command surface for text-to-video. Use the upstream TI2V-5B scale for visual quality validation:
+Wan2.2 TI2V-5B routes through the same command surface for text-to-video. Use the upstream TI2V-5B scale for visual quality validation:
 
 ```sh
 mlxgen generate \
@@ -204,7 +209,7 @@ mlxgen generate \
   --output video.mp4
 ```
 
-Wan image-to-video uses the Diffusers first-frame latent-conditioning path rather than ordinary image-to-image latent initialization. It VAE-encodes one input frame, masks first-frame timesteps, and reinserts the condition before decode. Multi-image/video interpolation is not enabled.
+Wan image-to-video uses model-specific Diffusers conditioning paths rather than ordinary image-to-image latent initialization. TI2V-5B VAE-encodes one input frame, masks first-frame timesteps, and reinserts the condition before decode. A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and concatenated image-condition latents. Multi-image/video interpolation is not enabled.
 
 Example image-to-video command:
 
@@ -223,7 +228,43 @@ mlxgen generate \
   --output video.mp4
 ```
 
-Wan does not have a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, 73 frames is about 3.04 seconds, and 49 frames is about 2.04 seconds. Frame counts are normalized to `4n + 1`. Width and height must be at least 32 pixels and are normalized to multiples of 32, so 1280x720 becomes 1280x704. Use 1280x704 for landscape or 704x1280 for portrait quality validation. Spatial-scale T2V and I2V sanity panels at 1280x704, 17 frames, and 20 steps live in `docs/assets/generation/`; they are coherent non-green outputs, not full quality benchmarks.
+Example A14B image-to-video command:
+
+```sh
+mlxgen generate \
+  --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
+  --task image-to-video \
+  --image input.png \
+  --prompt "A cinematic flyby around the subject in the input image" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 3.5 \
+  --fps 16 \
+  --output video.mp4
+```
+
+Wan2.2 T2V-A14B uses two transformer folders with Diffusers-compatible high-noise/low-noise boundary routing. `--guidance-2` is an optional low-noise-stage override. With no guidance flags, MLX-Gen uses the model's two-stage defaults (`4` high-noise and `3` low-noise for T2V-A14B). If `--guidance` is set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`:
+
+```sh
+mlxgen generate \
+  --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
+  --task text-to-video \
+  --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 4 \
+  --guidance-2 3 \
+  --fps 16 \
+  --output video.mp4
+```
+
+The separate A14B I2V route targets `Wan-AI/Wan2.2-I2V-A14B-Diffusers` and uses concatenated image-condition latents. It requires the complete local source snapshot before generation.
+
+Wan does not have a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, 73 frames is about 3.04 seconds, and 49 frames is about 2.04 seconds. Frame counts are normalized to `4n + 1`. Width and height are normalized to the selected Wan model's VAE/patch multiple: TI2V-5B uses multiples of 32, while A14B uses multiples of 16. Spatial-scale T2V and I2V sanity panels at 1280x704, 17 frames, and 20 steps live in `docs/assets/generation/`; they are coherent non-green outputs, not full quality benchmarks.
 
 Generation commands replace the requested `--output` path by default. Use `--replace false` or `--no-replace` to preserve an existing file and save to the next suffixed path.
 
@@ -299,7 +340,7 @@ Current responsibilities:
 - MLX-Gen owns MLX model loading, model-family behavior, local quantized formats, and runtime compatibility fixes.
 - MLX-Gen fails early when required local artifacts are missing so AbstractVision can surface an actionable remediation message.
 
-Existing model callbacks remain available through the mflux runtime internals. Wan video generation also exposes a direct `progress_callback` hook that receives `WanProgressEvent` objects with `phase`, `frame`, `total_frames`, `step`, `total_steps`, and `progress`. Wan progress is reported in output-frame units while carrying denoising step metadata for application-level monitoring. Other backends still use their existing model-specific callback paths.
+Existing model callbacks remain available through the mflux runtime internals. Wan video generation also exposes a direct `progress_callback` hook that receives `WanProgressEvent` objects with `phase`, `frame`, `total_frames`, `step`, `total_steps`, and `progress`. Wan progress is reported in output-frame units while carrying denoising step metadata for application-level monitoring. For Wan2.2 I2V-A14B, use `ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. Other backends still use their existing model-specific callback paths.
 
 ---
 

@@ -111,7 +111,8 @@ mlxgen generate \
   --output edited.png
 ```
 
-For text-to-video, use Wan2.2 TI2V:
+For text-to-video, use Wan2.2. The smaller TI2V-5B path supports text-to-video and experimental
+first-frame image-to-video:
 
 ```sh
 mlxgen download --model Wan-AI/Wan2.2-TI2V-5B-Diffusers
@@ -129,7 +130,30 @@ mlxgen generate \
   --output video.mp4
 ```
 
-Wan image-to-video is also available as an experimental first-frame conditioning path:
+Wan2.2 T2V-A14B is also wired as a Diffusers-style two-transformer A14B path. `--guidance-2` is an
+optional Diffusers-compatible low-noise-stage override. When both guidance flags are omitted,
+MLX-Gen uses the model defaults (`4` high-noise, `3` low-noise for T2V-A14B). When `--guidance` is
+set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`:
+
+```sh
+mlxgen download --model Wan-AI/Wan2.2-T2V-A14B-Diffusers
+
+mlxgen generate \
+  --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
+  --task text-to-video \
+  --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 4 \
+  --guidance-2 3 \
+  --fps 16 \
+  --output video.mp4
+```
+
+Wan image-to-video is available through two paths. TI2V-5B uses an experimental first-frame
+conditioning route:
 
 ```sh
 mlxgen generate \
@@ -146,7 +170,29 @@ mlxgen generate \
   --output video.mp4
 ```
 
-The I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated. Wan does not have a separate duration flag: duration is `frames / fps`. Frame counts are normalized to `4n + 1`, and width/height are normalized to multiples of 32.
+A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and the Diffusers
+concatenated image-condition latent path:
+
+```sh
+mlxgen download --model Wan-AI/Wan2.2-I2V-A14B-Diffusers
+
+mlxgen generate \
+  --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
+  --task image-to-video \
+  --image input.png \
+  --prompt "A cinematic flyby around the subject in the input image" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 3.5 \
+  --fps 16 \
+  --output video.mp4
+```
+
+The TI2V-5B I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated. The A14B I2V route requires the complete local I2V source snapshot before generation.
+
+Wan does not have a separate duration flag: duration is `frames / fps`. Frame counts are normalized to `4n + 1`. Width/height are normalized to the selected Wan model's VAE/patch multiple: TI2V-5B uses multiples of 32, while A14B uses multiples of 16.
 
 See [API And CLI](docs/api.md) for spatial-scale Wan T2V/I2V sanity panels generated at 1280x704.
 
@@ -278,7 +324,7 @@ MLX-Gen supports the following model families. They have different strengths and
 | Model | Release date | Size | Type | Training | Description |
 | --- | --- | --- | --- | --- | --- |
 |[Z-Image](src/mflux/models/z_image/README.md) | Nov 2025 | 6B | Distilled & Base | Yes | Fast, small, very good quality and realism. |
-| Wan2.2 TI2V | Jul 2025 | 5B | Base | No | Initial text-to-video and experimental first-frame image-to-video support. |
+| Wan2.2 TI2V / A14B | Jul 2025 | 5B / A14B MoE | Base | No | Wan video support. TI2V-5B supports text-to-video and experimental first-frame image-to-video; T2V-A14B adds two-transformer boundary routing with optional low-noise `--guidance-2`; I2V-A14B is wired for complete local source snapshots. |
 |[FLUX.2](src/mflux/models/flux2/README.md) | Jan 2026 | 4B & 9B | Distilled & Base | Yes | Fastest + smallest with very good quality and edit capabilities. |
 | Bonsai Image | — | 4B | Distilled low-bit FLUX.2-derived | No | Prism low-bit text-to-image checkpoints. Ternary 2-bit runs directly in MLX-Gen; binary 1-bit is detected but blocked until stock MLX has 1-bit packed affine runtime support. |
 |[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |

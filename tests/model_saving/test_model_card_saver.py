@@ -32,8 +32,8 @@ class ErnieImageTurbo:
 class Wan2_2_TI2V:
     model_config = SimpleNamespace(
         model_name="Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-        base_model="wan-video",
-        aliases=["wan2.2-ti2v-5b", "wan-video"],
+        base_model=None,
+        aliases=["wan2.2-ti2v-5b"],
     )
 
 

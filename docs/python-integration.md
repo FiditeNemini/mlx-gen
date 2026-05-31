@@ -60,6 +60,8 @@ video = model.generate_video(
 video.save("video.mp4")
 ```
 
+For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`.
+
 Wan progress events use output-frame units so callers can display `frame / total_frames`, while also receiving the active denoising `step / total_steps`. Other backends still use their existing model-specific callback paths.
 
 ## Threading

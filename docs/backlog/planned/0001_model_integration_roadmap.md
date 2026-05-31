@@ -113,7 +113,7 @@ than a renamed fork.
 | P2 | I2V, T2V, V2V, A/V | `Lightricks/LTX-2.3-fp8` | Very high online usage, ~55 GiB fp8, image-to-video/text-to-video/video-to-video/audio-video tags, custom community license. Card says full and distilled checkpoints exist and training is recommended on BF16. | Very high | Important to research, but licensing and model breadth make it riskier than Wan2.2 TI2V 5B. Needs a video/audio-capable backend decision before implementation. |
 | P3 | T2V | `zai-org/CogVideoX-2b` | Apache 2.0, cached locally, ~13 GiB, older but small. | High | Good proof-of-concept video port if Wan/LTX are too large. Lower strategic priority because current ecosystem momentum is stronger around Wan/LTX. |
 | P3 | T2I | `zai-org/GLM-Image` | MIT, cached locally, ~33 GiB, custom GLM image/VLM architecture. | Very high | Useful text-rendering/glyph candidate, but lower priority than ERNIE because downloads are lower and the custom VLM/VQ stack is significant. |
-| P3 | T2V, I2V | `Wan-AI/Wan2.2-T2V-A14B-Diffusers`, `Wan-AI/Wan2.2-I2V-A14B-Diffusers` | Apache 2.0 and strong current relevance, but each is ~118 GiB. | Very high | Defer until the 5B TI2V path proves MLX-Gen video abstractions and memory strategy. |
+| P0 | T2V, I2V | `Wan-AI/Wan2.2-T2V-A14B-Diffusers`, `Wan-AI/Wan2.2-I2V-A14B-Diffusers` | Apache 2.0 and strong current relevance. Initial T2V-A14B and I2V-A14B support exists with source-checkpoint MP4 smoke validation. Each source family is very large and still needs careful quality, quantization, and performance validation. | Very high | Focused item 0012 completed the initial wiring. Keep quantization, full-quality generation, and motion/prompt validation in the Wan follow-up items. |
 | P4 | T2I/I2I or wrappers | FLUX.2-dev, FLUX.1-Kontext, Stable Diffusion 3.5, HunyuanImage 3.0, Sulphur-2, external MLX SD3 | Large or license-constrained, overlapping, or not native to current MLX-Gen abstractions. | High to very high | Track but do not prioritize. Use AbstractVision provider adapters if needed rather than forcing all ecosystems into MLX-Gen. |
 
 Related focused items:
@@ -212,8 +212,8 @@ Related focused items:
 - `MFLUX_RUN_LOCAL_WAN_PARITY=1 uv run pytest tests/wan/test_wan_local_parity.py -q`
   validates the full Wan transformer, VAE encoder/decoder, prompt embeddings, scheduler replay,
   and a tiny 3-step CFG latent denoise loop against Diffusers-generated fixtures.
-- `uv run pytest tests/wan/test_wan_quality_settings.py -q` verifies that smoke-sized Wan runs warn
-  users instead of being presented as quality-validation settings.
+- Wan documentation distinguishes quick command checks from quality-validation settings without
+  emitting runtime warnings for valid low-cost requests.
 - New model cards continue to include source model, mflux acknowledgement, MLX-Gen version,
   quantization policy, AbstractFramework namespace examples, and contributor attribution.
 
@@ -234,7 +234,8 @@ Related focused items:
 - [x] Add opt-in Wan full-model parity fixtures for transformer and VAE encoder checks.
 - [x] Add Wan prompt-embedding parity and VAE decode parity fixtures.
 - [x] Add short deterministic Wan denoise-loop parity against Diffusers.
-- [x] Remove misleading tiny Wan contact-sheet examples and warn for smoke-sized runs.
+- [x] Remove misleading tiny Wan contact-sheet examples and document low-cost checks separately
+      from quality-validation settings.
 - [ ] Improve Wan video quality/performance validation beyond tiny smoke runs.
 - [ ] Add one full short Wan Diffusers-vs-MLX generation comparison for the same prompt, seed,
       dimensions, frames, steps, and guidance.

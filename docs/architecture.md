@@ -1,6 +1,6 @@
 # Architecture
 
-MLX-Gen is an independent package forked from mflux. It keeps the MLX-native model runtime from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The first supported video paths are Wan2.2 TI2V text-to-video and experimental first-frame image-to-video.
+MLX-Gen is an independent package forked from mflux. It keeps the MLX-native model runtime from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The supported video paths include Wan2.2 TI2V-5B text-to-video, experimental TI2V-5B first-frame image-to-video, Wan2.2 A14B text-to-video, and Wan2.2 A14B image-to-video.
 
 ## Package Shape
 
@@ -30,7 +30,7 @@ Source model files usually come from Hugging Face. They can be used in two ways:
 
 Prepared folders use the MLX/mflux saved-weight layout. They may contain MLX quantization tensors and generated Hugging Face model cards. They are intended for MLX-Gen and compatible mflux code, not direct Diffusers or Transformers loading.
 
-Video support follows the same setup/runtime boundary. Wan2.2 TI2V loads local source files and writes MP4 output. Text-to-video starts from random video latents; image-to-video VAE-encodes the first frame, masks first-frame timesteps, keeps the condition active during denoising, and reinserts the condition before decode.
+Video support follows the same setup/runtime boundary. Wan2.2 loads local source files and writes MP4 output. Text-to-video starts from random video latents. TI2V-5B image-to-video VAE-encodes the first frame, masks first-frame timesteps, keeps the condition active during denoising, and reinserts the condition before decode. A14B uses Diffusers-compatible two-transformer boundary routing and, for the separate I2V model, concatenated image-condition latents.
 
 ## Runtime Failure Contract
 

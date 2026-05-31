@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 import pytest
@@ -131,6 +132,52 @@ class TestPathResolutionHuggingFace:
             result = PathResolution.resolve(path="org/model")
 
         # Should return the cached path without calling snapshot_download
+        assert result == repo_cache
+
+    @pytest.mark.fast
+    def test_huggingface_cached_sharded_snapshot_requires_all_index_shards(self, tmp_path):
+        repo_cache = tmp_path / "models--org--model" / "snapshots" / "abc123"
+        transformer = repo_cache / "transformer"
+        transformer.mkdir(parents=True)
+        (transformer / "model-00001-of-00002.safetensors").touch()
+        (transformer / "model.safetensors.index.json").write_text(
+            json.dumps(
+                {
+                    "weight_map": {
+                        "a": "model-00001-of-00002.safetensors",
+                        "b": "model-00002-of-00002.safetensors",
+                    }
+                }
+            )
+        )
+
+        with patch("mflux.models.common.resolution.path_resolution.HF_HUB_CACHE", str(tmp_path)):
+            with pytest.raises(FileNotFoundError) as exc_info:
+                PathResolution.resolve(path="org/model", patterns=["transformer/*.safetensors", "transformer/*.json"])
+
+        assert "will not download model files during generation" in str(exc_info.value)
+
+    @pytest.mark.fast
+    def test_huggingface_cached_sharded_snapshot_accepts_complete_index_shards(self, tmp_path):
+        repo_cache = tmp_path / "models--org--model" / "snapshots" / "abc123"
+        transformer = repo_cache / "transformer"
+        transformer.mkdir(parents=True)
+        (transformer / "model-00001-of-00002.safetensors").touch()
+        (transformer / "model-00002-of-00002.safetensors").touch()
+        (transformer / "model.safetensors.index.json").write_text(
+            json.dumps(
+                {
+                    "weight_map": {
+                        "a": "model-00001-of-00002.safetensors",
+                        "b": "model-00002-of-00002.safetensors",
+                    }
+                }
+            )
+        )
+
+        with patch("mflux.models.common.resolution.path_resolution.HF_HUB_CACHE", str(tmp_path)):
+            result = PathResolution.resolve(path="org/model", patterns=["transformer/*.safetensors", "transformer/*.json"])
+
         assert result == repo_cache
 
     @pytest.mark.fast

@@ -107,7 +107,9 @@ mlxgen generate \
 
 ## Generate A Video
 
-Wan2.2 TI2V support is available as an initial text-to-video backend. Download the source snapshot first, then run `mlxgen generate` with `--task text-to-video`:
+Wan2.2 support is available as an initial video backend. Download the source snapshot first, then run `mlxgen generate` with `--task text-to-video`.
+
+Use TI2V-5B when you want the smaller text-to-video or experimental first-frame image-to-video path:
 
 ```sh
 mlxgen download --model Wan-AI/Wan2.2-TI2V-5B-Diffusers
@@ -126,7 +128,33 @@ mlxgen generate \
   --output video.mp4
 ```
 
-For image-to-video, pass one input image and switch the task:
+Use T2V-A14B when you want the larger Diffusers-style two-transformer A14B text-to-video path:
+
+```sh
+mlxgen download --model Wan-AI/Wan2.2-T2V-A14B-Diffusers
+
+mlxgen generate \
+  --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
+  --task text-to-video \
+  --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 4 \
+  --guidance-2 3 \
+  --fps 16 \
+  --seed 321 \
+  --output video.mp4
+```
+
+`--guidance-2` is optional and only applies to Wan A14B's low-noise `transformer_2` stage. When it
+and `--guidance` are both omitted, MLX-Gen uses the model's two-stage defaults. For T2V-A14B that
+means `--guidance 4` for the high-noise stage and `--guidance-2 3` for the low-noise stage. If you
+set `--guidance` and omit `--guidance-2`, the low-noise stage follows your `--guidance` value.
+
+For image-to-video, pass one input image and switch the task. TI2V-5B uses an experimental
+first-frame conditioning route:
 
 ```sh
 mlxgen generate \
@@ -143,9 +171,29 @@ mlxgen generate \
   --output video.mp4
 ```
 
-Wan image-to-video uses the Diffusers first-frame latent-conditioning path. Treat current Wan video support as experimental: the pipeline can produce MP4 output, but quality, speed, and practical defaults still need broader validation.
+A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and follows Diffusers'
+concatenated image-condition latent path:
 
-Wan does not have a separate duration option. Control duration with `--frames` and `--fps`: duration is `frames / fps`, so `--frames 121 --fps 24` is about 5.04 seconds. Wan frame counts must be `4n + 1`; MLX-Gen adjusts other values to that shape. Width and height must be at least 32 pixels and are adjusted down to multiples of 32, so `1280x720` becomes `1280x704`. Use `1280x704` for landscape or `704x1280` for portrait quality validation.
+```sh
+mlxgen download --model Wan-AI/Wan2.2-I2V-A14B-Diffusers
+
+mlxgen generate \
+  --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
+  --task image-to-video \
+  --image input.png \
+  --prompt "A cinematic flyby around the subject in the input image" \
+  --width 1280 \
+  --height 720 \
+  --frames 81 \
+  --steps 40 \
+  --guidance 3.5 \
+  --fps 16 \
+  --output video.mp4
+```
+
+TI2V-5B image-to-video uses the Diffusers first-frame latent-conditioning path. The separate A14B I2V route requires the complete I2V source snapshot before generation. Treat current Wan video support as experimental: the pipeline can produce MP4 output, but quality, speed, and practical defaults still need broader validation.
+
+Wan does not have a separate duration option. Control duration with `--frames` and `--fps`: duration is `frames / fps`, so `--frames 121 --fps 24` is about 5.04 seconds and `--frames 81 --fps 16` is about 5.06 seconds. Wan frame counts must be `4n + 1`; MLX-Gen adjusts other values to that shape. Width and height are adjusted down to the selected Wan model's VAE/patch multiple. TI2V-5B uses multiples of 32, so `1280x720` becomes `1280x704`; A14B uses multiples of 16, so `1280x720` remains valid.
 
 Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 

@@ -14,10 +14,12 @@ class Wan2_2_RMSNorm(nn.Module):
             self.weight = mx.ones((dim, 1, 1, 1))
 
     def __call__(self, x: mx.array) -> mx.array:
-        sum_sq = mx.sum(x * x, axis=1, keepdims=True)
+        input_dtype = x.dtype
+        x_float = x.astype(mx.float32)
+        sum_sq = mx.sum(x_float * x_float, axis=1, keepdims=True)
         l2_norm = mx.sqrt(sum_sq)
         denom = mx.maximum(l2_norm, mx.array(self.eps, dtype=l2_norm.dtype))
-        x_normalized = x / denom
+        x_normalized = x_float / denom
         if x.ndim == 5 and not self.images:
             weight = self.weight.reshape(1, -1, 1, 1, 1)
         elif x.ndim == 4 and self.images:
@@ -29,4 +31,4 @@ class Wan2_2_RMSNorm(nn.Module):
                 weight = self.weight.reshape(1, -1, 1, 1)
             else:
                 weight = self.weight
-        return x_normalized * self.scale * weight
+        return (x_normalized * self.scale * weight.astype(mx.float32)).astype(input_dtype)

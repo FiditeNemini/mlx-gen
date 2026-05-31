@@ -58,7 +58,7 @@ class ConfigResolution:
         if check == "can_infer_substring":
             model_name_lower = ctx["model_name"].lower()
             for base in ctx["base_models"]:
-                for alias in base.aliases:
+                for alias in base.inference_aliases:
                     if alias and alias.lower() in model_name_lower:
                         return True
             return False
@@ -96,7 +96,10 @@ class ConfigResolution:
         if action == ConfigAction.INFER_SUBSTRING:
             model_name_lower = model_name.lower()
             matching_bases = [
-                (b, alias) for b in base_models for alias in b.aliases if alias and alias.lower() in model_name_lower
+                (b, alias)
+                for b in base_models
+                for alias in b.inference_aliases
+                if alias and alias.lower() in model_name_lower
             ]
             if not matching_bases:
                 raise ModelConfigError(f"Cannot infer base_model from {model_name}")
@@ -126,6 +129,7 @@ class ConfigResolution:
             priority=base.priority,
             transformer_overrides=dict(base.transformer_overrides),
             text_encoder_overrides=dict(base.text_encoder_overrides),
+            inference_aliases=list(base.inference_aliases),
             sigma_base_shift=base.sigma_base_shift,
             sigma_max_shift=base.sigma_max_shift,
             sigma_base_seq_len=base.sigma_base_seq_len,

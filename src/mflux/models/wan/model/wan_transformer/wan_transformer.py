@@ -68,6 +68,11 @@ class WanTransformer(nn.Module):
         encoder_hidden_states: mx.array,
     ) -> mx.array:
         batch_size, _, num_frames, height, width = hidden_states.shape
+        if hidden_states.shape[1] != self.in_channels:
+            raise ValueError(
+                "Wan transformer input channel mismatch: "
+                f"got {hidden_states.shape[1]} channels, expected {self.in_channels}."
+            )
         p_t, p_h, p_w = self.patch_size
         post_patch_num_frames = num_frames // p_t
         post_patch_height = height // p_h
