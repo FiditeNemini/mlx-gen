@@ -107,9 +107,116 @@ mlxgen generate \
   --output edited.png
 ```
 
-Multi-image edit is not supported for ERNIE. `--image-strength` follows the MLX-Gen image-influence convention: higher values preserve more of the init image, while lower positive values allow more transformation.
+Multi-image edit is not supported for ERNIE. ERNIE's single-image path is latent image-to-image, so
+`--image-strength` follows the MLX-Gen image-influence convention: higher values preserve more of
+the init image, while lower positive values allow more transformation.
 
 Prepared ERNIE q8/q4 folders do not bundle Prompt Enhancer files; use the full source snapshot path or the Hugging Face repo after `mlxgen download --all-files` when you need `--use-prompt-enhancer`.
+
+## How Do I Choose Between Latent I2I And Image Edit?
+
+MLX-Gen keeps one public `image-to-image` task and exposes different internal modes through model
+capabilities. Use `mlxgen capabilities --model <model>` to inspect the selected model before a long
+run.
+
+Use latent img2img when you want a whole-image variation or broad restyle from one source image:
+make the lighting more cinematic, change the mood, loosely restyle the whole scene, or preserve the
+source while allowing the model to reinterpret details. Select it with `--image-strength` or
+`--i2i-mode latent` on a model that supports `latent-img2img`:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --image input.png \
+  --i2i-mode latent \
+  --image-strength 0.35 \
+  --prompt "Make the scene a moody graphite and charcoal illustration" \
+  --output latent-restyle.png
+```
+
+Use edit/reference I2I when the prompt is an instruction: remove an object, change a subject's
+color, turn a scene into a pencil sketch while preserving layout, reposition or reshape an object,
+or keep the composition stable. Select it with an edit-capable model and no `--image-strength`, or
+force it with `--i2i-mode edit`:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --image input.png \
+  --i2i-mode edit \
+  --prompt "Turn the scene into a clean pencil sketch while preserving the object layout" \
+  --output edit-sketch.png
+```
+
+Use multi-reference I2I when two or more input images provide different references, such as one
+image for content and another for style:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --image content.png \
+  --image style.png \
+  --prompt "Use the first image composition and the second image drawing style" \
+  --output multi-reference.png
+```
+
+`--image-strength` is not used by edit/reference or multi-reference modes. Those modes use source
+images as conditioning or references, not as a noised latent initialization. MLX-Gen rejects
+`--image-strength` for those modes before loading weights.
+
+## Why Does Image-To-Image Run Fewer Steps Than `--steps`?
+
+This is normal for latent image-to-image pipelines. They commonly start partway through the
+denoising schedule instead of running all requested steps from pure noise. In MLX-Gen,
+`--image-strength` is the latent img2img input-image influence value: higher values preserve more
+of the source image, inject less noise, and start denoising later in the schedule, so fewer denoise
+iterations are actually run. Edit/reference I2I modes do not use `--image-strength`; they use the
+input image as conditioning. Some other tools name or orient this control differently, so check the
+local convention when comparing settings.
+
+MLX-Gen's default `--image-strength` is `0.4`. With `--steps 50`, image-to-image starts at step 20
+and runs 30 denoise iterations:
+
+```text
+effective_denoise_steps = steps - floor(steps * image_strength)
+50 - floor(50 * 0.4) = 30
+```
+
+The CLI progress bar shows the effective denoise iterations, not the original requested step count.
+If you want a stronger transformation from the source image, lower `--image-strength`; if you want
+more source preservation, raise it. Use text-to-image without `--image` when you want all requested
+steps to run from pure noise.
+
+## Can MLX-Gen Outpaint Or Reframe An Image?
+
+Not yet as a first-class unified `mlxgen generate` workflow.
+
+The reliable operation is usually called masked outpainting or canvas expansion: create a larger
+canvas, paste the original image into the desired position, create a mask for the new empty area,
+and use a fill/inpaint model to synthesize only the new region. Generic image-to-image with a
+larger `--width` or `--height` is not the same thing because it resizes or recomposes the source
+instead of preserving original pixels in place.
+
+MLX-Gen has lower-level FLUX.1 Fill support inherited from mflux, but the unified outpaint/reframe
+command and Python API are still planned. Until that is implemented, do not rely on latent img2img
+or edit/reference I2I for precise canvas extension.
+
+## What Wan Video Resolutions Should I Use?
+
+Wan width and height are normalized to the selected model's VAE/patch multiple. The model will
+adjust unsupported dimensions down, which can also change the aspect ratio of an input image-to-video
+source if you did not compose the source for the adjusted canvas.
+
+| Model | Required multiple | Recommended/native size | Practical lower-cost sizes |
+| --- | ---: | --- | --- |
+| TI2V-5B T2V/I2V | 32 px | `1280x704` or `704x1280` | `832x480`, `480x832`, `448x256`, `256x448` |
+| T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
+| I2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
+
+For TI2V-5B, `1280x720` adjusts to `1280x704`, and `432x240` adjusts to `416x224`. For A14B,
+`1280x720`, `832x480`, `448x256`, and `432x240` are already valid multiples of 16. Lower-cost sizes
+are useful for routing checks and prompt iteration; use the recommended/native size, frame count,
+and step count when judging visual quality.
 
 ## How Should I Prompt Wan Image-To-Video?
 
@@ -183,4 +290,11 @@ MLX-Gen is currently built on the mflux codebase. Some internal modules and comp
 
 ## How Does This Relate To AbstractVision?
 
-MLX-Gen is intended to be the Apple Silicon / MLX backend dependency for AbstractVision. AbstractVision remains a cross-platform orchestration layer, while MLX-Gen owns MLX model loading, quantized local formats, and Apple Silicon runtime behavior.
+MLX-Gen is intended to be the Apple Silicon / MLX backend dependency for
+[AbstractVision](https://github.com/lpalbou/abstractvision), which sits inside the wider
+[AbstractFramework](https://github.com/lpalbou/abstractframework) ecosystem. AbstractVision remains
+a cross-platform orchestration layer, while MLX-Gen owns MLX model loading, quantized local formats,
+capability reporting, progress callbacks, and Apple Silicon runtime behavior.
+
+[AbstractFlow](https://github.com/lpalbou/abstractflow) can use those capabilities in visual
+workflows alongside other persistent agentic tasks.

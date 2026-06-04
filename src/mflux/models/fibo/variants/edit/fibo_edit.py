@@ -100,7 +100,7 @@ class FIBOEdit(nn.Module):
             dtype=encoder_hidden_states.dtype,
         )
 
-        ctx = self.callbacks.start(seed=seed, prompt=json_prompt, config=config)
+        ctx = self.callbacks.start(seed=seed, prompt=json_prompt, config=config, task="image-to-image")
         ctx.before_loop(latents)
 
         for t in config.time_steps:

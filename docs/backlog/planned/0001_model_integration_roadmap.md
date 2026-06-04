@@ -8,10 +8,12 @@
 
 ## ADR status
 
-- Governing ADRs: None
+- Governing ADRs: [ADR 0001](../../adr/0001_runtime_smoke_validation_for_model_routes.md),
+  [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md)
 - ADR impact: Needs new ADR if MLX-Gen adds a plugin/provider boundary for independent model
-  families or video backends. No ADR is required for narrow model wiring that follows existing
-  `ModelConfig`, initializer, weight-definition, and CLI-router patterns.
+  families or video backends. Narrow model wiring can continue to follow existing `ModelConfig`,
+  initializer, weight-definition, and CLI-router patterns, but new route-readiness claims must keep
+  ADR 0001 smoke evidence and ADR 0002 fail-closed resolution in view.
 
 ## Context
 
@@ -125,6 +127,7 @@ Related focused items:
 
 - [Bonsai ternary FLUX.2 support](../completed/0003_bonsai_ternary_flux2_support.md)
 - [Bonsai binary 1-bit runtime support](../proposed/0004_bonsai_binary_1bit_runtime_support.md)
+- [LoRA capability matrix and strict application](0007_lora_capability_matrix_and_strict_application.md)
 
 ## Requirements
 
@@ -245,8 +248,9 @@ Related focused items:
 - [ ] Improve Wan video quality/performance validation beyond tiny smoke runs.
 - [ ] Add one full short Wan Diffusers-vs-MLX generation comparison for the same prompt, seed,
       dimensions, frames, steps, and guidance.
-- [ ] Validate Wan q8/q4 preparation and decide whether a mixed quantization policy is needed.
-- [ ] Add Bonsai ternary 2-bit support through a FLUX.2-compatible packed-loader path.
+- [x] Validate Wan q8 preparation enough to establish the mixed q8/BF16 policy.
+- [ ] Decide and validate Wan q4 or mixed q4/q8 policy.
+- [x] Add Bonsai ternary 2-bit support through a FLUX.2-compatible packed-loader path.
 - [ ] Reassess Bonsai binary 1-bit only after runtime support is available or accepted by ADR.
 - [ ] Add stronger ERNIE Diffusers comparison tests and non-turbo scope.
 - [ ] Decide whether SeedVR2 should be unified under `mlxgen prepare` before larger video ports.

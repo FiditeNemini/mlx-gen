@@ -107,6 +107,25 @@ def test_routes_generate_subcommand_form():
     ]
 
 
+def test_capabilities_command_reports_model_modes(capsys):
+    mlx_gen._show_capabilities(["--model", "flux2-klein-4b"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["family"] == "flux2"
+    modes = {capability["mode"] for capability in payload["capabilities"]}
+    assert {"text-only", "latent-img2img", "edit-reference", "multi-reference"}.issubset(modes)
+
+
+def test_capabilities_command_accepts_base_model_for_local_paths(capsys):
+    mlx_gen._show_capabilities(
+        ["--model", "../models/local-flux2-folder", "--base-model", "flux2-klein-4b"]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["family"] == "flux2"
+    assert payload["model_name"] == "../models/local-flux2-folder"
+
+
 def test_generate_with_path_reports_prepare_command(capsys):
     with pytest.raises(SystemExit):
         mlx_gen._resolve_invocation(
@@ -129,7 +148,7 @@ def test_generate_with_path_reports_prepare_command(capsys):
     assert "--output" in error_output
 
 
-def test_routes_flux2_with_image_to_edit_generation():
+def test_routes_flux2_with_image_to_image_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
@@ -150,6 +169,58 @@ def test_routes_flux2_with_image_to_edit_generation():
         "input.png",
         "--prompt",
         "add sunglasses",
+    ]
+
+
+def test_routes_flux2_explicit_edit_with_image_to_edit_generation():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "lpalbou/flux2-klein-4b-4bit",
+            "--task",
+            "edit",
+            "--image",
+            "input.png",
+            "--prompt",
+            "add sunglasses",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert invocation.argv == [
+        "mflux-generate-flux2-edit",
+        "--model",
+        "lpalbou/flux2-klein-4b-4bit",
+        "--image-paths",
+        "input.png",
+        "--prompt",
+        "add sunglasses",
+    ]
+
+
+def test_routes_flux2_multiple_images_to_edit_generation():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "lpalbou/flux2-klein-4b-4bit",
+            "--images",
+            "input.png",
+            "style.png",
+            "--prompt",
+            "combine the source and style",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert invocation.argv == [
+        "mflux-generate-flux2-edit",
+        "--model",
+        "lpalbou/flux2-klein-4b-4bit",
+        "--image-paths",
+        "input.png",
+        "style.png",
+        "--prompt",
+        "combine the source and style",
     ]
 
 
@@ -179,6 +250,115 @@ def test_routes_flux2_with_image_strength_to_image_to_image_generation():
         "--prompt",
         "make it cinematic",
     ]
+
+
+def test_flux2_metadata_image_strength_routes_to_latent_i2i(tmp_path):
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "lpalbou/flux2-klein-4b-4bit",
+                "image_path": "input.png",
+                "image_strength": 0.4,
+                "prompt": "make it cinematic",
+            }
+        )
+    )
+
+    invocation = mlx_gen._resolve_invocation(["--config-from-metadata", str(metadata_path)])
+
+    assert invocation.target_name == "mflux-generate-flux2"
+    assert invocation.argv == [
+        "mflux-generate-flux2",
+        "--model",
+        "lpalbou/flux2-klein-4b-4bit",
+        "--image-path",
+        "input.png",
+        "--config-from-metadata",
+        str(metadata_path),
+    ]
+
+
+def test_routes_flux2_explicit_latent_i2i_mode_to_image_to_image_generation():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "lpalbou/flux2-klein-4b-4bit",
+            "--image",
+            "input.png",
+            "--i2i-mode",
+            "latent",
+            "--prompt",
+            "make it cinematic",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2"
+    assert invocation.argv == [
+        "mflux-generate-flux2",
+        "--model",
+        "lpalbou/flux2-klein-4b-4bit",
+        "--image-path",
+        "input.png",
+        "--prompt",
+        "make it cinematic",
+    ]
+
+
+def test_image_strength_is_rejected_for_flux2_edit_mode(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "lpalbou/flux2-klein-4b-4bit",
+                "--image",
+                "input.png",
+                "--i2i-mode",
+                "edit",
+                "--image-strength",
+                "0.4",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "image-strength is only supported for latent image-to-image mode" in capsys.readouterr().err
+
+
+def test_mask_path_is_rejected_for_flux2_edit_mode(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "lpalbou/flux2-klein-4b-4bit",
+                "--image",
+                "input.png",
+                "--mask-path",
+                "mask.png",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "mask-path is only supported" in capsys.readouterr().err
+
+
+def test_outpaint_padding_is_rejected_until_a_model_supports_it(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "lpalbou/flux2-klein-4b-4bit",
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "0,25%,0,25%",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    assert "outpaint-padding is only supported" in capsys.readouterr().err
 
 
 def test_routes_flux2_without_image_to_text_generation():
@@ -237,6 +417,40 @@ def test_bonsai_rejects_image_inputs(capsys):
     assert "Bonsai Image supports text-to-image only" in capsys.readouterr().err
 
 
+def test_qwen_image_to_image_task_requires_an_image(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Qwen/Qwen-Image",
+                "--task",
+                "image-to-image",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "image-to-image requires --image" in capsys.readouterr().err
+
+
+def test_qwen_text_to_image_rejects_image(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Qwen/Qwen-Image",
+                "--task",
+                "text-to-image",
+                "--image",
+                "input.png",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "text-to-image cannot be combined with --image" in capsys.readouterr().err
+
+
 def test_task_edit_can_select_qwen_edit_from_qwen_base_model():
     invocation = mlx_gen._resolve_invocation(
         [
@@ -290,6 +504,162 @@ def test_family_override_routes_unidentifiable_local_path():
         "input.png",
         "--prompt",
         "replace the chair",
+    ]
+
+
+def test_family_override_flux2_local_path_requires_base_model(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "../models/local-flux2-folder",
+                "--family",
+                "flux2",
+                "--prompt",
+                "hello",
+            ]
+        )
+
+    assert "Pass --base-model" in capsys.readouterr().err
+
+
+def test_family_override_flux2_local_path_forwards_base_model():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "../models/local-flux2-folder",
+            "--family",
+            "flux2",
+            "--base-model",
+            "flux2-klein-4b",
+            "--prompt",
+            "hello",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2"
+    assert invocation.argv == [
+        "mflux-generate-flux2",
+        "--model",
+        "../models/local-flux2-folder",
+        "--base-model",
+        "flux2-klein-4b",
+        "--prompt",
+        "hello",
+    ]
+
+
+def test_family_override_rejects_conflicting_known_model(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "qwen-image",
+                "--family",
+                "flux2",
+                "--prompt",
+                "hello",
+            ]
+        )
+
+    assert "conflicts with model" in capsys.readouterr().err
+
+
+def test_family_override_fibo_local_path_requires_base_model(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "../models/local-image-folder",
+                "--family",
+                "fibo",
+                "--prompt",
+                "hello",
+            ]
+        )
+
+    assert "Pass --base-model" in capsys.readouterr().err
+
+
+def test_family_override_fibo_local_path_forwards_base_model():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "../models/local-fibo-folder",
+            "--family",
+            "fibo",
+            "--base-model",
+            "fibo",
+            "--prompt",
+            "hello",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-fibo"
+    assert invocation.argv == [
+        "mflux-generate-fibo",
+        "--model",
+        "../models/local-fibo-folder",
+        "--base-model",
+        "fibo",
+        "--prompt",
+        "hello",
+    ]
+
+
+def test_fibo_edit_mask_path_routes_to_mask_capable_backend():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "fibo-edit",
+            "--image",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--prompt",
+            "replace the selected object",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-fibo-edit"
+    assert invocation.argv == [
+        "mflux-generate-fibo-edit",
+        "--model",
+        "fibo-edit",
+        "--image-path",
+        "input.png",
+        "--mask-path",
+        "mask.png",
+        "--prompt",
+        "replace the selected object",
+    ]
+
+
+def test_fibo_edit_masked_image_path_alias_routes_to_mask_capable_backend():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "fibo-edit",
+            "--image",
+            "input.png",
+            "--masked-image-path",
+            "mask.png",
+            "--prompt",
+            "replace the selected object",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-fibo-edit"
+    assert invocation.argv == [
+        "mflux-generate-fibo-edit",
+        "--model",
+        "fibo-edit",
+        "--image-path",
+        "input.png",
+        "--masked-image-path",
+        "mask.png",
+        "--prompt",
+        "replace the selected object",
     ]
 
 
@@ -449,7 +819,7 @@ def test_ernie_rejects_multiple_image_inputs(capsys):
             ]
         )
 
-    assert "supports only one input image" in capsys.readouterr().err
+    assert "does not support multi-reference image-to-image generation" in capsys.readouterr().err
 
 
 def test_ernie_rejects_edit_task(capsys):
@@ -460,12 +830,14 @@ def test_ernie_rejects_edit_task(capsys):
                 "baidu/ERNIE-Image-Turbo",
                 "--task",
                 "edit",
+                "--image",
+                "input.png",
                 "--prompt",
                 "replace the mug",
             ]
         )
 
-    assert "Multi-image edit is not supported" in capsys.readouterr().err
+    assert "does not support edit-reference image-to-image generation" in capsys.readouterr().err
 
 
 def test_ernie_cli_passes_prompt_enhancer_options(monkeypatch):
@@ -529,8 +901,6 @@ def test_routes_wan_text_to_video_generation():
         [
             "--model",
             "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-            "--task",
-            "text-to-video",
             "--prompt",
             "a city timelapse",
             "--frames",
@@ -559,8 +929,6 @@ def test_routes_wan_image_to_video_generation():
         [
             "--model",
             "wan2.2-ti2v-5b",
-            "--task",
-            "image-to-video",
             "--image",
             "input.png",
             "--prompt",
@@ -571,6 +939,52 @@ def test_routes_wan_image_to_video_generation():
     assert invocation.target_name == "mlxgen-generate-wan"
     assert "--image-path" in invocation.argv
     assert "input.png" in invocation.argv
+
+
+def test_wan_i2v_a14b_requires_image_before_model_load(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+                "--prompt",
+                "make a video",
+            ]
+        )
+
+    assert "image-to-video model requires --image" in capsys.readouterr().err
+
+
+def test_wan_t2v_a14b_rejects_image_before_model_load(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+                "--image",
+                "input.png",
+                "--prompt",
+                "make a video",
+            ]
+        )
+
+    assert "text-to-video model does not accept input images" in capsys.readouterr().err
+
+
+def test_wan_router_rejects_generic_local_wan_name_before_backend_load(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "models/my-wan-video-folder",
+                "--image",
+                "input.png",
+                "--prompt",
+                "make a video",
+            ]
+        )
+
+    assert "Cannot infer a supported Wan model config" in capsys.readouterr().err
 
 
 def test_wan_rejects_multiple_images(capsys):
@@ -1144,6 +1558,7 @@ def test_main_without_args_prints_top_level_help(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "usage: mlxgen" in output
     assert "mlxgen generate" in output
+    assert "mlxgen capabilities" in output
     assert "mlxgen download" in output
     assert "mlxgen prepare" in output
 

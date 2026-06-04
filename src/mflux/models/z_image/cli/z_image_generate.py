@@ -25,7 +25,7 @@ def main():
         args.scheduler = "flow_match_euler_discrete"
 
     model_name = args.model or "z-image"
-    model_config = ModelConfig.from_name(model_name=model_name)
+    model_config = ModelConfig.from_name(model_name=model_name, base_model=args.base_model)
 
     # 1. Load the model
     model = ZImage(

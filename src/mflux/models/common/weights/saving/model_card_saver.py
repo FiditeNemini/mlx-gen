@@ -334,7 +334,6 @@ class ModelCardSaver:
         if "wan" in terms:
             if ModelCardSaver._wan_is_i2v_only(terms):
                 return [
-                    "  --task image-to-video \\",
                     "  --image input.png \\",
                     '  --prompt "Your video prompt here" \\',
                     "  --width 224 \\",
@@ -351,7 +350,6 @@ class ModelCardSaver:
             if "a14b" in terms:
                 if bits == 8:
                     return [
-                        "  --task text-to-video \\",
                         '  --prompt "Your video prompt here" \\',
                         "  --width 384 \\",
                         "  --height 224 \\",
@@ -365,7 +363,6 @@ class ModelCardSaver:
                         "  --output video.mp4",
                     ]
                 return [
-                    "  --task text-to-video \\",
                     '  --prompt "Your video prompt here" \\',
                     "  --width 1280 \\",
                     "  --height 720 \\",
@@ -378,7 +375,6 @@ class ModelCardSaver:
                     "  --output video.mp4",
                 ]
             return [
-                "  --task text-to-video \\",
                 '  --prompt "Your video prompt here" \\',
                 "  --width 1280 \\",
                 "  --height 704 \\",

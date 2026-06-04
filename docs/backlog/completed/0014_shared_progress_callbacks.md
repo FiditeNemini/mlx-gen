@@ -154,6 +154,16 @@ arrays or requiring CLI parsing.
 - [x] Add focused tests.
 - [x] Update coredoc and LLM documentation.
 
+## Completion report
+
+- Date: 2026-06-03.
+- Final path: `docs/backlog/completed/0014_shared_progress_callbacks.md`.
+- Code areas: `ProgressEvent`, callback registry subscriptions, image generation context events,
+  Wan video events, CLI progress display, public docs, and focused tests.
+- Validation: ruff passed on the touched callback/Wan/test files; the focused progress test batch
+  passed with 11 tests.
+- Residual work: cancellation and richer orchestration state remain separate future work.
+
 ## Follow-up guidance
 
 Treat cancellation as separate work if it becomes a committed requirement. Keep future progress

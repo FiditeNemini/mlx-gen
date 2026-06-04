@@ -56,6 +56,9 @@ class Flux1Fill(nn.Module):
         image_strength: float | None = None,
         scheduler: str = "linear",
     ) -> GeneratedImage:
+        if image_strength is not None:
+            raise ValueError("image_strength is only supported for latent image-to-image mode, not fill mode.")
+
         # 0. Create a new config based on the model type and input parameters
         config = Config(
             width=width,
@@ -96,7 +99,7 @@ class Flux1Fill(nn.Module):
         )
 
         # 4. Create callback context and call before_loop
-        ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config)
+        ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config, task="image-to-image")
         ctx.before_loop(latents)
 
         for t in config.time_steps:

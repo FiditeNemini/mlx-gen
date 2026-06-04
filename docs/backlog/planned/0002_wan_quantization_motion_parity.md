@@ -22,8 +22,8 @@ that three 121-frame, 50-step videos generated at 1280x704 felt too static.
 
 ## Current code reality
 
-- The requested checkout path `/Users/albou/projects/gh/mlx-gen` does not exist on disk; the active
-  MLX-Gen repository is `/Users/albou/projects/gh/sbx/mlx-gen`.
+- An earlier requested checkout path was stale; the active working repository for this backlog
+  pass was the MLX-Gen repository root.
 - `src/mflux/models/common/cli/save.py` previously passed `lora_paths` and `lora_scales` to every
   prepare backend. `Wan2_2_TI2V.__init__()` does not accept those kwargs, so Wan q8/q4 prepare
   failed before model loading or quantization.
@@ -63,8 +63,14 @@ that three 121-frame, 50-step videos generated at 1280x704 felt too static.
   17.39. The final contact sheet and report are under `validation_outputs/wan/a14b_q8_t2v/`.
 - On 2026-06-03, a full-size T2V-A14B mixed q8/BF16 run at 1280x720, 81 frames, 40 steps,
   guidance 4/guidance-2 3, and fps 16 completed after about 13h15m but saved an all-black MP4 after
-  non-finite decoded values reached `VideoUtil`. The full-size q8 path is release-blocked until
-  [item 0016](0016_wan_video_integrity_release_gate.md) lands and the exact settings pass.
+  non-finite decoded values reached `VideoUtil`. Version 0.18.9 shipped fail-closed tensor and
+  video-health guards, but the full-size q8 path should not get broader quality claims until
+  [item 0016](0016_wan_video_integrity_release_gate.md) captures release artifacts and exact
+  settings pass.
+- Wan BF16 and mixed q8/BF16 A14B packages have been published with cards that describe the measured
+  storage and memory tradeoff. This item now tracks residual quantization quality and policy work,
+  especially I2V-A14B validation, q4 decisions, and motion/prompt checks not covered by items 0015
+  and 0016.
 
 ## Problem
 
@@ -123,7 +129,8 @@ clear guidance before uploading or depending on quantized Wan checkpoints.
 
 ## Non-goals
 
-- Do not upload AbstractFramework Wan q8/q4 repos until quality and model cards are verified.
+- Do not publish new q4 repos or expand q8 claims beyond the exact settings that have passed
+  quality and video-health validation.
 - Do not port Wan A14B, Wan VACE, Wan Animate, or video-to-video in this item.
 - Do not delete large local model folders automatically to recover disk; ask first.
 - Do not treat q8 smoke tests at 128x128/5 frames as quality evidence.
@@ -138,8 +145,8 @@ clear guidance before uploading or depending on quantized Wan checkpoints.
 - `tests/cli/test_prepare_save.py`
 - `tests/wan/test_wan_local_parity.py`
 - `tests/wan/test_wan_scheduler_and_timesteps.py`
-- Local Diffusers reference: `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/wan/`
-- Local Transformers reference: `/Users/albou/projects/gh/transformers/src/transformers/models/umt5/`
+- Local Diffusers checkout reference: `diffusers/src/diffusers/pipelines/wan/`
+- Local Transformers checkout reference: `transformers/src/transformers/models/umt5/`
 
 ## Expected outcomes
 
@@ -183,8 +190,9 @@ clear guidance before uploading or depending on quantized Wan checkpoints.
 - [x] Validate T2V-A14B mixed q8 against BF16/source with a contact sheet and frame metrics.
 - [ ] Add Wan runtime peak-memory reporting to validation metadata or a documented validation
       harness.
-- [ ] Add q8 quality comparison at publishable settings.
-  Full-size T2V-A14B mixed q8/BF16 currently fails this bar.
+- [ ] Add q8 quality comparison at expanded publishable settings.
+  Full-size T2V-A14B mixed q8/BF16 still needs exact-setting validation under item 0016 before
+  broader claims.
 - [ ] Decide and validate Wan q4 or mixed q4/q8 policy.
 - [x] Update generated Wan q8 model cards and public docs for the mixed q8/BF16 policy.
 - [ ] Validate I2V-A14B mixed q8 with source-image conditioning before publishing an I2V repo.

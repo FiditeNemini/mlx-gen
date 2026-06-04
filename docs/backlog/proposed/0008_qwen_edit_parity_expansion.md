@@ -103,6 +103,6 @@ does not become Qwen-specific vocabulary.
 
 - `src/mflux/models/qwen/`
 - `src/mflux/cli/mlx_gen.py`
-- Local Diffusers Qwen pipelines in `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/qwenimage/`
+- Local Diffusers checkout Qwen pipelines under `diffusers/src/diffusers/pipelines/qwenimage/`
 - Qwen-Image-Edit-2511 model card: https://huggingface.co/Qwen/Qwen-Image-Edit-2511
 - Qwen-Image-2.0 technical report watch item: https://arxiv.org/abs/2605.10730

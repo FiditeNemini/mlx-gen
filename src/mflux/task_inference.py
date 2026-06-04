@@ -1,0 +1,850 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from mflux.models.common.config import ModelConfig
+from mflux.utils.exceptions import ModelConfigError
+
+TASK_ALIASES = {
+    "txt2img": "text-to-image",
+    "img2img": "image-to-image",
+    "txt2vid": "text-to-video",
+    "t2v": "text-to-video",
+    "img2vid": "image-to-video",
+    "i2v": "image-to-video",
+}
+
+TASK_AUTO = "auto"
+TEXT_TO_IMAGE = "text-to-image"
+IMAGE_TO_IMAGE = "image-to-image"
+EDIT = "edit"
+TEXT_TO_VIDEO = "text-to-video"
+IMAGE_TO_VIDEO = "image-to-video"
+
+PUBLIC_IMAGE_TASKS = {TEXT_TO_IMAGE, IMAGE_TO_IMAGE}
+PUBLIC_VIDEO_TASKS = {TEXT_TO_VIDEO, IMAGE_TO_VIDEO}
+PUBLIC_TASKS = {*PUBLIC_IMAGE_TASKS, *PUBLIC_VIDEO_TASKS}
+IMAGE_TASKS = {*PUBLIC_IMAGE_TASKS, EDIT}
+VIDEO_TASKS = PUBLIC_VIDEO_TASKS
+VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
+
+I2I_MODE_AUTO = "auto"
+MODE_TEXT_ONLY = "text-only"
+MODE_LATENT_IMG2IMG = "latent-img2img"
+MODE_EDIT_REFERENCE = "edit-reference"
+MODE_MULTI_REFERENCE = "multi-reference"
+MODE_TEXT_VIDEO = "text-video"
+MODE_FIRST_FRAME_I2V = "first-frame-i2v"
+
+I2I_MODE_ALIASES = {
+    None: I2I_MODE_AUTO,
+    I2I_MODE_AUTO: I2I_MODE_AUTO,
+    "latent": MODE_LATENT_IMG2IMG,
+    "img2img": MODE_LATENT_IMG2IMG,
+    MODE_LATENT_IMG2IMG: MODE_LATENT_IMG2IMG,
+    "edit": MODE_EDIT_REFERENCE,
+    "edit-conditioned": MODE_EDIT_REFERENCE,
+    MODE_EDIT_REFERENCE: MODE_EDIT_REFERENCE,
+    "reference": MODE_EDIT_REFERENCE,
+    "multi": MODE_MULTI_REFERENCE,
+    "multi-reference": MODE_MULTI_REFERENCE,
+    MODE_MULTI_REFERENCE: MODE_MULTI_REFERENCE,
+}
+
+
+class TaskInferenceError(ValueError):
+    """Raised when model capabilities and requested image inputs cannot resolve to one plan."""
+
+
+@dataclass(frozen=True)
+class GenerationCapability:
+    id: str
+    public_task: str
+    mode: str
+    handler_id: str
+    min_images: int = 0
+    max_images: int | None = 0
+    supports_image_strength: bool = False
+    supports_mask: bool = False
+    supports_outpaint: bool = False
+    supports_frames: bool = False
+    supports_fps: bool = False
+    default_for_task: bool = False
+    model_override: str | None = None
+
+    def allows_image_count(self, image_count: int) -> bool:
+        if image_count < self.min_images:
+            return False
+        return self.max_images is None or image_count <= self.max_images
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "public_task": self.public_task,
+            "mode": self.mode,
+            "handler_id": self.handler_id,
+            "min_images": self.min_images,
+            "max_images": self.max_images,
+            "supports_image_strength": self.supports_image_strength,
+            "supports_mask": self.supports_mask,
+            "supports_outpaint": self.supports_outpaint,
+            "supports_frames": self.supports_frames,
+            "supports_fps": self.supports_fps,
+            "default_for_task": self.default_for_task,
+            "model_override": self.model_override,
+        }
+
+
+@dataclass(frozen=True)
+class ModelCapabilities:
+    schema_version: int
+    family: str
+    label: str
+    model_name: str | None
+    capabilities: tuple[GenerationCapability, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": self.schema_version,
+            "family": self.family,
+            "label": self.label,
+            "model_name": self.model_name,
+            "capabilities": [capability.to_dict() for capability in self.capabilities],
+        }
+
+
+@dataclass(frozen=True)
+class GenerationPlan:
+    public_task: str
+    mode: str
+    capability_id: str
+    family: str
+    handler_id: str
+    image_count: int
+    model_name: str | None = None
+    model_override: str | None = None
+
+    @property
+    def task(self) -> str:
+        return self.public_task
+
+    def to_dict(self) -> dict:
+        return {
+            "public_task": self.public_task,
+            "task": self.public_task,
+            "mode": self.mode,
+            "capability_id": self.capability_id,
+            "family": self.family,
+            "handler_id": self.handler_id,
+            "image_count": self.image_count,
+            "model_name": self.model_name,
+            "model_override": self.model_override,
+        }
+
+
+@dataclass(frozen=True)
+class ResolvedTask:
+    task: str
+    family: str
+    image_count: int
+    model_name: str | None = None
+    mode: str | None = None
+    capability_id: str | None = None
+    handler_id: str | None = None
+
+
+@dataclass(frozen=True)
+class _ModelIdentity:
+    model_config: ModelConfig | None
+    aliases: set[str]
+    model_name: str | None
+    model_key: str
+    family: str
+
+
+def normalize_task(task: str | None) -> str:
+    normalized = TASK_AUTO if task is None else task
+    normalized = TASK_ALIASES.get(normalized, normalized)
+    if normalized not in VALID_TASKS:
+        valid_tasks = ", ".join(sorted(VALID_TASKS))
+        raise TaskInferenceError(f"Unsupported task {task!r}. Expected one of: {valid_tasks}.")
+    return normalized
+
+
+def normalize_i2i_mode(i2i_mode: str | None) -> str:
+    normalized = I2I_MODE_ALIASES.get(i2i_mode, i2i_mode)
+    if normalized not in {I2I_MODE_AUTO, MODE_LATENT_IMG2IMG, MODE_EDIT_REFERENCE, MODE_MULTI_REFERENCE}:
+        valid_modes = ", ".join(["auto", "latent", "edit", "multi-reference"])
+        raise TaskInferenceError(f"Unsupported image-to-image mode {i2i_mode!r}. Expected one of: {valid_modes}.")
+    return normalized
+
+
+def get_model_capabilities(
+    *,
+    model: str | None = None,
+    model_config: ModelConfig | None = None,
+    family: str | None = None,
+) -> ModelCapabilities:
+    identity = _resolve_model_identity(model=model, model_config=model_config, family=family)
+    return _capabilities_for(identity)
+
+
+def resolve_generation_plan(
+    *,
+    model: str | None = None,
+    model_config: ModelConfig | None = None,
+    family: str | None = None,
+    image_count: int = 0,
+    task: str | None = TASK_AUTO,
+    i2i_mode: str | None = I2I_MODE_AUTO,
+    has_image_strength: bool = False,
+    has_mask: bool = False,
+    has_outpaint: bool = False,
+) -> GenerationPlan:
+    if image_count < 0:
+        raise TaskInferenceError("image_count must be greater than or equal to zero.")
+    if has_image_strength and image_count == 0:
+        raise TaskInferenceError("--image-strength requires --image or --image-path.")
+    if has_mask and image_count == 0:
+        raise TaskInferenceError("--mask-path requires --image or --image-path.")
+    if has_outpaint and image_count == 0:
+        raise TaskInferenceError("--outpaint-padding requires --image or --image-path.")
+
+    normalized_task = normalize_task(task)
+    normalized_i2i_mode = normalize_i2i_mode(i2i_mode)
+    identity = _resolve_model_identity(model=model, model_config=model_config, family=family)
+    model_capabilities = _capabilities_for(identity)
+
+    public_task = _requested_public_task(
+        model_capabilities=model_capabilities,
+        task=normalized_task,
+        image_count=image_count,
+    )
+    requested_mode = _requested_mode(
+        task=normalized_task,
+        public_task=public_task,
+        image_count=image_count,
+        i2i_mode=normalized_i2i_mode,
+        has_image_strength=has_image_strength,
+    )
+
+    candidates = [
+        capability
+        for capability in model_capabilities.capabilities
+        if capability.public_task == public_task and capability.allows_image_count(image_count)
+    ]
+    if requested_mode != I2I_MODE_AUTO:
+        candidates = [
+            capability for capability in candidates if _mode_matches_request(capability.mode, requested_mode)
+        ]
+
+    if has_image_strength:
+        candidates = [capability for capability in candidates if capability.supports_image_strength]
+        if not candidates:
+            raise TaskInferenceError("--image-strength is only supported for latent image-to-image mode.")
+    if has_mask:
+        candidates = [capability for capability in candidates if capability.supports_mask]
+        if not candidates:
+            raise TaskInferenceError("--mask-path is only supported for image-to-image modes with mask support.")
+    if has_outpaint:
+        candidates = [capability for capability in candidates if capability.supports_outpaint]
+        if not candidates:
+            raise TaskInferenceError("--outpaint-padding is only supported for image-to-image modes with outpaint support.")
+
+    capability = _select_capability(
+        model_capabilities=model_capabilities,
+        public_task=public_task,
+        requested_mode=requested_mode,
+        image_count=image_count,
+        candidates=candidates,
+    )
+
+    return GenerationPlan(
+        public_task=capability.public_task,
+        mode=capability.mode,
+        capability_id=capability.id,
+        family=model_capabilities.family,
+        handler_id=capability.handler_id,
+        image_count=image_count,
+        model_name=model_capabilities.model_name,
+        model_override=capability.model_override,
+    )
+
+
+def resolve_task(
+    *,
+    model: str | None = None,
+    model_config: ModelConfig | None = None,
+    family: str | None = None,
+    image_count: int = 0,
+    task: str | None = TASK_AUTO,
+    i2i_mode: str | None = I2I_MODE_AUTO,
+    has_image_strength: bool = False,
+    has_mask: bool = False,
+    has_outpaint: bool = False,
+) -> ResolvedTask:
+    plan = resolve_generation_plan(
+        model=model,
+        model_config=model_config,
+        family=family,
+        image_count=image_count,
+        task=task,
+        i2i_mode=i2i_mode,
+        has_image_strength=has_image_strength,
+        has_mask=has_mask,
+        has_outpaint=has_outpaint,
+    )
+    return ResolvedTask(
+        task=plan.public_task,
+        family=plan.family,
+        image_count=plan.image_count,
+        model_name=plan.model_name,
+        mode=plan.mode,
+        capability_id=plan.capability_id,
+        handler_id=plan.handler_id,
+    )
+
+
+def infer_task(
+    *,
+    model: str | None = None,
+    model_config: ModelConfig | None = None,
+    family: str | None = None,
+    image_count: int = 0,
+    task: str | None = TASK_AUTO,
+    i2i_mode: str | None = I2I_MODE_AUTO,
+    has_image_strength: bool = False,
+    has_mask: bool = False,
+    has_outpaint: bool = False,
+) -> str:
+    return resolve_task(
+        model=model,
+        model_config=model_config,
+        family=family,
+        image_count=image_count,
+        task=task,
+        i2i_mode=i2i_mode,
+        has_image_strength=has_image_strength,
+        has_mask=has_mask,
+        has_outpaint=has_outpaint,
+    ).task
+
+
+def _resolve_model_identity(
+    *,
+    model: str | None,
+    model_config: ModelConfig | None,
+    family: str | None,
+) -> _ModelIdentity:
+    if model_config is None and model is not None:
+        try:
+            model_config = ModelConfig.from_name(model)
+        except ModelConfigError:
+            model_config = None
+
+    aliases = set(model_config.aliases) if model_config is not None else set()
+    model_name = model_config.model_name if model_config is not None else model
+    model_key = _model_key(model_name, model_config.base_model if model_config is not None else None, model)
+    resolved_family = family or _infer_family(aliases, model_key)
+    if resolved_family is None:
+        raise TaskInferenceError(
+            f"Could not infer a supported backend from model {model!r}. "
+            "Pass family='qwen', 'flux2', 'fibo', 'z-image', 'ernie-image', 'wan', or 'bonsai'."
+        )
+    return _ModelIdentity(
+        model_config=model_config,
+        aliases=aliases,
+        model_name=model_name,
+        model_key=model_key,
+        family=resolved_family,
+    )
+
+
+def _capabilities_for(identity: _ModelIdentity) -> ModelCapabilities:
+    family = identity.family
+    if family == "bonsai":
+        return ModelCapabilities(
+            schema_version=1,
+            family=family,
+            label="Bonsai Image",
+            model_name=identity.model_name,
+            capabilities=(
+                GenerationCapability(
+                    id="bonsai.text",
+                    public_task=TEXT_TO_IMAGE,
+                    mode=MODE_TEXT_ONLY,
+                    handler_id="bonsai.generate",
+                    default_for_task=True,
+                ),
+            ),
+        )
+    if family == "ernie-image":
+        return _image_latent_capabilities(
+            family=family,
+            label="ERNIE Image Turbo",
+            model_name=identity.model_name,
+            handler_id="ernie-image.generate",
+            supports_guidance=True,
+        )
+    if family == "z-image":
+        handler_id = "z-image-turbo.generate" if _is_z_image_turbo(identity.aliases, identity.model_key) else "z-image.generate"
+        return _image_latent_capabilities(
+            family=family,
+            label="Z-Image",
+            model_name=identity.model_name,
+            handler_id=handler_id,
+            supports_guidance=True,
+        )
+    if family == "qwen":
+        return _qwen_capabilities(identity)
+    if family == "flux2":
+        return _flux2_capabilities(identity)
+    if family == "fibo":
+        return _fibo_capabilities(identity)
+    if family == "wan":
+        return _wan_capabilities(identity)
+    raise TaskInferenceError(f"Unsupported generation family {family!r}.")
+
+
+def _image_latent_capabilities(
+    *,
+    family: str,
+    label: str,
+    model_name: str | None,
+    handler_id: str,
+    supports_guidance: bool,
+) -> ModelCapabilities:
+    return ModelCapabilities(
+        schema_version=1,
+        family=family,
+        label=label,
+        model_name=model_name,
+        capabilities=(
+            GenerationCapability(
+                id=f"{family}.text",
+                public_task=TEXT_TO_IMAGE,
+                mode=MODE_TEXT_ONLY,
+                handler_id=handler_id,
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id=f"{family}.latent",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_LATENT_IMG2IMG,
+                handler_id=handler_id,
+                min_images=1,
+                max_images=1,
+                supports_image_strength=True,
+                default_for_task=True,
+            ),
+        ),
+    )
+
+
+def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    is_edit_model = _is_qwen_edit(identity.aliases, identity.model_key)
+    if is_edit_model:
+        capabilities = (
+            GenerationCapability(
+                id="qwen.edit",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=1,
+                max_images=1,
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="qwen.multi-reference",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_MULTI_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=2,
+                max_images=None,
+                default_for_task=True,
+            ),
+        )
+    else:
+        edit_override = None if identity.model_config is None else "qwen-image-edit"
+        capabilities = (
+            GenerationCapability(
+                id="qwen.text",
+                public_task=TEXT_TO_IMAGE,
+                mode=MODE_TEXT_ONLY,
+                handler_id="qwen.generate",
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="qwen.latent",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_LATENT_IMG2IMG,
+                handler_id="qwen.generate",
+                min_images=1,
+                max_images=1,
+                supports_image_strength=True,
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="qwen.edit",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=1,
+                max_images=1,
+                model_override=edit_override,
+            ),
+            GenerationCapability(
+                id="qwen.multi-reference",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_MULTI_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=2,
+                max_images=None,
+                default_for_task=True,
+                model_override=edit_override,
+            ),
+        )
+    return ModelCapabilities(
+        schema_version=1,
+        family=identity.family,
+        label="Qwen Image",
+        model_name=identity.model_name,
+        capabilities=capabilities,
+    )
+
+
+def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    return ModelCapabilities(
+        schema_version=1,
+        family=identity.family,
+        label="FLUX.2",
+        model_name=identity.model_name,
+        capabilities=(
+            GenerationCapability(
+                id="flux2.text",
+                public_task=TEXT_TO_IMAGE,
+                mode=MODE_TEXT_ONLY,
+                handler_id="flux2.generate",
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="flux2.latent",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_LATENT_IMG2IMG,
+                handler_id="flux2.generate",
+                min_images=1,
+                max_images=1,
+                supports_image_strength=True,
+            ),
+            GenerationCapability(
+                id="flux2.edit",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="flux2.edit",
+                min_images=1,
+                max_images=1,
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="flux2.multi-reference",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_MULTI_REFERENCE,
+                handler_id="flux2.edit",
+                min_images=2,
+                max_images=None,
+                default_for_task=True,
+            ),
+        ),
+    )
+
+
+def _fibo_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    is_edit_model = _is_fibo_edit(identity.aliases, identity.model_key)
+    if is_edit_model:
+        capabilities = (
+            GenerationCapability(
+                id="fibo.edit",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="fibo.edit",
+                min_images=1,
+                max_images=1,
+                supports_mask=True,
+                default_for_task=True,
+            ),
+        )
+    else:
+        edit_override = None if identity.model_config is None else "fibo-edit"
+        capabilities = (
+            GenerationCapability(
+                id="fibo.text",
+                public_task=TEXT_TO_IMAGE,
+                mode=MODE_TEXT_ONLY,
+                handler_id="fibo.generate",
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="fibo.latent",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_LATENT_IMG2IMG,
+                handler_id="fibo.generate",
+                min_images=1,
+                max_images=1,
+                supports_image_strength=True,
+                default_for_task=True,
+            ),
+            GenerationCapability(
+                id="fibo.edit",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="fibo.edit",
+                min_images=1,
+                max_images=1,
+                supports_mask=True,
+                model_override=edit_override,
+            ),
+        )
+    return ModelCapabilities(
+        schema_version=1,
+        family=identity.family,
+        label="FIBO",
+        model_name=identity.model_name,
+        capabilities=capabilities,
+    )
+
+
+def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    if identity.model_config is None:
+        raise TaskInferenceError(
+            "Cannot infer a supported Wan model config. "
+            "Use an exact supported Wan repo or a local prepared folder whose name includes a specific Wan alias."
+        )
+    declared_task = identity.model_config.transformer_overrides.get("task")
+    supports_image_to_video = bool(identity.model_config.transformer_overrides.get("supports_image_to_video", True))
+    capabilities: list[GenerationCapability] = []
+    if declared_task in {TEXT_TO_VIDEO, "text-image-to-video", None}:
+        capabilities.append(
+            GenerationCapability(
+                id="wan.text-video",
+                public_task=TEXT_TO_VIDEO,
+                mode=MODE_TEXT_VIDEO,
+                handler_id="wan.generate",
+                supports_frames=True,
+                supports_fps=True,
+                default_for_task=True,
+            )
+        )
+    if (declared_task in {IMAGE_TO_VIDEO, "text-image-to-video", None}) and supports_image_to_video:
+        capabilities.append(
+            GenerationCapability(
+                id="wan.first-frame",
+                public_task=IMAGE_TO_VIDEO,
+                mode=MODE_FIRST_FRAME_I2V,
+                handler_id="wan.generate",
+                min_images=1,
+                max_images=1,
+                supports_frames=True,
+                supports_fps=True,
+                default_for_task=True,
+            )
+        )
+    if not capabilities:
+        raise TaskInferenceError(f"Unsupported Wan2.2 model task contract: {declared_task!r}.")
+    return ModelCapabilities(
+        schema_version=1,
+        family=identity.family,
+        label="Wan2.2",
+        model_name=identity.model_name,
+        capabilities=tuple(capabilities),
+    )
+
+
+def _requested_public_task(
+    *,
+    model_capabilities: ModelCapabilities,
+    task: str,
+    image_count: int,
+) -> str:
+    if task == EDIT:
+        if model_capabilities.family == "wan":
+            raise TaskInferenceError(f"{model_capabilities.label} supports video generation tasks, not {task}.")
+        return IMAGE_TO_IMAGE
+    if task != TASK_AUTO:
+        return task
+    public_tasks = {capability.public_task for capability in model_capabilities.capabilities}
+    if public_tasks.issubset(PUBLIC_VIDEO_TASKS):
+        if image_count:
+            return IMAGE_TO_VIDEO if IMAGE_TO_VIDEO in public_tasks else TEXT_TO_VIDEO
+        return TEXT_TO_VIDEO if TEXT_TO_VIDEO in public_tasks else IMAGE_TO_VIDEO
+    if public_tasks == {IMAGE_TO_IMAGE}:
+        return IMAGE_TO_IMAGE
+    return IMAGE_TO_IMAGE if image_count else TEXT_TO_IMAGE
+
+
+def _requested_mode(
+    *,
+    task: str,
+    public_task: str,
+    image_count: int,
+    i2i_mode: str,
+    has_image_strength: bool,
+) -> str:
+    if public_task != IMAGE_TO_IMAGE:
+        if i2i_mode != I2I_MODE_AUTO:
+            raise TaskInferenceError("--i2i-mode can only be used with image-to-image generation.")
+        return I2I_MODE_AUTO
+
+    requested_mode = i2i_mode
+    if task == EDIT and requested_mode == I2I_MODE_AUTO:
+        requested_mode = MODE_MULTI_REFERENCE if image_count > 1 else MODE_EDIT_REFERENCE
+    elif requested_mode == I2I_MODE_AUTO and image_count > 1:
+        requested_mode = MODE_MULTI_REFERENCE
+
+    if has_image_strength:
+        if requested_mode not in {I2I_MODE_AUTO, MODE_LATENT_IMG2IMG}:
+            raise TaskInferenceError("--image-strength is only supported for latent image-to-image mode.")
+        requested_mode = MODE_LATENT_IMG2IMG
+    return requested_mode
+
+
+def _mode_matches_request(capability_mode: str, requested_mode: str) -> bool:
+    return capability_mode == requested_mode
+
+
+def _select_capability(
+    *,
+    model_capabilities: ModelCapabilities,
+    public_task: str,
+    requested_mode: str,
+    image_count: int,
+    candidates: list[GenerationCapability],
+) -> GenerationCapability:
+    if candidates:
+        defaults = [capability for capability in candidates if capability.default_for_task]
+        if requested_mode == I2I_MODE_AUTO and len(defaults) == 1:
+            return defaults[0]
+        if len(candidates) == 1:
+            return candidates[0]
+        if requested_mode != I2I_MODE_AUTO and len(candidates) > 1:
+            return candidates[0]
+        modes = ", ".join(sorted({capability.mode for capability in candidates}))
+        raise TaskInferenceError(
+            f"{model_capabilities.label} image-to-image request is ambiguous; choose --i2i-mode. "
+            f"Available modes: {modes}."
+        )
+
+    _raise_no_capability(
+        model_capabilities=model_capabilities,
+        public_task=public_task,
+        requested_mode=requested_mode,
+        image_count=image_count,
+    )
+
+
+def _raise_no_capability(
+    *,
+    model_capabilities: ModelCapabilities,
+    public_task: str,
+    requested_mode: str,
+    image_count: int,
+) -> None:
+    label = model_capabilities.label
+    if public_task in VIDEO_TASKS and not any(cap.public_task in VIDEO_TASKS for cap in model_capabilities.capabilities):
+        raise TaskInferenceError(f"{label} supports image generation tasks, not {public_task}.")
+    if public_task in PUBLIC_IMAGE_TASKS and not any(cap.public_task in PUBLIC_IMAGE_TASKS for cap in model_capabilities.capabilities):
+        raise TaskInferenceError(f"{label} supports video generation tasks, not {public_task}.")
+    if public_task == IMAGE_TO_IMAGE and not any(
+        cap.public_task == IMAGE_TO_IMAGE for cap in model_capabilities.capabilities
+    ):
+        raise TaskInferenceError(f"{label} supports text-to-image only; image-to-image/edit is not supported.")
+    if public_task == TEXT_TO_IMAGE and image_count:
+        raise TaskInferenceError(f"{label} text-to-image cannot be combined with --image or --images.")
+    if public_task == IMAGE_TO_IMAGE and image_count == 0:
+        raise TaskInferenceError(f"{label} image-to-image requires --image or --image-path.")
+    if public_task == IMAGE_TO_IMAGE and requested_mode == MODE_MULTI_REFERENCE:
+        raise TaskInferenceError(f"{label} does not support multi-reference image-to-image generation.")
+    if public_task == IMAGE_TO_IMAGE and requested_mode == MODE_EDIT_REFERENCE:
+        raise TaskInferenceError(f"{label} does not support edit-reference image-to-image generation.")
+    if public_task == IMAGE_TO_IMAGE and requested_mode == MODE_LATENT_IMG2IMG:
+        raise TaskInferenceError(f"{label} does not support latent image-to-image generation.")
+    if public_task == IMAGE_TO_IMAGE:
+        raise TaskInferenceError(f"{label} accepts at most one input image for image-to-image generation.")
+    if public_task == TEXT_TO_VIDEO and image_count:
+        raise TaskInferenceError(f"This {label} text-to-video model does not accept input images.")
+    if public_task == IMAGE_TO_VIDEO and image_count == 0:
+        raise TaskInferenceError(f"This {label} image-to-video model requires --image or --image-path.")
+    if public_task == IMAGE_TO_VIDEO and image_count > 1:
+        raise TaskInferenceError(f"{label} image-to-video accepts exactly one input image.")
+    if public_task == IMAGE_TO_VIDEO:
+        raise TaskInferenceError(f"This {label} text-to-video model does not accept input images.")
+    raise TaskInferenceError(f"{label} does not support {public_task}.")
+
+
+def _infer_family(aliases: set[str], model_key: str) -> str | None:
+    if _is_bonsai(aliases, model_key):
+        return "bonsai"
+    if _is_qwen(aliases, model_key):
+        return "qwen"
+    if _is_flux2(aliases, model_key):
+        return "flux2"
+    if _is_fibo(aliases, model_key):
+        return "fibo"
+    if _is_z_image(aliases, model_key):
+        return "z-image"
+    if _is_ernie(aliases, model_key):
+        return "ernie-image"
+    if _is_wan(aliases, model_key):
+        return "wan"
+    return None
+
+
+def _model_key(*parts: str | None) -> str:
+    return " ".join(part for part in parts if part).lower().replace("_", "-")
+
+
+def _has_alias(aliases: set[str], *needles: str) -> bool:
+    return bool(aliases.intersection(needles))
+
+
+def _is_qwen(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "qwen-image", "qwen-image-edit", "qwen-image-edit-2511") or "qwen" in model_key
+
+
+def _is_qwen_edit(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "qwen-image-edit", "qwen-image-edit-2511") or ("qwen" in model_key and "edit" in model_key)
+
+
+def _is_flux2(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("flux2") or alias.startswith("klein") for alias in aliases) or any(
+        token in model_key for token in ("flux2", "flux.2", "klein")
+    )
+
+
+def _is_bonsai(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("bonsai") for alias in aliases) or "bonsai" in model_key
+
+
+def _is_fibo(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("fibo") for alias in aliases) or "fibo" in model_key
+
+
+def _is_fibo_edit(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "fibo-edit", "fibo-edit-rmbg") or ("fibo" in model_key and "edit" in model_key)
+
+
+def _is_z_image(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "z-image", "z-image-turbo") or "z-image" in model_key or "zimage" in model_key
+
+
+def _is_z_image_turbo(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "z-image-turbo") or (
+        ("z-image" in model_key or "zimage" in model_key) and "turbo" in model_key
+    )
+
+
+def _is_ernie(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("ernie") for alias in aliases) or "ernie" in model_key
+
+
+def _is_wan(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("wan") for alias in aliases) or "wan" in model_key

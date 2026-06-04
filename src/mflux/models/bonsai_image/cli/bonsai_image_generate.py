@@ -28,7 +28,7 @@ def main():
     model_name = args.model or "bonsai-image-ternary"
     try:
         model = BonsaiImage(
-            model_config=ModelConfig.from_name(model_name=model_name),
+            model_config=ModelConfig.from_name(model_name=model_name, base_model=args.base_model),
             model_path=args.model_path,
         )
     except (RuntimeError, ValueError) as exc:

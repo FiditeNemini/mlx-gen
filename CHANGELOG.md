@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.10] - 2026-06-04
+
+### Added
+
+- **Taskless generation planning**: add public model capabilities and generation-plan resolution for
+  text-to-image, image-to-image, text-to-video, and image-to-video. `mlxgen capabilities` now
+  reports supported public tasks, internal modes, image-count contracts, route handlers, and option
+  support before weights are loaded.
+- **Image-to-image mode routing**: route one-image FLUX.2 requests to edit/reference I2I by
+  default, route `--image-strength` requests to latent img2img, and route repeated `--image`
+  inputs to multi-reference I2I where the model supports it.
+- **Reproducible multimodal example**: add a documented spaceship-in-snow workflow with real
+  generated assets for T2I, I2I edit, multi-reference I2I, Wan A14B T2V, and Wan A14B I2V.
+
+### Changed
+
+- **Public task cleanup**: `edit` is now a compatibility alias for `image-to-image` plus an
+  internal I2I mode. New integrations should use media-direction tasks and inspect the resolved
+  generation plan when they need routing details.
+- **Progress event consistency**: edit and fill image pipelines now report image-to-image progress
+  through the shared progress callback contract instead of relying on latent-img2img inference.
+- **Local model routing safety**: local paths and custom repository names now fail earlier when
+  model family or base-model hints are insufficient or contradictory.
+- **README and docs**: rewrite the README around the current `mlxgen` command surface, published
+  AbstractFramework model repositories, Wan A14B memory measurements, and AbstractVision /
+  AbstractFramework / AbstractFlow usage.
+
+### Fixed
+
+- **Metadata replay routing**: generation metadata that includes `image_strength` now resolves to
+  latent img2img instead of being mistaken for edit/reference I2I.
+- **Unsupported option handling**: mask, outpaint, image-strength, and model-family contradictions
+  are rejected before model execution when the selected model capability does not support them.
+
 ## [0.18.9] - 2026-06-03
 
 ### Added

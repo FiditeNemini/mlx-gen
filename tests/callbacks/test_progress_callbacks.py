@@ -72,6 +72,51 @@ def test_image_progress_infers_image_to_image_and_filters_subscribers():
     assert text_events == []
 
 
+def test_image_progress_reports_text_to_image_when_image_strength_is_nonpositive():
+    registry = CallbackRegistry()
+    all_events = []
+    img2img_events = []
+    text_events = []
+    registry.subscribe_progress(all_events.append)
+    registry.subscribe_progress(img2img_events.append, task="image-to-image")
+    registry.subscribe_progress(text_events.append, task="text-to-image")
+
+    ctx = registry.start(
+        seed=7,
+        prompt="prompt",
+        config=FakeConfig(num_inference_steps=5, image_path="input.png", image_strength=0.0),
+    )
+    ctx.before_loop(latents=object())
+    ctx.after_loop(latents=object())
+
+    assert [event.task for event in all_events] == ["text-to-image", "text-to-image"]
+    assert text_events == all_events
+    assert img2img_events == []
+
+
+def test_image_progress_uses_explicit_task_for_edit_conditioned_generation():
+    registry = CallbackRegistry()
+    all_events = []
+    img2img_events = []
+    text_events = []
+    registry.subscribe_progress(all_events.append)
+    registry.subscribe_progress(img2img_events.append, task="image-to-image")
+    registry.subscribe_progress(text_events.append, task="text-to-image")
+
+    ctx = registry.start(
+        seed=7,
+        prompt="prompt",
+        config=FakeConfig(num_inference_steps=4, image_path="input.png", image_strength=None),
+        task="image-to-image",
+    )
+    ctx.before_loop(latents=object())
+    ctx.after_loop(latents=object())
+
+    assert [event.task for event in all_events] == ["image-to-image", "image-to-image"]
+    assert img2img_events == all_events
+    assert text_events == []
+
+
 def test_progress_subscription_can_be_removed():
     registry = CallbackRegistry()
     events = []

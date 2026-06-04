@@ -107,7 +107,7 @@ class QwenImageEdit(nn.Module):
         )
 
         # 4. Create callback context and call before_loop
-        ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config)
+        ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config, task="image-to-image")
         ctx.before_loop(latents)
 
         for t in time_steps:

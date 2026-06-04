@@ -10,6 +10,7 @@ from huggingface_hub import snapshot_download
 
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import allow_downloads, is_huggingface_repo_id
+from mflux.task_inference import TaskInferenceError, get_model_capabilities, normalize_task, resolve_generation_plan
 from mflux.utils.exceptions import ModelConfigError
 
 
@@ -35,7 +36,7 @@ def main() -> None:
         _top_level_parser().print_help()
         return
 
-    if argv and argv[0] in {"download", "prepare"}:
+    if argv and argv[0] in {"download", "prepare", "capabilities"}:
         _run_model_command(argv)
         return
 
@@ -63,6 +64,8 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     normalized_argv = [route.target_name]
     if forwarded_model is not None:
         normalized_argv.extend(["--model", forwarded_model])
+    if args.base_model is not None and _route_accepts_base_model(route):
+        normalized_argv.extend(["--base-model", args.base_model])
     if route.image_argument is not None and images:
         normalized_argv.append(route.image_argument)
         normalized_argv.extend(images)
@@ -75,16 +78,37 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     )
 
 
+def _route_accepts_base_model(route: _Route) -> bool:
+    return route.target_name in {
+        "mflux-generate-bonsai",
+        "mflux-generate-fibo",
+        "mflux-generate-fibo-edit",
+        "mflux-generate-flux2",
+        "mflux-generate-flux2-edit",
+        "mflux-generate-z-image",
+    }
+
+
 def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     parser = _parser()
     args, forwarded = parser.parse_known_args(argv)
     metadata = _read_metadata_config(parser, argv)
     if args.model is None:
         args.model = metadata.get("model")
+    if args.base_model is None:
+        args.base_model = metadata.get("base_model")
     _reject_prepare_path_in_generate(parser, args, forwarded)
     args.metadata_images = _metadata_images(metadata)
-    args.task = _normalize_task(args.task)
-    args.has_image_strength = _option_was_provided(argv, "--image-strength")
+    try:
+        args.task = normalize_task(args.task)
+    except TaskInferenceError as exc:
+        parser.error(str(exc))
+    args.has_image_strength = _option_was_provided(argv, "--image-strength") or _metadata_has_positive_number(
+        metadata,
+        "image_strength",
+    )
+    args.has_mask = _has_mask_option(argv, metadata)
+    args.has_outpaint = _has_outpaint_option(argv, metadata)
     if args.model is None:
         parser.error("--model is required so mlx-gen can choose the right backend, unless metadata provides it.")
     return args, forwarded
@@ -132,17 +156,19 @@ def _normalize_command(argv: list[str]) -> list[str]:
 def _top_level_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlxgen",
-        usage="mlxgen [generate|download|prepare] ...",
-        description="Prepare local model assets and generate or edit images with MLX-Gen.",
+        usage="mlxgen [generate|capabilities|download|prepare] ...",
+        description="Prepare local model assets and generate images or videos with MLX-Gen.",
         epilog=(
             "Commands:\n"
             "  generate    Generate or edit images and videos from a prepared or cached model.\n"
-            "  download    Explicitly download a model snapshot into the Hugging Face cache.\n"
-            "  prepare     Create a reusable local MLX-Gen model folder, optionally quantized.\n"
+            "  capabilities Inspect model generation tasks, modes, and option support.\n"
+            "  download     Explicitly download a model snapshot into the Hugging Face cache.\n"
+            "  prepare      Create a reusable local MLX-Gen model folder, optionally quantized.\n"
             "\n"
             "Examples:\n"
             "  mlxgen generate --model z-image-turbo --prompt 'A puffin standing on a cliff'\n"
-            "  mlxgen generate --model wan2.2-ti2v-5b --task text-to-video --prompt 'A city timelapse'\n"
+            "  mlxgen generate --model wan2.2-ti2v-5b --prompt 'A city timelapse'\n"
+            "  mlxgen capabilities --model flux2-klein-4b\n"
             "  mlxgen download --model Qwen/Qwen-Image\n"
             "  mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8\n"
             "\n"
@@ -153,23 +179,39 @@ def _top_level_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _normalize_task(task: str) -> str:
-    aliases = {
-        "txt2img": "text-to-image",
-        "img2img": "image-to-image",
-        "txt2vid": "text-to-video",
-        "t2v": "text-to-video",
-        "img2vid": "image-to-video",
-        "i2v": "image-to-video",
-    }
-    return aliases.get(task, task)
-
-
 def _option_was_provided(argv: list[str], option_name: str) -> bool:
     for token in argv:
         if token == option_name or token.startswith(f"{option_name}="):
             return True
     return False
+
+
+def _metadata_has_positive_number(metadata: dict, key: str) -> bool:
+    value = metadata.get(key)
+    if value is None:
+        return False
+    try:
+        return float(value) > 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def _has_mask_option(argv: list[str], metadata: dict) -> bool:
+    return (
+        _option_was_provided(argv, "--mask-path")
+        or _option_was_provided(argv, "--masked-image-path")
+        or metadata.get("mask_path") is not None
+        or metadata.get("masked_image_path") is not None
+    )
+
+
+def _has_outpaint_option(argv: list[str], metadata: dict) -> bool:
+    return (
+        _option_was_provided(argv, "--outpaint-padding")
+        or _option_was_provided(argv, "--image-outpaint-padding")
+        or metadata.get("outpaint_padding") is not None
+        or metadata.get("image_outpaint_padding") is not None
+    )
 
 
 def _read_metadata_config(parser: argparse.ArgumentParser, argv: list[str]) -> dict:
@@ -214,8 +256,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlxgen generate",
         description=(
-            "Generate or edit images and videos with MLX-Gen. The command routes to the right model backend "
-            "from --model and from whether input images are supplied."
+            "Generate images or videos with MLX-Gen. The command routes to the right model backend from --model "
+            "and from whether input images are supplied."
         ),
         epilog=(
             "Common generation options are forwarded to the selected backend, including --prompt, "
@@ -226,6 +268,12 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")
+    parser.add_argument(
+        "--base-model",
+        type=str,
+        default=None,
+        help="Base model hint for custom repositories or local paths.",
+    )
     parser.add_argument(
         "--family",
         choices=["qwen", "flux2", "fibo", "z-image", "ernie-image", "wan", "bonsai"],
@@ -252,13 +300,22 @@ def _parser() -> argparse.ArgumentParser:
         help="Override automatic routing. Default: auto.",
     )
     parser.add_argument(
+        "--i2i-mode",
+        choices=["auto", "latent", "img2img", "edit", "edit-reference", "multi", "multi-reference"],
+        default="auto",
+        help=(
+            "Internal image-to-image mode. Default: auto. Use latent/img2img for image-strength "
+            "variation, edit for instruction/reference edits, or multi-reference for two or more input images."
+        ),
+    )
+    parser.add_argument(
         "--image",
         "--input-image",
         "-i",
         dest="images",
         action="append",
         default=[],
-        help="Input image for image-to-image or edit. Repeat for multi-image edit.",
+        help="Input image for image-to-image. Repeat for multi-reference image-to-image.",
     )
     parser.add_argument(
         "--images",
@@ -268,7 +325,7 @@ def _parser() -> argparse.ArgumentParser:
         nargs="+",
         action="append",
         default=[],
-        help="One or more input images for editing.",
+        help="One or more input images for image-to-image reference/edit modes.",
     )
     parser.add_argument(
         "--image-path",
@@ -281,6 +338,9 @@ def _parser() -> argparse.ArgumentParser:
 
 def _run_model_command(argv: list[str]) -> None:
     command = argv[0]
+    if command == "capabilities":
+        _show_capabilities(argv[1:])
+        return
     if command == "download":
         _download_model(argv[1:])
         return
@@ -288,6 +348,28 @@ def _run_model_command(argv: list[str]) -> None:
         _prepare_model(argv[1:])
         return
     raise AssertionError("unreachable")
+
+
+def _show_capabilities(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="mlxgen capabilities",
+        description="Inspect the public tasks, internal modes, and option support for a model.",
+    )
+    parser.add_argument("--model", "-m", required=True, help="Model alias, Hugging Face repo, or local model path.")
+    parser.add_argument("--base-model", default=None, help="Base model hint for custom repositories or local paths.")
+    parser.add_argument(
+        "--family",
+        choices=["qwen", "flux2", "fibo", "z-image", "ernie-image", "wan", "bonsai"],
+        default=None,
+        help="Override model-family detection for local paths or custom repo names.",
+    )
+    args = parser.parse_args(argv)
+    try:
+        model_config = _model_config(args.model, base_model=args.base_model)
+        capabilities = get_model_capabilities(model=args.model, model_config=model_config, family=args.family)
+    except TaskInferenceError as exc:
+        parser.error(str(exc))
+    print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
 
 
 def _download_model(argv: list[str]) -> None:
@@ -417,91 +499,93 @@ def _collect_images(args: argparse.Namespace) -> list[str]:
 
 
 def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
-    model_config = _model_config(args.model)
-    aliases = set(model_config.aliases) if model_config is not None else set()
-    model_name = model_config.model_name if model_config is not None else args.model
-    model_key = _model_key(model_name, args.model)
     has_images = image_count > 0
-    has_multiple_images = image_count > 1
-    explicit_img2img = args.task == "image-to-image" or args.has_image_strength
+    model_config = _model_config(args.model, base_model=args.base_model)
+    plan = _resolve_generation_plan(args, image_count=image_count, model_config=model_config)
+    _validate_family_override(args, model_config=model_config, plan=plan)
+    return _route_for_plan(plan.handler_id, has_image=has_images, model_override=plan.model_override)
 
-    if args.family == "qwen":
-        if args.task == "edit" or _is_qwen_edit(aliases, model_key) or (has_multiple_images and not explicit_img2img):
-            return _qwen_edit_route()
-        return _qwen_route()
+def _resolve_generation_plan(
+    args: argparse.Namespace,
+    *,
+    image_count: int,
+    model_config: ModelConfig | None,
+):
+    try:
+        return resolve_generation_plan(
+            model=args.model,
+            model_config=model_config,
+            family=args.family,
+            image_count=image_count,
+            task=args.task,
+            i2i_mode=args.i2i_mode,
+            has_image_strength=args.has_image_strength,
+            has_mask=args.has_mask,
+            has_outpaint=args.has_outpaint,
+        )
+    except TaskInferenceError as exc:
+        _parser().error(str(exc))
 
-    if args.family == "flux2":
-        if args.task == "edit" or (args.task == "auto" and has_images and not explicit_img2img):
-            return _flux2_edit_route()
-        return _flux2_route()
 
-    if args.family == "fibo":
-        if args.task == "edit" or _is_fibo_edit(aliases, model_key):
-            return _fibo_edit_route()
-        return _fibo_route()
-
-    if args.family == "z-image":
-        if _is_z_image_turbo(aliases, model_key):
-            return _z_image_turbo_route()
-        return _z_image_route()
-
-    if args.family == "ernie-image":
-        _reject_ernie_unsupported_inputs(args, image_count)
-        return _ernie_route()
-
-    if args.family == "wan":
-        _reject_wan_unsupported_inputs(args, image_count)
-        return _wan_route(has_image=has_images)
-
-    if args.family == "bonsai":
-        _reject_bonsai_unsupported_inputs(args, image_count)
-        return _bonsai_route()
-
-    if _is_bonsai(aliases, model_key):
-        _reject_bonsai_unsupported_inputs(args, image_count)
-        return _bonsai_route()
-
-    if _is_qwen_edit(aliases, model_key) or (args.task == "edit" and _is_qwen(aliases, model_key)):
-        return _qwen_edit_route(model_override=None if _is_qwen_edit(aliases, model_key) else "qwen-image-edit")
-
-    if _is_qwen(aliases, model_key):
-        if args.task == "text-to-image":
-            return _qwen_route()
-        if explicit_img2img or (args.task == "auto" and not has_multiple_images):
-            return _qwen_route()
-        return _qwen_edit_route(model_override="qwen-image-edit")
-
-    if _is_flux2(aliases, model_key):
-        if args.task == "edit" or (args.task == "auto" and has_images and not explicit_img2img):
-            return _flux2_edit_route()
-        return _flux2_route()
-
-    if _is_fibo_edit(aliases, model_key) or (args.task == "edit" and _is_fibo(aliases, model_key)):
-        return _fibo_edit_route(model_override=None if _is_fibo_edit(aliases, model_key) else "fibo-edit")
-
-    if _is_fibo(aliases, model_key):
-        return _fibo_route()
-
-    if _is_z_image_turbo(aliases, model_key):
-        return _z_image_turbo_route()
-
-    if _is_z_image(aliases, model_key):
-        return _z_image_route()
-
-    if _is_ernie(aliases, model_key):
-        _reject_ernie_unsupported_inputs(args, image_count)
-        return _ernie_route()
-
-    if _is_wan(aliases, model_key):
-        _reject_wan_unsupported_inputs(args, image_count)
-        return _wan_route(has_image=has_images)
-
+def _validate_family_override(
+    args: argparse.Namespace,
+    *,
+    model_config: ModelConfig | None,
+    plan,
+) -> None:
+    if args.family is None or model_config is not None:
+        if args.family is not None and model_config is not None:
+            try:
+                actual_family = get_model_capabilities(model_config=model_config).family
+            except TaskInferenceError as exc:
+                _parser().error(str(exc))
+            if actual_family != args.family:
+                _parser().error(
+                    f"--family {args.family} conflicts with model {args.model!r}, "
+                    f"which resolves to family {actual_family}."
+                )
+        return
+    handlers_requiring_model_config = {
+        "flux2.generate",
+        "flux2.edit",
+        "fibo.generate",
+        "z-image.generate",
+        "z-image-turbo.generate",
+        "fibo.edit",
+        "bonsai.generate",
+    }
+    if plan.handler_id not in handlers_requiring_model_config:
+        return
     _parser().error(
-        f"Could not infer a supported backend from --model {args.model!r}. "
-        "Use a model name containing qwen, flux2/flux.2/klein, bonsai, fibo, z-image, ernie, or wan, "
-        "or pass --family."
+        f"--family {args.family} is not enough to configure model path {args.model!r} for {plan.mode}. "
+        "Pass --base-model with a supported model alias so the backend can build the correct model config."
     )
-    raise AssertionError("unreachable")
+
+
+def _route_for_plan(handler_id: str, *, has_image: bool, model_override: str | None) -> _Route:
+    if handler_id == "qwen.generate":
+        return _qwen_route()
+    if handler_id == "qwen.edit":
+        return _qwen_edit_route(model_override=model_override)
+    if handler_id == "flux2.generate":
+        return _flux2_route()
+    if handler_id == "flux2.edit":
+        return _flux2_edit_route()
+    if handler_id == "fibo.generate":
+        return _fibo_route()
+    if handler_id == "fibo.edit":
+        return _fibo_edit_route(model_override=model_override)
+    if handler_id == "z-image.generate":
+        return _z_image_route()
+    if handler_id == "z-image-turbo.generate":
+        return _z_image_turbo_route()
+    if handler_id == "ernie-image.generate":
+        return _ernie_route()
+    if handler_id == "wan.generate":
+        return _wan_route(has_image=has_image)
+    if handler_id == "bonsai.generate":
+        return _bonsai_route()
+    _parser().error(f"Unsupported generation handler {handler_id!r}.")
 
 
 def _model_config(model: str | None, base_model: str | None = None) -> ModelConfig | None:
@@ -563,48 +647,6 @@ def _is_ernie(aliases: set[str], model_key: str) -> bool:
 
 def _is_wan(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("wan") for alias in aliases) or "wan" in model_key
-
-
-def _reject_ernie_unsupported_inputs(args: argparse.Namespace, image_count: int) -> None:
-    if args.task == "edit":
-        _parser().error(
-            "ERNIE Image Turbo supports text-to-image and experimental single-image image-to-image only. "
-            "Multi-image edit is not supported."
-        )
-    if image_count > 1:
-        _parser().error(
-            "ERNIE Image Turbo supports only one input image. "
-            "Pass a single --image/--image-path for experimental image-to-image."
-        )
-    if args.task == "text-to-image" and image_count:
-        _parser().error("ERNIE Image Turbo text-to-image cannot be combined with --image/--image-path.")
-    if args.task == "image-to-image" and image_count == 0:
-        _parser().error("ERNIE Image Turbo image-to-image requires --image or --image-path.")
-    if args.has_image_strength and image_count == 0:
-        _parser().error("ERNIE Image Turbo --image-strength requires --image or --image-path.")
-
-
-def _reject_wan_unsupported_inputs(args: argparse.Namespace, image_count: int) -> None:
-    if args.task in {"edit", "text-to-image", "image-to-image"}:
-        _parser().error(
-            "Wan2.2 supports text-to-video and image-to-video tasks. "
-            "Use --task text-to-video or --task image-to-video."
-        )
-    if image_count > 1:
-        _parser().error("Wan2.2 image-to-video accepts exactly one input image.")
-    if image_count and args.task == "text-to-video":
-        _parser().error("Wan2.2 text-to-video does not accept --image. Use --task image-to-video.")
-    if args.task == "image-to-video" and image_count == 0:
-        _parser().error("Wan2.2 image-to-video requires --image or --image-path.")
-
-
-def _reject_bonsai_unsupported_inputs(args: argparse.Namespace, image_count: int) -> None:
-    if image_count:
-        _parser().error("Bonsai Image supports text-to-image only; image-to-image/edit is not supported.")
-    if args.task not in {"auto", "text-to-image", "txt2img"}:
-        _parser().error("Bonsai Image supports only text-to-image generation.")
-    if args.has_image_strength:
-        _parser().error("Bonsai Image does not support --image-strength.")
 
 
 def _qwen_route() -> _Route:

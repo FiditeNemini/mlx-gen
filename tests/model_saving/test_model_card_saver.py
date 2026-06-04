@@ -183,7 +183,7 @@ def test_model_card_for_wan_q8_uses_video_metadata_and_usage(tmp_path):
     assert "BF16 for Wan transformer conditioning/output projection linears" in card
     assert "the UMT5 text encoder" in card
     assert "Wan q4 quality and any possible mixed q4/q8 policy are still under validation" in card
-    assert "--task text-to-video" in card
+    assert "--task text-to-video" not in card
     assert "--frames 121" in card
     assert "--fps 24" in card
     assert "--output video.mp4" in card
@@ -241,7 +241,7 @@ def test_model_card_for_wan_t2v_a14b_ignores_shared_ti2v_runtime_class_name(tmp_
     assert "pipeline_tag: text-to-video" in card
     assert "- text-to-video" in card
     assert "- image-to-video" not in card
-    assert "--task text-to-video" in card
+    assert "--task text-to-video" not in card
 
 
 def test_model_card_for_wan_i2v_a14b_uses_image_to_video_metadata(tmp_path):
@@ -254,7 +254,7 @@ def test_model_card_for_wan_i2v_a14b_uses_image_to_video_metadata(tmp_path):
     assert "pipeline_tag: image-to-video" in card
     assert "- image-to-video" in card
     assert "- text-to-video" not in card
-    assert "--task image-to-video" in card
+    assert "--task image-to-video" not in card
     assert "--image input.png" in card
     assert "--width 224" in card
     assert "--height 384" in card
@@ -276,7 +276,7 @@ def test_model_card_for_wan_i2v_a14b_ignores_shared_ti2v_runtime_class_name(tmp_
     assert "pipeline_tag: image-to-video" in card
     assert "- image-to-video" in card
     assert "- text-to-video" not in card
-    assert "--task image-to-video" in card
+    assert "--task image-to-video" not in card
 
 
 def test_model_card_for_qwen_q8_explains_q4_policy_is_not_used(tmp_path):

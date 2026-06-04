@@ -6,13 +6,14 @@ MLX-Gen is an MLX-native generative image and video runtime forked from mflux. I
 
 - [Getting started](getting-started.md): install MLX-Gen, inspect the CLI, prepare model files, run a first generation or edit, and use Wan video commands with duration, FPS, and resolution guidance.
 - [Architecture](architecture.md): package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
-- [API and CLI](api.md): public `mlxgen` command surface, generation router behavior, image/video examples, model-management commands, and Python integration boundary.
+- [API and CLI](api.md): public `mlxgen` command surface, generation router behavior, image-to-image modes, Wan video size rules, model-management commands, and Python integration boundary.
+- [Spaceship snow workflow](examples/spaceship-snow.md): reproducible model-backed T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B commands with included assets.
 - [Model management](model-management.md): explicit download and prepare workflows, cache-only runtime behavior, and Depth Pro downloads.
 - [Quantization](quantization.md): current low-bit compatibility by model family, including validation panels, Bonsai ternary 2-bit support, Qwen and ERNIE mixed q4/q8 policies, and Wan mixed q8/BF16 measurements.
 - [Hugging Face publishing](huggingface-publishing.md): generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
 - [Python integration](python-integration.md): current in-process API, AbstractVision integration notes, shared progress callbacks, and error handling.
 - [Release](release.md): GitHub Release and PyPI trusted publishing workflow.
-- [FAQ](faq.md): common questions about `prepare`, downloads, package naming, compatibility, and Wan image-to-video prompting.
+- [FAQ](faq.md): common questions about `prepare`, downloads, package naming, image-to-image mode selection, outpaint/reframe status, Wan resolutions, compatibility, and Wan image-to-video prompting.
 - [Troubleshooting](troubleshooting.md): common missing-artifact, cache, local-path, ERNIE Prompt Enhancer, small-resolution ERNIE, unsupported ERNIE edit inputs, and Wan video quality-setting and prompting limits.
 
 The top-level [README](../README.md) remains the starting point for installation, model families, and project relationship details.

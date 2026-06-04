@@ -21,7 +21,10 @@ For user-facing applications, show the exception message or the `download_comman
 
 ## AbstractVision
 
-MLX-Gen is intended to be the Apple Silicon / MLX dependency for AbstractVision while AbstractVision remains a cross-platform orchestration package.
+MLX-Gen is intended to be the Apple Silicon / MLX dependency for
+[AbstractVision](https://github.com/lpalbou/abstractvision), while AbstractVision remains a
+cross-platform orchestration package inside the wider
+[AbstractFramework](https://github.com/lpalbou/abstractframework) ecosystem.
 
 That split means:
 
@@ -30,6 +33,64 @@ That split means:
 - MLX-Gen should fail early when required local artifacts are missing so AbstractVision can surface a clear remediation message instead of starting a network transfer.
 
 The current integration path is still model-specific Python classes. A future higher-level facade may expose explicit prepared/loaded/warmed model states, but current docs only describe the APIs that exist now.
+
+[AbstractFlow](https://github.com/lpalbou/abstractflow) can orchestrate these generation
+capabilities visually alongside other persistent agentic tasks. MLX-Gen remains the local model
+runtime boundary: it reports capabilities, validates local artifacts, emits progress events, and
+writes generated assets.
+
+## Capability And Plan Resolution
+
+Applications can use the same routing contract as the CLI through the public `mlxgen` package. The
+resolver does not load weights. Public tasks describe media direction only:
+`text-to-image`, `image-to-image`, `text-to-video`, and `image-to-video`. Image editing,
+multi-reference editing, and latent image-to-image are internal modes selected by model capability,
+image count, and options such as `image_strength`.
+
+```python
+from mlxgen import get_model_capabilities, resolve_generation_plan, resolve_task
+
+capabilities = get_model_capabilities(model="flux2-klein-4b")
+print([capability.mode for capability in capabilities.capabilities])
+# ['text-only', 'latent-img2img', 'edit-reference', 'multi-reference']
+
+print(resolve_task(model="flux2-klein-4b").task)
+# text-to-image
+
+print(resolve_task(model="flux2-klein-4b", image_count=1).task)
+# image-to-image
+
+plan = resolve_generation_plan(model="flux2-klein-4b", image_count=1)
+print(plan.task, plan.mode, plan.handler_id)
+# image-to-image edit-reference flux2.edit
+
+latent_plan = resolve_generation_plan(
+    model="flux2-klein-4b",
+    image_count=1,
+    i2i_mode="latent",
+    has_image_strength=True,
+)
+print(latent_plan.task, latent_plan.mode, latent_plan.handler_id)
+# image-to-image latent-img2img flux2.generate
+
+print(resolve_task(model="Wan-AI/Wan2.2-I2V-A14B-Diffusers", image_count=1).task)
+# image-to-video
+```
+
+`--task edit` in the CLI is only a compatibility alias. Python integrations should request
+`task="image-to-image"` and, when they need disambiguation, pass `i2i_mode="edit"` or
+`i2i_mode="latent"`.
+
+Contradictions fail early:
+
+```python
+from mlxgen import TaskInferenceError, resolve_task
+
+try:
+    resolve_task(model="Wan-AI/Wan2.2-T2V-A14B-Diffusers", image_count=1)
+except TaskInferenceError as exc:
+    print(exc)
+```
 
 ## Progress And Monitoring
 
@@ -62,7 +123,10 @@ finally:
     unsubscribe()
 ```
 
-For image-to-image, the same subscription path emits `task="image-to-image"` when generation uses an input image and positive `image_strength`.
+For image-to-image, the same subscription path emits `task="image-to-image"` for latent img2img
+when generation uses an input image with positive `image_strength`. Edit-conditioned backends pass
+the task explicitly so applications can subscribe to `task="image-to-image"` even though those
+paths do not use `image_strength`.
 
 Wan video generation supports the same subscription path. It also accepts `progress_callback` directly on `generate_video()` when a caller wants a one-shot handler for a single run:
 

@@ -14,15 +14,22 @@ The public workflows are:
 
 | Command | Purpose |
 | --- | --- |
-| `mlxgen generate` | Generate images, edit images, or generate supported videos from a cached or prepared model. |
+| `mlxgen generate` | Generate images or supported videos from a cached or prepared model. Image input selects image-to-image or image-to-video when the model supports it. |
+| `mlxgen capabilities` | Inspect the public tasks, internal modes, and option support for a model without loading weights. |
 | `mlxgen download` | Explicitly download model or LoRA files into the local cache. |
 | `mlxgen prepare` | Create a reusable local MLX-Gen model folder, optionally quantized, and write a Hugging Face model card. |
 
 The package also installs compatibility entry points from the mflux codebase. New MLX-Gen documentation and application integrations should prefer the `mlxgen` commands above.
 
+For a full copy/pasteable workflow that exercises T2I, I2I edit, multi-reference I2I, T2V A14B,
+and I2V A14B, see [Spaceship Snow Workflow](examples/spaceship-snow.md).
+
 ## Generation Router
 
-`mlxgen generate` chooses the backend from `--model`, optional `--family`, `--task`, and image inputs.
+`mlxgen generate` chooses the backend from `--model`, optional `--family`, and image inputs. Public
+tasks are media directions: `text-to-image`, `image-to-image`, `text-to-video`, and
+`image-to-video`. Edit/reference behavior is an internal image-to-image mode, not a separate public
+task.
 
 ```sh
 mlxgen generate \
@@ -31,7 +38,46 @@ mlxgen generate \
   --output image.png
 ```
 
-For edits, pass an image:
+Inspect a model before generation:
+
+```sh
+mlxgen capabilities --model flux2-klein-4b
+```
+
+The JSON includes each supported public task, internal mode, image count, route handler, and option
+support. Applications can use the same contract from Python through `get_model_capabilities(...)`
+and `resolve_generation_plan(...)`. For custom repositories or local paths whose name does not
+identify the architecture, pass the same `--base-model` hint that you would use for generation.
+
+### Image-To-Image Modes
+
+`image-to-image` is one public task with several internal modes. Use `mlxgen capabilities --model
+<model>` to see which modes a selected model exposes, and use `--i2i-mode` when you need to force a
+specific path.
+
+| Goal | Internal mode | Inputs | Selection rule | Uses `--image-strength`? |
+| --- | --- | --- | --- | --- |
+| Whole-image variation or restyle from a source image | `latent-img2img` | exactly one image | pass `--image-strength` or `--i2i-mode latent` on a model that supports latent I2I | Yes |
+| Instruction edit, object/layout change, or composition-preserving style edit | `edit-reference` | one image | default for FLUX.2 and dedicated edit checkpoints when one image is supplied without `--image-strength`; or pass `--i2i-mode edit` | No |
+| Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
+| Inpainting, outpainting, or reframing with a preserved canvas | fill/outpaint mode | image plus mask/canvas | not first-class in unified `mlxgen generate` yet | No |
+
+Use latent img2img when you want a whole-image variation driven by source-image noise injection:
+restyle the whole scene, change the mood, or make a loose variation. Lower `--image-strength`
+allows more change; higher values preserve more of the source image and run fewer effective denoise
+steps.
+
+Use edit/reference I2I when the prompt is an instruction: remove an object, change an object color,
+turn a scene into a pencil sketch while preserving layout, reposition or reshape a subject, or keep
+the composition stable. Edit/reference and multi-reference routes use the image(s) as conditioning
+or references, so `--image-strength` is rejected before loading weights.
+
+In `auto` mode, the selected model's default capability wins. FLUX.2 and dedicated edit models route
+one image to `edit-reference`; latent image models such as ERNIE Image Turbo, Z-Image, and base
+Qwen/FIBO generation variants use `latent-img2img` for one-image input unless you request a
+supported edit route explicitly.
+
+For instruction/reference image-to-image, pass one or more input images to an edit-capable model:
 
 ```sh
 mlxgen generate \
@@ -40,6 +86,32 @@ mlxgen generate \
   --prompt "Turn the room into a pencil sketch" \
   --output edited.png
 ```
+
+For latent image-to-image variation, use a model that supports `latent-img2img` and pass
+`--image-strength`. `--image-strength` is rejected for edit/reference and multi-reference modes
+because those paths use source/reference images as conditioning rather than noising the source
+latent:
+
+```sh
+mlxgen generate \
+  --model lpalbou/flux2-klein-4b-4bit \
+  --image input.png \
+  --i2i-mode latent \
+  --image-strength 0.4 \
+  --prompt "Make the scene more cinematic" \
+  --output variation.png
+```
+
+`--task edit` remains accepted as a compatibility alias for
+`--task image-to-image --i2i-mode edit`, but new commands and integrations should prefer
+`--i2i-mode`.
+
+Reframing and outpainting are not ordinary image-to-image resizing. Generic I2I with a larger
+`--width` or `--height` resizes/recomposes the source instead of preserving original pixels in place.
+The reliable operation is masked outpainting: create a larger canvas, paste the source image into
+it, create a mask for the new area, and run a fill/inpaint model. MLX-Gen has lower-level FLUX.1
+Fill support inherited from mflux, but the unified `mlxgen generate --outpaint-padding ...` flow is
+not release-ready yet and is tracked as planned work.
 
 Supported router families are `qwen`, `flux2`, `bonsai`, `fibo`, `z-image`, `ernie-image`, and `wan`:
 
@@ -109,7 +181,6 @@ Wan2.2 routes through the same command surface for video generation. TI2V-5B is 
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
   --width 1280 \
   --height 704 \
@@ -128,7 +199,6 @@ omit `--guidance-2`, the low-noise stage follows `--guidance`:
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
-  --task text-to-video \
   --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
   --width 1280 \
   --height 720 \
@@ -145,7 +215,6 @@ TI2V-5B image-to-video uses the same command with one input image:
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task image-to-video \
   --image input.png \
   --prompt "A slow cinematic camera move from the input frame" \
   --width 1280 \
@@ -163,7 +232,6 @@ concatenated image-condition latent path:
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
-  --task image-to-video \
   --image input.png \
   --prompt "A cinematic flyby around the subject in the input image" \
   --width 1280 \
@@ -198,7 +266,15 @@ At the default 24 fps, `--frames 121` produces about 5.04 seconds of video, `--f
 | `--seed` | Deterministic seed. Repeat with multiple values to create multiple videos. |
 | `--progress`, `--no-progress` | Show or disable the CLI video progress bar. The bar advances by denoising step and keeps the requested frame count as context. Default: `--progress true`. |
 
-The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. The upstream A14B guidance is 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Lower resolutions, frame counts, or step counts are useful for quick checks, but they should not be treated as quality settings.
+Common Wan video sizes:
+
+| Model | Required width/height multiple | Recommended/native quality size | Useful lower-cost sizes | Notes |
+| --- | ---: | --- | --- | --- |
+| TI2V-5B T2V/I2V | 32 px | `1280x704` or `704x1280` | `832x480`, `480x832`, `448x256`, `256x448` | `1280x720` adjusts to `1280x704`; `432x240` adjusts to `416x224`. |
+| T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` | Text-to-video only; image input is rejected. |
+| I2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` | Requires one input image; match the source image composition to the requested canvas. |
+
+The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. The upstream A14B guidance is 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Lower resolutions, frame counts, or step counts are useful for routing and prompt checks, but they should not be treated as final quality settings.
 
 Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 

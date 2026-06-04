@@ -12,7 +12,7 @@ MLX-Gen exposes three public commands for the normal model lifecycle:
 | --- | --- | --- | --- |
 | `mlxgen download` | Put an original model repository or LoRA repository in the local Hugging Face cache. | Allowed because the user asked for download. | Cached source files. |
 | `mlxgen prepare` | Create a reusable local MLX-Gen model folder, usually quantized. | Allowed because the user asked for preparation. | Local model folder plus generated `README.md` card. |
-| `mlxgen generate` | Generate images, edit images, or generate supported videos from cached or prepared files. | Not allowed by default. | Image or video output and optional metadata. |
+| `mlxgen generate` | Generate images or supported videos from cached or prepared files. Image input selects image-to-image or image-to-video when supported. | Not allowed by default. | Image or video output and optional metadata. |
 
 Use `mlxgen prepare`, not a separate `save` command, when you want a local quantized model folder to reuse from another project or upload to Hugging Face.
 

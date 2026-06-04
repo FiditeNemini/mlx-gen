@@ -5,6 +5,7 @@ import pytest
 
 from mflux.models.common.download_policy import allow_downloads
 from mflux.models.common.resolution.path_resolution import PathResolution
+from mflux.models.flux2.weights.flux2_weight_definition import Flux2KleinWeightDefinition
 
 
 class TestPathResolutionNone:
@@ -177,6 +178,30 @@ class TestPathResolutionHuggingFace:
 
         with patch("mflux.models.common.resolution.path_resolution.HF_HUB_CACHE", str(tmp_path)):
             result = PathResolution.resolve(path="org/model", patterns=["transformer/*.safetensors", "transformer/*.json"])
+
+        assert result == repo_cache
+
+    @pytest.mark.fast
+    def test_flux2_prepared_cache_does_not_require_root_tokenizer_sidecars(self, tmp_path):
+        repo_cache = tmp_path / "models--org--flux.2-klein-9b-8bit" / "snapshots" / "abc123"
+        for component in ("vae", "transformer", "text_encoder"):
+            component_dir = repo_cache / component
+            component_dir.mkdir(parents=True)
+            (component_dir / "0.safetensors").touch()
+            (component_dir / "model.safetensors.index.json").write_text(
+                json.dumps({"weight_map": {"a": "0.safetensors"}})
+            )
+
+        tokenizer_dir = repo_cache / "tokenizer"
+        tokenizer_dir.mkdir()
+        (tokenizer_dir / "tokenizer.json").touch()
+        (tokenizer_dir / "chat_template.jinja").touch()
+
+        with patch("mflux.models.common.resolution.path_resolution.HF_HUB_CACHE", str(tmp_path)):
+            result = PathResolution.resolve(
+                path="org/flux.2-klein-9b-8bit",
+                patterns=Flux2KleinWeightDefinition.get_download_patterns(),
+            )
 
         assert result == repo_cache
 

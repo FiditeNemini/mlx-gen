@@ -1,56 +1,37 @@
 # MLX-Gen
 
-MLX-Gen is an MLX-native generative image and video runtime forked from mflux and published as the `mlx-gen` Python package. It is currently built on the mflux codebase while adding faster release cadence, Qwen/FLUX.2 compatibility fixes, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, Wan2.2 TI2V-5B and A14B video support, explicit model preparation, Hugging Face model-card generation, and AbstractVision-oriented integration behavior.
+> MLX-Gen is a local MLX image and video generation runtime for Apple Silicon, published as
+> `mlx-gen` and exposed through the `mlxgen` CLI and Python package identity.
 
-## Key Documents
+Use these docs to understand installation, cache-only model management, generation routing, model
+capabilities, quantized prepared folders, Wan video behavior, and application integration.
 
-- [README.md](README.md): installation, project relationship to mflux, main CLI examples, supported model families, and acknowledgements.
-- [docs/getting-started.md](docs/getting-started.md): first-run workflow, top-level CLI discovery, model preparation, image generation/editing, and Wan video duration/FPS/resolution examples.
-- [docs/architecture.md](docs/architecture.md): package shape, command boundaries, model-file lifecycle, runtime failure contract, and Python integration boundary.
-- [docs/api.md](docs/api.md): public `mlxgen` command surface, generation router behavior, model-management commands, and Python integration boundary.
-- [docs/model-management.md](docs/model-management.md): cache-only runtime policy, explicit `mlxgen download` and `mlxgen prepare` flows, Depth Pro download command, and `DownloadRequiredError`.
-- [docs/quantization.md](docs/quantization.md): low-bit compatibility by model family, validation panels, Bonsai ternary 2-bit support, Qwen/ERNIE mixed q4/q8 policies, Wan mixed q8/BF16 package measurements, and binary 1-bit runtime limits.
-- [docs/huggingface-publishing.md](docs/huggingface-publishing.md): generated model cards, source license/access wording, default `AbstractFramework/<repo-name>` usage, upload flow, and optional Hugging Face collection membership.
-- [docs/python-integration.md](docs/python-integration.md): current Python API expectations, AbstractVision integration notes, shared progress callbacks, and threading guidance.
-- [docs/adr/README.md](docs/adr/README.md): accepted architecture decisions, including model-backed smoke validation requirements for new model routes.
-- [docs/release.md](docs/release.md): GitHub Release and PyPI trusted publishing workflow.
-- [docs/faq.md](docs/faq.md): common questions about `prepare`, downloads, package naming, compatibility, and Wan image-to-video prompting.
-- [docs/troubleshooting.md](docs/troubleshooting.md): common missing-artifact, local-path, output replacement, ERNIE Prompt Enhancer, ERNIE small-resolution and unsupported edit-input behavior, Wan video quality-setting and prompting limits, LoRA, and `hf_transfer` issues.
-- [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md): upstream mflux credit, post-fork maintainership, and model/community acknowledgements.
-- [CHANGELOG.md](CHANGELOG.md): release history.
-- [CONTRIBUTING.md](CONTRIBUTING.md): development setup, checks, optional Wan parity validation, documentation expectations, and pull-request scope.
-- [SECURITY.md](SECURITY.md): vulnerability reporting and model/token safety guidance.
+## Core Docs
+
+- [README.md](README.md): project overview, mflux credit, install commands, published model links, Wan A14B measurements, and ecosystem links.
+- [docs/README.md](docs/README.md): index for the documentation tree.
+- [docs/getting-started.md](docs/getting-started.md): first-run workflow for install, download, prepare, image generation, image editing, and Wan video.
+- [docs/api.md](docs/api.md): `mlxgen` command surface, generation router, public tasks, internal I2I modes, outpaint/reframe status, Wan video sizes, model capabilities, and Python plan resolution.
+- [docs/model-management.md](docs/model-management.md): explicit download/prepare commands, cache-only generation, local prepared folders, and missing-artifact errors.
+- [docs/quantization.md](docs/quantization.md): q8/q4/BF16 policies, Wan mixed q8/BF16 measurements, Bonsai ternary support, and model-family compatibility.
+- [docs/python-integration.md](docs/python-integration.md): embedding MLX-Gen, AbstractVision integration, progress callbacks, and threading guidance.
+- [docs/faq.md](docs/faq.md): common questions about tasks, image-to-image mode selection, `--image-strength`, outpaint/reframe status, Wan resolutions and prompting, model preparation, and package naming.
+- [docs/troubleshooting.md](docs/troubleshooting.md): symptoms and fixes for missing files, local paths, unsupported options, Wan video settings, LoRA, and transfer issues.
+
+## Examples
+
+- [docs/examples/spaceship-snow.md](docs/examples/spaceship-snow.md): reproducible model-backed T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B workflow with included assets.
+
+## Operations
+
+- [docs/huggingface-publishing.md](docs/huggingface-publishing.md): generated model cards, upload commands, and AbstractFramework repository naming.
+- [docs/release.md](docs/release.md): release checklist, GitHub Release flow, and PyPI publishing.
+- [CHANGELOG.md](CHANGELOG.md): user-visible release history.
+
+## Project
+
+- [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md): upstream mflux credit and model/community acknowledgements.
+- [CONTRIBUTING.md](CONTRIBUTING.md): development setup, checks, documentation expectations, and pull-request scope.
+- [SECURITY.md](SECURITY.md): vulnerability reporting and token/model safety guidance.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): participation expectations.
-
-## Important Runtime Contract
-
-Generation and Python model construction are cache-only by default. MLX-Gen does not download model, tokenizer, LoRA, or Depth Pro files during runtime generation. Missing artifacts raise `DownloadRequiredError` with an exact explicit command to run.
-
-Explicit preparation commands:
-
-```sh
-mlxgen download --model Qwen/Qwen-Image
-mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8
-mlxgen download --model depth-pro
-```
-
-`mlxgen download` only fills the local cache. `mlxgen prepare` creates a reusable local MLX-Gen model folder and writes a Hugging Face `README.md` model card that records the `mlx-gen` generator version and includes `python -m pip install -U mlx-gen` for copy/pasteable public usage. `mlxgen generate` does not accept `--path` for model preparation; use `--output` for generated image files.
-
-`HF_HUB_ENABLE_HF_TRANSFER=1` is optional acceleration for explicit Hugging Face download/prepare commands; it is not the authorization mechanism.
-
-## Code Entry Points
-
-- `src/mflux/cli/mlx_gen.py`: smart `mlxgen` command router plus explicit `download` and `prepare`.
-- `src/mflux/models/bonsai_image/`: Bonsai Image ternary 2-bit text-to-image support using Prism's pre-packed FLUX.2-derived transformer, a 4-bit Qwen3 text encoder, and the Flux2 VAE. Bonsai is download/generate only; `prepare`, image input, negative prompts, and `--quantize` are rejected. Binary 1-bit is detected but blocked until stock MLX supports the required packed affine matmul; stock MLX 0.31.2 still rejects `bits=1`.
-- `src/mflux/models/ernie_image/`: ERNIE Image Turbo text-to-image and experimental single-image image-to-image runtime, tokenizer, transformer, scheduler, VAE wrapper, optional Prompt Enhancer, weights, q8/q4 quantization, and CLI. Multi-image edit is not supported. ERNIE image-to-image is best for stylization/guided variation; use Qwen Image Edit when exact source-layout preservation matters.
-- `src/mflux/models/wan/`: Wan2.2 TI2V-5B text-to-video and experimental first-frame image-to-video runtime plus Wan2.2 A14B text-to-video and image-to-video support for `Wan-AI/Wan2.2-T2V-A14B-Diffusers` and `Wan-AI/Wan2.2-I2V-A14B-Diffusers`, optional A14B low-noise `--guidance-2`, mixed q8/BF16 prepared-folder policy, Wan transformer/VAE/scheduler support, shared step-based progress events with video frame context, MP4 health checks, CLI failure manifests, and opt-in Diffusers parity fixtures.
-- `src/mflux/models/common/download_policy.py`: download policy, explicit command helpers, and `DownloadRequiredError`.
-- `src/mflux/models/common/weights/saving/model_card_saver.py`: generated Hugging Face model-card content for prepared model folders.
-- `src/mflux/models/common/resolution/path_resolution.py`: cache-only Hugging Face model path resolution.
-- `src/mflux/models/common/tokenizer/tokenizer_loader.py`: cache-only tokenizer resolution.
-- `src/mflux/models/common/resolution/lora_resolution.py`: cache-only LoRA resolution.
-- `src/mflux/models/common/weights/loading/weight_loader.py`: weight loading, including direct URL policy for Depth Pro.
-
-## Active Architecture Decisions
-
-- [ADR 0001](docs/adr/0001_runtime_smoke_validation_for_model_routes.md): new model routes require model-backed runtime smoke proof before they are described as working or release-ready.
+- [docs/adr/README.md](docs/adr/README.md): architecture decision records, including model-backed smoke validation policy.

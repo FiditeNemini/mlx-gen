@@ -1,16 +1,16 @@
-# Proposed: LoRA capability matrix and strict application
+# Planned: LoRA capability matrix and strict application
 
 ## Metadata
 
 - Created: 2026-05-28
-- Status: Proposed
+- Status: Planned
 - Completed: N/A
 
 ## ADR status
 
-- Governing ADRs: None
-- ADR impact: Needs new ADR only if MLX-Gen changes LoRA into a plugin/provider interface rather
-  than per-family mappings.
+- Governing ADRs: [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md)
+- ADR impact: None for the immediate strictness task. Escalate to a new ADR only if MLX-Gen
+  changes LoRA into a plugin/provider interface rather than per-family mappings.
 
 ## Context
 
@@ -25,9 +25,11 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
 ## Current code reality
 
 - `src/mflux/cli/parser/parsers.py` adds `--lora-style`, `--lora-paths`, and `--lora-scales`.
-- `src/mflux/models/common/lora/mapping/lora_loader.py` loads LoRA files, applies family mappings,
-  and prints unmatched keys. Missing or unreadable LoRA files currently print an error and return
-  from `_apply_single_lora()` instead of failing the generation.
+- `src/mflux/models/common/resolution/lora_resolution.py` now fails unresolved LoRA paths before
+  model load, and `docs/troubleshooting.md` tells users that requested LoRAs are required.
+- `src/mflux/models/common/lora/mapping/lora_loader.py` still has loader-level silent-degradation
+  paths: missing or unreadable files print an error and return from `_apply_single_lora()`, and
+  zero-match adapters can finish with warnings rather than a failed generation.
 - LoRA mappings exist for FLUX.1, FLUX.2, Qwen, and Z-Image:
   - `src/mflux/models/flux/weights/flux_lora_mapping.py`
   - `src/mflux/models/flux2/weights/flux2_lora_mapping.py`
@@ -39,14 +41,17 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
 - Wan, SeedVR2, and FIBO do not have proven LoRA mappings in the current MLX-Gen tree. FIBO is the
   most misleading risk if any CLI path accepts LoRA flags without applying them.
 
-## Problem or opportunity
+## Problem
 
 LoRA should be treated as required user input, not best-effort decoration. If a user asks for a LoRA
 and it is missing, corrupt, maps zero keys, or targets a family that does not support LoRA, MLX-Gen
 should fail early with a clear message. Silent or warning-only behavior is dangerous because the
 output image can look plausible while ignoring the requested adapter.
 
-## Proposed direction
+This is now planned because the current behavior is inconsistent with ADR 0002 and the user-facing
+troubleshooting docs: resolution is strict, but application can still degrade silently later.
+
+## What we want to do
 
 Add a capability matrix and strict LoRA application policy:
 
@@ -78,14 +83,22 @@ characters, and AbstractVision workflows. It is also one of the easiest places t
 loading a model and ignoring the adapter creates outputs that are technically valid but
 semantically wrong.
 
-## Promotion criteria
+## Scope
 
-- The next AbstractVision integration needs to expose LoRA controls.
-- A user reports a LoRA run that completed while ignoring a missing or zero-match adapter.
-- We decide to promote Qwen-Image-Edit-2511 LoRA workflows as a first-class feature.
-- A new family port wants LoRA support and needs a shared test contract.
+- Family-level LoRA capability metadata for generation and training surfaces.
+- Strict router or model-load rejection for families without proven LoRA inference support.
+- Strict loader behavior for unreadable, corrupt, zero-match, or shape-invalid user-requested
+  adapters.
+- Docs and tests that align the public troubleshooting claim with runtime behavior.
 
-## Validation ideas
+## Non-goals
+
+- Do not implement LoRA for every family.
+- Do not add automatic LoRA downloads during generation.
+- Do not change existing quantization policies.
+- Do not bake LoRAs into prepared folders unless that behavior is explicitly documented and tested.
+
+## Validation
 
 - Unit test missing file, corrupt file, zero matched keys, partial matched keys, and successful
   application.
@@ -95,11 +108,16 @@ semantically wrong.
 - Metadata test proving generated images preserve original LoRA paths and scales.
 - Save/prepare test proving baked or stripped LoRA behavior is documented and deterministic.
 
-## Non-goals
+## Progress checklist
 
-- This proposal does not authorize implementing LoRA for every family.
-- This proposal does not require automatic LoRA downloads during generation.
-- This proposal does not change existing quantization policies.
+- [x] Confirm unresolved LoRA paths now fail in `LoraResolution`.
+- [x] Confirm loader-level missing/unreadable and zero-match cases can still avoid hard failure.
+- [ ] Add explicit family-level LoRA capability metadata.
+- [ ] Reject LoRA flags for unsupported families before generation starts.
+- [ ] Make loader-level missing, unreadable, corrupt, zero-match, and shape-invalid cases fail
+      closed.
+- [ ] Add focused tests for strict LoRA application.
+- [ ] Update docs and generated capability metadata.
 
 ## Guidance for future agents
 

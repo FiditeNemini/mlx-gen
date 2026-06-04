@@ -14,8 +14,8 @@ source-exclude = [
 
 [project]
 name = "mlx-gen"
-version = "0.18.9"
-description = "Generative image model runtimes for MLX."
+version = "0.18.10"
+description = "Generative image and video model runtimes for MLX."
 readme = "README.md"
 keywords = ["flux", "ai", "ml", "transformers", "mlx", "huggingface", "apple-silicon", "diffusers", "qwen", "qwen-image", "seedvr2", "z-image"]
 authors = [{ name = "Filip Strand", email = "strand.filip@gmail.com" }]

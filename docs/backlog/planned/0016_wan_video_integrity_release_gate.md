@@ -28,7 +28,7 @@ temporal change. No metadata sidecar, latent checkpoint, or temp recovery artifa
 
 - `src/mflux/utils/video_util.py` previously let `np.clip(...).astype("uint8")` convert NaN decoded
   frame values into black pixels.
-- The current worktree adds fail-closed finite checks before uint8 conversion and phase-aware Wan
+- Version 0.18.9 ships fail-closed finite checks before uint8 conversion and phase-aware Wan
   tensor-health checks for prompt embeddings, conditioning, denoise predictions, scheduler latents,
   pre-decode latents, and VAE decode.
 - `src/mflux/models/wan/cli/wan_generate.py` now keeps the progress lifecycle open through save and
@@ -37,10 +37,15 @@ temporal change. No metadata sidecar, latent checkpoint, or temp recovery artifa
   effectively black/white collapse and validate dimensions, frame count, and fps.
 - Wan CLI failures now write a compact `<output>.failure.json` manifest with the error, tensor-health
   report when available, prompt, seed, shape, guidance, fps, and memory-related runtime flags.
-- `models/wan2.2-t2v-a14b-diffusers-8bit/README.md` previously advertised the exact full-size command
-  that failed, while validation only covered 384x224, 17 frames, and 12 steps.
-- Wan VAE q8 metadata was misleading for prepared q8 folders; the current worktree marks Wan VAE as
+- Wan q8/BF16 model cards now keep full-size claims tied to validation evidence instead of treating
+  the failed 1280x720, 81-frame command as proven.
+- Wan VAE q8 metadata was misleading for prepared q8 folders; 0.18.9 marks Wan VAE as
   `skip_quantization` and ignores stale q metadata for skipped components.
+- The 0.18.10 public docs and model-card wording keep Wan mixed q8/BF16 claims tied to measured
+  validation profiles and included lower-cost examples. They do not claim full-size A14B q8
+  production readiness.
+- Remaining planned work is release-artifact capture, optional latent diagnostics, and exact
+  full-size A14B revalidation with the shipped guards enabled.
 
 ## Problem
 
@@ -49,9 +54,9 @@ run, and the public card guidance overstated what the q8 package had proven.
 
 ## What we want to do
 
-Make video generation fail closed when tensors become non-finite, preserve enough failure evidence to
-avoid blind reruns, and require a video-health gate before Wan q8 model cards or releases claim
-full-size readiness.
+Keep video generation fail-closed when tensors become non-finite, preserve enough failure evidence
+to avoid blind reruns, and require release artifacts plus a video-health gate before Wan q8 model
+cards or docs claim exact full-size readiness.
 
 ## Why
 
@@ -129,11 +134,14 @@ unvalidated generation settings.
 - [x] Add Wan denoise/pre-decode tensor-health checks with a configurable per-step interval.
 - [x] Add reusable video-health inspector and default generated-video save gate.
 - [x] Add default CLI failure manifests next to the intended Wan video output path.
+- [x] Keep 0.18.10 release docs/cards limited to measured validation profiles instead of full-size
+  q8 readiness claims.
 - [ ] Wire the video-health report into the full Wan q8 release validation artifacts.
 - [ ] Add optional latent diagnostics on failure.
 - [ ] Revalidate full-size T2V-A14B mixed q8/BF16 with diagnostics.
 
 ## Guidance for the implementing agent
 
-Treat this as release-blocking. Prefer fast unit tests and small probes first; do not spend another
-multi-hour run until the failure path preserves enough evidence to explain the result.
+Treat this as blocking any expanded full-size q8 claim. Prefer fast unit tests and small probes
+first; do not spend another multi-hour run until the failure path preserves enough evidence to
+explain the result.

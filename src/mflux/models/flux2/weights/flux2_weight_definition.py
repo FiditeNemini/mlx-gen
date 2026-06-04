@@ -41,7 +41,7 @@ class Flux2KleinWeightDefinition:
                 max_length=512,
                 use_chat_template=True,
                 chat_template_kwargs={"enable_thinking": False},
-                download_patterns=["tokenizer/**", "added_tokens.json", "chat_template.jinja"],
+                download_patterns=["tokenizer/**"],
             ),
         ]
 
@@ -55,8 +55,6 @@ class Flux2KleinWeightDefinition:
             "text_encoder/*.safetensors",
             "text_encoder/*.json",
             "tokenizer/**",
-            "added_tokens.json",
-            "chat_template.jinja",
         ]
 
     @staticmethod

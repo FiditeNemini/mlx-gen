@@ -51,6 +51,9 @@ class Flux2KleinEdit(nn.Module):
         image_strength: float | None = None,
         scheduler: str = "flow_match_euler_discrete",
     ) -> GeneratedImage:
+        if image_strength is not None:
+            raise ValueError("image_strength is only supported for latent image-to-image mode, not edit-reference mode.")
+
         # For metadata + dimension inference purposes, pick a primary reference image (if any).
         primary_image_path = None
         if image_paths:
@@ -92,7 +95,7 @@ class Flux2KleinEdit(nn.Module):
         )
 
         # 4. Denoising loop
-        ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config)
+        ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config, task="image-to-image")
         ctx.before_loop(latents)
         predict = self._predict(self.transformer)
         for t in config.time_steps:

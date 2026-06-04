@@ -96,5 +96,5 @@ upscalers, video LoRA adapters, or multi-stage generation.
 
 ## Sources checked
 
-- Local Diffusers LTX-2 pipelines in `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/ltx2/`
+- Local Diffusers checkout LTX-2 pipelines under `diffusers/src/diffusers/pipelines/ltx2/`
 - LTX-2.3 model card: https://huggingface.co/Lightricks/LTX-2.3

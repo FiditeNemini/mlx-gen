@@ -63,7 +63,8 @@ Then retry generation with `--use-prompt-enhancer`.
 
 ## ERNIE Rejects Multiple Image Inputs Or Edit Tasks
 
-ERNIE Image Turbo supports text-to-image and experimental single-image image-to-image. It does not support multi-image edit.
+ERNIE Image Turbo supports text-to-image and experimental single-image latent image-to-image. It
+does not support edit/reference or multi-reference image-to-image.
 
 Use one input image for ERNIE image-to-image:
 
@@ -80,7 +81,9 @@ mlxgen generate \
   --output edited.png
 ```
 
-If you pass `--task edit`, multiple `--images`, or `--image-strength` without an image, MLX-Gen fails before loading the model and tells you which input shape ERNIE supports.
+If you pass `--task edit`, `--i2i-mode edit`, multiple `--images`, or `--image-strength` without an
+image, MLX-Gen fails before loading the model and tells you which input shape and mode ERNIE
+supports.
 
 If ERNIE image-to-image does not preserve enough of the source image, increase `--image-strength`, keep the output aspect ratio close to the input aspect ratio, or use Qwen Image Edit for a true image-conditioned edit. If ERNIE preserves the source too strongly and barely applies the requested style, lower `--image-strength` or increase `--steps` to 12-16.
 
@@ -93,7 +96,6 @@ Use the upstream TI2V-5B settings when validating visual quality:
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
   --width 1280 \
   --height 704 \
@@ -104,7 +106,9 @@ mlxgen generate \
   --output video.mp4
 ```
 
-Use lower dimensions, frame counts, or step counts only to validate routing and MP4 writing. For image-to-video, pass exactly one input image and use `--task image-to-video`. Multi-image Wan interpolation is not enabled.
+Use lower dimensions, frame counts, or step counts only to validate routing and MP4 writing. For
+image-to-video, pass exactly one input image; MLX-Gen infers I2V from the image input and selected
+Wan model. Multi-image Wan interpolation is not enabled.
 
 For Wan image-to-video prompts, describe concrete motion rather than only a style. Name the moving
 body parts or object parts, keep continuity constraints in the positive prompt, and put common
@@ -115,7 +119,7 @@ examples.
 
 For T2V-A14B source/BF16 quality validation, use 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Do not treat those settings as a full-size mixed q8/BF16 validation claim until the q8 ladder and video-health release gate have passed. The separate I2V-A14B path requires a complete local `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and one `--image` input.
 
-Wan uses frame-count control rather than a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, and at 16 fps, 81 frames is about 5.06 seconds. Frame counts are normalized to `4n + 1`, and width/height are normalized to the selected Wan model's VAE/patch multiple.
+Wan uses frame-count control rather than a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, and at 16 fps, 81 frames is about 5.06 seconds. Frame counts are normalized to `4n + 1`, and width/height are normalized to the selected Wan model's VAE/patch multiple. TI2V-5B requires 32-pixel width/height multiples; A14B requires 16-pixel multiples. `832x480` works for both families, `448x256` works for both families, and `432x240` works for A14B but adjusts to `416x224` on TI2V-5B. See [What Wan Video Resolutions Should I Use?](faq.md#what-wan-video-resolutions-should-i-use) for the full table.
 
 If Wan generation or MP4 save validation fails, the CLI writes a failure manifest next to the intended output path, for example `video.failure.json` for `video.mp4`. The manifest includes the error, tensor-health report when available, seed, prompt, dimensions, frames, steps, guidance, fps, output path, and memory-related runtime flags.
 

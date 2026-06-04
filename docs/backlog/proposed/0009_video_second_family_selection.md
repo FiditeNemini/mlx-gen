@@ -103,7 +103,7 @@ CLI/API, progress events, quantization plan, and validation clips.
 ## Sources checked
 
 - `src/mflux/models/wan/`
-- Local Diffusers video pipelines under `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/`
+- Local Diffusers checkout video pipelines under `diffusers/src/diffusers/pipelines/`
 - Wan2.2 TI2V 5B model card: https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers
 - LTX-2.3 model card: https://huggingface.co/Lightricks/LTX-2.3
 - HunyuanVideo-1.5 model card: https://huggingface.co/tencent/HunyuanVideo-1.5

@@ -4,402 +4,184 @@
 [![MLX](https://img.shields.io/pypi/v/mlx?label=MLX&logo=pypi&logoColor=white)](https://pypi.org/project/mlx/)
 [![CI](https://github.com/lpalbou/mlx-gen/actions/workflows/tests.yml/badge.svg)](https://github.com/lpalbou/mlx-gen/actions/workflows/tests.yml)
 
-### About
-
-Run state-of-the-art generative image and video models locally with native MLX.
+MLX-Gen is a local image and video generation runtime for Apple Silicon and MLX. It exposes one
+`mlxgen` command for text-to-image, image-to-image, text-to-video, image-to-video, model download,
+model preparation, quantized local folders, and application progress callbacks.
 
 > [!IMPORTANT]
-> MLX-Gen is an independent project forked from [mflux](https://github.com/filipstrand/mflux). It is currently built on the mflux codebase, with full credit to Filip Strand and the original contributors, while publishing under the `mlx-gen` package name and exposing `mlxgen` as the application import path.
->
-> The project exists so compatibility fixes and capabilities can ship quickly for Apple Silicon workflows, including enabling Qwen Image/Edit support, ERNIE Image Turbo support, Bonsai low-bit FLUX.2 support, Wan video experiments, Qwen/FLUX.2 image editing, quantized model packaging, local model loading, AbstractVision integration, and release cadence. We will continue to credit and upstream focused fixes where practical, but MLX-Gen is expected to evolve and diverge rapidly as its own package.
+> MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux). Most credit for the
+> current codebase goes to Filip Strand and the original mflux contributors. This project keeps
+> that attribution visible while publishing independently as `mlx-gen` and evolving the `mlxgen`
+> command surface for current Apple Silicon workflows.
 
-### Table of contents
+![MLX-Gen workflow example](https://raw.githubusercontent.com/lpalbou/mlx-gen/main/docs/assets/examples/spaceship-snow/mlx-gen-example.png)
 
-- [Relationship to mflux](#relationship-to-mflux)
-- [💡 Philosophy](#-philosophy)
-- [💿 Installation](#-installation)
-- [Model Downloads And Preparation](#model-downloads-and-preparation)
-- [Quantized Model Compatibility](#quantized-model-compatibility)
-- [Progress And Video Health](#progress-and-video-health)
-- [Documentation](#documentation)
-- [🎨 Models](#-models)
-- [✨ Features](#-features)
-- [🌱 Related projects](#related-projects)
-- [🙏 Acknowledgements](#-acknowledgements)
-- [⚖️ License](#%EF%B8%8F-license)
+## What It Does
 
----
+MLX-Gen runs supported Hugging Face and prepared MLX-Gen model folders without starting network
+downloads during generation. You explicitly download or prepare models first, then generation is a
+cache-only operation suitable for desktop apps, workflow engines, and long-running local jobs.
 
-<a id="relationship-to-mflux"></a>
+The main capabilities are:
 
-### Relationship to mflux
+- text-to-image generation with Qwen Image, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image,
+  FIBO, and related prepared folders;
+- image-to-image modes, including latent img2img, instruction/reference edits, and multi-reference
+  edits where the selected model supports them;
+- Wan2.2 text-to-video and image-to-video, including A14B T2V/I2V prepared BF16 and mixed q8/BF16
+  packages;
+- explicit `download` and `prepare` workflows for reproducible local model folders;
+- JSON model capability inspection before starting a heavy run;
+- shared progress events for applications embedding MLX-Gen.
 
-MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux), which established a clear MLX-native image generation stack. This repository preserves that foundation and remains MIT licensed.
+## Install
 
-The immediate reason for the independent package is practical: MLX-Gen can iterate faster on compatibility fixes and capabilities that affect real usage, including Qwen Image/Edit quantization layouts, ERNIE Image Turbo model support, Bonsai low-bit FLUX.2 support, FLUX.2 edit behavior, local model packaging, PyPI release cadence, and Apple Silicon validation. Some of those changes are proposed upstream as small PRs; others may remain MLX-Gen-specific as the project direction diverges.
-
-MLX-Gen also exists to power [AbstractVision](https://pypi.org/project/abstractvision/), the generative vision layer used with [AbstractCore](https://pypi.org/project/abstractcore/) in the wider [AbstractFramework](https://pypi.org/project/abstractframework/) ecosystem. That gives the package its own product requirements while keeping general fixes available for upstream mflux contributions where practical.
-
-For now, some internals still live under `mflux.*` while MLX-Gen evolves from its forked base. New application code should use the `mlxgen` command and import path.
-
-The project intentionally keeps mflux vocabulary in parts of the codebase and metadata while that remains useful. This preserves compatibility for existing users and keeps a possible merge-back path open if the two projects converge again.
-
-Most credit for the current codebase goes to Filip Strand and the original mflux contributors. Changes introduced after the MLX-Gen fork are maintained here by Laurent-Philippe Albou / AbstractVision. See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) for project credits.
-
----
-
-### 💡 Philosophy
-
-MLX-Gen is an independent package for running generative image and video models on MLX. It prioritizes fast local iteration, practical Apple Silicon performance, and compatibility with current model releases without coupling every change to upstream release timing.
-
-The implementation remains intentionally direct: model code is written in MLX, with Hugging Face libraries used for tokenizers and model downloads.
-
----
-
-### 💿 Installation
-If you haven't already, [install `uv`](https://github.com/astral-sh/uv?tab=readme-ov-file#installation), then run:
+Install with `uv`:
 
 ```sh
 uv tool install --upgrade mlx-gen
 ```
 
-This package is published on PyPI as `mlx-gen`. The Python import for application code is `mlxgen`.
+Or install into an environment:
 
-After installation, start with the MLX-Gen command help:
+```sh
+python -m pip install -U mlx-gen
+```
+
+Check the command surface:
 
 ```sh
 mlxgen --help
 ```
 
-The public command surface is:
+## First Commands
 
-- `mlxgen generate`: generate images, edit images, or generate supported videos with a cached or prepared model.
-- `mlxgen download`: explicitly download a model snapshot into the Hugging Face cache.
-- `mlxgen prepare`: create a reusable local MLX-Gen model folder, optionally quantized, and write a Hugging Face model card.
-
-Use `mlxgen prepare`, not a separate `save` command, when you want a local quantized folder to reuse or upload.
-
-To generate your first image, use `mlxgen generate` and choose the model with `--model`:
-
-```
-mlxgen download --model z-image-turbo
-
-mlxgen generate \
-  --model z-image-turbo \
-  --prompt "A puffin standing on a cliff" \
-  --width 1280 \
-  --height 500 \
-  --seed 42 \
-  --steps 9 \
-  --quantize 8
-```
-
-![Puffin](src/mflux/assets/puffin.png)
-
-The same router is also available as `mlx-gen`, `mlxgen-generate`, and `mlx-generate`.
-
-For image editing, pass input images with `--image` or `--images`; MLX-Gen routes to the right backend from the model and image inputs:
+Download model files explicitly:
 
 ```sh
-mlxgen download --model AbstractFramework/qwen-image-edit-2511-4bit
-
-mlxgen generate \
-  --model AbstractFramework/qwen-image-edit-2511-4bit \
-  --image input.png \
-  --prompt "Turn the room into a pencil sketch" \
-  --steps 20 \
-  --seed 42 \
-  --output edited.png
+mlxgen download --model AbstractFramework/flux.2-klein-9b-8bit
 ```
 
-For text-to-video, use Wan2.2. The smaller TI2V-5B path supports text-to-video and experimental
-first-frame image-to-video:
-
-```sh
-mlxgen download --model Wan-AI/Wan2.2-TI2V-5B-Diffusers
-
-mlxgen generate \
-  --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task text-to-video \
-  --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
-  --width 1280 \
-  --height 704 \
-  --frames 121 \
-  --steps 50 \
-  --guidance 5 \
-  --fps 24 \
-  --output video.mp4
-```
-
-Wan2.2 T2V-A14B is also wired as a Diffusers-style two-transformer A14B path. `--guidance-2` is an
-optional Diffusers-compatible low-noise-stage override. When both guidance flags are omitted,
-MLX-Gen uses the model defaults (`4` high-noise, `3` low-noise for T2V-A14B). When `--guidance` is
-set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`:
-
-```sh
-mlxgen download --model Wan-AI/Wan2.2-T2V-A14B-Diffusers
-
-mlxgen generate \
-  --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
-  --task text-to-video \
-  --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
-  --width 1280 \
-  --height 720 \
-  --frames 81 \
-  --steps 40 \
-  --guidance 4 \
-  --guidance-2 3 \
-  --fps 16 \
-  --output video.mp4
-```
-
-Wan image-to-video is available through two paths. TI2V-5B uses an experimental first-frame
-conditioning route:
+Generate an image:
 
 ```sh
 mlxgen generate \
-  --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task image-to-video \
-  --image input.png \
-  --prompt "A slow cinematic camera move from the input frame" \
-  --width 1280 \
-  --height 704 \
-  --frames 121 \
-  --steps 50 \
-  --guidance 5 \
-  --fps 24 \
-  --output video.mp4
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --prompt "A cinematic wide shot of a compact sci-fi spaceship resting in deep snow on a frozen alien planet" \
+  --width 768 \
+  --height 432 \
+  --steps 24 \
+  --guidance 1.0 \
+  --seed 6107 \
+  --output spaceship.png
 ```
 
-A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and the Diffusers
-concatenated image-condition latent path:
+Inspect model capabilities before a run:
 
 ```sh
-mlxgen download --model Wan-AI/Wan2.2-I2V-A14B-Diffusers
-
-mlxgen generate \
-  --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
-  --task image-to-video \
-  --image input.png \
-  --prompt "A cinematic flyby around the subject in the input image" \
-  --width 1280 \
-  --height 720 \
-  --frames 81 \
-  --steps 40 \
-  --guidance 3.5 \
-  --fps 16 \
-  --output video.mp4
+mlxgen capabilities --model AbstractFramework/flux.2-klein-9b-8bit
 ```
 
-The TI2V-5B I2V path follows Diffusers first-frame latent conditioning. It is not ordinary image-to-image latent initialization, and it should still be treated as early video support while quality and performance are validated. The A14B I2V route requires the complete local I2V source snapshot before generation.
-
-Wan does not have a separate duration flag: duration is `frames / fps`. Frame counts are normalized to `4n + 1`. Width/height are normalized to the selected Wan model's VAE/patch multiple: TI2V-5B uses multiples of 32, while A14B uses multiples of 16.
-
-See [API And CLI](docs/api.md) for spatial-scale Wan T2V/I2V sanity panels generated at 1280x704.
-
-If a local model path or custom repository name cannot be classified from its name, add `--family qwen`, `--family flux2`, `--family bonsai`, `--family fibo`, `--family z-image`, `--family ernie-image`, or `--family wan`. The router can also read `model`, `image_path`, and `image_paths` from `--config-from-metadata`.
-
-### Model Downloads And Preparation
-
-MLX-Gen does not download model, tokenizer, LoRA, or Depth Pro files during generation. Generation is cache-only by default so applications can run predictable workflows without a network transfer starting in the middle of a job.
-
-Use one of these explicit setup commands before generation:
+Create a reusable local prepared folder:
 
 ```sh
-# Download the required Hugging Face snapshot into the local cache.
-mlxgen download --model Qwen/Qwen-Image
-
-# Prepare a reusable local MLX-Gen model folder, optionally quantized.
 mlxgen prepare \
   --model Qwen/Qwen-Image \
   --path ./models/qwen-image-8bit \
   --quantize 8
-
-# Download the direct Apple Depth Pro weights used by depth workflows.
-mlxgen download --model depth-pro
 ```
 
-The commands have different outputs:
+`mlxgen generate` does not download missing files. If something is not cached, MLX-Gen raises a
+clear `DownloadRequiredError` with the command to run.
 
-| Command | Use it when | Writes a local model folder | Writes a Hugging Face card |
-| --- | --- | --- | --- |
-| `mlxgen download` | You want the original repository cached for generation. | No | No |
-| `mlxgen prepare` | You want a reusable MLX-Gen folder, usually quantized, for local reuse or upload. | Yes | Yes |
-| `mlxgen generate` | You want to run inference from cached or prepared files. | No | No |
+## Reproducible Example
 
-`mlxgen download` and `mlxgen prepare` are the commands that authorize network access. If you have Hugging Face's accelerated transfer backend available, you can optionally prefix those commands with `HF_HUB_ENABLE_HF_TRANSFER=1` for faster downloads.
+The docs include a complete model-backed spaceship workflow:
 
-`mlxgen prepare` also writes a Hugging Face `README.md` model card into the prepared folder. The generated card cites the original model, mflux, MLX-Gen, the `mlx-gen` version that generated the card, the quantization policy, and the default contributor attribution. Public card examples default to `AbstractFramework/<repo-name>` and include `python -m pip install -U mlx-gen` so Hugging Face readers can copy and paste a complete baseline setup.
+- T2I: generate a spaceship in the snow.
+- I2I edit: turn it into a pencil sketch.
+- I2I edit: crash the same spaceship in the snow.
+- I2I multi-reference: combine the crash layout and pencil-sketch style.
+- T2V A14B: generate a spaceship taking off from a snow planet.
+- I2V A14B: animate the generated spaceship taking off from the source image.
 
-If a required artifact is missing, MLX-Gen raises `DownloadRequiredError` with the exact command to run. See [docs/model-management.md](docs/model-management.md) for details and [docs/python-integration.md](docs/python-integration.md) for in-process usage.
+See [docs/examples/spaceship-snow.md](docs/examples/spaceship-snow.md) for the exact commands and
+included assets.
 
-### Quantized Model Compatibility
+![Spaceship mode contact sheet](https://raw.githubusercontent.com/lpalbou/mlx-gen/main/docs/assets/examples/spaceship-snow/spaceship_modes_real_generation_contact_sheet.png)
 
-MLX-Gen supports reusable prepared folders for these primary quantized model families:
+## Published Models
 
-| Model family | q8 | q4 | Notes |
-| --- | --- | --- | --- |
-| Qwen Image and Qwen Image Edit | Supported | Mixed q4/q8 | Covers Qwen Image, Qwen Image 2512, Qwen Image Edit, 2509, and 2511. |
-| ERNIE Image Turbo | Supported | Mixed q4/q8 | Text-to-image plus experimental single-image image-to-image. Prompt Enhancer is optional from a full source snapshot. |
-| FLUX.2 Klein | Supported | Supported | Standard MLX quantization. 9B derivatives follow the source gated/non-commercial access requirements. |
-| Bonsai Image | Pre-packed ternary 2-bit | Pre-packed ternary 2-bit | Use `mlxgen download` and `mlxgen generate`; do not run `prepare`. Binary 1-bit is detected but waiting on stock-MLX 1-bit runtime support. |
-| Z-Image and Z-Image Turbo | Supported | Supported | Standard MLX quantization with model-specific generation defaults. |
-| FIBO | Supported with source access | Supported with source access | Source repositories may require access approval before download or preparation. |
-| Wan2.2 | Mixed q8/BF16 | Under validation | q8 prepared folders quantize bulky transformer block linears and keep sensitive conditioning/output paths, text encoders, and VAE at BF16. |
+Prepared MLX-Gen model folders are published under the
+[AbstractFramework organization on Hugging Face](https://huggingface.co/AbstractFramework). Current
+published examples include:
 
-q4 and lower-bit checkpoints are not treated as blind size-only conversions. Qwen and ERNIE use mixed q4/q8 policies because fully q4 checkpoints can lose generation quality; the higher-precision paths are kept where validation shows they matter. Bonsai uses Prism's pre-packed ternary 2-bit transformer plus a 4-bit Qwen3 text encoder rather than MLX-Gen's `prepare` flow. In practice the quality strategy is similar: keep sensitive paths higher precision, then publish the smallest validated layout. See [Quantization](docs/quantization.md) for the current rules and measurements.
+- `AbstractFramework/flux.2-klein-4b-4bit`
+- `AbstractFramework/flux.2-klein-4b-8bit`
+- `AbstractFramework/flux.2-klein-9b-4bit`
+- `AbstractFramework/flux.2-klein-9b-8bit`
+- `AbstractFramework/qwen-image-2512-4bit`
+- `AbstractFramework/qwen-image-2512-8bit`
+- `AbstractFramework/qwen-image-edit-2511-4bit`
+- `AbstractFramework/qwen-image-edit-2511-8bit`
+- `AbstractFramework/z-image-turbo-4bit`
+- `AbstractFramework/z-image-turbo-8bit`
+- `AbstractFramework/ernie-image-turbo-4bit`
+- `AbstractFramework/ernie-image-turbo-8bit`
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-bf16`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-bf16`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit`
 
-Wan A14B prepared BF16 and mixed q8/BF16 folders can substantially reduce storage compared with the upstream source snapshot. The mixed q8/BF16 layout also reduces measured full-process memory in validation, but it is not documented as a speed improvement. Keep full-size Wan A14B claims tied to the validation profile in the model card or release notes.
+Use `mlxgen download --model <repo-id>` to cache a published model, or pass the repository id
+directly to `mlxgen generate` after it is cached.
 
-### Progress And Video Health
+## Wan A14B Measurements
 
-Python applications can subscribe to a shared progress event through `model.callbacks.subscribe_progress(...)`. The event type is `mflux.callbacks.ProgressEvent`; `event.progress` always reports denoising-step progress. Video events also include optional frame context through `frame`, `total_frames`, and `frame_progress`.
+Wan A14B was measured on an Apple M5 Max with 128 GB unified memory. The published-card validation
+uses small, repeatable low-RAM runs and records full-process Darwin physical footprint, RSS, MLX
+allocator peak, and generation time. These are validation-profile measurements, not a guarantee for
+every full-size production prompt.
 
-Wan video generation emits step-based progress instead of using output frames as the progress total. The CLI reserves `complete` for a video that has been saved and passed the built-in MP4 health check. If Wan generation or save validation fails, MLX-Gen writes a compact `<output>.failure.json` manifest next to the intended output path.
+| Model | Package | Disk | Physical Peak | Max RSS | MLX Peak | Time | Profile |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Wan2.2 T2V-A14B | BF16 | 64.3 GiB | 33.0 GiB | 31.8 GiB | 27.7 GiB | 152.7 s | 384x224, 33 frames, 12 steps, 8 fps |
+| Wan2.2 T2V-A14B | mixed q8/BF16 | 39.7 GiB | 20.7 GiB | 19.5 GiB | 15.5 GiB | 154.8 s | 384x224, 33 frames, 12 steps, 8 fps |
+| Wan2.2 I2V-A14B | BF16 | 64.1 GiB | 33.7 GiB | 31.8 GiB | 28.2 GiB | 228.2 s | 384x384, 33 frames, 12 steps, 8 fps |
+| Wan2.2 I2V-A14B | mixed q8/BF16 | 39.7 GiB | 21.5 GiB | 19.6 GiB | 15.9 GiB | 242.2 s | 384x384, 33 frames, 12 steps, 8 fps |
 
-### Documentation
+In these runs, mixed q8/BF16 reduces disk usage by about 38% versus prepared BF16 folders and
+reduces full-process physical peak memory by about 36-37%. It is not documented as a speed
+improvement. See [docs/quantization.md](docs/quantization.md) for model-family quantization details.
 
-- [Getting started](docs/getting-started.md): install MLX-Gen, discover the CLI, prepare a model, and run generation.
-- [Architecture](docs/architecture.md): package shape, command boundaries, model-file lifecycle, and runtime failure contract.
-- [API and CLI](docs/api.md): public command surface, Python integration notes, and compatibility entry points.
-- [Model management](docs/model-management.md): explicit `download` and `prepare` behavior, runtime cache policy, and model-card creation.
-- [Quantization](docs/quantization.md): q4/q8 behavior, Bonsai low-bit packed support, and current Qwen/ERNIE mixed q4/q8 policies.
-- [Hugging Face publishing](docs/huggingface-publishing.md): generated model cards, default `AbstractFramework/<repo-name>` usage, upload flow, and optional collection membership.
-- [Python integration](docs/python-integration.md): cache-only model construction, AbstractVision integration, shared progress callbacks, and threading guidance.
-- [FAQ](docs/faq.md): common questions about `prepare`, downloads, package naming, compatibility, and Wan image-to-video prompting.
-- [Troubleshooting](docs/troubleshooting.md): common setup, runtime, and Wan video validation errors.
+## Ecosystem
 
-<details>
-<summary>Python API</summary>
+MLX-Gen is used as the local Apple Silicon generation backend for:
 
-Create a standalone `generate.py` script with inline `uv` dependencies:
+- [AbstractVision](https://github.com/lpalbou/abstractvision), the vision/generation layer of the
+  AbstractFramework ecosystem;
+- [AbstractFramework](https://github.com/lpalbou/abstractframework), the broader framework for
+  local agentic and generative workflows;
+- [AbstractFlow](https://github.com/lpalbou/abstractflow), a visual orchestration layer that can
+  compose generative capabilities with persistent agentic tasks.
 
-```python
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#   "mlx-gen",
-# ]
-# ///
-from mlxgen.models.z_image import ZImageTurbo
+MLX-Gen remains useful as a standalone CLI package, but its cache-only runtime behavior, capability
+inspection, prepared model folders, and progress callbacks are designed so applications can embed it
+without surprise network transfers or ambiguous model routing.
 
-model = ZImageTurbo(quantize=8)
-image = model.generate_image(
-    prompt="A puffin standing on a cliff",
-    seed=42,
-    num_inference_steps=9,
-    width=1280,
-    height=500,
-)
-image.save("puffin.png")
-```
+## Documentation
 
-Run it with:
+- [Getting started](docs/getting-started.md): installation and first runs.
+- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, Wan video sizes, capabilities, and Python entry points.
+- [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
+- [Model management](docs/model-management.md): download, prepare, cache-only runtime policy.
+- [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
+- [Python integration](docs/python-integration.md): embedding, progress callbacks, and AbstractVision notes.
+- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, outpaint/reframe status, Wan resolutions, and usage limits.
+- [Troubleshooting](docs/troubleshooting.md): common setup and runtime failures.
+- [Acknowledgements](ACKNOWLEDGEMENTS.md): upstream mflux and model-community credits.
 
-```sh
-mlxgen download --model z-image-turbo
-uv run generate.py
-```
+## License
 
-For more Python API inspiration, look at the [CLI entry points](src/mflux/models/z_image/cli/z_image_turbo_generate.py) for the respective models.
-</details>
-
-<details>
-<summary>⚠️ Troubleshooting: hf_transfer error</summary>
-
-If you explicitly enable `HF_HUB_ENABLE_HF_TRANSFER=1` and encounter a `ValueError` because `hf_transfer` is not available, install MLX-Gen with the `hf_transfer` package included:
-
-```sh
-uv tool install --upgrade mlx-gen --with hf_transfer
-```
-
-This will enable faster model downloads from Hugging Face.
-
-</details>
-
-<details>
-<summary>DGX / NVIDIA (uv tool install)</summary>
-
-```sh
-uv tool install --python 3.13 mlx-gen
-```
-</details>
-
----
-
-### 🎨 Models
-
-MLX-Gen supports the following model families. They have different strengths and weaknesses; see each model’s README for full usage details.
-
-| Model | Release date | Size | Type | Training | Description |
-| --- | --- | --- | --- | --- | --- |
-|[Z-Image](src/mflux/models/z_image/README.md) | Nov 2025 | 6B | Distilled & Base | Yes | Fast, small, very good quality and realism. |
-| Wan2.2 TI2V / A14B | Jul 2025 | 5B / A14B MoE | Base | No | Wan video support. TI2V-5B supports text-to-video and experimental first-frame image-to-video; T2V-A14B adds two-transformer boundary routing with optional low-noise `--guidance-2`; I2V-A14B is wired for complete local source snapshots. |
-|[FLUX.2](src/mflux/models/flux2/README.md) | Jan 2026 | 4B & 9B | Distilled & Base | Yes | Fastest + smallest with very good quality and edit capabilities. |
-| Bonsai Image | — | 4B | Distilled low-bit FLUX.2-derived | No | Prism low-bit text-to-image checkpoints. Ternary 2-bit runs directly in MLX-Gen; binary 1-bit is detected but blocked until stock MLX has 1-bit packed affine runtime support. |
-|[FIBO](src/mflux/models/fibo/README.md) | Oct 2025+ | 8B | Distilled & Base | No | Very good JSON-based prompt understanding. Has edit capabilities. |
-| ERNIE Image Turbo | Mar 2026 | 6B class | Distilled | No | Fast Apache 2.0 model from Baidu. MLX-Gen support covers text-to-image, experimental single-image image-to-image, BF16/q8/mixed q4 folders, and optional Prompt Enhancer from a full source snapshot. Use 384px+ outputs for reliable composition. |
-|[SeedVR2](src/mflux/models/seedvr2/README.md) | Jun 2025 | 3B & 7B | — | No | Best upscaling model. |
-|[Qwen Image](src/mflux/models/qwen/README.md) | Aug 2025+ | 20B | Base | No | Large model (slower); strong prompt understanding and world knowledge. Has edit capabilities |
-|[Depth Pro](src/mflux/models/depth_pro/README.md) | Oct 2024 | — | — | No | Very fast and accurate depth estimation model from Apple. |
-|[FLUX.1](src/mflux/models/flux/README.md) | Aug 2024 | 12B | Distilled & Base | No (legacy) | Legacy option with decent quality. Has edit capabilities with 'Kontext' model and upscaling support via ControlNet |
-
----
-
-### ✨ Features
-
-**General**
-- Quantization and local model loading
-- LoRA support (multi-LoRA, scales, library lookup)
-- Metadata export + reuse, plus prompt file support
-
-**Model-specific highlights**
-- Text-to-image and image-to-image generation.
-- LoRA finetuning
-- In-context editing, multi-image editing, and virtual try-on
-- ControlNet (Canny), depth conditioning, fill/inpainting, and Redux
-- Upscaling (SeedVR2 and Flux ControlNet)
-- Depth map extraction and FIBO prompt tooling (VLM inspire/refine)
-
-See the [common README](src/mflux/models/common/README.md) for detailed usage and examples, and use the model section above to browse specific models and capabilities.
-
-> [!NOTE]
-> As MLX-Gen supports a wide variety of CLI tools and options, the easiest way to navigate the CLI in 2026 is to use a coding agent (like [Cursor](https://cursor.com), [Claude Code](https://www.anthropic.com/claude-code), or similar). Ask questions like: “Can you help me generate an image using z-image?”
-
-
----
-
-<a id="related-projects"></a>
-
-### 🌱 Related projects
-
-- [MindCraft Studio](https://themindstudio.cc/mindcraft#models) — macOS app built on mflux by [@shaoju](https://github.com/shaoju)
-- [Mflux-ComfyUI](https://github.com/raysers/Mflux-ComfyUI) by [@raysers](https://github.com/raysers)
-- [MFLUX-WEBUI](https://github.com/CharafChnioune/MFLUX-WEBUI) by [@CharafChnioune](https://github.com/CharafChnioune)
-- [mflux-fasthtml](https://github.com/anthonywu/mflux-fasthtml) by [@anthonywu](https://github.com/anthonywu)
-- [mflux-streamlit](https://github.com/elitexp/mflux-streamlit) by [@elitexp](https://github.com/elitexp)
-
----
-
-### 🙏 Acknowledgements
-
-MLX-Gen exists because of the great work of:
-
-- The MLX Team for [MLX](https://github.com/ml-explore/mlx) and [MLX examples](https://github.com/ml-explore/mlx-examples)
-- Black Forest Labs for the [FLUX project](https://github.com/black-forest-labs/flux)
-- Bria for the [FIBO project](https://huggingface.co/briaai/FIBO)
-- Tongyi Lab for the [Z-Image project](https://tongyi-mai.github.io/Z-Image-blog/)
-- Baidu for the [ERNIE Image Turbo model](https://huggingface.co/baidu/ERNIE-Image-Turbo)
-- Prism ML for the [Bonsai Image low-bit MLX checkpoints](https://huggingface.co/prism-ml)
-- Qwen Team for the [Qwen Image project](https://qwen.ai/blog?id=a6f483777144685d33cd3d2af95136fcbeb57652&from=research.research-list)
-- ByteDance, @numz and @adrientoupet for the [SeedVR2 project](https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler)
-- Hugging Face for the [Diffusers library implementations](https://github.com/huggingface/diffusers) 
-- Depth Pro authors for the [Depth Pro model](https://github.com/apple/ml-depth-pro?tab=readme-ov-file#citation)
-- [mflux](https://github.com/filipstrand/mflux), Filip Strand, and the original mflux contributors and testers. MLX-Gen is currently based on that codebase and will keep acknowledging that foundation even as it evolves independently. Post-fork MLX-Gen changes are maintained by Laurent-Philippe Albou / AbstractVision.
-
----
-
-### ⚖️ License
-
-This project is licensed under the [MIT License](LICENSE).
+MLX-Gen is MIT licensed. Model weights remain governed by their original licenses and access terms.

@@ -103,7 +103,7 @@ existing Qwen/FLUX-style backend.
 
 ## Sources checked
 
-- Local Diffusers pipelines in `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/`
+- Local Diffusers checkout pipelines under `diffusers/src/diffusers/pipelines/`
 - HiDream-O1-Image-Dev model card: https://huggingface.co/HiDream-ai/HiDream-O1-Image-Dev
 - Qwen-Image-2.0 technical report: https://arxiv.org/abs/2605.10730
 - Z-Image-Turbo model card and model zoo: https://huggingface.co/Tongyi-MAI/Z-Image-Turbo

@@ -56,7 +56,13 @@ slower than the source BF16 snapshot. The comparison used 704x384, 25 frames, 12
   and frame count, so the tiny 384x224 sample is not large enough to show a meaningful RSS change.
 - On 2026-06-03, the full-size 1280x720, 81-frame, 40-step T2V-A14B mixed q8/BF16 run took about
   13h15m and produced an invalid all-black MP4 from non-finite decoded values. Treat that as a
-  numerical-integrity blocker before interpreting full-size q8 speed or memory results.
+  numerical-integrity blocker before interpreting full-size q8 speed or memory results. Version
+  0.18.9 ships fail-closed guards, but exact full-size q8 timing remains meaningful only after the
+  residual release-artifact and health-gated validation in
+  [item 0016](0016_wan_video_integrity_release_gate.md).
+- Public docs now describe mixed q8/BF16 as a storage and memory-footprint improvement, not as a
+  speed improvement. This investigation is still useful for optimization, but it is no longer the
+  release gate unless future docs or cards want to make speed claims.
 
 ## Problem
 

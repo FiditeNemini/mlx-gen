@@ -43,8 +43,8 @@ The latest source audit clarified an important default distinction:
 - `src/mflux/models/wan/variants/wan2_2_ti2v.py` resolves omitted runtime guidance, injects the
   default negative prompt, and routes `guidance` to the high-noise transformer and `guidance_2` to
   the low-noise transformer.
-- `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/wan/pipeline_wan.py` and
-  `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/wan/pipeline_wan_i2v.py` use empty
+- `diffusers/src/diffusers/pipelines/wan/pipeline_wan.py` and
+  `diffusers/src/diffusers/pipelines/wan/pipeline_wan_i2v.py` use empty
   negative prompts and tie `guidance_scale_2` to `guidance_scale` when callers omit those values.
 - Existing planned item [0002](0002_wan_quantization_motion_parity.md) tracks broader Wan
   quantization and motion parity. Existing proposed item

@@ -16,9 +16,10 @@ Check the command surface:
 mlxgen --help
 ```
 
-The top-level command shows the three public workflows:
+The top-level command shows the public workflows:
 
-- `mlxgen generate` for image generation, image editing, and supported video generation.
+- `mlxgen generate` for image generation and supported video generation.
+- `mlxgen capabilities` for inspecting model tasks, image-to-image modes, and option support without loading weights.
 - `mlxgen download` for explicit Hugging Face cache downloads.
 - `mlxgen prepare` for reusable local MLX-Gen model folders.
 
@@ -93,7 +94,8 @@ mlxgen generate \
 
 ## Edit An Image
 
-Pass one or more input images to the same `generate` command. MLX-Gen routes to the edit backend from the model and image inputs:
+Pass one or more input images to the same `generate` command. MLX-Gen routes to the right
+image-to-image mode from the model and image inputs:
 
 ```sh
 mlxgen generate \
@@ -105,9 +107,20 @@ mlxgen generate \
   --output edited.png
 ```
 
+Use `mlxgen capabilities --model <model>` to check whether a model supports latent img2img,
+edit/reference image-to-image, or multi-reference image-to-image. `--image-strength` is for latent
+img2img variation only; edit/reference models do not use it.
+
+For a complete image workflow with included outputs, see the
+[spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image
+edits, and multi-reference image-to-image with copy/pasteable commands.
+
 ## Generate A Video
 
-Wan2.2 support is available as an initial video backend. Download the source snapshot first, then run `mlxgen generate` with `--task text-to-video`.
+Wan2.2 support is available as an initial video backend. Download the source snapshot first, then
+run `mlxgen generate`. TI2V-5B infers text-to-video when no image is supplied and image-to-video
+when one image is supplied. The fixed A14B models are stricter: T2V-A14B rejects image inputs and
+I2V-A14B requires one image.
 
 Use TI2V-5B when you want the smaller text-to-video or experimental first-frame image-to-video path:
 
@@ -116,7 +129,6 @@ mlxgen download --model Wan-AI/Wan2.2-TI2V-5B-Diffusers
 
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task text-to-video \
   --prompt "A short cinematic video of a glowing orange glass sphere floating above teal water" \
   --width 1280 \
   --height 704 \
@@ -135,7 +147,6 @@ mlxgen download --model Wan-AI/Wan2.2-T2V-A14B-Diffusers
 
 mlxgen generate \
   --model Wan-AI/Wan2.2-T2V-A14B-Diffusers \
-  --task text-to-video \
   --prompt "A cinematic shot of mist rolling across a teal mountain lake" \
   --width 1280 \
   --height 720 \
@@ -153,13 +164,12 @@ and `--guidance` are both omitted, MLX-Gen uses the model's two-stage defaults. 
 means `--guidance 4` for the high-noise stage and `--guidance-2 3` for the low-noise stage. If you
 set `--guidance` and omit `--guidance-2`, the low-noise stage follows your `--guidance` value.
 
-For image-to-video, pass one input image and switch the task. TI2V-5B uses an experimental
-first-frame conditioning route:
+For image-to-video, pass one input image. TI2V-5B uses an experimental first-frame conditioning
+route:
 
 ```sh
 mlxgen generate \
   --model Wan-AI/Wan2.2-TI2V-5B-Diffusers \
-  --task image-to-video \
   --image input.png \
   --prompt "A slow cinematic camera move from the input frame" \
   --width 1280 \
@@ -179,7 +189,6 @@ mlxgen download --model Wan-AI/Wan2.2-I2V-A14B-Diffusers
 
 mlxgen generate \
   --model Wan-AI/Wan2.2-I2V-A14B-Diffusers \
-  --task image-to-video \
   --image input.png \
   --prompt "A cinematic flyby around the subject in the input image" \
   --width 1280 \
@@ -193,7 +202,21 @@ mlxgen generate \
 
 TI2V-5B image-to-video uses the Diffusers first-frame latent-conditioning path. The separate A14B I2V route requires the complete I2V source snapshot before generation. Treat current Wan video support as experimental: the pipeline can produce MP4 output, but quality, speed, and practical defaults still need broader validation.
 
-Wan does not have a separate duration option. Control duration with `--frames` and `--fps`: duration is `frames / fps`, so `--frames 121 --fps 24` is about 5.04 seconds and `--frames 81 --fps 16` is about 5.06 seconds. Wan frame counts must be `4n + 1`; MLX-Gen adjusts other values to that shape. Width and height are adjusted down to the selected Wan model's VAE/patch multiple. TI2V-5B uses multiples of 32, so `1280x720` becomes `1280x704`; A14B uses multiples of 16, so `1280x720` remains valid.
+Wan does not have a separate duration option. Control duration with `--frames` and `--fps`: duration
+is `frames / fps`, so `--frames 121 --fps 24` is about 5.04 seconds and `--frames 81 --fps 16` is
+about 5.06 seconds. Wan frame counts must be `4n + 1`; MLX-Gen adjusts other values to that shape.
+
+Width and height are adjusted down to the selected Wan model's VAE/patch multiple:
+
+| Model | Required multiple | Recommended/native size | Practical lower-cost sizes |
+| --- | ---: | --- | --- |
+| TI2V-5B T2V/I2V | 32 px | `1280x704` or `704x1280` | `832x480`, `480x832`, `448x256`, `256x448` |
+| T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
+| I2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
+
+For TI2V-5B, `1280x720` adjusts to `1280x704`, and `432x240` adjusts to `416x224`. For A14B,
+`1280x720`, `832x480`, `448x256`, and `432x240` are valid multiples of 16. Keep image-to-video
+source images composed for the requested/adjusted video aspect ratio.
 
 Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
@@ -205,5 +228,6 @@ Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
 - See [Model Management](model-management.md) for the full download, prepare, and runtime failure contract.
 - See [API And CLI](api.md) for the supported command surface and Python integration notes.
+- See [Spaceship Snow Workflow](examples/spaceship-snow.md) for a reproducible image and Wan A14B video example with included assets.
 - See [Quantization](quantization.md) for q4/q8 behavior, Bonsai low-bit packed support, and current Qwen/ERNIE mixed q4/q8 policies.
 - See [Troubleshooting](troubleshooting.md) when a required artifact is missing or a local path cannot be classified.

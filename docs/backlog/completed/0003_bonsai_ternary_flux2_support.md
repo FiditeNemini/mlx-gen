@@ -5,6 +5,7 @@
 - Created: 2026-05-27
 - Status: Completed
 - Completed: 2026-05-27
+- Original path: docs/backlog/planned/0003_bonsai_ternary_flux2_support.md
 
 ## ADR status
 
@@ -114,7 +115,8 @@ folders.
 - `src/mflux/models/common/weights/loading/weight_loader.py`
 - `src/mflux/models/flux2/`
 - Local Prism reference inspected at `/tmp/mflux-prism-inspect/src/mflux/models/flux2/model/flux2_transformer/klein_fast/`
-- Local Bonsai cached snapshots under `/Users/albou/.cache/huggingface/hub/models--prism-ml--bonsai-image-*`
+- Local Bonsai cached snapshots under the Hugging Face cache path for
+  `models--prism-ml--bonsai-image-*`
 
 ## Outcomes
 
@@ -166,6 +168,18 @@ The 512px timing values are three cold-process repeats captured with `/usr/bin/t
 - [x] Add low-bit runtime capability probe and binary 1-bit error path.
 - [x] Generate and inspect at least one ternary image.
 - [x] Update docs and model capability tables.
+
+## Completion report
+
+- Date: 2026-05-27.
+- Final path: `docs/backlog/completed/0003_bonsai_ternary_flux2_support.md`.
+- Code areas: Bonsai/FLUX.2 route detection, packed transformer loading, Qwen3 text-encoder
+  loading, low-bit runtime probes, CLI routing, docs, and generated capability tables.
+- Validation: real Bonsai ternary and FLUX.2 Klein q8 comparison images were generated; binary
+  1-bit was verified to fail with an explicit unsupported-runtime message; focused router/prepare
+  tests and ruff checks passed.
+- Residual work: Bonsai binary 1-bit remains deferred in proposed item 0004 until stock MLX or an
+  accepted custom-kernel path supports the required 1-bit packed affine runtime.
 
 ## Follow-up guidance
 

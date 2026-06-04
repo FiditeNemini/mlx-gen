@@ -1,4 +1,4 @@
-# Planned: Wan A14B boundary memory recovery
+# Planned: Wan A14B boundary memory recovery and full-size validation
 
 ## Metadata
 
@@ -28,12 +28,10 @@ to switch from `transformer` to `transformer_2`.
   objects.
 - `src/mflux/models/wan/cli/wan_generate.py` saves the MP4 only after `generate_video` returns.
   Interrupted denoise runs therefore produce no final MP4.
-- A14B configs construct both `transformer` and `transformer_2` up front. Before this item, both
-  remained resident for the entire denoise loop even though the high-noise transformer is never
-  needed again after the boundary.
-- The CLI progress bar previously used frame totals even though progress events are emitted per
-  denoise step. Item 0014 changed the CLI display to denoise-step units while preserving frame
-  count as context.
+- A14B configs construct both `transformer` and `transformer_2` up front. Version 0.18.9 added a
+  single-seed CLI path that can release the inactive high-noise denoiser before low-noise
+  denoising, plus optional low-RAM cleanup between denoise steps.
+- The CLI progress bar now uses denoise-step totals while preserving frame count as context.
 - The pasted shell command included `--frames 81 \ ` with a trailing space after the backslash. In
   zsh this does not continue the command; it passes a literal space argument and starts the next
   line as a separate command. That is a user-invocation risk, but it does not explain a live
@@ -41,14 +39,14 @@ to switch from `transformer` to `transformer_2`.
 
 ## Problem
 
-Full-size A14B I2V runs can hit peak memory exactly at the boundary where the low-noise transformer
-starts, because the high-noise transformer remains resident. Progress reporting also makes this
-failure mode harder to understand, and no recoverable output exists until the run finishes.
+Full-size A14B I2V runs can still hit peak memory near the high-noise to low-noise boundary or fail
+late during decode/save. The runtime and progress fixes have shipped, but the original full-size
+I2V retry has not yet produced memory, exit-code, metadata, and MP4 health evidence.
 
 ## What we want to do
 
-Reduce unnecessary A14B memory pressure at the denoiser boundary, make CLI progress report denoise
-steps honestly, and capture validation evidence for full-size A14B retry behavior.
+Keep the shipped A14B memory/progress improvements visible and complete the missing full-size I2V
+retry evidence before declaring the original boundary-memory concern closed.
 
 ## Why
 
@@ -68,17 +66,18 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
 
 ## Suggested implementation
 
-1. Add a runtime option that releases the inactive high-noise denoiser after the A14B boundary.
-2. Enable that option automatically for single-seed CLI runs with `has_transformer_2`.
-3. Keep the existing decode-time denoiser release for `--low-ram`, but add per-step cleanup only
-   when `--low-ram` is requested.
-4. Wan CLI progress now uses step totals and keeps frame count only as context.
+1. Keep the shipped runtime option that releases the inactive high-noise denoiser after the A14B
+   boundary.
+2. Keep the single-seed CLI default that enables boundary release only when the run will not reuse
+   the same model instance for later seeds.
+3. Keep low-RAM cleanup explicit and opt-in.
+4. Keep CLI progress step-based.
 5. Retry the user's command as a single shell line with a unique output path and memory capture.
 
 ## Scope
 
-- Wan2.2 A14B T2V/I2V denoise lifecycle, CLI progress, and validation commands.
-- Focused unit tests for routing, lifecycle flags, progress semantics, and helper behavior.
+- Wan2.2 A14B I2V full-size retry validation and the shipped denoise lifecycle/progress context
+  needed to interpret it.
 
 ## Non-goals
 
@@ -105,6 +104,8 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
 - Low-RAM mode has a denoise-loop cleanup path instead of only decode-time cleanup.
 - A future agent has a precise full-size validation command and knows what evidence remains
   missing.
+- The item can close only after the full-size I2V retry captures memory, exit-code, metadata, and
+  MP4 health evidence.
 
 ## Validation
 

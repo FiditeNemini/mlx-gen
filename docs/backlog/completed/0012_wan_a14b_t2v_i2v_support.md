@@ -5,6 +5,7 @@
 - Created: 2026-05-30
 - Status: Completed
 - Completed: 2026-05-31
+- Original path: docs/backlog/planned/0012_wan_a14b_t2v_i2v_support.md
 
 ## ADR status
 
@@ -90,11 +91,11 @@ Diffusers/PyTorch for Wan A14B workflows on Apple Silicon.
 
 ## Dependencies and related tasks
 
-- [Wan quantization and motion parity](0002_wan_quantization_motion_parity.md)
-- [Wan q8 performance investigation](0005_wan_q8_performance_investigation.md)
-- Local Diffusers reference: `/Users/albou/projects/gh/diffusers/src/diffusers/pipelines/wan/`
+- [Wan quantization and motion parity](../planned/0002_wan_quantization_motion_parity.md)
+- [Wan q8 performance investigation](../planned/0005_wan_q8_performance_investigation.md)
+- Local Diffusers checkout reference: `diffusers/src/diffusers/pipelines/wan/`
 - Local Diffusers VAE reference:
-  `/Users/albou/projects/gh/diffusers/src/diffusers/models/autoencoders/autoencoder_kl_wan.py`
+  `diffusers/src/diffusers/models/autoencoders/autoencoder_kl_wan.py`
 
 ## Expected outcomes
 
@@ -167,3 +168,14 @@ Diffusers/PyTorch for Wan A14B workflows on Apple Silicon.
 - [x] Update public docs and LLM indexes.
 - [x] Run a real A14B T2V smoke generation and preserve output evidence.
 - [x] Validate A14B I2V generation after the source snapshot is complete.
+
+## Completion report
+
+- Date: 2026-05-31.
+- Final path: `docs/backlog/completed/0012_wan_a14b_t2v_i2v_support.md`.
+- Code areas: Wan model configs, A14B routing, dynamic two-transformer loading, Wan2.1-style VAE
+  handling, CLI/API `guidance_2`, config resolution, docs, and focused tests.
+- Validation: focused Wan A14B, scheduler, progress, transformer, VAE, CLI-router, and prepare
+  tests passed; real T2V-A14B and I2V-A14B source-checkpoint MP4 smoke runs were preserved.
+- Residual work: quantized quality, full-size generation validation, prompt adherence, memory
+  behavior, and performance remain in the planned Wan follow-up items.

@@ -26,7 +26,7 @@ def main():
         parser.error("--negative-prompt is not supported for FLUX.2. Focus on describing what you want.")
 
     model_name = args.model or "flux2-klein-4b"
-    model_config = ModelConfig.from_name(model_name=model_name)
+    model_config = ModelConfig.from_name(model_name=model_name, base_model=args.base_model)
 
     if args.guidance is None:
         args.guidance = 1.0
