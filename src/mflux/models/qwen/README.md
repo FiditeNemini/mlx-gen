@@ -161,9 +161,19 @@ image.save("qwen_food.png")
 > Note: The Qwen Image model requires downloading the `Qwen/Qwen-Image` model weights (~58GB for the full model, or use quantization for smaller sizes).
 
 ## Qwen Image Edit (natural language image editing)
-**Qwen Image Edit** enables precise natural language image editing, allowing you to modify images using text instructions while maintaining their original structure and context. The model uses a vision-language encoder to understand both the input image and your editing instructions.
+**Qwen Image Edit** enables natural language image editing with source-image conditioning. The model uses a vision-language encoder to understand both the input image and the editing instruction.
 
-Qwen Image Edit supports natural language editing with descriptive text instructions, maintains original poses and body positions when requested, supports multiple images for complex compositions, and works seamlessly with LoRA adapters for specialized transformations like camera angles and styles. The model uses `Qwen/Qwen-Image-Edit-2509`.
+The Qwen edit checkpoints have different contracts:
+
+| Checkpoint | MLX-Gen route | Input images |
+| --- | --- | --- |
+| `Qwen/Qwen-Image-Edit` | single-reference edit | 1 |
+| `Qwen/Qwen-Image-Edit-2509` | EditPlus single-reference or multi-reference edit | 1-3 recommended |
+| `Qwen/Qwen-Image-Edit-2511` | EditPlus single-reference or multi-reference edit | 1-3 recommended |
+
+Use the original `Qwen/Qwen-Image-Edit` checkpoint for one-source semantic or appearance edits.
+Use 2509 or 2511 when a prompt needs multiple reference images for composition. In unified
+`mlxgen generate`, the regular checkpoint rejects multi-reference input before loading weights.
 
 ![Qwen Image Edit Examples](../../assets/qwen_edit_example.jpg)
 *Examples showing dog replacement with two-image input and monkey camera angle transformations with LoRAs. Source images: [Golden Retriever](https://images.unsplash.com/photo-1552053831-71594a27632d), [Grey Dog](https://images.unsplash.com/photo-1566710582818-d673dc761201), and [Monkey](https://images.unsplash.com/photo-1578948610588-ffe24448f5ed).*
@@ -173,6 +183,7 @@ Qwen Image Edit supports natural language editing with descriptive text instruct
 ```sh
 mflux-generate-qwen-edit \
   --image-paths "dog1.png" "dog2.png" \
+  --model Qwen/Qwen-Image-Edit-2509 \
   --prompt "Replace the golden retriever (standing outside, holding white rose) in Image 1 with the grey dog from Image 2 (which is standing inside in a studio). The grey dog should hold a red rose in its mouth and stand outside in the same position as the golden retriever. Maintain the outside environment, background, lighting, and all surroundings completely unchanged." \
   --steps 30 \
   --guidance 2.5 \
@@ -187,7 +198,7 @@ mflux-generate-qwen-edit \
 from mflux.models.common.config import ModelConfig
 from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit
 
-model = QwenImageEdit(model_config=ModelConfig.qwen_image_edit())
+model = QwenImageEdit(model_config=ModelConfig.qwen_image_edit_2509())
 image = model.generate_image(
     seed=42,
     prompt="Replace the golden retriever (standing outside, holding white rose) in Image 1 with the grey dog from Image 2 (which is standing inside in a studio). The grey dog should hold a red rose in its mouth and stand outside in the same position as the golden retriever. Maintain the outside environment, background, lighting, and all surroundings completely unchanged.",
@@ -206,6 +217,7 @@ image.save("qwen_edit_dogs.png")
 ```sh
 mflux-generate-qwen-edit \
   --image-paths "monkey.png" \
+  --model Qwen/Qwen-Image-Edit-2509 \
   --prompt "将镜头极度拉近，使用超长焦镜头进行极端特写拍摄，主体占据画面的大部分空间，背景完全虚化，营造出强烈的视觉冲击力和亲密感。Extreme zoom in with a super telephoto lens, creating an intense close-up where the subject dominates most of the frame, with the background completely blurred, creating a strong visual impact and sense of intimacy." \
   --steps 8 \
   --guidance 2.5 \
@@ -223,7 +235,7 @@ from mflux.models.common.config import ModelConfig
 from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit
 
 model = QwenImageEdit(
-    model_config=ModelConfig.qwen_image_edit(),
+    model_config=ModelConfig.qwen_image_edit_2509(),
     lora_paths=["lightx2v/Qwen-Image-Lightning", "dx8152/Qwen-Edit-2509-Multiple-angles"],
     lora_scales=[0.5, 1.0],
 )
@@ -247,10 +259,14 @@ image.save("qwen_edit_monkey.png")
 2. **Pose Maintenance**: Explicitly mention maintaining poses, body positions, or overall stance when you want to preserve the original structure
 3. **Single Focus**: Focus on one or a few related edits at a time for more predictable results
 4. **LoRA Combinations**: Combine multiple LoRAs for complex effects (e.g., fast generation + camera control)
-5. **Quantization**: 6-bit or below can degrade the image a lot more compared to Flux, use with caution
-6. **Seed Variation**: Qwen models typically do not vary much with seed changes. If you want more variation, vary the prompt instead
-7. **Image Quality**: Qwen images come out quite soft compared to Flux models
-8. **Output Size**: By default, edits keep the first input image size. Use `--width`/`--height` or scale factors like `2x` when you want resizing.
+5. **Negative Prompts**: `--negative-prompt` and `--negative` are aliases. Use them to block crop, blur, text, watermark, unwanted color, or an object state that conflicts with the edit.
+6. **Quantization**: Low-bit Qwen edit packages use MLX-Gen's model-specific q8/q4 policies. Validate the exact prepared package when quality matters.
+7. **Seed Variation**: Qwen models typically do not vary much with seed changes. If you want more variation, vary the prompt instead.
+8. **Image Quality**: Qwen images can be softer than FLUX.2 outputs.
+9. **Output Size**: By default, edits preserve the first input image aspect ratio. Use `--width`/`--height` or scale factors like `2x` when you want resizing.
 
 > [!WARNING]
-> Note: The Qwen Image Edit model requires downloading the `Qwen/Qwen-Image-Edit-2509` model weights (~58GB for the full model, or use quantization for smaller sizes).
+> Qwen edit source checkpoints are large. Download the exact checkpoint you plan to use, such as
+> `Qwen/Qwen-Image-Edit` for single-reference editing or `Qwen/Qwen-Image-Edit-2509` /
+> `Qwen/Qwen-Image-Edit-2511` for EditPlus multi-reference routes. Prepared q8/q4 packages are
+> smaller, but validate the exact package when visual quality matters.

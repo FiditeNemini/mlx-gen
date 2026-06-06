@@ -1,3 +1,5 @@
+import mlx.core as mx
+
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
@@ -71,10 +73,51 @@ class QwenImageInitializer:
 
     @staticmethod
     def _load_weights(model_path: str) -> LoadedWeights:
-        return WeightLoader.load(
+        weights = WeightLoader.load(
             weight_definition=QwenWeightDefinition,
             model_path=model_path,
         )
+        QwenImageInitializer._validate_text_encoder_weights(weights, model_path)
+        return weights
+
+    @staticmethod
+    def _validate_text_encoder_weights(weights: LoadedWeights, model_path: str) -> None:
+        projection = QwenImageInitializer._get_nested_value(
+            weights.components,
+            "text_encoder.encoder.layers.0.self_attn.q_proj.weight",
+        )
+        if projection is None or not getattr(projection, "shape", None):
+            return
+
+        try:
+            has_signal = bool(mx.any(projection != 0).item())
+        except (AttributeError, TypeError, ValueError):
+            return
+
+        if not has_signal:
+            raise ValueError(
+                "Qwen text encoder weights appear corrupt: "
+                "text_encoder.encoder.layers.0.self_attn.q_proj.weight is all zero. "
+                f"Delete the local Hugging Face cache for {model_path!r}, then run "
+                f"`mlxgen download --model {model_path}` again."
+            )
+
+    @staticmethod
+    def _get_nested_value(values: dict, path: str):
+        current = values
+        for part in path.split("."):
+            if isinstance(current, list):
+                if not part.isdigit():
+                    return None
+                index = int(part)
+                if index >= len(current):
+                    return None
+                current = current[index]
+            elif isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return None
+        return current
 
     @staticmethod
     def _init_tokenizers(model, model_path: str) -> None:
@@ -86,15 +129,24 @@ class QwenImageInitializer:
     @staticmethod
     def _init_models(model) -> None:
         model.vae = QwenVAE()
-        model.transformer = QwenTransformer()
+        model.transformer = QwenImageInitializer._transformer_from_config(model.model_config)
         model.text_encoder = QwenTextEncoder()
 
     @staticmethod
     def _init_edit_models(model) -> None:
         model.vae = QwenVAE()
-        model.transformer = QwenTransformer()
+        model.transformer = QwenImageInitializer._transformer_from_config(model.model_config)
         model.text_encoder = QwenTextEncoder()
         model.text_encoder.encoder.visual = VisionTransformer()
+
+    @staticmethod
+    def _transformer_from_config(model_config: ModelConfig) -> QwenTransformer:
+        overrides = model_config.transformer_overrides
+        return QwenTransformer(
+            axes_dims_rope=overrides.get("axes_dims_rope"),
+            zero_cond_t=bool(overrides.get("zero_cond_t", False)),
+            use_layer3d_rope=bool(overrides.get("use_layer3d_rope", False)),
+        )
 
     @staticmethod
     def _apply_weights(model, weights: LoadedWeights, quantize: int | None) -> None:

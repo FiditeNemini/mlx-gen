@@ -72,6 +72,7 @@ def main() -> None:
                     release_inactive_denoiser=release_inactive_denoiser,
                     release_denoisers_before_decode=release_denoisers_before_decode,
                     clear_cache_each_step=args.low_ram,
+                    clear_cache_each_transformer_block=args.low_ram,
                     tensor_health_check_interval=args.tensor_health_check_interval,
                 )
                 print(f"Saving video to: {output_path}")
@@ -119,18 +120,31 @@ def _parser() -> argparse.ArgumentParser:
     prompt_group = parser.add_mutually_exclusive_group()
     prompt_group.add_argument("--prompt", type=str, help="Text prompt for video generation.")
     prompt_group.add_argument("--prompt-file", type=Path, help="Path to a text file containing the prompt.")
-    parser.add_argument("--negative-prompt", type=str, default="", help="Negative prompt used when guidance > 1.")
+    parser.add_argument(
+        "--negative-prompt",
+        "--negative",
+        dest="negative_prompt",
+        type=str,
+        default="",
+        help="Negative prompt used when guidance > 1.",
+    )
     parser.add_argument(
         "--width",
         type=int,
         default=WAN_DEFAULT_WIDTH,
-        help="Video width. Adjusted down to a model-specific patch multiple.",
+        help=(
+            "Video width. For text-to-video, adjusted up to a model-specific patch multiple. "
+            "For image-to-video, used as a size target while preserving the input image aspect ratio."
+        ),
     )
     parser.add_argument(
         "--height",
         type=int,
         default=WAN_DEFAULT_HEIGHT,
-        help="Video height. Adjusted down to a model-specific patch multiple.",
+        help=(
+            "Video height. For text-to-video, adjusted up to a model-specific patch multiple. "
+            "For image-to-video, used as a size target while preserving the input image aspect ratio."
+        ),
     )
     parser.add_argument(
         "--frames",
@@ -182,8 +196,8 @@ def _parser() -> argparse.ArgumentParser:
         "--low-ram",
         action="store_true",
         help=(
-            "Reduce peak memory by clearing MLX cache during denoising and releasing denoisers before decode. "
-            "May reduce throughput."
+            "Reduce peak memory by clearing MLX cache between transformer blocks and denoise steps, "
+            "then releasing denoisers before decode. May reduce throughput."
         ),
     )
     parser.add_argument(
@@ -411,6 +425,7 @@ def _provided_options(argv: list[str]) -> set[str]:
         "-q": "--quantize",
         "-C": "--config-from-metadata",
         "-B": "--battery-percentage-stop-limit",
+        "--negative": "--negative-prompt",
     }
     for token in argv:
         if not token.startswith("-"):

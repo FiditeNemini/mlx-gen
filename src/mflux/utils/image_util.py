@@ -87,6 +87,11 @@ class ImageUtil:
             concept_heatmap=concept_heatmap,
             negative_prompt=negative_prompt,
             init_metadata=init_metadata,
+            canvas_policy=config.canvas_policy,
+            requested_width=config.requested_width,
+            requested_height=config.requested_height,
+            source_image_width=config.source_image_width,
+            source_image_height=config.source_image_height,
         )
 
     @staticmethod

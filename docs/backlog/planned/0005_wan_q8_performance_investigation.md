@@ -40,9 +40,9 @@ slower than the source BF16 snapshot. The comparison used 704x384, 25 frames, 12
     footprint, 110.34s;
   - mixed q8/BF16 prepared with low-RAM release: 15.48 GiB MLX peak, 20.74 GiB physical footprint,
     108.70s.
-- The prepared q8 folder reduces storage from a 118 GiB source snapshot to 40 GiB and does reduce
-  package-level usage memory. It does not prove a speed improvement; measured times remain within
-  short-run variance around BF16.
+- The prepared q8 folder reduces storage from a 117.5 GiB source snapshot to about 39.5 GiB and
+  reduces measured package-level usage memory in the A14B low-RAM validation profile. It does not
+  prove a speed improvement; measured times remain within short-run variance around BF16.
 - The same A14B run proved full q8 is a quality failure rather than a performance candidate:
   full q8 generated in 111.44s at 13.72 GiB peak RSS but produced near-black/static output. The
   current Wan q8 policy keeps `condition_embedder.*` and `proj_out` BF16.
@@ -92,7 +92,9 @@ local video generation.
   seed, width, height, frames, steps, fps, and guidance.
 - Inspect which Wan modules are quantized and whether the hot path uses `mx.quantized_matmul` or
   expensive fallback/dequantization.
-- Compare q8 performance with and without cache limits or low-RAM options if relevant.
+- Compare q8 performance with and without cache limits or low-RAM options if relevant. Current
+  low-RAM mode also requests transformer-block cache boundaries, not only cleanup after each
+  denoise step.
 
 ## Suggested implementation
 

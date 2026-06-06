@@ -152,6 +152,11 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def qwen_image_edit_2509() -> "ModelConfig":
+        return AVAILABLE_MODELS["qwen-image-edit-2509"]
+
+    @staticmethod
+    @lru_cache
     def fibo() -> "ModelConfig":
         return AVAILABLE_MODELS["fibo"]
 
@@ -238,7 +243,7 @@ AVAILABLE_MODELS = {
         controlnet_model=None,
         custom_transformer_model=None,
         num_train_steps=1000,
-        max_sequence_length=512,
+        max_sequence_length=3000,
         supports_guidance=True,
         requires_sigma_shift=True,
     ),
@@ -262,7 +267,7 @@ AVAILABLE_MODELS = {
         controlnet_model=None,
         custom_transformer_model=None,
         num_train_steps=1000,
-        max_sequence_length=512,
+        max_sequence_length=3000,
         supports_guidance=True,
         requires_sigma_shift=True,
     ),
@@ -274,7 +279,7 @@ AVAILABLE_MODELS = {
         controlnet_model=None,
         custom_transformer_model=None,
         num_train_steps=1000,
-        max_sequence_length=512,
+        max_sequence_length=3000,
         supports_guidance=True,
         requires_sigma_shift=True,
     ),
@@ -286,7 +291,7 @@ AVAILABLE_MODELS = {
         controlnet_model=None,
         custom_transformer_model=None,
         num_train_steps=1000,
-        max_sequence_length=512,
+        max_sequence_length=3000,
         supports_guidance=True,
         requires_sigma_shift=True,
     ),
@@ -531,7 +536,7 @@ AVAILABLE_MODELS = {
         custom_transformer_model=None,
         num_train_steps=None,
         max_sequence_length=None,
-        supports_guidance=None,
+        supports_guidance=True,
         requires_sigma_shift=True,
         sigma_max_shift=0.9,
         sigma_max_seq_len=8192,
@@ -539,21 +544,39 @@ AVAILABLE_MODELS = {
     ),
     "qwen-image-edit": ModelConfig(
         priority=16,
-        aliases=["qwen-image-edit", "qwen-edit", "qwen-edit-plus", "qwen-edit-2509"],
+        aliases=["qwen-image-edit", "qwen-edit"],
+        model_name="Qwen/Qwen-Image-Edit",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=None,
+        max_sequence_length=None,
+        supports_guidance=True,
+        requires_sigma_shift=True,
+        sigma_max_shift=0.9,
+        sigma_max_seq_len=8192,
+        sigma_shift_terminal=0.02,
+    ),
+    "qwen-image-edit-2509": ModelConfig(
+        priority=17,
+        aliases=["qwen-image-edit-2509", "qwen-edit-2509", "qwen-edit-plus", "qwen-edit-plus-2509"],
         model_name="Qwen/Qwen-Image-Edit-2509",
         base_model=None,
         controlnet_model=None,
         custom_transformer_model=None,
         num_train_steps=None,
         max_sequence_length=None,
-        supports_guidance=None,
+        supports_guidance=True,
         requires_sigma_shift=True,
         sigma_max_shift=0.9,
         sigma_max_seq_len=8192,
         sigma_shift_terminal=0.02,
+        transformer_overrides={
+            "qwen_edit_plus": True,
+        },
     ),
     "qwen-image-edit-2511": ModelConfig(
-        priority=17,
+        priority=18,
         aliases=["qwen-image-edit-2511", "qwen-edit-2511"],
         model_name="Qwen/Qwen-Image-Edit-2511",
         base_model=None,
@@ -561,11 +584,15 @@ AVAILABLE_MODELS = {
         custom_transformer_model=None,
         num_train_steps=None,
         max_sequence_length=None,
-        supports_guidance=None,
+        supports_guidance=True,
         requires_sigma_shift=True,
         sigma_max_shift=0.9,
         sigma_max_seq_len=8192,
         sigma_shift_terminal=0.02,
+        transformer_overrides={
+            "qwen_edit_plus": True,
+            "zero_cond_t": True,
+        },
     ),
     "fibo": ModelConfig(
         priority=17,

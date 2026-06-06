@@ -3,7 +3,6 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.ernie_image.latent_creator import ErnieImageLatentCreator
 from mflux.models.ernie_image.variants import ErnieImageTurbo
-from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
@@ -49,8 +48,10 @@ def main():
     if args.guidance is None:
         args.guidance = 1.0
 
+    model_config = ModelConfig.from_name(args.model or "ernie-image-turbo", base_model=args.base_model)
+
     model = ErnieImageTurbo(
-        model_config=ModelConfig.ernie_image_turbo(),
+        model_config=model_config,
         quantize=args.quantize,
         model_path=args.model_path,
     )
@@ -62,12 +63,7 @@ def main():
     )
 
     try:
-        width, height = DimensionResolver.resolve(
-            width=args.width,
-            height=args.height,
-            reference_image_path=args.image_path,
-        )
-        if min(width, height) < 384:
+        if all(isinstance(value, int) for value in (args.width, args.height)) and min(args.width, args.height) < 384:
             print(
                 "Warning: ERNIE-Image-Turbo is validated for practical generation at 384px and above. "
                 "Very small outputs can crop or truncate subjects."
@@ -76,8 +72,8 @@ def main():
             image = model.generate_image(
                 seed=seed,
                 prompt=PromptUtil.read_prompt(args),
-                width=width,
-                height=height,
+                width=args.width,
+                height=args.height,
                 guidance=args.guidance,
                 image_path=args.image_path,
                 image_strength=args.image_strength,
@@ -88,6 +84,7 @@ def main():
                 pe_temperature=args.prompt_enhancer_temperature,
                 pe_top_p=args.prompt_enhancer_top_p,
                 pe_max_new_tokens=args.prompt_enhancer_max_new_tokens,
+                canvas_policy=args.canvas_policy,
             )
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)
     except (StopImageGenerationException, PromptFileReadError) as exc:

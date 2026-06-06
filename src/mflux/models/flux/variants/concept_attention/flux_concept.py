@@ -83,6 +83,7 @@ class Flux1Concept(nn.Module):
                 image_path=config.image_path,
                 sigmas=config.scheduler.sigmas,
                 init_time_step=config.init_time_step,
+                image_strength=config.image_strength,
             ),
         )
 

@@ -17,9 +17,11 @@ from mflux.models.qwen.qwen_initializer import QwenImageInitializer
 from mflux.models.qwen.variants.edit.qwen_edit_util import QwenEditUtil
 from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
 from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class QwenImageEdit(nn.Module):
@@ -58,15 +60,17 @@ class QwenImageEdit(nn.Module):
         seed: int,
         prompt: str,
         image_paths: list[str],
-        num_inference_steps: int = 4,
-        height: int | None = None,
-        width: int | None = None,
+        num_inference_steps: int | None = None,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
         image_path: Path | str | None = None,
-        scheduler: str = "linear",
+        scheduler: str = "flow_match_euler_discrete",
         negative_prompt: str | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
-        config, vl_width, vl_height, vae_width, vae_height = self._compute_dimensions(
+        num_inference_steps = self._default_num_inference_steps(num_inference_steps, image_paths=image_paths)
+        config, vl_width, vl_height, _, _ = self._compute_dimensions(
             width=width,
             height=height,
             guidance=guidance,
@@ -74,9 +78,15 @@ class QwenImageEdit(nn.Module):
             image_path=image_path,
             image_paths=image_paths,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
         )
         timesteps = config.scheduler.timesteps
         time_steps = tqdm(range(len(timesteps)))
+        negative_prompt = self._resolve_negative_prompt_for_model(
+            guidance=config.guidance,
+            negative_prompt=negative_prompt,
+            image_paths=image_paths,
+        )
 
         # 1. Create initial latents
         latents = QwenLatentCreator.create_noise(
@@ -86,6 +96,7 @@ class QwenImageEdit(nn.Module):
         )
 
         # 2. Encode the prompt
+        do_true_cfg = self._should_use_true_cfg(guidance=config.guidance, negative_prompt=negative_prompt)
         prompt_embeds, prompt_mask, negative_prompt_embeds, negative_prompt_mask = self._encode_prompts_with_images(
             prompt=prompt,
             config=config,
@@ -93,14 +104,15 @@ class QwenImageEdit(nn.Module):
             vl_height=vl_height,
             image_paths=image_paths,
             negative_prompt=negative_prompt,
+            encode_negative=do_true_cfg,
         )
 
         # 3. Generate image conditioning latents
-        static_image_latents, qwen_image_ids, cond_h_patches, cond_w_patches, num_images = (
+        static_image_latents, qwen_image_ids, cond_image_grid, _ = (
             QwenEditUtil.create_image_conditioning_latents(
                 vae=self.vae,
-                width=vae_width,
-                height=vae_height,
+                width=None,
+                height=None,
                 image_paths=image_paths,
                 tiling_config=self.tiling_config,
             )
@@ -117,11 +129,6 @@ class QwenImageEdit(nn.Module):
                 hidden_states_neg = mx.concatenate([latents, static_image_latents], axis=1)
 
                 # 6.t Predict the noise
-                if num_images > 1:
-                    cond_image_grid = [(1, cond_h_patches, cond_w_patches) for _ in range(num_images)]
-                else:
-                    cond_image_grid = (1, cond_h_patches, cond_w_patches)
-
                 noise = self.transformer(
                     t=t,
                     config=config,
@@ -131,16 +138,19 @@ class QwenImageEdit(nn.Module):
                     qwen_image_ids=qwen_image_ids,
                     cond_image_grid=cond_image_grid,
                 )[:, : latents.shape[1]]
-                noise_negative = self.transformer(
-                    t=t,
-                    config=config,
-                    hidden_states=hidden_states_neg,
-                    encoder_hidden_states=negative_prompt_embeds,
-                    encoder_hidden_states_mask=negative_prompt_mask,
-                    qwen_image_ids=qwen_image_ids,
-                    cond_image_grid=cond_image_grid,
-                )[:, : latents.shape[1]]
-                guided_noise = QwenImage.compute_guided_noise(noise, noise_negative, config.guidance)
+                if do_true_cfg:
+                    noise_negative = self.transformer(
+                        t=t,
+                        config=config,
+                        hidden_states=hidden_states_neg,
+                        encoder_hidden_states=negative_prompt_embeds,
+                        encoder_hidden_states_mask=negative_prompt_mask,
+                        qwen_image_ids=qwen_image_ids,
+                        cond_image_grid=cond_image_grid,
+                    )[:, : latents.shape[1]]
+                    guided_noise = QwenImage.compute_guided_noise(noise, noise_negative, config.guidance)
+                else:
+                    guided_noise = noise
 
                 # 7.t Take one denoise step
                 latents = config.scheduler.step(noise=guided_noise, timestep=t, latents=latents)
@@ -183,10 +193,16 @@ class QwenImageEdit(nn.Module):
         config,
         vl_width: int | None = None,
         vl_height: int | None = None,
-    ) -> tuple[mx.array, mx.array, mx.array, mx.array]:
+        encode_negative: bool = True,
+    ) -> tuple[mx.array, mx.array, mx.array | None, mx.array | None]:
         tokenizer = self.tokenizers["qwen_vl"]
+        use_picture_prefix = self._should_use_edit_plus_prompt(image_paths=image_paths)
         pos_input_ids, pos_attention_mask, pos_pixel_values, pos_image_grid_thw = tokenizer.tokenize_with_image(
-            prompt, image_paths, vl_width=vl_width, vl_height=vl_height
+            prompt,
+            image_paths,
+            vl_width=vl_width,
+            vl_height=vl_height,
+            use_picture_prefix=use_picture_prefix,
         )
 
         pos_hidden_states = self.qwen_vl_encoder(
@@ -196,11 +212,18 @@ class QwenImageEdit(nn.Module):
             image_grid_thw=pos_image_grid_thw,
         )
 
-        neg_prompt = negative_prompt if negative_prompt is not None else ""
+        final_prompt_embeds = pos_hidden_states[0].astype(mx.float16)
+        final_prompt_mask = pos_hidden_states[1].astype(mx.float16)
+        if not encode_negative:
+            return final_prompt_embeds, final_prompt_mask, None, None
 
-        # Use real MLX tokenizer for negative prompt
+        neg_prompt = negative_prompt if negative_prompt is not None else ""
         neg_input_ids, neg_attention_mask, neg_pixel_values, neg_image_grid_thw = tokenizer.tokenize_with_image(
-            neg_prompt, image_paths, vl_width=vl_width, vl_height=vl_height
+            neg_prompt,
+            image_paths,
+            vl_width=vl_width,
+            vl_height=vl_height,
+            use_picture_prefix=use_picture_prefix,
         )
 
         neg_hidden_states = self.qwen_vl_encoder(
@@ -210,9 +233,6 @@ class QwenImageEdit(nn.Module):
             image_grid_thw=neg_image_grid_thw,
         )
 
-        final_prompt_embeds = pos_hidden_states[0].astype(mx.float16)
-        final_prompt_mask = pos_hidden_states[1].astype(mx.float16)
-
         return (
             final_prompt_embeds,  # prompt_embeds
             final_prompt_mask,  # prompt_mask
@@ -220,42 +240,98 @@ class QwenImageEdit(nn.Module):
             neg_hidden_states[1].astype(mx.float16),  # negative_prompt_mask
         )
 
+    @staticmethod
+    def _should_use_true_cfg(guidance: float, negative_prompt: str | None) -> bool:
+        return guidance > 1.0 and negative_prompt is not None
+
+    @staticmethod
+    def _resolve_negative_prompt(guidance: float, negative_prompt: str | None) -> str | None:
+        return negative_prompt
+
+    def _should_use_edit_plus_prompt(self, image_paths: list[str]) -> bool:
+        return QwenImageEdit._is_edit_plus_model_config(
+            model_config=self.model_config,
+            image_paths=image_paths,
+        )
+
+    @staticmethod
+    def _is_edit_plus_model_config(model_config: ModelConfig, image_paths: list[str]) -> bool:
+        del image_paths
+        return bool(getattr(model_config, "transformer_overrides", {}).get("qwen_edit_plus", False))
+
     def _compute_dimensions(
         self,
         image_paths: list[str],
         num_inference_steps: int,
-        height: int | None,
-        width: int | None,
+        height: int | ScaleFactor | None,
+        width: int | ScaleFactor | None,
         guidance: float,
         image_path: Path | str | None,
         scheduler: str,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> tuple[Config, int, int, int, int]:
-        reference_image = ImageUtil.load_image(image_paths[0]).convert("RGB")
+        reference_image_path = QwenImageEdit._dimension_reference_image_path(image_paths=image_paths)
+        reference_image = ImageUtil.load_image(reference_image_path).convert("RGB")
         image_size = reference_image.size
-
-        use_width = width or image_size[0]
-        use_height = height or image_size[1]
-
-        vae_scale_factor = 8
-        multiple_of = vae_scale_factor * 2
-        use_width = use_width // multiple_of * multiple_of
-        use_height = use_height // multiple_of * multiple_of
+        default_width, default_height = QwenEditUtil._area_dimensions(
+            target_area=QwenEditUtil.VAE_IMAGE_SIZE,
+            ratio=image_size[0] / image_size[1],
+        )
+        if QwenImageEdit._is_auto_dimension(width):
+            width = default_width
+        if QwenImageEdit._is_auto_dimension(height):
+            height = default_height
 
         config = Config(
-            width=use_width,
-            height=use_height,
+            width=width,
+            height=height,
             guidance=guidance,
             scheduler=scheduler,
-            image_path=image_path,
+            image_path=image_path or reference_image_path,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
+        use_width = config.width
+        use_height = config.height
 
-        CONDITION_IMAGE_SIZE = 384 * 384
+        condition_image_size = (
+            QwenEditUtil.CONDITION_IMAGE_SIZE
+            if QwenImageEdit._is_edit_plus_model_config(model_config=self.model_config, image_paths=image_paths)
+            else QwenEditUtil.VAE_IMAGE_SIZE
+        )
         condition_ratio = image_size[0] / image_size[1]
-        vl_width = math.sqrt(CONDITION_IMAGE_SIZE * condition_ratio)
+        vl_width = math.sqrt(condition_image_size * condition_ratio)
         vl_height = vl_width / condition_ratio
         vl_width = round(vl_width / 32) * 32
         vl_height = round(vl_height / 32) * 32
 
         return config, int(vl_width), int(vl_height), use_width, use_height
+
+    def _resolve_negative_prompt_for_model(
+        self,
+        guidance: float,
+        negative_prompt: str | None,
+        image_paths: list[str],
+    ) -> str | None:
+        if negative_prompt is not None:
+            return negative_prompt
+        if guidance <= 1.0:
+            return None
+        return " "
+
+    def _default_num_inference_steps(self, num_inference_steps: int | None, image_paths: list[str]) -> int:
+        if num_inference_steps is not None:
+            return num_inference_steps
+        if QwenImageEdit._is_edit_plus_model_config(model_config=self.model_config, image_paths=image_paths):
+            return 40
+        return 50
+
+    @staticmethod
+    def _dimension_reference_image_path(image_paths: list[str]) -> str:
+        return image_paths[0]
+
+    @staticmethod
+    def _is_auto_dimension(value: int | ScaleFactor | None) -> bool:
+        return value is None or isinstance(value, ScaleFactor) and value.value == 1

@@ -367,19 +367,30 @@ image.save("bird_inspired.png")
 ---
 
 ### FIBO-Edit
-FIBO Edit supports direct image-conditioned editing using a plain-text edit instruction plus a source image.
-The CLI will convert the instruction + image into a structured JSON prompt automatically.
+FIBO Edit is not exposed through unified `mlxgen generate` capabilities in the current release.
+The dedicated `mflux-generate-fibo-edit` command remains available for FIBO-specific parity
+testing, but it is not a release-quality public image-to-image route.
 
-![FIBO Edit Example](../../assets/fibo_edit_example.jpg)
+Public capability discovery fails closed for FIBO Edit. Use base FIBO for text-to-image and use
+Qwen Image Edit, Qwen EditPlus, or FLUX.2 Klein for public image-edit workflows that have passing
+validation evidence.
+
+Mask-based FIBO Edit is validation-limited in MLX-Gen. The mask is used to gray-composite the
+conditioning image before VAE encoding, not as a hard compositing operation. It can over-edit or
+ignore localized color/material instructions on some sources. Validate masked outputs visually
+before relying on them.
+
+Maintainers can still run the dedicated entry point while investigating parity:
 
 ```sh
 mflux-generate-fibo-edit \
+    --model briaai/Fibo-Edit \
     --image-path reference_upscaled.png \
-    --prompt "Make the hand fistbump the camera instead of showing a flat palm." \
+    --prompt-file fibo_edit_prompt.json \
     --width 640 \
     --height 384 \
-    --steps 30 \
-    --guidance 3.5 \
+    --steps 50 \
+    --guidance 5 \
     --seed 42 \
     --output fibo_edit_fistbump.png
 ```
@@ -407,16 +418,18 @@ image = model.generate_image(
     seed=42,
     prompt=structured_prompt,
     image_path="image.png",
-    num_inference_steps=30,
+    num_inference_steps=50,
     width=640,
     height=384,
-    guidance=3.5,
+    guidance=5,
 )
 image.save("fibo_edit_fistbump.png")
 ```
 </details>
 
-Optional localized editing is supported with a mask:
+Optional localized editing can be tested with a mask, but keep it validation-gated until your target
+prompt/source/mask combination passes visual QA. Use the dedicated FIBO command for masked tests;
+`mlxgen generate` rejects FIBO mask requests before loading weights.
 
 ![FIBO Edit Mask Example](../../assets/fibo_edit_mask_example.jpg)
 
@@ -424,15 +437,16 @@ Optional localized editing is supported with a mask:
 mflux-generate-fibo-edit \
     --image-path reference_upscaled.png \
     --mask-path hand_mask.png \
-    --prompt "Make only the masked hand fistbump the camera and keep the rest of the image unchanged." \
-    --steps 30 \
-    --guidance 3.5 \
+    --prompt-file fibo_edit_masked_prompt.json \
+    --steps 50 \
+    --guidance 5 \
     --seed 42 \
     --output fibo_edit_fistbump_masked.png
 ```
 
 Advanced use: you can still pass a full structured JSON prompt via `--prompt` or `--prompt-file`.
-When doing so, make sure the JSON includes `edit_instruction`.
+When doing so, make sure the JSON includes `edit_instruction`; JSON without that field is rejected
+before generation.
 
 <details>
 <summary>Example full edit JSON</summary>
@@ -532,4 +546,3 @@ mflux-generate-fibo-edit \
 ## Notes
 > [!WARNING]
 > FIBO and FIBO-Edit require downloading the `briaai/FIBO`, `briaai/FIBO-lite`, `briaai/Fibo-Edit`, or `briaai/Fibo-Edit-RMBG` model weights (~24GB each), plus the `briaai/FIBO-vlm` vision-language model (~8GB), totaling ~32GB for a full setup with one FIBO-family model, or use quantization for smaller sizes.
-

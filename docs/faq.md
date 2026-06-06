@@ -45,6 +45,27 @@ No. It is optional acceleration for explicit Hugging Face downloads and prepare 
 
 No. Prepared MLX-Gen folders use the MLX/mflux saved-weight layout and MLX quantization tensors. They are intended for MLX-Gen and compatible mflux code, not direct Diffusers or Transformers `from_pretrained()` loading.
 
+## Why Can q8 Show The Same Physical Peak As BF16?
+
+Because the visible peak metric may be measuring a different thing than the persistent model
+footprint.
+
+`Storage` is the on-disk or Hugging Face repository size. `Wan MLX model` is the loaded Wan
+transformer plus VAE tensor footprint. `MLX active after generation` is the MLX allocator memory
+still live after `generate_video()` returns. These should drop when a q8 package actually stores
+and loads quantized transformer block linears.
+
+`Physical Peak` is a full-process Darwin high-water sample. It includes MLX/Metal allocations, the
+PyTorch UMT5 prompt encoder, activation graphs, decoded video buffers, frame conversion, save
+validation, Python objects, and native-library transients. `Max RSS` is resident set high-water
+memory and can under-report Apple unified-memory/Metal pressure. `MLX Peak` is only the MLX
+allocator high-water mark, not the whole process.
+
+So a q8 model can be clearly smaller on disk and in loaded MLX model memory while a specific
+generation profile shows a similar full-process physical peak because temporary activations or
+decode/save buffers dominate that run. See [Quantization](quantization.md) for the current Wan
+tables and definitions.
+
 ## Can I Quantize ERNIE Image Turbo?
 
 Yes. ERNIE Image Turbo supports q8 and q4 prepared folders:
@@ -92,7 +113,7 @@ mlxgen generate \
   --use-prompt-enhancer
 ```
 
-ERNIE Image Turbo supports experimental single-image image-to-image in MLX-Gen:
+ERNIE Image Turbo supports single-image latent image-to-image in MLX-Gen:
 
 ```sh
 mlxgen generate \
@@ -108,8 +129,8 @@ mlxgen generate \
 ```
 
 Multi-image edit is not supported for ERNIE. ERNIE's single-image path is latent image-to-image, so
-`--image-strength` follows the MLX-Gen image-influence convention: higher values preserve more of
-the init image, while lower positive values allow more transformation.
+`--image-strength` follows latent img2img denoising semantics: higher values add more noise and
+allow more transformation, while lower positive values stay closer to the encoded source image.
 
 Prepared ERNIE q8/q4 folders do not bundle Prompt Enhancer files; use the full source snapshot path or the Hugging Face repo after `mlxgen download --all-files` when you need `--use-prompt-enhancer`.
 
@@ -164,27 +185,115 @@ mlxgen generate \
 images as conditioning or references, not as a noised latent initialization. MLX-Gen rejects
 `--image-strength` for those modes before loading weights.
 
+For Qwen edit models, use the exact version you intend. `qwen-image-edit` is the original
+single-reference edit checkpoint. `qwen-image-edit-2509` and `qwen-image-edit-2511` are Edit-Plus
+checkpoints and can route multi-reference requests.
+
+## Which Qwen Image Edit Model Should I Use?
+
+Use the exact Qwen edit handle for the capability you need:
+
+| Model family | Best use | Multi-reference composition |
+| --- | --- | --- |
+| `Qwen/Qwen-Image-Edit` | One-source semantic or appearance edits, such as pencil sketch, object-state changes, color/style edits, and layout-preserving instruction edits. | No. MLX-Gen exposes this as `max_images=1`. |
+| `Qwen/Qwen-Image-Edit-2509` | EditPlus workflows, including one-source edits and multi-image reference composition. | Yes, when the selected source/prepared package passes validation for the prompt profile. |
+| `Qwen/Qwen-Image-Edit-2511` | EditPlus workflows with the 2511 checkpoint. | Yes. Source, q8, and q4 have passing 2026-06-06 proof for the documented pencil/crash/composition profile. |
+
+For composition with multiple images, repeat `--image` and use an EditPlus-capable model:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2509-8bit \
+  --image crash-reference.png \
+  --image sketch-reference.png \
+  --prompt "Use the first image for the crashed spaceship layout and the second image for the graphite sketch style" \
+  --output composition.png
+```
+
+The regular `qwen-image-edit` route intentionally rejects multi-reference input before loading
+weights. Use `mlxgen capabilities --model <model>` to see the image-count contract and
+`mlxgen validation --model <model>` to inspect the current release evidence for an exact package.
+
+## How Do Negative Prompts Work?
+
+Use `--negative-prompt` or its shorter alias `--negative` in `mlxgen generate`:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-8bit \
+  --image input.png \
+  --prompt "Convert the scene into a clean graphite pencil sketch while preserving layout" \
+  --negative "color, blur, crop, text, watermark" \
+  --steps 30 \
+  --guidance 4 \
+  --output sketch.png
+```
+
+Python callers pass the same value as `negative_prompt=...` on the model-specific generation
+method. For Qwen image edit, guidance above `1` uses true classifier-free guidance when a negative
+prompt is present. If you omit the CLI option, MLX-Gen uses the official blank negative-prompt
+behavior for Qwen edit models, so true CFG remains enabled by default; explicit negative prompts are
+still useful for blocking concrete failure modes such as crop, blur, text, unwanted color, or an
+object remaining intact when the prompt asks for damage.
+
+Wan video models are different: when the negative prompt is omitted, MLX-Gen uses Wan's official
+default negative prompt. Pass `--negative ""` or `--negative-prompt ""` only when you intentionally
+want no negative prompt.
+
+## How Does Image-To-Image Choose Output Size?
+
+Ordinary image-to-image uses `--canvas-policy source-aspect` by default. The first input image
+defines the output aspect ratio for latent img2img, edit/reference I2I, and multi-reference I2I.
+`--width` and `--height` are size targets, not forced stretch dimensions. MLX-Gen resolves the
+nearest model-compatible canvas that preserves the first image's ratio and stores the requested,
+source, and final dimensions in image metadata.
+
+Examples:
+
+| Source | Request | Default output behavior |
+| --- | --- | --- |
+| `432x240` | `--width 320 --height 320` | wide output near the source ratio, not square |
+| `512x512` | `--width 832 --height 480` | square-ish output near the source ratio, not 16:9 |
+| `720x1280` | `--height 640 --width auto` | portrait output near the source ratio |
+
+Use `--canvas-policy exact-resize` when you intentionally want the exact requested canvas:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-2512-8bit \
+  --image input.png \
+  --i2i-mode latent \
+  --canvas-policy exact-resize \
+  --width 512 \
+  --height 512 \
+  --image-strength 0.4 \
+  --prompt "Restyle the source as a graphite sketch" \
+  --output exact-square.png
+```
+
+Exact resize can reshape or recompose the source. Use it for deliberate whole-image remixes, not
+for preserving original pixels in place.
+
 ## Why Does Image-To-Image Run Fewer Steps Than `--steps`?
 
 This is normal for latent image-to-image pipelines. They commonly start partway through the
 denoising schedule instead of running all requested steps from pure noise. In MLX-Gen,
-`--image-strength` is the latent img2img input-image influence value: higher values preserve more
-of the source image, inject less noise, and start denoising later in the schedule, so fewer denoise
-iterations are actually run. Edit/reference I2I modes do not use `--image-strength`; they use the
-input image as conditioning. Some other tools name or orient this control differently, so check the
-local convention when comparing settings.
+`--image-strength` is the latent img2img denoising strength: higher values add more noise, allow
+more transformation, and run more effective denoise iterations. Lower values stay closer to the
+encoded source image. Edit/reference I2I modes do not use `--image-strength`; they use the input
+image as conditioning.
 
-MLX-Gen's default `--image-strength` is `0.4`. With `--steps 50`, image-to-image starts at step 20
-and runs 30 denoise iterations:
+Latent image-to-image requires an explicit `--image-strength`. With `--steps 50` and
+`--image-strength 0.4`, generation starts at scheduler index 30 and runs 20 denoise iterations:
 
 ```text
-effective_denoise_steps = steps - floor(steps * image_strength)
-50 - floor(50 * 0.4) = 30
+effective_denoise_steps = floor(steps * image_strength)
+floor(50 * 0.4) = 20
 ```
 
 The CLI progress bar shows the effective denoise iterations, not the original requested step count.
-If you want a stronger transformation from the source image, lower `--image-strength`; if you want
-more source preservation, raise it. Use text-to-image without `--image` when you want all requested
+If you want a stronger transformation from the source image, raise `--image-strength`; if you want
+more source preservation, lower it. Use text-to-image without `--image` when you want all requested
 steps to run from pure noise.
 
 ## Can MLX-Gen Outpaint Or Reframe An Image?
@@ -199,13 +308,21 @@ instead of preserving original pixels in place.
 
 MLX-Gen has lower-level FLUX.1 Fill support inherited from mflux, but the unified outpaint/reframe
 command and Python API are still planned. Until that is implemented, do not rely on latent img2img
-or edit/reference I2I for precise canvas extension.
+or edit/reference I2I for controlled canvas extension.
+
+For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
+to the first source image. That prevents accidental stretching, but it does not expand the original
+canvas or preserve source pixels in place. Use `--canvas-policy exact-resize` only for deliberate
+whole-image recomposition.
 
 ## What Wan Video Resolutions Should I Use?
 
-Wan width and height are normalized to the selected model's VAE/patch multiple. The model will
-adjust unsupported dimensions down, which can also change the aspect ratio of an input image-to-video
-source if you did not compose the source for the adjusted canvas.
+Wan width and height are normalized to the selected model's VAE/patch multiple. For text-to-video,
+MLX-Gen uses the requested canvas after model-multiple normalization. For image-to-video, MLX-Gen
+preserves the source image aspect ratio: requested `--width` and `--height` define the approximate
+size target, and the runtime resolves the closest supported canvas from the input image ratio before
+conditioning the model. The video is generated directly at the resolved canvas; MLX-Gen does not
+generate a stretched canvas and then crop or resize it back afterward.
 
 | Model | Required multiple | Recommended/native size | Practical lower-cost sizes |
 | --- | ---: | --- | --- |
@@ -213,19 +330,39 @@ source if you did not compose the source for the adjusted canvas.
 | T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
 | I2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
 
-For TI2V-5B, `1280x720` adjusts to `1280x704`, and `432x240` adjusts to `416x224`. For A14B,
-`1280x720`, `832x480`, `448x256`, and `432x240` are already valid multiples of 16. Lower-cost sizes
-are useful for routing checks and prompt iteration; use the recommended/native size, frame count,
-and step count when judging visual quality.
+For TI2V-5B text-to-video, `1280x720` adjusts to `1280x736`, and `432x240` adjusts to `448x256`.
+For A14B text-to-video, `1280x720`, `832x480`, `448x256`, and `432x240` are already valid multiples
+of 16. Lower-cost sizes are useful for routing checks and prompt iteration; use the
+recommended/native size, frame count, and step count when judging visual quality.
+
+For image-to-video, the source ratio controls the final canvas. These are typical resolved outputs:
+
+| Model | Source ratio | Requested target | Generated canvas |
+| --- | --- | ---: | ---: |
+| I2V-A14B | `16:9` | `1280x720` | `1280x720` |
+| I2V-A14B | `9:16` | `1280x720` | `720x1280` |
+| I2V-A14B | `16:9` | `832x480` | `848x480` |
+| I2V-A14B | `1:1` | `432x240` | `320x320` |
+| TI2V-5B I2V | `20:11` | `1280x704` | `1280x704` |
+| TI2V-5B I2V | `16:9` | `1280x704` | `1248x704` |
+| TI2V-5B I2V | `16:9` | `432x240` | `448x256` |
+| TI2V-5B I2V | `1:1` | `432x240` | `320x320` |
+
+If you need an exact output size, prepare the source image at the same aspect ratio as the requested
+target and choose dimensions that match the model multiple. For A14B I2V, a `16:9` source requested
+at `1280x720` produces `1280x720`. For `480p`-class A14B I2V, `832x480` produces exactly `832x480`
+when the source also has the `832:480` aspect ratio; a true `16:9` source resolves to `848x480`.
+For TI2V-5B I2V, `1280x704` produces exactly `1280x704` when the source uses the same `20:11`
+aspect ratio.
 
 ## How Should I Prompt Wan Image-To-Video?
 
 Wan image-to-video responds best when the input image and prompt agree on a plausible motion path.
 Use a source frame with the whole subject visible, enough margin around moving limbs or objects, and
-minimal occlusion for body parts that need to move. Match the source image's aspect ratio and
-composition to the requested video canvas instead of stretching a portrait source into a landscape
-video or the reverse. TI2V-5B normalizes width and height to multiples of 32, so compose the source
-image for the adjusted dimensions when the requested size is rounded.
+minimal occlusion for body parts that need to move. MLX-Gen resolves the output canvas from the
+source image aspect ratio, so a portrait source stays portrait and a landscape source stays
+landscape. TI2V-5B normalizes width and height to multiples of 32, so keep enough edge margin for
+the adjusted canvas.
 
 Keep the main subject inside the rendered frame for the whole intended motion. If a face, hand,
 foot, product edge, or other identity-critical region leaves the frame and later re-enters, the
@@ -243,12 +380,17 @@ front-facing or three-quarter-front motion, keep torso pivots below about 60-90 
 rear views in the negative prompt. This usually improves identity stability, but it can make motion
 more restrained.
 
+Wan uses the model's official default negative prompt when `--negative-prompt` is omitted. That is a
+good starting point for many human/action prompts, but it can over-constrain simple abstract scenes
+and introduce noisy texture. Use `--negative-prompt ""` when you intentionally want no negative
+prompt, especially for minimal object, water, sky, or studio-light tests.
+
 Write the positive prompt as a concrete motion plan instead of a general style request. Name the
 subject, camera style, body parts or object parts that should move, and the continuity constraints
 that should remain stable:
 
 ```text
-Cinematic 5 second full-body motion video of the adult athlete performing controlled lateral steps:
+Cinematic 5 second full-body motion video of the athlete performing controlled lateral steps:
 torso pivots, head turns, arms sweeping naturally from high and low positions, legs crossing and
 uncrossing, weight shifting forward and backward, knees bending and straightening, full head visible,
 full body visible, arms attached naturally at shoulders and wrists, natural hands and feet,
@@ -281,8 +423,8 @@ or camera-follow shot, keep motion restrained near boundaries, constrain subject
 identity matters, and shorten clips when identity details approach the edge. If the action requires
 the subject to leave the frame, turn away fully, or return from an occluded/back-facing pose, split it
 into separate clips or use a later keyframe/image input rather than relying on one long single-image
-conditioning run. For release or production checks, use seed sweeps and inspect decoded frames or
-contact sheets rather than relying only on MP4 existence.
+conditioning run. For production checks, use seed sweeps and inspect decoded frames or contact
+sheets rather than relying only on MP4 existence.
 
 ## Why Do Some Imports Or Paths Still Say `mflux`?
 

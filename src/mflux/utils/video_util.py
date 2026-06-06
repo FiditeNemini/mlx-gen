@@ -30,6 +30,10 @@ class VideoUtil:
         task: str = "text-to-video",
         image_path: str | Path | None = None,
         negative_prompt: str | None = None,
+        source_width: int | None = None,
+        source_height: int | None = None,
+        requested_width: int | None = None,
+        requested_height: int | None = None,
     ):
         from mflux.utils.generated_video import GeneratedVideo
 
@@ -52,6 +56,10 @@ class VideoUtil:
             task=task,
             image_path=image_path,
             negative_prompt=negative_prompt,
+            source_width=source_width,
+            source_height=source_height,
+            requested_width=requested_width,
+            requested_height=requested_height,
         )
 
     @staticmethod

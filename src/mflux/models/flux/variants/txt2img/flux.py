@@ -16,9 +16,11 @@ from mflux.models.flux.model.flux_text_encoder.t5_encoder.t5_encoder import T5En
 from mflux.models.flux.model.flux_transformer.transformer import Transformer
 from mflux.models.flux.model.flux_vae.vae import VAE
 from mflux.models.flux.weights.flux_weight_definition import FluxWeightDefinition
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class Flux1(nn.Module):
@@ -50,13 +52,14 @@ class Flux1(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 4,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
         image_path: Path | str | None = None,
         image_strength: float | None = None,
         scheduler: str = "linear",
         negative_prompt: str | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
         # 0. Create a new config based on the model type and input parameters
         config = Config(
@@ -68,6 +71,8 @@ class Flux1(nn.Module):
             image_strength=image_strength,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
 
         # 1. Create the initial latents
@@ -81,6 +86,7 @@ class Flux1(nn.Module):
                 image_path=config.image_path,
                 sigmas=config.scheduler.sigmas,
                 init_time_step=config.init_time_step,
+                image_strength=config.image_strength,
             ),
         )
 

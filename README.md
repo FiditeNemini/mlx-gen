@@ -29,10 +29,16 @@ The main capabilities are:
 - image-to-image modes, including latent img2img, instruction/reference edits, and multi-reference
   edits where the selected model supports them;
 - Wan2.2 text-to-video and image-to-video, including TI2V-5B BF16/q8 packages plus A14B
-  T2V/I2V prepared BF16 and mixed q8/BF16 packages;
+  T2V/I2V prepared BF16 and mixed q8/BF16 packages; Wan I2V resolves output size from the source
+  image aspect ratio so inputs are not stretched into a mismatched canvas;
 - explicit `download` and `prepare` workflows for reproducible local model folders;
 - JSON model capability inspection before starting a heavy run;
 - shared progress events for applications embedding MLX-Gen.
+
+Use `mlxgen capabilities --model ...` before long image-edit runs. Capability output describes the
+available route; validation reports and contact sheets describe whether an exact source handle or
+prepared package passed a visual release gate. Release evidence should use true handles such as
+`briaai/Fibo-Edit` or `AbstractFramework/flux.2-klein-9b-8bit`, not short aliases.
 
 ## Install
 
@@ -82,6 +88,13 @@ Inspect model capabilities before a run:
 mlxgen capabilities --model AbstractFramework/flux.2-klein-9b-8bit
 ```
 
+Capabilities are route contracts: they show which tasks, I2I modes, image counts, and options the
+selected model can dispatch. For release QA evidence on exact packages, use:
+
+```sh
+mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit
+```
+
 Create a reusable local prepared folder:
 
 ```sh
@@ -110,6 +123,10 @@ included assets.
 
 ![Spaceship mode contact sheet](https://raw.githubusercontent.com/lpalbou/mlx-gen/main/docs/assets/examples/spaceship-snow/spaceship_modes_real_generation_contact_sheet.png)
 
+For current image-edit validation evidence across Qwen Image Edit, Qwen EditPlus, FLUX.2 Klein,
+and latent I2I models, see
+[docs/edit-capabilities.md](docs/edit-capabilities.md).
+
 ## Published Models
 
 Prepared MLX-Gen model folders are published under the
@@ -122,6 +139,7 @@ published examples include:
 - `AbstractFramework/flux.2-klein-9b-8bit`
 - `AbstractFramework/qwen-image-2512-4bit`
 - `AbstractFramework/qwen-image-2512-8bit`
+- `AbstractFramework/qwen-image-edit-2509-8bit`
 - `AbstractFramework/qwen-image-edit-2511-4bit`
 - `AbstractFramework/qwen-image-edit-2511-8bit`
 - `AbstractFramework/z-image-turbo-4bit`
@@ -143,26 +161,29 @@ sizes, prepared package sizes, task coverage, and quantization notes.
 For Wan2.2 TI2V-5B, the published BF16 prepared package is 21.2 GiB versus 31.9 GiB for the
 upstream source snapshot. It is mainly a smaller reusable source-equivalent package because
 MLX-Gen already loads Wan transformer/VAE weights at BF16 runtime precision. The published q8
-package is 16.9 GiB. Wan TI2V-5B q4 or mixed q4/q8 remains under validation and is not published as
-a supported package.
+package is 16.9 GiB. In the documented 1280x704 benchmark profile, q8 reduced logical model
+footprint and MLX allocator peak but did not reduce full-process physical peak memory. Wan TI2V-5B
+q4 or mixed q4/q8 is not published as a supported package. See the exact benchmark profile in
+[docs/quantization.md](docs/quantization.md).
 
 ## Wan A14B Measurements
 
-Wan A14B was measured on an Apple M5 Max with 128 GB unified memory. The published-card validation
+Wan A14B was measured on an Apple M5 Max with 128 GB unified memory. The published-card benchmark
 uses small, repeatable low-RAM runs and records full-process Darwin physical footprint, RSS, MLX
-allocator peak, and generation time. These are validation-profile measurements, not a guarantee for
-every full-size production prompt.
+allocator peak, and generation time. Use these values for the listed profiles; memory and runtime
+scale with resolution, frame count, step count, cache settings, and image-to-video conditioning.
 
 | Model | Package | Disk | Physical Peak | Max RSS | MLX Peak | Time | Profile |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Wan2.2 T2V-A14B | BF16 | 64.3 GiB | 33.0 GiB | 31.8 GiB | 27.7 GiB | 152.7 s | 384x224, 33 frames, 12 steps, 8 fps |
-| Wan2.2 T2V-A14B | mixed q8/BF16 | 39.7 GiB | 20.7 GiB | 19.5 GiB | 15.5 GiB | 154.8 s | 384x224, 33 frames, 12 steps, 8 fps |
+| Wan2.2 T2V-A14B | BF16 | 64.1 GiB | 33.0 GiB | 31.8 GiB | 27.7 GiB | 152.7 s | 384x224, 33 frames, 12 steps, 8 fps |
+| Wan2.2 T2V-A14B | mixed q8/BF16 | 39.5 GiB | 20.7 GiB | 19.5 GiB | 15.5 GiB | 154.8 s | 384x224, 33 frames, 12 steps, 8 fps |
 | Wan2.2 I2V-A14B | BF16 | 64.1 GiB | 33.7 GiB | 31.8 GiB | 28.2 GiB | 228.2 s | 384x384, 33 frames, 12 steps, 8 fps |
-| Wan2.2 I2V-A14B | mixed q8/BF16 | 39.7 GiB | 21.5 GiB | 19.6 GiB | 15.9 GiB | 242.2 s | 384x384, 33 frames, 12 steps, 8 fps |
+| Wan2.2 I2V-A14B | mixed q8/BF16 | 39.5 GiB | 21.5 GiB | 19.6 GiB | 15.9 GiB | 242.2 s | 384x384, 33 frames, 12 steps, 8 fps |
 
 In these runs, mixed q8/BF16 reduces disk usage by about 38% versus prepared BF16 folders and
 reduces full-process physical peak memory by about 36-37%. It is not documented as a speed
-improvement. See [docs/quantization.md](docs/quantization.md) for model-family quantization details.
+improvement. See
+[docs/quantization.md](docs/quantization.md) for model-family quantization details and metrics JSON.
 
 ## Ecosystem
 
@@ -184,10 +205,11 @@ without surprise network transfers or ambiguous model routing.
 - [Getting started](docs/getting-started.md): installation and first runs.
 - [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, Wan video sizes, capabilities, and Python entry points.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
+- [Image edit capabilities](docs/edit-capabilities.md): visual edit-validation contact sheets, exact model/package status, and command logs.
 - [Model management](docs/model-management.md): download, prepare, cache-only runtime policy.
 - [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
 - [Python integration](docs/python-integration.md): embedding, progress callbacks, and AbstractVision notes.
-- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, outpaint/reframe status, Wan resolutions, and usage limits.
+- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, and usage limits.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime failures.
 - [Acknowledgements](ACKNOWLEDGEMENTS.md): upstream mflux and model-community credits.
 

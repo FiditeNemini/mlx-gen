@@ -11,6 +11,7 @@ from mflux.models.fibo.model.fibo_vae.wan_2_2_vae import Wan2_2_VAE
 from mflux.models.fibo_vlm.model.fibo_vlm import FiboVLM
 from mflux.utils.image_util import ImageUtil
 from mflux.utils.prompt_util import PromptUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 FIBO_EDIT_RMBG_DEFAULT_EDIT_INSTRUCTION = (
     "Generate a detailed grayscale alpha matte. Map the opaque foreground to white "
@@ -18,6 +19,22 @@ FIBO_EDIT_RMBG_DEFAULT_EDIT_INSTRUCTION = (
     "edges of the subject to represent fine details and transparency."
 )
 FIBO_EDIT_RMBG_DEFAULT_JSON_PROMPT = json.dumps({"edit_instruction": FIBO_EDIT_RMBG_DEFAULT_EDIT_INSTRUCTION})
+FIBO_EDIT_PROMPTIFIER_MODEL_ID = "briaai/FIBO-edit-prompt-to-JSON"
+FIBO_EDIT_DIMENSION_MULTIPLE = 16
+FIBO_EDIT_PREFERRED_RESOLUTIONS_1024: tuple[tuple[int, int], ...] = (
+    (832, 1248),
+    (880, 1184),
+    (912, 1136),
+    (1024, 1024),
+    (1136, 912),
+    (1184, 880),
+    (1216, 848),
+    (1248, 832),
+    (1248, 832),
+    (1264, 816),
+    (1296, 800),
+    (1360, 768),
+)
 
 
 class FiboEditUtil:
@@ -38,20 +55,26 @@ class FiboEditUtil:
 
         try:
             return FiboEditUtil.ensure_edit_instruction(prompt)
-        except (TypeError, ValueError):
-            pass
+        except ValueError:
+            try:
+                json.loads(prompt)
+            except (TypeError, json.JSONDecodeError):
+                pass
+            else:
+                raise
 
         if getattr(args, "image_path", None) is None:
             raise ValueError("Edit mode requires --image-path when prompt is not valid JSON.")
-
-        image = ImageUtil.load_image(args.image_path)
         if getattr(args, "mask_path", None) is not None:
-            mask_image = Image.open(args.mask_path).convert("L")
-            if mask_image.size != image.size:
-                raise ValueError("Mask and image must have the same size.")
-            image = FiboEditUtil._composite_mask_on_image(mask=mask_image, image=image)
+            raise ValueError(
+                "Masked FIBO edit requires a JSON prompt with `edit_instruction`; "
+                "local masked prompt-to-JSON conversion is not supported."
+            )
 
-        vlm = FiboVLM(quantize=quantize)
+        print("Preparing FIBO edit JSON prompt with the local VLM before denoising...", flush=True)
+        image = ImageUtil.load_image(args.image_path)
+
+        vlm = FiboVLM(model_id=FIBO_EDIT_PROMPTIFIER_MODEL_ID, quantize=quantize)
         try:
             return vlm.edit(
                 image=image,
@@ -65,7 +88,9 @@ class FiboEditUtil:
             mx.clear_cache()
 
     @staticmethod
-    def parse_json_prompt(prompt: str) -> dict:
+    def parse_json_prompt(prompt: str | dict) -> dict:
+        if isinstance(prompt, dict):
+            return dict(prompt)
         try:
             value = json.loads(prompt)
         except (TypeError, json.JSONDecodeError) as exc:
@@ -76,7 +101,7 @@ class FiboEditUtil:
         return value
 
     @staticmethod
-    def ensure_edit_instruction(prompt: str, edit_instruction: str | None = None) -> str:
+    def ensure_edit_instruction(prompt: str | dict, edit_instruction: str | None = None) -> str:
         prompt_dict = FiboEditUtil.parse_json_prompt(prompt)
         if "edit_instruction" in prompt_dict and prompt_dict["edit_instruction"]:
             return json.dumps(prompt_dict)
@@ -106,15 +131,38 @@ class FiboEditUtil:
         return ImageUtil.scale_to_dimensions(masked_image, width, height)
 
     @staticmethod
+    def resolve_preferred_canvas_size(
+        image_path: Path | str,
+        width: int | ScaleFactor | None,
+        height: int | ScaleFactor | None,
+    ) -> tuple[int | ScaleFactor | None, int | ScaleFactor | None]:
+        if width is not None or height is not None:
+            return width, height
+
+        with Image.open(image_path) as image:
+            image_width, image_height = image.size
+
+        source_ratio = image_width / image_height
+        return min(
+            FIBO_EDIT_PREFERRED_RESOLUTIONS_1024,
+            key=lambda size: abs(size[0] / size[1] - source_ratio),
+        )
+
+    @staticmethod
     def encode_conditioning_image(
         vae: Wan2_2_VAE,
         image: Image.Image,
         height: int,
         width: int,
         tiling_config=None,
+        dtype: mx.Dtype | None = None,
     ) -> mx.array:
         image_array = ImageUtil.to_array(image=image)
+        if dtype is not None:
+            image_array = image_array.astype(dtype)
         image_latents = VAEUtil.encode(vae=vae, image=image_array, tiling_config=tiling_config)
+        if dtype is not None:
+            image_latents = image_latents.astype(dtype)
         return FiboLatentCreator.pack_latents(latents=image_latents, height=height, width=width)
 
     @staticmethod

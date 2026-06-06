@@ -52,10 +52,7 @@ class ErnieImageWeightDefinition:
     @staticmethod
     def get_download_patterns() -> List[str]:
         return [
-            "LICENSE",
             "README.md",
-            "model_index.json",
-            "scheduler/*.json",
             "tokenizer/*",
             "text_encoder/*.safetensors",
             "text_encoder/*.json",

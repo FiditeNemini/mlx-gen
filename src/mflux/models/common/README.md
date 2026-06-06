@@ -28,7 +28,12 @@ This README covers stable, shared patterns. For model-specific usage, see each m
 
 ## Quantization
 
-Quantization reduces memory use and speeds up inference. Most models support `--quantize` (3, 4, 5, 6, 8). This is the on-the-fly option, and quantization is performed as weights are loaded.
+Quantization reduces stored weights and usually reduces loaded model memory, but full-process
+memory and speed are model- and profile-specific. Video models can still peak on activation,
+decode, or save buffers even when their q8 model tensors are smaller. See
+[`docs/quantization.md`](../../../docs/quantization.md) for measured package behavior.
+Most models support `--quantize` (3, 4, 5, 6, 8). This is the on-the-fly option, and
+quantization is performed as weights are loaded.
 
 ```sh
 mflux-generate-z-image-turbo \

@@ -21,6 +21,7 @@ AGENTS.md
 *.json
 !src/mflux/models/common/training/_example/train.json
 !tests/training/config/train.json
+!docs/assets/**/*.json
 tests/training/tmp/
 validation_outputs/
 

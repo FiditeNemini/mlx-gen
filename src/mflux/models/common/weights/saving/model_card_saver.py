@@ -111,6 +111,21 @@ class ModelCardSaver:
 
     @staticmethod
     def _license_frontmatter(model_name: str, terms: str) -> list[str]:
+        if ModelCardSaver._is_fibo_model(model_name, terms):
+            return [
+                "license: other",
+                "license_name: bria-fibo",
+                f"license_link: {ModelCardSaver._fibo_license_link(model_name)}",
+                (
+                    'extra_gated_prompt: "Access is for non-commercial use under the '
+                    "Bria FIBO license. This repository is a quantized derivative of "
+                    'the gated briaai/FIBO source model."'
+                ),
+                "extra_gated_fields:",
+                "  I agree to use this model for non-commercial use only: checkbox",
+                "  I agree to follow the Bria FIBO license terms: checkbox",
+            ]
+
         if ModelCardSaver._is_flux2_9b(model_name, terms):
             return [
                 "license: other",
@@ -142,6 +157,20 @@ class ModelCardSaver:
 
     @staticmethod
     def _license_section(model_name: str, terms: str, bits: int | None) -> list[str]:
+        if ModelCardSaver._is_fibo_model(model_name, terms):
+            derivative = "prepared derivative" if bits is None else "quantized derivative"
+            return [
+                "## License and Access",
+                "",
+                (
+                    f"This checkpoint is a {derivative} of the gated `briaai/FIBO` source model "
+                    "and follows the source model's `bria-fibo` non-commercial license terms."
+                ),
+                "",
+                "Host this derivative as a gated Hugging Face repository and require users to accept "
+                "the upstream FIBO terms before accessing the files.",
+            ]
+
         if ModelCardSaver._is_flux2_9b(model_name, terms):
             return [
                 "## License and Access",
@@ -173,6 +202,36 @@ class ModelCardSaver:
 
     @staticmethod
     def _quantization_section(terms: str, bits: int | None) -> str:
+        if bits == 8 and "fibo" in terms:
+            return "\n".join(
+                [
+                    "This is an MLX mixed q8/BF16 checkpoint for base FIBO text-to-image generation:",
+                    "",
+                    "- q8 for quantizable FIBO transformer and text-encoder linears.",
+                    "- BF16 for the FIBO VAE.",
+                    "- BF16 for FIBO conditioning, timestep, caption-projection, normalization, "
+                    "and output-projection paths that are precision-sensitive in MLX-Gen.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for compatibility notes and measured FIBO behavior.",
+                ]
+            )
+
+        if bits == 4 and "fibo" in terms:
+            return "\n".join(
+                [
+                    "This is an MLX mixed q4/BF16 checkpoint for base FIBO text-to-image generation:",
+                    "",
+                    "- q4 for quantizable FIBO transformer and text-encoder linears.",
+                    "- BF16 for the FIBO VAE.",
+                    "- BF16 for FIBO conditioning, timestep, caption-projection, normalization, "
+                    "and output-projection paths that are precision-sensitive in MLX-Gen.",
+                    "",
+                    f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
+                    "for compatibility notes and measured FIBO behavior.",
+                ]
+            )
+
         if bits == 4 and "qwen" in terms:
             return "\n".join(
                 [
@@ -239,8 +298,9 @@ class ModelCardSaver:
             wan_label = ModelCardSaver._wan_model_label(terms)
             return "\n".join(
                 [
-                    f"This is an MLX q8 checkpoint for {wan_label}. MLX-Gen uses 8-bit "
-                    "quantization for Wan modules where MLX supports quantization:",
+                    f"This is an MLX q8 checkpoint for {wan_label}. It is a mixed q8/BF16 package: "
+                    "MLX-Gen uses 8-bit quantization for Wan modules where MLX supports quantization, "
+                    "and preserves runtime-sensitive or unsupported paths at BF16:",
                     "",
                     "- q8 for quantizable Wan transformer attention and feed-forward modules.",
                     "- BF16 for the Wan VAE.",
@@ -289,6 +349,12 @@ class ModelCardSaver:
                 "stack; ERNIE Prompt Enhancer files are not bundled in this checkpoint."
             )
 
+        if bits is None and "fibo" in terms:
+            return (
+                "This checkpoint stores MLX-Gen base FIBO text-to-image weights without an explicit "
+                "quantization level. FIBO Edit is a separate source model and is not bundled."
+            )
+
         if bits == 8:
             section = (
                 "This is an MLX q8 checkpoint. Quantizable modules are saved at 8-bit where "
@@ -326,6 +392,21 @@ class ModelCardSaver:
                 "full-size `1280x720`, 81-frame, 40-step readiness until that exact path has passed video "
                 "integrity and quality validation.",
                 "",
+                "The measured A14B memory rows in the MLX-Gen quantization docs are short low-RAM profiles "
+                "on an Apple M5 Max with 128 GiB unified memory. `Physical Peak` is full-process Darwin "
+                "physical footprint, `Max RSS` can under-report Apple unified-memory/Metal pressure, and "
+                "`MLX Peak` is only the MLX allocator high-water mark.",
+                "",
+            ]
+        if "wan" in terms and "a14b" in terms:
+            return [
+                "The usage command below is a recommended full-size Wan A14B shape. The measured memory "
+                "rows in the MLX-Gen quantization docs are separate short low-RAM validation profiles.",
+                "",
+                "For memory tables: `Physical Peak` is full-process Darwin physical footprint, `Max RSS` "
+                "can under-report Apple unified-memory/Metal pressure, and `MLX Peak` is only the MLX "
+                "allocator high-water mark.",
+                "",
             ]
         return []
 
@@ -336,14 +417,22 @@ class ModelCardSaver:
                 return [
                     "  --image input.png \\",
                     '  --prompt "Your video prompt here" \\',
-                    "  --width 224 \\",
-                    "  --height 384 \\",
+                    *(
+                        ["  --width 384 \\", "  --height 384 \\"]
+                        if bits == 8 and "a14b" in terms
+                        else ["  --width 224 \\", "  --height 384 \\"]
+                    ),
                     "  --frames 33 \\",
                     "  --steps 12 \\",
                     "  --guidance 3.5 \\",
                     "  --guidance-2 3.5 \\",
                     "  --fps 8 \\",
                     "  --seed 4242 \\",
+                    *(
+                        ["  --low-ram \\"]
+                        if bits == 8 and "a14b" in terms
+                        else []
+                    ),
                     "  --metadata \\",
                     "  --output video.mp4",
                 ]
@@ -359,6 +448,7 @@ class ModelCardSaver:
                         "  --guidance-2 3 \\",
                         "  --fps 8 \\",
                         "  --seed 4242 \\",
+                        "  --low-ram \\",
                         "  --metadata \\",
                         "  --output video.mp4",
                     ]
@@ -438,6 +528,12 @@ class ModelCardSaver:
             tags.append(f"{bits}-bit")
         if bits == 4 and ("qwen" in terms or "ernie" in terms):
             tags.extend(["mixed-q4", "mixed-q4-q8"])
+        if bits == 8 and "wan" in terms:
+            tags.append("mixed-q8-bf16")
+        if bits == 4 and "fibo" in terms:
+            tags.append("mixed-q4-bf16")
+        if bits == 8 and "fibo" in terms:
+            tags.append("mixed-q8-bf16")
         if "qwen" in terms:
             tags.extend(["qwen", "qwen-image"])
         if "edit" in terms or pipeline_tag == "image-to-image":
@@ -533,10 +629,21 @@ class ModelCardSaver:
         return "flux.2-klein" in normalized and "9b" in normalized
 
     @staticmethod
+    def _is_fibo_model(model_name: str, terms: str) -> bool:
+        normalized = f"{model_name} {terms}".lower()
+        return "fibo" in normalized
+
+    @staticmethod
     def _flux_noncommercial_license_link(model_name: str) -> str:
         if ModelCardSaver._is_huggingface_repo_id(model_name):
             return f"https://huggingface.co/{model_name}/blob/main/LICENSE.md"
         return ModelCardSaver.FLUX_NON_COMMERCIAL_LICENSE_LINK
+
+    @staticmethod
+    def _fibo_license_link(model_name: str) -> str:
+        if ModelCardSaver._is_huggingface_repo_id(model_name):
+            return f"https://huggingface.co/{model_name}"
+        return "https://huggingface.co/briaai/FIBO"
 
     @staticmethod
     def _is_apache_model(model_name: str, terms: str) -> bool:

@@ -17,8 +17,10 @@ from mflux.models.z_image.model.z_image_vae.vae import VAE
 from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightDefinition
 from mflux.models.z_image.z_image_initializer import ZImageInitializer
 from mflux.utils.apple_silicon import AppleSiliconUtil
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class ZImage(nn.Module):
@@ -49,13 +51,14 @@ class ZImage(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 4,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float | None = None,
         image_path: Path | str | None = None,
         image_strength: float | None = None,
         scheduler: str | None = None,
         negative_prompt: str | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> Image.Image:
         supports_guidance = bool(self.model_config.supports_guidance)
         if not supports_guidance:
@@ -74,6 +77,8 @@ class ZImage(nn.Module):
             image_strength=image_strength,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
         # 1. Create the initial latents
         latents = LatentCreator.create_for_txt2img_or_img2img(
@@ -86,6 +91,7 @@ class ZImage(nn.Module):
                 image_path=config.image_path,
                 sigmas=config.scheduler.sigmas,
                 init_time_step=config.init_time_step,
+                image_strength=config.image_strength,
                 tiling_config=self.tiling_config,
             ),
         )

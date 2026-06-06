@@ -4,6 +4,7 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import allow_downloads
 from mflux.models.ernie_image.variants import ErnieImageTurbo
+from mflux.models.fibo.variants.edit.fibo_edit import FIBOEdit
 from mflux.models.fibo.variants.txt2img.fibo import FIBO
 from mflux.models.flux.variants.txt2img.flux import Flux1
 from mflux.models.flux2.variants.txt2img.flux2_klein import Flux2Klein
@@ -37,6 +38,8 @@ def main():
             model_class = QwenImageEdit
         elif "qwen" in model_name_lower:
             model_class = QwenImage
+        elif "fibo" in model_name_lower and ("edit" in model_name_lower or "rmbg" in model_name_lower):
+            model_class = FIBOEdit
         elif "fibo" in model_name_lower:
             model_class = FIBO
         elif "z-image-turbo" in model_name_lower or "zimage-turbo" in model_name_lower:
@@ -57,6 +60,8 @@ def main():
             "quantize": args.quantize,
             "model_config": ModelConfig.from_name(args.model, base_model=args.base_model),
         }
+        if model_class in {FIBO, FIBOEdit} and (args.lora_paths or args.lora_scales):
+            parser.error("FIBO does not support LoRA weights in MLX-Gen yet.")
         if "lora_paths" in inspect.signature(model_class).parameters:
             model_kwargs["lora_paths"] = args.lora_paths
             model_kwargs["lora_scales"] = args.lora_scales

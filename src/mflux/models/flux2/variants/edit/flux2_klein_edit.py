@@ -11,9 +11,11 @@ from mflux.models.flux2.model.flux2_transformer.transformer import Flux2Transfor
 from mflux.models.flux2.model.flux2_vae.vae import Flux2VAE
 from mflux.models.flux2.variants.edit.flux2_klein_edit_helpers import _Flux2KleinEditHelpers
 from mflux.utils.apple_silicon import AppleSiliconUtil
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class Flux2KleinEdit(nn.Module):
@@ -44,12 +46,13 @@ class Flux2KleinEdit(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 4,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 1.0,
         image_paths: list[Path | str] | None = None,
         image_strength: float | None = None,
         scheduler: str = "flow_match_euler_discrete",
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
         if image_strength is not None:
             raise ValueError("image_strength is only supported for latent image-to-image mode, not edit-reference mode.")
@@ -69,6 +72,8 @@ class Flux2KleinEdit(nn.Module):
             image_path=primary_image_path,
             image_strength=image_strength,
             scheduler=scheduler,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=primary_image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
         # 1. Encode prompt(s)
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(

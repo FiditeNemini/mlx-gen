@@ -30,7 +30,11 @@ to switch from `transformer` to `transformer_2`.
   Interrupted denoise runs therefore produce no final MP4.
 - A14B configs construct both `transformer` and `transformer_2` up front. Version 0.18.9 added a
   single-seed CLI path that can release the inactive high-noise denoiser before low-noise
-  denoising, plus optional low-RAM cleanup between denoise steps.
+  denoising. The current low-RAM path clears MLX cache between transformer blocks and denoise steps,
+  then releases denoisers before decode and clears between VAE temporal decode slices.
+- CFG denoise predictions are explicitly materialized even when tensor-health checks are disabled
+  or sampled sparsely, so low-RAM behavior no longer depends on diagnostic checks to force MLX
+  graph evaluation.
 - The CLI progress bar now uses denoise-step totals while preserving frame count as context.
 - The pasted shell command included `--frames 81 \ ` with a trailing space after the backslash. In
   zsh this does not continue the command; it passes a literal space argument and starts the next
@@ -57,7 +61,8 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
 
 - Single-seed CLI A14B runs may release the high-noise denoiser before the first low-noise step.
 - Multi-seed runs must not silently destroy the model instance before later seeds can run.
-- Low-RAM runs should clear transient denoise arrays and MLX cache between steps.
+- Low-RAM runs should clear transient denoise arrays and MLX cache between transformer blocks and
+  denoise steps.
 - CLI progress should show denoise steps, not a fake frame counter.
 - Full-size validation should capture exit code, output path, metadata, memory, and whether the
   run crosses step 7.
@@ -70,7 +75,7 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
    boundary.
 2. Keep the single-seed CLI default that enables boundary release only when the run will not reuse
    the same model instance for later seeds.
-3. Keep low-RAM cleanup explicit and opt-in.
+3. Keep low-RAM cleanup explicit and opt-in, including transformer-block cache boundaries.
 4. Keep CLI progress step-based.
 5. Retry the user's command as a single shell line with a unique output path and memory capture.
 
@@ -101,7 +106,8 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
 
 - The CLI no longer shows `24/81` as denoise progress for an 81-frame video.
 - A single-seed A14B CLI run can free the high-noise denoiser before low-noise denoising.
-- Low-RAM mode has a denoise-loop cleanup path instead of only decode-time cleanup.
+- Low-RAM mode has transformer-block and denoise-loop cleanup paths instead of only decode-time
+  cleanup.
 - A future agent has a precise full-size validation command and knows what evidence remains
   missing.
 - The item can close only after the full-size I2V retry captures memory, exit-code, metadata, and
@@ -112,7 +118,7 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
 - `MFLUX_PRESERVE_TEST_OUTPUT=1 uv run pytest tests/wan/test_wan_progress.py tests/wan/test_wan_a14b_config.py tests/cli/test_mlx_gen_router.py -q`
 - `git diff --check`
 - Full-size retry:
-  `MFLUX_PRESERVE_TEST_OUTPUT=1 uv run mlxgen generate --model Wan-AI/Wan2.2-I2V-A14B-Diffusers --task image-to-video --image docs/assets/i2v_takeoff_source.png --prompt "Cinematic sequence of the spacecraft lifting off from the snowy landing field, engines glowing as the camera tracks the ascent." --width 1280 --height 704 --frames 81 --steps 20 --guidance 5 --fps 16 --seed 321 --metadata --output validation_outputs/wan_a14b_i2v_takeoff_retry.mp4`
+  `MFLUX_PRESERVE_TEST_OUTPUT=1 uv run mlxgen generate --model Wan-AI/Wan2.2-I2V-A14B-Diffusers --image docs/assets/i2v_takeoff_source.png --prompt "Cinematic sequence of the spacecraft lifting off from the snowy landing field, engines glowing as the camera tracks the ascent." --width 1280 --height 704 --frames 81 --steps 20 --guidance 5 --fps 16 --seed 321 --metadata --output validation_outputs/wan_a14b_i2v_takeoff_retry.mp4`
 - Postflight validation must reject black/static MP4 output even when `ffprobe` reports the expected
   stream metadata.
 
@@ -122,6 +128,9 @@ keep tens of gigabytes of no-longer-needed weights alive in a single-output run.
 - [x] Confirm step 7 is the first low-noise transformer step for A14B I2V at 20 steps.
 - [x] Add boundary denoiser release for single-seed CLI runs.
 - [x] Change CLI progress to denoise-step progress.
+- [x] Extend low-RAM mode to request transformer-block cache boundaries.
+- [x] Materialize CFG predictions independently from tensor-health checks.
+- [x] Extend low-RAM decode cleanup to VAE temporal slices.
 - [x] Add focused tests.
 - [ ] Retry full-size A14B I2V with memory/exit-code capture.
 

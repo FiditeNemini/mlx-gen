@@ -1,17 +1,16 @@
 from pathlib import Path
 
 from mflux.callbacks.callback_manager import CallbackManager
-from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.fibo.latent_creator.fibo_latent_creator import FiboLatentCreator
 from mflux.models.fibo.variants.edit.fibo_edit import FIBOEdit
 from mflux.models.fibo.variants.edit.util import FIBO_EDIT_RMBG_DEFAULT_JSON_PROMPT, FiboEditUtil
-from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError, StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.prompt_util import PromptUtil
 
+FIBO_EDIT_GUIDANCE_DEFAULT = 5.0
 FIBO_EDIT_RMBG_GUIDANCE_DEFAULT = 1.0
 
 
@@ -41,7 +40,7 @@ def _validate_matte_output(parser: CommandLineParser, args, model_config: ModelC
 
 def _apply_default_guidance(args, model_config: ModelConfig) -> None:
     if args.guidance is None:
-        args.guidance = FIBO_EDIT_RMBG_GUIDANCE_DEFAULT if _is_rmbg(model_config) else ui_defaults.GUIDANCE_SCALE
+        args.guidance = FIBO_EDIT_RMBG_GUIDANCE_DEFAULT if _is_rmbg(model_config) else FIBO_EDIT_GUIDANCE_DEFAULT
 
 
 def _json_prompt_for_edit(args, model_config: ModelConfig) -> str:
@@ -83,7 +82,6 @@ def main():
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     parser.set_defaults(model="fibo-edit")
-    parser.add_lora_arguments()
     parser.add_image_generator_arguments(
         supports_metadata_config=True,
         require_prompt=False,
@@ -108,13 +106,14 @@ def main():
     model_config = _resolve_fibo_edit_model_config(parser, args)
     _validate_matte_output(parser, args, model_config)
     _apply_default_guidance(args, model_config)
-    json_prompt = _json_prompt_for_edit(args, model_config)
+    try:
+        json_prompt = _json_prompt_for_edit(args, model_config)
+    except (PromptFileReadError, ValueError) as exc:
+        parser.error(str(exc))
 
     fibo_edit = FIBOEdit(
         quantize=args.quantize,
         model_path=args.model_path,
-        lora_paths=args.lora_paths,
-        lora_scales=args.lora_scales,
         model_config=model_config,
     )
 
@@ -125,27 +124,24 @@ def main():
     )
 
     try:
-        width, height = DimensionResolver.resolve(
-            width=args.width,
-            height=args.height,
-            reference_image_path=args.image_path,
-        )
         for seed in args.seed:
             image = fibo_edit.generate_image(
                 seed=seed,
                 prompt=json_prompt,
                 image_path=args.image_path,
                 mask_path=args.mask_path,
-                width=width,
-                height=height,
+                width=args.width,
+                height=args.height,
                 guidance=args.guidance,
                 num_inference_steps=args.steps,
                 scheduler="flow_match_euler_discrete",
                 negative_prompt=PromptUtil.read_negative_prompt(args),
+                canvas_policy=args.canvas_policy,
             )
             _save_edit_result(image, args, model_config, seed)
     except (StopImageGenerationException, PromptFileReadError, ValueError) as exc:
         print(exc)
+        raise SystemExit(1) from exc
     finally:
         if memory_saver:
             print(memory_saver.memory_stats())

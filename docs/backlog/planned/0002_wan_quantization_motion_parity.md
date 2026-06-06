@@ -53,9 +53,9 @@ that three 121-frame, 50-step videos generated at 1280x704 felt too static.
 - Three user-provided 1280x704 reference videos were inspected at 121 frames, 24 fps, and about
   5.04 seconds each. Analysis artifacts live in `validation_outputs/wan/user_video_analysis/`.
 - On 2026-06-02, `Wan-AI/Wan2.2-T2V-A14B-Diffusers` mixed q8 prepare succeeded at
-  `models/wan2.2-t2v-a14b-diffusers-8bit`. The prepared folder is about 40 GiB: `transformer`
+  `models/wan2.2-t2v-a14b-diffusers-8bit`. The prepared folder is about 39.5 GiB: `transformer`
   14 GiB, `transformer_2` 14 GiB, text encoder 11 GiB, VAE 242 MiB, tokenizer 16 MiB. The source
-  snapshot is about 118 GiB when following symlinks.
+  snapshot is about 117.5 GiB when following symlinks.
 - A controlled T2V-A14B 384x224, 17-frame, 12-step, guidance 4/guidance-2 3, fps 8, seed 4242
   validation showed full q8 is not publishable: sampled frame MAE against BF16 was 99.95 and
   sampled temporal change collapsed to 2.03 versus 16.61 for BF16. The mixed q8 policy restored
@@ -71,6 +71,31 @@ that three 121-frame, 50-step videos generated at 1280x704 felt too static.
   storage and memory tradeoff. This item now tracks residual quantization quality and policy work,
   especially I2V-A14B validation, q4 decisions, and motion/prompt checks not covered by items 0015
   and 0016.
+- On 2026-06-04, a clean TI2V-5B source/BF16/q8 validation passed at 1280x704, 17 frames,
+  20 steps, guidance 5, fps 24, seed 321, with `--negative-prompt ""`. The current source run and
+  prepared BF16 run were byte-identical after MP4 decode. The mixed q8/BF16 run stayed visually in
+  the same family with mean frame MAE 1.66 versus source/BF16. The MP4s, contact sheet, and metrics
+  are tracked under `docs/assets/quantization/wan-ti2v5b-clean/` and documented in
+  `docs/quantization.md`.
+- The TI2V-5B source snapshot is not already all 16-bit on disk: safetensors headers show FP32
+  transformer and VAE files plus a BF16 UMT5 text encoder. MLX-Gen loads Wan transformer/VAE
+  weights at BF16 runtime precision, so the prepared BF16 package reduces storage/download size
+  from 31.9 GiB to 21.2 GiB but does not reduce runtime memory in the clean profile.
+- TI2V-5B clean-profile memory measured on 2026-06-04: source 102.7 GiB physical peak, 13.7 GiB
+  max RSS, 58.5 GiB MLX peak, 216.2s; prepared BF16 102.6 GiB physical peak, 14.5 GiB max RSS,
+  58.5 GiB MLX peak, 261.6s; mixed q8/BF16 103.7 GiB physical peak, 13.8 GiB max RSS, 54.2 GiB
+  MLX peak, 243.4s. q8 reduces storage, Wan MLX model bytes from 10.6 to 6.3 GiB, active MLX bytes
+  after generation from 10.3 to 6.1 GiB, and MLX peak. This was a 1280x704 normal-cache profile,
+  not a low-RAM profile and not comparable to the A14B 384px-class low-RAM rows as model-size
+  evidence. It did not reduce full-process physical peak in this profile because transient
+  prompt/denoise/decode/save allocations dominated the sampled high-water mark.
+- The same prompt with the official default Wan negative prompt produced a visibly noisy textured
+  background. `Wan2_2_TI2V.generate_video()` now distinguishes an omitted negative prompt from an
+  explicit empty string: omitted uses the model default, while `negative_prompt=""` disables the
+  default. This is covered by `test_wan_explicit_empty_negative_prompt_disables_default`.
+- Wan spatial size normalization now rounds up to the required VAE/patch multiple instead of
+  rounding down, so TI2V-5B `432x240` becomes `448x256` rather than `416x224`. This is covered by
+  `test_wan_spatial_size_rounds_up_to_patch_multiple`.
 
 ## Problem
 
@@ -97,9 +122,9 @@ clear guidance before uploading or depending on quantized Wan checkpoints.
 - Prepared q8 Wan folders must reload and generate MP4 output.
 - q8 quality must be compared with BF16/source at realistic settings before public model-card
   claims go beyond "loads and runs".
-- Wan timing and memory reporting must be improved before performance claims: current metadata
-  records generation time but not peak MLX memory, and the current q8 smoke comparison was slower
-  than BF16/source.
+- Wan timing and memory reporting must remain profile-specific: the TI2V-5B clean profile now has
+  full-process physical, RSS, MLX peak, and timing measurements, while older smoke comparisons and
+  future full-duration A14B claims still need the same package-level measurement discipline.
 - q4 must not be published as good unless side-by-side tests show acceptable quality. If full q4
   degrades motion or detail, define a mixed q4/q8 policy and document the retained q8/BF16 layers.
 - Static-feeling outputs must be evaluated with frame contact sheets, frame-difference or optical
@@ -186,13 +211,25 @@ clear guidance before uploading or depending on quantized Wan checkpoints.
 - [x] Fix generated Wan q8 model-card metadata and video usage.
 - [x] Smoke-generate an MP4 from the prepared q8 folder.
 - [x] Run a same-settings BF16/source versus prepared q8 short comparison.
+- [x] Run a clean TI2V-5B source/BF16/q8 comparison at 1280x704, 17 frames, 20 steps,
+      guidance 5, fps 24, seed 321, with `--negative-prompt ""`, and publish the MP4/contact-sheet
+      evidence in `docs/assets/quantization/wan-ti2v5b-clean/`.
 - [x] Generate contact sheets and motion metrics for the three user-provided videos.
 - [x] Validate T2V-A14B mixed q8 against BF16/source with a contact sheet and frame metrics.
-- [ ] Add Wan runtime peak-memory reporting to validation metadata or a documented validation
-      harness.
-- [ ] Add q8 quality comparison at expanded publishable settings.
-  Full-size T2V-A14B mixed q8/BF16 still needs exact-setting validation under item 0016 before
-  broader claims.
+- [x] Add a documented TI2V-5B runtime memory profile with full-process Darwin physical footprint,
+      max RSS, MLX allocator peak, logical model bytes, generation time, MP4 health, and decoded
+      frame metrics.
+- [ ] Generalize Wan runtime peak-memory reporting into reusable validation metadata or a documented
+      release harness for future full-size A14B and q4/q8 comparisons. The harness should preserve
+      phase-labeled samples and distinguish storage, Wan MLX model bytes, MLX active bytes,
+      full-process physical footprint, max RSS, MLX allocator peak, cache limit, denoiser-release
+      flags, block/slice cache-clearing flags, tensor-health interval, and save-health settings.
+- [ ] Run a normalized Wan memory matrix before making any cross-family memory claim: same
+      resolution, frames, steps, fps, seed, guidance, negative-prompt policy, cache limit,
+      `--low-ram` behavior, tensor-health interval, save-health policy, and sampler.
+- [ ] Add q8 quality comparison at full-duration/full-step settings where practical. TI2V-5B now
+      has clean 1280x704 validation at 17 frames and 20 steps; full-duration A14B mixed q8/BF16
+      still needs exact-setting validation under item 0016 before broader claims.
 - [ ] Decide and validate Wan q4 or mixed q4/q8 policy.
 - [x] Update generated Wan q8 model cards and public docs for the mixed q8/BF16 policy.
 - [ ] Validate I2V-A14B mixed q8 with source-image conditioning before publishing an I2V repo.

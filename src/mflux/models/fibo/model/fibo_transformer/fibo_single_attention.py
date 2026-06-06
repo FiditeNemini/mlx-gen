@@ -43,19 +43,31 @@ class FiboSingleAttention(nn.Module):
         query = FiboSingleAttention.apply_rotary_emb(query, cos, sin)
         key = FiboSingleAttention.apply_rotary_emb(key, cos, sin)
 
-        # [B, H, S, D]
-        query_bhsd = mx.transpose(query, (0, 2, 1, 3))
-        key_bhsd = mx.transpose(key, (0, 2, 1, 3))
-        value_bhsd = mx.transpose(value, (0, 2, 1, 3))
+        output_dtype = query.dtype
 
-        scale = 1.0 / mx.sqrt(mx.array(self.head_dim, dtype=query_bhsd.dtype))
+        # [B, H, S, D]
+        query_bhsd = mx.transpose(query, (0, 2, 1, 3)).astype(mx.float32)
+        key_bhsd = mx.transpose(key, (0, 2, 1, 3)).astype(mx.float32)
+        value_bhsd = mx.transpose(value, (0, 2, 1, 3)).astype(mx.float32)
+
+        attn_mask = None
+        valid_query = None
+        if attention_mask is not None:
+            attn_mask = mx.broadcast_to(attention_mask, (batch_size, self.num_heads, seq_len, seq_len))
+            attn_mask = attn_mask.astype(mx.float32)
+            valid_query = mx.any(mx.isfinite(attn_mask), axis=-1, keepdims=True)
+
+        scale = 1.0 / mx.sqrt(mx.array(self.head_dim, dtype=mx.float32))
         attn_output = scaled_dot_product_attention(
             query_bhsd,
             key_bhsd,
             value_bhsd,
             scale=scale,
-            mask=attention_mask,
+            mask=attn_mask,
         )
+        if valid_query is not None:
+            attn_output = mx.where(valid_query, attn_output, mx.zeros_like(attn_output))
+        attn_output = attn_output.astype(output_dtype)
 
         attn_output = mx.transpose(attn_output, (0, 2, 1, 3))
         attn_output = mx.reshape(attn_output, (batch_size, seq_len, self.inner_dim))

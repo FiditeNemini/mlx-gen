@@ -12,9 +12,11 @@ from mflux.models.common.schedulers.base_scheduler import BaseScheduler
 
 @partial(mx.compile, shapeless=True)
 def _step(noise, latents, s1, s2):
-    dt = (s1 - s2).astype(latents.dtype)
-    noise = noise.astype(latents.dtype)
-    return latents + dt * noise
+    output_dtype = noise.dtype
+    dt = (s1 - s2).astype(mx.float32)
+    sample = latents.astype(mx.float32)
+    model_output = noise.astype(mx.float32)
+    return (sample + dt * model_output).astype(output_dtype)
 
 
 class FlowMatchEulerDiscreteScheduler(BaseScheduler):
@@ -37,6 +39,11 @@ class FlowMatchEulerDiscreteScheduler(BaseScheduler):
         self._timesteps, self._sigmas = FlowMatchEulerDiscreteScheduler.get_timesteps_and_sigmas(
             image_seq_len=image_seq_len,
             num_inference_steps=self.config.num_inference_steps,
+            base_seq_len=self.model_config.sigma_base_seq_len,
+            max_seq_len=self.model_config.sigma_max_seq_len,
+            base_shift=self.model_config.sigma_base_shift,
+            max_shift=self.model_config.sigma_max_shift,
+            shift_terminal=self.model_config.sigma_shift_terminal,
         )
 
     def set_mu(self, mu: float) -> None:
@@ -64,13 +71,23 @@ class FlowMatchEulerDiscreteScheduler(BaseScheduler):
         image_seq_len: int,
         num_inference_steps: int,
         num_train_timesteps: int = 1000,
+        base_seq_len: int = 256,
+        max_seq_len: int = 4096,
+        base_shift: float = 0.5,
+        max_shift: float = 1.15,
+        shift_terminal: float | None = None,
     ) -> tuple[mx.array, mx.array]:
         sigmas = mx.linspace(1.0, 1.0 / num_inference_steps, num_inference_steps, dtype=mx.float32)
-        mu = FlowMatchEulerDiscreteScheduler._compute_empirical_mu(
+        mu = FlowMatchEulerDiscreteScheduler._compute_linear_mu(
             image_seq_len=image_seq_len,
-            num_steps=num_inference_steps,
+            base_seq_len=base_seq_len,
+            max_seq_len=max_seq_len,
+            base_shift=base_shift,
+            max_shift=max_shift,
         )
         sigmas = FlowMatchEulerDiscreteScheduler._time_shift_exponential_array(mu, 1.0, sigmas)
+        if shift_terminal is not None:
+            sigmas = FlowMatchEulerDiscreteScheduler._stretch_to_terminal_array(sigmas, shift_terminal)
         timesteps = sigmas * num_train_timesteps
         sigmas = mx.concatenate([sigmas, mx.zeros((1,), dtype=sigmas.dtype)], axis=0)
         return timesteps, sigmas
@@ -94,6 +111,12 @@ class FlowMatchEulerDiscreteScheduler(BaseScheduler):
     @staticmethod
     def _time_shift_exponential_array(mu: float, sigma_power: float, t: mx.array) -> mx.array:
         return mx.exp(mu) / (mx.exp(mu) + ((1.0 / t - 1.0) ** sigma_power))
+
+    @staticmethod
+    def _stretch_to_terminal_array(sigmas: mx.array, shift_terminal: float) -> mx.array:
+        one_minus = 1.0 - sigmas
+        scale = one_minus[-1] / (1.0 - shift_terminal)
+        return 1.0 - (one_minus / scale)
 
     def _stretch_to_terminal(self, sigmas: list[float]) -> list[float]:
         one_minus_sigmas = [1.0 - s for s in sigmas]

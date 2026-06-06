@@ -1,3 +1,5 @@
+import gc
+
 import mlx.core as mx
 import numpy as np
 from mlx import nn
@@ -276,7 +278,7 @@ class Wan2_2_VAE(nn.Module):
         latents_std = mx.array(self.latents_std).reshape(1, self.z_dim, 1, 1, 1)
         return (self.encode(images) - latents_mean) / latents_std
 
-    def decode(self, latents: mx.array) -> mx.array:
+    def decode(self, latents: mx.array, *, clear_cache_each_slice: bool = False) -> mx.array:
         if latents.ndim == 4:
             latents = latents.reshape(latents.shape[0], latents.shape[1], 1, latents.shape[2], latents.shape[3])
         latents = self.post_quant_conv(latents)
@@ -292,14 +294,19 @@ class Wan2_2_VAE(nn.Module):
                     first_chunk=frame_idx == 0,
                 )
             )
+            mx.eval(decoded_slices[-1])
+            if clear_cache_each_slice:
+                gc.collect()
+                mx.synchronize()
+                mx.clear_cache()
         decoded = mx.concatenate(decoded_slices, axis=2)
         decoded = self.unpatchify(decoded, patch_size=self.patch_size)
         return mx.clip(decoded, -1.0, 1.0)
 
-    def decode_normalized_latents(self, latents: mx.array) -> mx.array:
+    def decode_normalized_latents(self, latents: mx.array, *, clear_cache_each_slice: bool = False) -> mx.array:
         latents_mean = mx.array(self.latents_mean).reshape(1, self.z_dim, 1, 1, 1)
         latents_std = mx.array(self.latents_std).reshape(1, self.z_dim, 1, 1, 1)
-        return self.decode(latents * latents_std + latents_mean)
+        return self.decode(latents * latents_std + latents_mean, clear_cache_each_slice=clear_cache_each_slice)
 
     def _encode_cached(self, images: mx.array) -> mx.array:
         feat_cache = self._new_feature_cache()

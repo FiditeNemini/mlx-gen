@@ -10,13 +10,31 @@ from mflux.cli.mlx_gen import RouterInvocation
 from mflux.models.common.download_policy import downloads_enabled
 
 
-def test_routes_qwen_image_to_text_or_image_generation():
+def test_qwen_base_single_image_requires_latent_strength(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Qwen/Qwen-Image",
+                "--image",
+                "input.png",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "image-strength is required for latent image-to-image mode" in capsys.readouterr().err
+
+
+def test_routes_qwen_single_image_with_strength_to_latent_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
             "Qwen/Qwen-Image",
             "--image",
             "input.png",
+            "--image-strength",
+            "0.4",
             "--prompt",
             "make it cinematic",
         ]
@@ -29,42 +47,73 @@ def test_routes_qwen_image_to_text_or_image_generation():
         "Qwen/Qwen-Image",
         "--image-path",
         "input.png",
+        "--image-strength",
+        "0.4",
         "--prompt",
         "make it cinematic",
     ]
 
 
-def test_routes_qwen_multiple_images_to_edit_generation():
-    invocation = mlx_gen._resolve_invocation(
+def test_qwen_backend_defaults_to_flow_match_scheduler(monkeypatch):
+    from mflux.models.qwen.cli import qwen_image_generate
+
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeQwenImage:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_generate, "QwenImage", FakeQwenImage)
+    monkeypatch.setattr(qwen_image_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
         [
+            "mflux-generate-qwen",
             "--model",
-            "qwen",
-            "--images",
-            "input.png",
-            "style.png",
+            "qwen-image",
             "--prompt",
-            "apply the second image style",
-        ]
+            "a spaceship in the snow",
+            "--output",
+            "out.png",
+        ],
     )
 
-    assert invocation.target_name == "mflux-generate-qwen-edit"
-    assert invocation.argv == [
-        "mflux-generate-qwen-edit",
-        "--model",
-        "qwen-image-edit",
-        "--image-paths",
-        "input.png",
-        "style.png",
-        "--prompt",
-        "apply the second image style",
-    ]
+    qwen_image_generate.main()
+
+    assert observed["generate"]["scheduler"] == "flow_match_euler_discrete"
+
+
+def test_qwen_base_multiple_images_requires_edit_model(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "qwen",
+                "--images",
+                "input.png",
+                "style.png",
+                "--prompt",
+                "apply the second image style",
+            ]
+        )
+
+    assert "does not support multi-reference image-to-image generation" in capsys.readouterr().err
 
 
 def test_routes_qwen_edit_model_to_edit_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "lpalbou/qwen-image-edit-2511-4bit",
+            "AbstractFramework/qwen-image-edit-2511-8bit",
             "--image",
             "input.png",
             "--prompt",
@@ -76,7 +125,7 @@ def test_routes_qwen_edit_model_to_edit_generation():
     assert invocation.argv == [
         "mflux-generate-qwen-edit",
         "--model",
-        "lpalbou/qwen-image-edit-2511-4bit",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
         "--image-paths",
         "input.png",
         "--prompt",
@@ -126,6 +175,22 @@ def test_capabilities_command_accepts_base_model_for_local_paths(capsys):
     assert payload["model_name"] == "../models/local-flux2-folder"
 
 
+def test_validation_command_reports_model_specific_status(capsys):
+    mlx_gen._show_validation(["--model", "briaai/Fibo-Edit"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["model"] == "briaai/Fibo-Edit"
+    assert payload["status"] == "FAIL"
+    assert {record["mode"] for record in payload["records"]} == {"edit-reference"}
+
+
+def test_validation_command_lists_profiles(capsys):
+    mlx_gen._show_validation(["--list"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert [profile["id"] for profile in payload["profiles"]] == ["i2i_edit_5x4_2026_06_05"]
+
+
 def test_generate_with_path_reports_prepare_command(capsys):
     with pytest.raises(SystemExit):
         mlx_gen._resolve_invocation(
@@ -152,7 +217,7 @@ def test_routes_flux2_with_image_to_image_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "lpalbou/flux2-klein-4b-4bit",
+            "AbstractFramework/flux.2-klein-4b-8bit",
             "--image",
             "input.png",
             "--prompt",
@@ -164,7 +229,7 @@ def test_routes_flux2_with_image_to_image_generation():
     assert invocation.argv == [
         "mflux-generate-flux2-edit",
         "--model",
-        "lpalbou/flux2-klein-4b-4bit",
+        "AbstractFramework/flux.2-klein-4b-8bit",
         "--image-paths",
         "input.png",
         "--prompt",
@@ -176,7 +241,7 @@ def test_routes_flux2_explicit_edit_with_image_to_edit_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "lpalbou/flux2-klein-4b-4bit",
+            "AbstractFramework/flux.2-klein-4b-8bit",
             "--task",
             "edit",
             "--image",
@@ -190,7 +255,7 @@ def test_routes_flux2_explicit_edit_with_image_to_edit_generation():
     assert invocation.argv == [
         "mflux-generate-flux2-edit",
         "--model",
-        "lpalbou/flux2-klein-4b-4bit",
+        "AbstractFramework/flux.2-klein-4b-8bit",
         "--image-paths",
         "input.png",
         "--prompt",
@@ -202,7 +267,7 @@ def test_routes_flux2_multiple_images_to_edit_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "lpalbou/flux2-klein-4b-4bit",
+            "AbstractFramework/flux.2-klein-4b-8bit",
             "--images",
             "input.png",
             "style.png",
@@ -215,7 +280,7 @@ def test_routes_flux2_multiple_images_to_edit_generation():
     assert invocation.argv == [
         "mflux-generate-flux2-edit",
         "--model",
-        "lpalbou/flux2-klein-4b-4bit",
+        "AbstractFramework/flux.2-klein-4b-8bit",
         "--image-paths",
         "input.png",
         "style.png",
@@ -228,7 +293,7 @@ def test_routes_flux2_with_image_strength_to_image_to_image_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "lpalbou/flux2-klein-4b-4bit",
+            "AbstractFramework/flux.2-klein-4b-8bit",
             "--image",
             "input.png",
             "--image-strength",
@@ -242,7 +307,7 @@ def test_routes_flux2_with_image_strength_to_image_to_image_generation():
     assert invocation.argv == [
         "mflux-generate-flux2",
         "--model",
-        "lpalbou/flux2-klein-4b-4bit",
+        "AbstractFramework/flux.2-klein-4b-8bit",
         "--image-path",
         "input.png",
         "--image-strength",
@@ -257,7 +322,7 @@ def test_flux2_metadata_image_strength_routes_to_latent_i2i(tmp_path):
     metadata_path.write_text(
         json.dumps(
             {
-                "model": "lpalbou/flux2-klein-4b-4bit",
+                "model": "AbstractFramework/flux.2-klein-4b-8bit",
                 "image_path": "input.png",
                 "image_strength": 0.4,
                 "prompt": "make it cinematic",
@@ -271,7 +336,7 @@ def test_flux2_metadata_image_strength_routes_to_latent_i2i(tmp_path):
     assert invocation.argv == [
         "mflux-generate-flux2",
         "--model",
-        "lpalbou/flux2-klein-4b-4bit",
+        "AbstractFramework/flux.2-klein-4b-8bit",
         "--image-path",
         "input.png",
         "--config-from-metadata",
@@ -283,11 +348,13 @@ def test_routes_flux2_explicit_latent_i2i_mode_to_image_to_image_generation():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "lpalbou/flux2-klein-4b-4bit",
+            "AbstractFramework/flux.2-klein-4b-8bit",
             "--image",
             "input.png",
             "--i2i-mode",
             "latent",
+            "--image-strength",
+            "0.4",
             "--prompt",
             "make it cinematic",
         ]
@@ -297,12 +364,55 @@ def test_routes_flux2_explicit_latent_i2i_mode_to_image_to_image_generation():
     assert invocation.argv == [
         "mflux-generate-flux2",
         "--model",
-        "lpalbou/flux2-klein-4b-4bit",
+        "AbstractFramework/flux.2-klein-4b-8bit",
         "--image-path",
         "input.png",
+        "--image-strength",
+        "0.4",
         "--prompt",
         "make it cinematic",
     ]
+
+
+def test_latent_i2i_requires_image_strength(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/flux.2-klein-4b-8bit",
+                "--image",
+                "input.png",
+                "--i2i-mode",
+                "latent",
+                "--prompt",
+                "make it cinematic",
+            ]
+        )
+
+    assert "image-strength is required for latent image-to-image mode" in capsys.readouterr().err
+
+
+def test_routes_canvas_policy_to_selected_i2i_backend():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/flux.2-klein-4b-8bit",
+            "--image",
+            "input.png",
+            "--i2i-mode",
+            "latent",
+            "--image-strength",
+            "0.4",
+            "--canvas-policy",
+            "exact-resize",
+            "--prompt",
+            "make it cinematic",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2"
+    assert "--canvas-policy" in invocation.argv
+    assert invocation.argv[invocation.argv.index("--canvas-policy") + 1] == "exact-resize"
 
 
 def test_image_strength_is_rejected_for_flux2_edit_mode(capsys):
@@ -310,7 +420,7 @@ def test_image_strength_is_rejected_for_flux2_edit_mode(capsys):
         mlx_gen._resolve_invocation(
             [
                 "--model",
-                "lpalbou/flux2-klein-4b-4bit",
+                "AbstractFramework/flux.2-klein-4b-8bit",
                 "--image",
                 "input.png",
                 "--i2i-mode",
@@ -330,7 +440,7 @@ def test_mask_path_is_rejected_for_flux2_edit_mode(capsys):
         mlx_gen._resolve_invocation(
             [
                 "--model",
-                "lpalbou/flux2-klein-4b-4bit",
+                "AbstractFramework/flux.2-klein-4b-8bit",
                 "--image",
                 "input.png",
                 "--mask-path",
@@ -348,7 +458,7 @@ def test_outpaint_padding_is_rejected_until_a_model_supports_it(capsys):
         mlx_gen._resolve_invocation(
             [
                 "--model",
-                "lpalbou/flux2-klein-4b-4bit",
+                "AbstractFramework/flux.2-klein-4b-8bit",
                 "--image",
                 "input.png",
                 "--outpaint-padding",
@@ -451,32 +561,23 @@ def test_qwen_text_to_image_rejects_image(capsys):
     assert "text-to-image cannot be combined with --image" in capsys.readouterr().err
 
 
-def test_task_edit_can_select_qwen_edit_from_qwen_base_model():
-    invocation = mlx_gen._resolve_invocation(
-        [
-            "--model",
-            "Qwen/Qwen-Image",
-            "--task",
-            "edit",
-            "--images",
-            "input.png",
-            "style.png",
-            "--prompt",
-            "apply the style from the second image",
-        ]
-    )
+def test_task_edit_does_not_silently_swap_qwen_base_to_edit_model(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Qwen/Qwen-Image",
+                "--task",
+                "edit",
+                "--images",
+                "input.png",
+                "style.png",
+                "--prompt",
+                "apply the style from the second image",
+            ]
+        )
 
-    assert invocation.target_name == "mflux-generate-qwen-edit"
-    assert invocation.argv == [
-        "mflux-generate-qwen-edit",
-        "--model",
-        "qwen-image-edit",
-        "--image-paths",
-        "input.png",
-        "style.png",
-        "--prompt",
-        "apply the style from the second image",
-    ]
+    assert "does not support multi-reference image-to-image generation" in capsys.readouterr().err
 
 
 def test_family_override_routes_unidentifiable_local_path():
@@ -486,6 +587,8 @@ def test_family_override_routes_unidentifiable_local_path():
             "../models/local-edit-checkpoint",
             "--family",
             "qwen",
+            "--base-model",
+            "qwen-image-edit-2511",
             "--task",
             "edit",
             "--image",
@@ -500,6 +603,8 @@ def test_family_override_routes_unidentifiable_local_path():
         "mflux-generate-qwen-edit",
         "--model",
         "../models/local-edit-checkpoint",
+        "--base-model",
+        "qwen-image-edit-2511",
         "--image-paths",
         "input.png",
         "--prompt",
@@ -607,60 +712,56 @@ def test_family_override_fibo_local_path_forwards_base_model():
     ]
 
 
-def test_fibo_edit_mask_path_routes_to_mask_capable_backend():
-    invocation = mlx_gen._resolve_invocation(
-        [
-            "--model",
-            "fibo-edit",
-            "--image",
-            "input.png",
-            "--mask-path",
-            "mask.png",
-            "--prompt",
-            "replace the selected object",
-        ]
-    )
+def test_unified_router_rejects_fibo_edit_until_visual_parity_passes(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "briaai/Fibo-Edit",
+                "--image",
+                "input.png",
+                "--prompt",
+                '{"short_description":"ship","edit_instruction":"Turn the ship into a pencil sketch"}',
+            ]
+        )
 
-    assert invocation.target_name == "mflux-generate-fibo-edit"
-    assert invocation.argv == [
-        "mflux-generate-fibo-edit",
-        "--model",
-        "fibo-edit",
-        "--image-path",
-        "input.png",
-        "--mask-path",
-        "mask.png",
-        "--prompt",
-        "replace the selected object",
-    ]
+    assert "does not expose unified generation capabilities" in capsys.readouterr().err
 
 
-def test_fibo_edit_masked_image_path_alias_routes_to_mask_capable_backend():
-    invocation = mlx_gen._resolve_invocation(
-        [
-            "--model",
-            "fibo-edit",
-            "--image",
-            "input.png",
-            "--masked-image-path",
-            "mask.png",
-            "--prompt",
-            "replace the selected object",
-        ]
-    )
+def test_fibo_edit_mask_path_is_not_advertised_by_unified_router(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "briaai/Fibo-Edit",
+                "--image",
+                "input.png",
+                "--mask-path",
+                "mask.png",
+                "--prompt",
+                "replace the selected object",
+            ]
+        )
 
-    assert invocation.target_name == "mflux-generate-fibo-edit"
-    assert invocation.argv == [
-        "mflux-generate-fibo-edit",
-        "--model",
-        "fibo-edit",
-        "--image-path",
-        "input.png",
-        "--masked-image-path",
-        "mask.png",
-        "--prompt",
-        "replace the selected object",
-    ]
+    assert "does not expose unified generation capabilities" in capsys.readouterr().err
+
+
+def test_fibo_edit_masked_image_path_alias_is_not_advertised_by_unified_router(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "briaai/Fibo-Edit",
+                "--image",
+                "input.png",
+                "--masked-image-path",
+                "mask.png",
+                "--prompt",
+                "replace the selected object",
+            ]
+        )
+
+    assert "does not expose unified generation capabilities" in capsys.readouterr().err
 
 
 def test_metadata_can_supply_model_and_images(tmp_path):
@@ -668,7 +769,7 @@ def test_metadata_can_supply_model_and_images(tmp_path):
     metadata_path.write_text(
         json.dumps(
             {
-                "model": "lpalbou/qwen-image-edit-2511-4bit",
+                "model": "AbstractFramework/qwen-image-edit-2511-8bit",
                 "image_paths": ["input.png", "style.png"],
                 "prompt": "apply the second image style",
             }
@@ -681,7 +782,7 @@ def test_metadata_can_supply_model_and_images(tmp_path):
     assert invocation.argv == [
         "mflux-generate-qwen-edit",
         "--model",
-        "lpalbou/qwen-image-edit-2511-4bit",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
         "--image-paths",
         "input.png",
         "style.png",
@@ -713,6 +814,22 @@ def test_routes_ernie_image_turbo_to_ernie_generation():
     ]
 
 
+def test_ernie_family_override_local_folder_requires_base_model(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "../models/custom-folder",
+                "--family",
+                "ernie-image",
+                "--prompt",
+                "hello",
+            ]
+        )
+
+    assert "--family ernie-image is not enough to configure model path" in capsys.readouterr().err
+
+
 def test_ernie_family_override_routes_local_folder():
     invocation = mlx_gen._resolve_invocation(
         [
@@ -720,6 +837,8 @@ def test_ernie_family_override_routes_local_folder():
             "../models/custom-ernie-folder",
             "--family",
             "ernie-image",
+            "--base-model",
+            "ernie-image-turbo",
             "--prompt",
             "hello",
         ]
@@ -730,6 +849,8 @@ def test_ernie_family_override_routes_local_folder():
         "mflux-generate-ernie-image",
         "--model",
         "../models/custom-ernie-folder",
+        "--base-model",
+        "ernie-image-turbo",
         "--prompt",
         "hello",
     ]
@@ -742,8 +863,12 @@ def test_ernie_family_override_routes_local_folder_with_image():
             "../models/custom-folder",
             "--family",
             "ernie-image",
+            "--base-model",
+            "ernie-image-turbo",
             "--image",
             "input.png",
+            "--image-strength",
+            "0.4",
             "--prompt",
             "make it cinematic",
         ]
@@ -754,8 +879,12 @@ def test_ernie_family_override_routes_local_folder_with_image():
         "mflux-generate-ernie-image",
         "--model",
         "../models/custom-folder",
+        "--base-model",
+        "ernie-image-turbo",
         "--image-path",
         "input.png",
+        "--image-strength",
+        "0.4",
         "--prompt",
         "make it cinematic",
     ]
@@ -894,6 +1023,258 @@ def test_ernie_cli_passes_prompt_enhancer_options(monkeypatch):
     assert observed["generate"]["pe_temperature"] == 0.7
     assert observed["generate"]["pe_top_p"] == 0.9
     assert observed["generate"]["pe_max_new_tokens"] == 12
+
+
+def test_ernie_cli_uses_selected_prepared_model_config(monkeypatch):
+    from mflux.models.ernie_image.cli import ernie_image_generate
+
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeErnieImageTurbo:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(ernie_image_generate, "ErnieImageTurbo", FakeErnieImageTurbo)
+    monkeypatch.setattr(ernie_image_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-ernie-image",
+            "--model",
+            "AbstractFramework/ernie-image-turbo-8bit",
+            "--prompt",
+            "make it cinematic",
+            "--image-path",
+            "input.png",
+            "--image-strength",
+            "0.4",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    ernie_image_generate.main()
+
+    model_config = observed["init"]["model_config"]
+    assert model_config.model_name == "AbstractFramework/ernie-image-turbo-8bit"
+    assert model_config.base_model == "baidu/ERNIE-Image-Turbo"
+    assert observed["init"]["model_path"] is None
+
+
+def test_z_image_turbo_cli_uses_selected_prepared_model_config(monkeypatch):
+    from mflux.models.z_image.cli import z_image_turbo_generate
+
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeZImage:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(z_image_turbo_generate, "ZImage", FakeZImage)
+    monkeypatch.setattr(z_image_turbo_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-z-image-turbo",
+            "--model",
+            "AbstractFramework/z-image-turbo-8bit",
+            "--prompt",
+            "make it cinematic",
+            "--image-path",
+            "input.png",
+            "--image-strength",
+            "0.4",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    z_image_turbo_generate.main()
+
+    model_config = observed["init"]["model_config"]
+    assert model_config.model_name == "AbstractFramework/z-image-turbo-8bit"
+    assert model_config.base_model == "Tongyi-MAI/Z-Image-Turbo"
+    assert observed["init"]["model_path"] is None
+
+
+def test_qwen_edit_backend_accepts_local_path_with_2511_base_model(monkeypatch):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeQwenImageEdit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_edit_generate, "QwenImageEdit", FakeQwenImageEdit)
+    monkeypatch.setattr(qwen_image_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "../models/local-qwen-edit",
+            "--base-model",
+            "qwen-image-edit-2511",
+            "--prompt",
+            "replace the chair",
+            "--image-paths",
+            "input.png",
+            "style.png",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    qwen_image_edit_generate.main()
+
+    model_config = observed["init"]["model_config"]
+    assert model_config.model_name == "../models/local-qwen-edit"
+    assert model_config.base_model == "Qwen/Qwen-Image-Edit-2511"
+    assert observed["init"]["model_path"] == "../models/local-qwen-edit"
+    assert observed["generate"]["image_paths"] == ["input.png", "style.png"]
+    assert observed["generate"]["negative_prompt"] is None
+    assert observed["generate"]["guidance"] == 4.0
+    assert observed["generate"]["scheduler"] == "flow_match_euler_discrete"
+    assert observed["generate"]["num_inference_steps"] == 40
+    assert observed["save"]["path"] == Path("out.png")
+
+
+def test_qwen_edit_backend_preserves_explicit_scheduler(monkeypatch):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeQwenImageEdit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_edit_generate, "QwenImageEdit", FakeQwenImageEdit)
+    monkeypatch.setattr(qwen_image_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit",
+            "--prompt",
+            "replace the chair",
+            "--image-paths",
+            "input.png",
+            "--scheduler",
+            "linear",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    qwen_image_edit_generate.main()
+
+    assert observed["generate"]["scheduler"] == "linear"
+
+
+def test_qwen_edit_backend_accepts_negative_alias(monkeypatch):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    observed = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeQwenImageEdit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_edit_generate, "QwenImageEdit", FakeQwenImageEdit)
+    monkeypatch.setattr(qwen_image_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit",
+            "--prompt",
+            "replace the chair",
+            "--image-paths",
+            "input.png",
+            "--negative",
+            "cropped, blurry",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    qwen_image_edit_generate.main()
+
+    assert observed["generate"]["negative_prompt"] == "cropped, blurry"
+
+
+def test_qwen_edit_backend_rejects_multi_reference_without_edit_plus(monkeypatch, capsys):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit",
+            "--prompt",
+            "combine these references",
+            "--image-paths",
+            "input.png",
+            "style.png",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        qwen_image_edit_generate.main()
+
+    assert "Multiple Qwen edit reference images require an Edit-Plus model" in capsys.readouterr().err
 
 
 def test_routes_wan_text_to_video_generation():
@@ -1072,6 +1453,7 @@ def test_wan_cli_generates_video_and_respects_replace(monkeypatch, tmp_path):
     assert callable(observed["generate"]["progress_callback"])
     assert observed["generate"]["release_inactive_denoiser"] is True
     assert observed["generate"]["clear_cache_each_step"] is False
+    assert observed["generate"]["clear_cache_each_transformer_block"] is False
     assert observed["generate"]["tensor_health_check_interval"] == 1
     assert observed["save"]["path"] == "out.mp4"
     assert observed["save"]["overwrite"] is False
@@ -1230,6 +1612,56 @@ def test_wan_cli_low_ram_releases_denoisers_before_decode_and_sets_cache_limit(m
     assert observed["generate"]["release_inactive_denoiser"] is True
     assert observed["generate"]["release_denoisers_before_decode"] is True
     assert observed["generate"]["clear_cache_each_step"] is True
+    assert observed["generate"]["clear_cache_each_transformer_block"] is True
+
+
+def test_wan_cli_cache_limit_without_low_ram_sets_allocator_only(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {"cache_limit": None, "cache_cleared": False, "peak_reset": False}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(wan_generate.mx, "set_cache_limit", lambda value: observed.update(cache_limit=value))
+    monkeypatch.setattr(wan_generate.mx, "clear_cache", lambda: observed.update(cache_cleared=True))
+    monkeypatch.setattr(wan_generate.mx, "reset_peak_memory", lambda: observed.update(peak_reset=True))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--seed",
+            "123",
+            "--mlx-cache-limit-gb",
+            "2.5",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["cache_limit"] == int(2.5 * (1000**3))
+    assert observed["cache_cleared"] is True
+    assert observed["peak_reset"] is True
+    assert observed["generate"]["release_inactive_denoiser"] is True
+    assert observed["generate"]["release_denoisers_before_decode"] is False
+    assert observed["generate"]["clear_cache_each_step"] is False
+    assert observed["generate"]["clear_cache_each_transformer_block"] is False
 
 
 def test_wan_cli_low_ram_defaults_cache_limit(monkeypatch):
@@ -1319,6 +1751,7 @@ def test_wan_cli_multiple_seeds_keep_denoisers_for_reuse(monkeypatch):
     assert len(observed["generate"]) == 2
     assert all(call["release_inactive_denoiser"] is False for call in observed["generate"])
     assert all(call["release_denoisers_before_decode"] is False for call in observed["generate"])
+    assert all(call["clear_cache_each_transformer_block"] is False for call in observed["generate"])
 
 
 def test_wan_cli_progress_advances_by_denoise_steps(monkeypatch):
@@ -1519,6 +1952,46 @@ def test_wan_cli_explicit_guidance_keeps_guidance_2_diffusers_default(monkeypatc
     assert observed["generate"]["guidance_2"] is None
 
 
+def test_wan_cli_negative_alias_disables_default_negative_prompt(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--negative",
+            "",
+            "--seed",
+            "123",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["generate"]["negative_prompt"] == ""
+
+
 def test_wan_cli_rejects_unrecognized_remote_wan_repo():
     from mflux.models.wan.cli import wan_generate
 
@@ -1635,10 +2108,7 @@ def test_download_command_uses_ernie_source_patterns(monkeypatch):
     assert calls[0][0] == "baidu/ERNIE-Image-Turbo"
     assert calls[0][2] is True
     assert {
-        "LICENSE",
         "README.md",
-        "model_index.json",
-        "scheduler/*.json",
         "tokenizer/*",
         "text_encoder/*.safetensors",
         "transformer/*.safetensors",

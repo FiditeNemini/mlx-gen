@@ -1,6 +1,7 @@
 import gc
 import html
 import io
+import math
 import re
 import shutil
 import time
@@ -68,13 +69,14 @@ class Wan2_2_TI2V(nn.Module):
         fps: int = RECOMMENDED_FPS,
         guidance: float | None = None,
         guidance_2: float | None | object = _GUIDANCE_2_UNSET,
-        negative_prompt: str | None = "",
+        negative_prompt: str | None = None,
         image_path: Path | str | None = None,
         max_sequence_length: int = 512,
         progress_callback: ProgressCallback | None = None,
         release_inactive_denoiser: bool = False,
         release_denoisers_before_decode: bool = False,
         clear_cache_each_step: bool = False,
+        clear_cache_each_transformer_block: bool = False,
         tensor_health_check_interval: int | None = 1,
     ) -> GeneratedVideo:
         start_time = time.time()
@@ -85,16 +87,20 @@ class Wan2_2_TI2V(nn.Module):
             and self._wan_config("boundary_ratio", None) is None
         ):
             raise ValueError("guidance_2 is only supported for Wan models with two-transformer boundary routing.")
-        self._validate_denoisers_available()
-        height, width = self._validated_spatial_size(height=height, width=width)
-        num_frames = self._validated_frame_count(num_frames)
         is_image_to_video = image_path is not None
         task = "image-to-video" if is_image_to_video else "text-to-video"
         if image_path is not None and not self._supports_image_to_video():
             raise ValueError(f"{self.model_config.model_name} does not support image-to-video input.")
+        self._validate_denoisers_available()
+        height, width, spatial_metadata = self._resolve_video_spatial_size(
+            height=height,
+            width=width,
+            image_path=image_path,
+        )
+        num_frames = self._validated_frame_count(num_frames)
         guidance, guidance_2 = self._resolve_guidance_pair(guidance=guidance, guidance_2=guidance_2)
         self._validate_guidance_values(guidance=guidance, guidance_2=guidance_2)
-        negative_prompt = self._default_negative_prompt() if not negative_prompt else negative_prompt
+        negative_prompt = self._resolve_negative_prompt(negative_prompt)
         self._validate_runtime_contract(is_image_to_video=is_image_to_video)
         progress_registry = getattr(self, "callbacks", None)
         self._emit_progress(
@@ -202,6 +208,11 @@ class Wan2_2_TI2V(nn.Module):
                 hidden_states=latent_model_input,
                 timestep=expanded_timestep,
                 encoder_hidden_states=prompt_embeds,
+                clear_cache_each_block=clear_cache_each_transformer_block,
+            )
+            self._materialize_denoise_prediction(
+                noise_pred,
+                clear_cache=clear_cache_each_transformer_block,
             )
             if should_check_tensors:
                 self._require_tensor_health(
@@ -219,6 +230,11 @@ class Wan2_2_TI2V(nn.Module):
                     hidden_states=latent_model_input,
                     timestep=expanded_timestep,
                     encoder_hidden_states=negative_prompt_embeds,
+                    clear_cache_each_block=clear_cache_each_transformer_block,
+                )
+                self._materialize_denoise_prediction(
+                    noise_uncond,
+                    clear_cache=clear_cache_each_transformer_block,
                 )
                 if should_check_tensors:
                     self._require_tensor_health(
@@ -232,6 +248,10 @@ class Wan2_2_TI2V(nn.Module):
                         guidance=current_guidance,
                     )
                 noise_pred = noise_uncond + current_guidance * (noise_pred - noise_uncond)
+                self._materialize_denoise_prediction(
+                    noise_pred,
+                    clear_cache=clear_cache_each_transformer_block,
+                )
                 if should_check_tensors:
                     self._require_tensor_health(
                         noise_pred,
@@ -307,7 +327,10 @@ class Wan2_2_TI2V(nn.Module):
             task=task,
             registry=progress_registry,
         )
-        decoded = self.vae.decode_normalized_latents(latents.astype(ModelConfig.precision))
+        decoded = self.vae.decode_normalized_latents(
+            latents.astype(ModelConfig.precision),
+            clear_cache_each_slice=release_denoisers_before_decode,
+        )
         mx.eval(decoded)
         mx.synchronize()
         mx.clear_cache()
@@ -336,6 +359,10 @@ class Wan2_2_TI2V(nn.Module):
             task=task,
             image_path=image_path,
             negative_prompt=negative_prompt,
+            source_width=spatial_metadata.get("source_width"),
+            source_height=spatial_metadata.get("source_height"),
+            requested_width=spatial_metadata.get("requested_width"),
+            requested_height=spatial_metadata.get("requested_height"),
         )
         self._emit_progress(
             progress_callback,
@@ -521,10 +548,10 @@ class Wan2_2_TI2V(nn.Module):
     def _validated_spatial_size(self, height: int, width: int) -> tuple[int, int]:
         multiple_h = self.vae.spatial_scale * self.transformer.patch_size[1]
         multiple_w = self.vae.spatial_scale * self.transformer.patch_size[2]
-        calc_height = height // multiple_h * multiple_h
-        calc_width = width // multiple_w * multiple_w
-        if calc_height <= 0 or calc_width <= 0:
+        if height <= 0 or width <= 0:
             raise ValueError(f"Wan height and width must be at least ({multiple_h}, {multiple_w})px.")
+        calc_height = math.ceil(height / multiple_h) * multiple_h
+        calc_width = math.ceil(width / multiple_w) * multiple_w
         if (height, width) != (calc_height, calc_width):
             print(
                 "`height` and `width` must be multiples of "
@@ -532,6 +559,124 @@ class Wan2_2_TI2V(nn.Module):
                 f"Adjusting ({height}, {width}) -> ({calc_height}, {calc_width})."
             )
         return calc_height, calc_width
+
+    def _resolved_spatial_size(
+        self,
+        *,
+        height: int,
+        width: int,
+        image_path: Path | str | None,
+    ) -> tuple[int, int]:
+        resolved_height, resolved_width, _ = self._resolve_video_spatial_size(
+            height=height,
+            width=width,
+            image_path=image_path,
+        )
+        return resolved_height, resolved_width
+
+    def _resolve_video_spatial_size(
+        self,
+        *,
+        height: int,
+        width: int,
+        image_path: Path | str | None,
+    ) -> tuple[int, int, dict[str, int]]:
+        if image_path is None:
+            resolved_height, resolved_width = self._validated_spatial_size(height=height, width=width)
+            return resolved_height, resolved_width, {}
+        source_image = ImageUtil.load_image(image_path)
+        resolved_height, resolved_width = self._validated_i2v_spatial_size(
+            height=height,
+            width=width,
+            source_height=source_image.height,
+            source_width=source_image.width,
+        )
+        return (
+            resolved_height,
+            resolved_width,
+            {
+                "source_width": source_image.width,
+                "source_height": source_image.height,
+                "requested_width": width,
+                "requested_height": height,
+            },
+        )
+
+    def _validated_i2v_spatial_size(
+        self,
+        *,
+        height: int,
+        width: int,
+        source_height: int,
+        source_width: int,
+    ) -> tuple[int, int]:
+        multiple_h = self.vae.spatial_scale * self.transformer.patch_size[1]
+        multiple_w = self.vae.spatial_scale * self.transformer.patch_size[2]
+        if height <= 0 or width <= 0:
+            raise ValueError(f"Wan height and width must be at least ({multiple_h}, {multiple_w})px.")
+        if source_height <= 0 or source_width <= 0:
+            raise ValueError("Wan image-to-video source image must have positive dimensions.")
+        calc_height, calc_width = self._closest_spatial_size_for_ratio(
+            requested_height=height,
+            requested_width=width,
+            source_height=source_height,
+            source_width=source_width,
+            multiple_h=multiple_h,
+            multiple_w=multiple_w,
+        )
+        if (height, width) != (calc_height, calc_width):
+            print(
+                "Wan image-to-video preserves the input image aspect ratio. "
+                f"Adjusting requested video size ({height}, {width}) with source image "
+                f"({source_height}, {source_width}) -> ({calc_height}, {calc_width})."
+            )
+        return calc_height, calc_width
+
+    @staticmethod
+    def _closest_spatial_size_for_ratio(
+        *,
+        requested_height: int,
+        requested_width: int,
+        source_height: int,
+        source_width: int,
+        multiple_h: int,
+        multiple_w: int,
+    ) -> tuple[int, int]:
+        target_ratio = source_width / source_height
+        target_area = requested_width * requested_height
+        ideal_height = math.sqrt(target_area / target_ratio)
+        ideal_width = ideal_height * target_ratio
+        max_height = max(multiple_h, math.ceil((ideal_height * 2) / multiple_h) * multiple_h)
+        max_width = max(multiple_w, math.ceil((ideal_width * 2) / multiple_w) * multiple_w)
+        candidates: set[tuple[int, int]] = set()
+
+        for candidate_height in range(multiple_h, max_height + multiple_h, multiple_h):
+            ideal_candidate_width = candidate_height * target_ratio
+            for width_count in Wan2_2_TI2V._nearby_axis_counts(ideal_candidate_width, multiple_w):
+                candidates.add((candidate_height, width_count * multiple_w))
+
+        for candidate_width in range(multiple_w, max_width + multiple_w, multiple_w):
+            ideal_candidate_height = candidate_width / target_ratio
+            for height_count in Wan2_2_TI2V._nearby_axis_counts(ideal_candidate_height, multiple_h):
+                candidates.add((height_count * multiple_h, candidate_width))
+
+        def score(candidate: tuple[int, int]) -> tuple[float, float, float, int, int]:
+            candidate_height, candidate_width = candidate
+            candidate_ratio = candidate_width / candidate_height
+            candidate_area = candidate_width * candidate_height
+            ratio_error = abs(math.log(candidate_ratio / target_ratio))
+            area_error = abs(math.log(candidate_area / target_area))
+            shape_error = abs(candidate_width - ideal_width) / ideal_width
+            shape_error += abs(candidate_height - ideal_height) / ideal_height
+            return (ratio_error * 10.0 + area_error, ratio_error, area_error, candidate_area, int(shape_error * 1e9))
+
+        return min(candidates, key=score)
+
+    @staticmethod
+    def _nearby_axis_counts(ideal_size: float, multiple: int) -> set[int]:
+        ideal_count = ideal_size / multiple
+        base_counts = {math.floor(ideal_count), round(ideal_count), math.ceil(ideal_count)}
+        return {max(1, count + offset) for count in base_counts for offset in range(-2, 3)}
 
     def _validated_frame_count(self, num_frames: int) -> int:
         if num_frames < 1:
@@ -760,6 +905,11 @@ class Wan2_2_TI2V(nn.Module):
     def _default_negative_prompt(self) -> str:
         return str(self._wan_config("default_negative_prompt", ""))
 
+    def _resolve_negative_prompt(self, negative_prompt: str | None) -> str:
+        if negative_prompt is None:
+            return self._default_negative_prompt()
+        return negative_prompt
+
     def _wan_config(self, key: str, default):
         return self.model_config.transformer_overrides.get(key, default)
 
@@ -806,6 +956,13 @@ class Wan2_2_TI2V(nn.Module):
         gc.collect()
         mx.synchronize()
         mx.clear_cache()
+
+    @staticmethod
+    def _materialize_denoise_prediction(prediction: mx.array, *, clear_cache: bool) -> None:
+        mx.eval(prediction)
+        if clear_cache:
+            mx.synchronize()
+            mx.clear_cache()
 
     @staticmethod
     def _prompt_clean(text: str) -> str:

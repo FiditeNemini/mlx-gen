@@ -4,7 +4,6 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.flux.latent_creator.flux_latent_creator import FluxLatentCreator
 from mflux.models.flux.variants.txt2img.flux import Flux1
-from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
@@ -41,26 +40,20 @@ def main():
     )
 
     try:
-        # Resolve dimensions (supports ScaleFactor like "2x" when --image-path is provided)
-        width, height = DimensionResolver.resolve(
-            height=args.height,
-            width=args.width,
-            reference_image_path=args.image_path,
-        )
-
         for seed in args.seed:
             # 3. Generate an image for each seed value
             image = flux.generate_image(
                 seed=seed,
                 prompt=PromptUtil.read_prompt(args),
-                width=width,
-                height=height,
+                width=args.width,
+                height=args.height,
                 guidance=args.guidance,
                 scheduler=args.scheduler,
                 image_path=args.image_path,
                 num_inference_steps=args.steps,
                 image_strength=args.image_strength,
                 negative_prompt=PromptUtil.read_negative_prompt(args),
+                canvas_policy=args.canvas_policy,
             )
             # 4. Save the image
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)

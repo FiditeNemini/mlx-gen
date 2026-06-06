@@ -66,6 +66,7 @@ class WanTransformer(nn.Module):
         hidden_states: mx.array,
         timestep: mx.array,
         encoder_hidden_states: mx.array,
+        clear_cache_each_block: bool = False,
     ) -> mx.array:
         batch_size, _, num_frames, height, width = hidden_states.shape
         if hidden_states.shape[1] != self.in_channels:
@@ -99,6 +100,9 @@ class WanTransformer(nn.Module):
 
         for block in self.blocks:
             hidden_states = block(hidden_states, encoder_hidden_states, timestep_proj, rotary_emb)
+            if clear_cache_each_block:
+                mx.eval(hidden_states)
+                mx.clear_cache()
 
         hidden_states = self._project_out(hidden_states, temb)
         hidden_states = hidden_states.reshape(

@@ -26,12 +26,14 @@ class Img2Img:
         latent_creator: "LatentCreatorType",
         sigmas: mx.array,
         init_time_step: int,
+        image_strength: float | None,
         image_path: str | Path | None,
         tiling_config: "TilingConfig" | None = None,
     ):
         self.vae = vae
         self.sigmas = sigmas
         self.init_time_step = init_time_step
+        self.image_strength = image_strength
         self.image_path = image_path
         self.latent_creator = latent_creator
         self.tiling_config = tiling_config
@@ -51,6 +53,8 @@ class LatentCreator:
             # txt2img: just create noise
             return latent_creator.create_noise(seed, height, width)
         else:
+            if img2img.image_strength is None or img2img.image_strength <= 0.0:
+                raise ValueError("latent image-to-image requires image_strength > 0.")
             # img2img: blend encoded image with noise
             pure_noise = latent_creator.create_noise(seed, height, width)
             encoded = LatentCreator.encode_image(

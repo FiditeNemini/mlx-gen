@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Image-edit validation evidence**: add a current Qwen Image Edit 2511 source/q8/q4 parity sheet
+  with exact commands for pencil sketch, hard-landing edit, and multi-reference composition, and
+  document the existing Qwen Image Edit 2509 plus FLUX.2 Klein 4B/9B proof matrices.
+
+### Changed
+
+- **FIBO Edit public status**: keep FIBO Edit unavailable through unified `mlxgen generate`
+  capability discovery until source-model parity and release-quality edit validation pass.
+
+### Fixed
+
+- **Qwen Image/Edit FlowMatch scheduler parity**: use the model-config dynamic-shift scheduler
+  values and terminal sigma stretch for Qwen Image/Edit FlowMatch runs, matching the upstream
+  Diffusers scheduler contract and fixing Qwen Image Edit 2511 edit/composition adherence.
+
+## [0.18.11] - 2026-06-04
+
+### Changed
+
+- **Wan image-to-video sizing**: image-to-video now treats `width` and `height` as a size target,
+  resolves the actual output canvas from the input image aspect ratio and model spatial multiples,
+  and records requested, source, and resolved dimensions in MP4 metadata.
+
+### Fixed
+
+- **`mlxgen` alias imports**: importing `mlxgen.models.*` no longer replaces the `mflux.models`
+  parent package with an alias module, keeping mixed `mlxgen` and `mflux` imports stable in the
+  same Python process.
+
 ## [0.18.10] - 2026-06-04
 
 ### Added
@@ -37,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Metadata replay routing**: generation metadata that includes `image_strength` now resolves to
-  latent img2img instead of being mistaken for edit/reference I2I.
+  latent img2img instead of routing to edit/reference I2I.
 - **Unsupported option handling**: mask, outpaint, image-strength, and model-family contradictions
   are rejected before model execution when the selected model capability does not support them.
 
@@ -72,8 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   q8 storage/runtime-memory measurements.
 - Clarify that Wan mixed q8/BF16 improves storage and measured usage memory in validation, but is
   not currently claimed as a speed improvement.
-- Track remaining Wan release gates in the backlog: full-size A14B I2V boundary validation and
-  same-settings Diffusers-vs-MLX prompt-adherence validation.
+- Link Wan follow-up validation work from the backlog without making unsupported full-size claims
+  in user-facing docs.
 
 ## [0.18.8] - 2026-05-31
 
@@ -87,7 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Wan model identity safety**: unknown or generic Wan names no longer infer the TI2V-5B runtime from the generic `wan` substring. Wan requests now require an exact supported repo or a local prepared folder with a specific Wan alias.
 - **Wan prompt and default handling**: Wan generation now applies model-specific default negative prompts, spatial defaults, guidance defaults, and optional A14B low-noise guidance consistently across CLI and Python generation.
-- **Wan low-cost runs**: valid low-resolution or short Wan runs no longer emit runtime quality warnings; docs now describe those settings as quick command checks rather than quality-validation settings.
+- **Wan low-cost runs**: valid low-resolution or short Wan runs no longer emit runtime quality warnings; docs now describe those settings as quick command checks rather than final quality settings.
 - **Wan source/runtime mismatch guard**: Wan initialization now compares available Diffusers source configs against the selected MLX-Gen runtime before loading weights, and transformer calls fail with a clear channel mismatch before entering MLX convolution.
 
 ## [0.18.7] - 2026-05-27
@@ -106,12 +137,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Wan local parity fixtures**: Add opt-in full-model Wan component-parity tests for the MLX transformer, VAE encoder/decoder, prompt-embedding paths, and a tiny 3-step CFG latent denoise loop against Diffusers-generated fixtures.
-- **Wan smoke-setting warnings**: Warn when Wan generation uses tiny resolution, frame, step, or fps settings that are useful only for routing/MP4 smoke tests and not visual quality validation.
+- **Wan smoke-setting warnings**: Warn when Wan generation uses tiny resolution, frame, step, or fps settings that are useful only for routing/MP4 smoke tests and not visual quality assessment.
 - **Wan video progress**: Show a frame-based CLI progress bar during Wan text-to-video and image-to-video generation, and expose structured `WanProgressEvent` callbacks for Python callers.
 
 ### Documentation
 
-- Replace low-resolution Wan example panels with upstream TI2V-5B quality-validation settings plus 1280x704 spatial-scale sanity panels, and document that tiny runs can produce abstract green frames even with upstream Diffusers.
+- Replace low-resolution Wan example panels with upstream TI2V-5B recommended settings plus 1280x704 spatial-scale examples, and document tiny runs as command checks rather than final quality settings.
 
 ## [0.18.5] - 2026-05-26
 

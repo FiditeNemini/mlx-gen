@@ -282,7 +282,7 @@ def test_wan_generate_releases_high_noise_transformer_before_low_noise_call(monk
         z_dim=16,
         temporal_scale=4,
         spatial_scale=8,
-        decode_normalized_latents=lambda latents: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
+        decode_normalized_latents=lambda latents, **kwargs: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
     )
     calls = []
 
@@ -329,6 +329,11 @@ def test_wan_generate_releases_high_noise_transformer_before_low_noise_call(monk
         model,
         "_encode_video_condition",
         lambda **kwargs: mx.zeros((1, 20, 1, 8, 8), dtype=mx.float32),
+    )
+    monkeypatch.setattr(
+        model,
+        "_resolve_video_spatial_size",
+        lambda **kwargs: (kwargs["height"], kwargs["width"], {}),
     )
     monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.gc.collect", lambda: None)
     monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.mx.synchronize", lambda: None)
@@ -418,7 +423,7 @@ def test_wan_generate_fails_on_non_finite_vae_decode(monkeypatch):
     model = _fake_t2v_a14b_model()
     decoded = np.zeros((1, 3, 1, 8, 8), dtype=np.float32)
     decoded[0, 0, 0, 0, 0] = np.nan
-    model.vae.decode_normalized_latents = lambda latents: mx.array(decoded)
+    model.vae.decode_normalized_latents = lambda latents, **kwargs: mx.array(decoded)
     events = []
     calls = _patch_fake_wan_generation(monkeypatch, model, patch_to_video=False)
 
@@ -503,7 +508,7 @@ def test_wan_generate_rejects_non_finite_latents_during_denoise(monkeypatch):
         z_dim=16,
         temporal_scale=4,
         spatial_scale=8,
-        decode_normalized_latents=lambda latents: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
+        decode_normalized_latents=lambda latents, **kwargs: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
     )
 
     class FakeTransformer:
@@ -539,6 +544,11 @@ def test_wan_generate_rejects_non_finite_latents_during_denoise(monkeypatch):
     )
     monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.VideoUtil.to_video", fail_video_conversion)
     monkeypatch.setattr(model, "encode_prompt", lambda **kwargs: (mx.zeros((1, 1, 4096)), None))
+    monkeypatch.setattr(
+        model,
+        "_resolve_video_spatial_size",
+        lambda **kwargs: (kwargs["height"], kwargs["width"], {}),
+    )
     monkeypatch.setattr(
         model,
         "prepare_latents",
@@ -600,6 +610,83 @@ def test_wan_tensor_health_check_interval_validation():
         Wan2_2_TI2V._validate_tensor_health_check_interval(-1)
 
 
+def test_wan_generate_can_request_transformer_block_cache_clearing(monkeypatch):
+    model = _fake_t2v_a14b_model()
+    _patch_fake_wan_generation(monkeypatch, model)
+
+    model.generate_video(
+        seed=1,
+        prompt="a slow wave",
+        width=64,
+        height=64,
+        num_frames=1,
+        num_inference_steps=2,
+        guidance=1,
+        guidance_2=1,
+        clear_cache_each_transformer_block=True,
+    )
+
+    calls = model.transformer.calls + model.transformer_2.calls
+    assert calls
+    assert all(call["clear_cache_each_block"] is True for call in calls)
+
+
+def test_wan_generate_materializes_cfg_predictions_without_tensor_health(monkeypatch):
+    model = _fake_t2v_a14b_model()
+    _patch_fake_wan_generation(monkeypatch, model)
+    model.encode_prompt = lambda **kwargs: (
+        mx.zeros((1, 1, 4096), dtype=mx.float32),
+        mx.zeros((1, 1, 4096), dtype=mx.float32),
+    )
+    materialized = []
+    model._materialize_denoise_prediction = lambda prediction, clear_cache: materialized.append(clear_cache)
+
+    model.generate_video(
+        seed=1,
+        prompt="a slow wave",
+        width=64,
+        height=64,
+        num_frames=1,
+        num_inference_steps=2,
+        guidance=5,
+        clear_cache_each_transformer_block=True,
+        tensor_health_check_interval=None,
+    )
+
+    assert materialized == [True, True, True, True, True, True]
+
+
+def test_wan_generate_releases_denoisers_before_decode(monkeypatch):
+    model = _fake_t2v_a14b_model()
+    _patch_fake_wan_generation(monkeypatch, model)
+    observed = {}
+
+    def decode(latents, *, clear_cache_each_slice=False):
+        observed["transformer"] = model.transformer
+        observed["transformer_2"] = model.transformer_2
+        observed["clear_cache_each_slice"] = clear_cache_each_slice
+        return mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32)
+
+    model.vae.decode_normalized_latents = decode
+
+    model.generate_video(
+        seed=1,
+        prompt="a slow wave",
+        width=64,
+        height=64,
+        num_frames=1,
+        num_inference_steps=2,
+        guidance=1,
+        release_denoisers_before_decode=True,
+    )
+
+    assert observed == {
+        "transformer": None,
+        "transformer_2": None,
+        "clear_cache_each_slice": True,
+    }
+
+
 @pytest.mark.parametrize("guidance", [np.nan, np.inf, -np.inf])
 def test_wan_generate_rejects_non_finite_guidance(monkeypatch, guidance):
     model = _fake_t2v_a14b_model()
@@ -643,8 +730,10 @@ class _FakeWanTransformer:
 
     def __init__(self, output=None):
         self._output = output
+        self.calls = []
 
     def __call__(self, **kwargs):
+        self.calls.append(kwargs)
         if self._output is not None:
             return self._output
         return mx.zeros((1, 16, 1, 8, 8), dtype=mx.float32)
@@ -658,7 +747,7 @@ def _fake_t2v_a14b_model():
         z_dim=16,
         temporal_scale=4,
         spatial_scale=8,
-        decode_normalized_latents=lambda latents: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
+        decode_normalized_latents=lambda latents, **kwargs: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
     )
     model.transformer = _FakeWanTransformer()
     model.transformer_2 = _FakeWanTransformer()
@@ -700,6 +789,11 @@ def _patch_fake_wan_generation(monkeypatch, model, scheduler_output=None, patch_
         model,
         "prepare_latents",
         lambda **kwargs: mx.zeros((1, 16, 1, 8, 8), dtype=mx.float32),
+    )
+    monkeypatch.setattr(
+        model,
+        "_resolve_video_spatial_size",
+        lambda **kwargs: (kwargs["height"], kwargs["width"], {}),
     )
     monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.gc.collect", lambda: None)
     monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.mx.synchronize", lambda: None)
@@ -842,6 +936,180 @@ def test_wan_a14b_prepare_latents_uses_vae_channels_not_i2v_input_channels():
     mx.eval(latents)
 
     assert latents.shape == (1, 16, 3, 8, 10)
+
+
+def test_wan_spatial_size_rounds_up_to_patch_multiple():
+    model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
+    model.transformer = SimpleNamespace(patch_size=(1, 4, 4))
+    model.vae = SimpleNamespace(spatial_scale=8)
+
+    assert model._validated_spatial_size(height=240, width=432) == (256, 448)
+    assert model._validated_spatial_size(height=256, width=448) == (256, 448)
+
+
+def test_wan_i2v_spatial_size_preserves_source_ratio_for_ti2v_multiple():
+    model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
+    model.transformer = SimpleNamespace(patch_size=(1, 4, 4))
+    model.vae = SimpleNamespace(spatial_scale=8)
+
+    height, width = model._validated_i2v_spatial_size(
+        height=240,
+        width=432,
+        source_height=240,
+        source_width=320,
+    )
+
+    assert (height, width) == (288, 384)
+    assert width / height == pytest.approx(320 / 240)
+
+
+def test_wan_i2v_spatial_size_preserves_source_ratio_for_a14b_multiple():
+    model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
+    model.transformer = SimpleNamespace(patch_size=(1, 2, 2))
+    model.vae = SimpleNamespace(spatial_scale=8)
+
+    height, width = model._validated_i2v_spatial_size(
+        height=288,
+        width=512,
+        source_height=240,
+        source_width=320,
+    )
+
+    assert (height, width) == (336, 448)
+    assert width / height == pytest.approx(320 / 240)
+
+
+def test_wan_i2v_resolved_spatial_size_reads_source_image(tmp_path):
+    image_path = tmp_path / "source.png"
+    Image.new("RGB", (320, 240), "white").save(image_path)
+    model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
+    model.transformer = SimpleNamespace(patch_size=(1, 4, 4))
+    model.vae = SimpleNamespace(spatial_scale=8)
+
+    assert model._resolved_spatial_size(height=240, width=432, image_path=image_path) == (288, 384)
+
+
+def test_wan_generate_i2v_uses_resolved_source_ratio_size_for_a14b_condition(monkeypatch):
+    model = _fake_t2v_a14b_model()
+    model.model_config = ModelConfig.wan2_2_i2v_a14b()
+    model.transformer.in_channels = 36
+    model.transformer_2.in_channels = 36
+    _patch_fake_wan_generation(monkeypatch, model, patch_to_video=False)
+    observed = {}
+
+    def resolved_spatial_size(**kwargs):
+        observed["resolve"] = kwargs
+        return 336, 448, {"source_width": 320, "source_height": 240, "requested_width": 512, "requested_height": 288}
+
+    def prepare_latents(**kwargs):
+        observed["prepare"] = kwargs
+        return mx.zeros((1, 16, 1, 8, 8), dtype=mx.float32)
+
+    def encode_video_condition(**kwargs):
+        observed["condition"] = kwargs
+        return mx.zeros((1, 20, 1, 8, 8), dtype=mx.float32)
+
+    def to_video(**kwargs):
+        observed["to_video"] = kwargs
+        return SimpleNamespace()
+
+    monkeypatch.setattr(model, "_resolve_video_spatial_size", resolved_spatial_size)
+    monkeypatch.setattr(model, "prepare_latents", prepare_latents)
+    monkeypatch.setattr(model, "_encode_video_condition", encode_video_condition)
+    monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.VideoUtil.to_video", to_video)
+
+    model.generate_video(
+        seed=1,
+        prompt="a slow wave",
+        width=512,
+        height=288,
+        num_frames=1,
+        num_inference_steps=2,
+        guidance=1,
+        guidance_2=1,
+        image_path="input.png",
+    )
+
+    assert observed["resolve"] == {"height": 288, "width": 512, "image_path": "input.png"}
+    assert observed["prepare"]["height"] == 336
+    assert observed["prepare"]["width"] == 448
+    assert observed["condition"]["height"] == 336
+    assert observed["condition"]["width"] == 448
+    assert observed["to_video"]["task"] == "image-to-video"
+    assert observed["to_video"]["source_width"] == 320
+    assert observed["to_video"]["source_height"] == 240
+    assert observed["to_video"]["requested_width"] == 512
+    assert observed["to_video"]["requested_height"] == 288
+
+
+def test_wan_generate_i2v_uses_resolved_source_ratio_size_for_ti2v_condition(monkeypatch):
+    model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
+    model.model_config = ModelConfig.wan2_2_ti2v_5b()
+    model.bits = None
+    model.vae = SimpleNamespace(
+        z_dim=48,
+        temporal_scale=4,
+        spatial_scale=8,
+        decode_normalized_latents=lambda latents, **kwargs: mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32),
+    )
+    model.transformer = _FakeWanTransformer(output=mx.zeros((1, 48, 1, 8, 8), dtype=mx.float32))
+    model.transformer.in_channels = 48
+    model.transformer.out_channels = 48
+    model.transformer_2 = None
+    _patch_fake_wan_generation(monkeypatch, model, patch_to_video=False)
+    observed = {}
+
+    def resolved_spatial_size(**kwargs):
+        observed["resolve"] = kwargs
+        return 288, 384, {"source_width": 320, "source_height": 240, "requested_width": 432, "requested_height": 240}
+
+    def prepare_latents(**kwargs):
+        observed["prepare"] = kwargs
+        return mx.zeros((1, 48, 1, 8, 8), dtype=mx.float32)
+
+    def encode_first_frame_condition(**kwargs):
+        observed["condition"] = kwargs
+        return mx.zeros((1, 48, 1, 8, 8), dtype=mx.float32)
+
+    def to_video(**kwargs):
+        observed["to_video"] = kwargs
+        return SimpleNamespace()
+
+    monkeypatch.setattr(model, "_resolve_video_spatial_size", resolved_spatial_size)
+    monkeypatch.setattr(model, "prepare_latents", prepare_latents)
+    monkeypatch.setattr(model, "_encode_first_frame_condition", encode_first_frame_condition)
+    monkeypatch.setattr("mflux.models.wan.variants.wan2_2_ti2v.VideoUtil.to_video", to_video)
+
+    model.generate_video(
+        seed=1,
+        prompt="a slow wave",
+        width=432,
+        height=240,
+        num_frames=1,
+        num_inference_steps=2,
+        guidance=1,
+        image_path="input.png",
+    )
+
+    assert observed["resolve"] == {"height": 240, "width": 432, "image_path": "input.png"}
+    assert observed["prepare"]["height"] == 288
+    assert observed["prepare"]["width"] == 384
+    assert observed["condition"]["height"] == 288
+    assert observed["condition"]["width"] == 384
+    assert observed["to_video"]["task"] == "image-to-video"
+    assert observed["to_video"]["source_width"] == 320
+    assert observed["to_video"]["source_height"] == 240
+    assert observed["to_video"]["requested_width"] == 432
+    assert observed["to_video"]["requested_height"] == 240
+
+
+def test_wan_explicit_empty_negative_prompt_disables_default():
+    model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
+    model.model_config = ModelConfig.wan2_2_ti2v_5b()
+
+    assert "低质量" in model._resolve_negative_prompt(None)
+    assert model._resolve_negative_prompt("") == ""
+    assert model._resolve_negative_prompt("no blur") == "no blur"
 
 
 def test_wan_a14b_i2v_condition_uses_20_condition_channels(tmp_path):

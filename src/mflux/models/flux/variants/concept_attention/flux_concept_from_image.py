@@ -71,6 +71,8 @@ class Flux1ConceptFromImage(nn.Module):
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
         )
+        if config.image_strength is None or config.image_strength <= 0.0:
+            raise ValueError("latent image-to-image requires image_strength > 0.")
 
         # 1. Create the initial latents from the reference image
         encoded_image = LatentCreator.encode_image(

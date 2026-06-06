@@ -39,6 +39,71 @@ def test_skip_quantization_component_ignores_stale_mflux_q_metadata(tmp_path):
     assert mflux_version == VersionUtil.get_mflux_version()
 
 
+def test_mflux_format_reads_metadata_without_double_loading_first_shard(monkeypatch, tmp_path):
+    component_path = tmp_path / "transformer"
+    component_path.mkdir()
+    first_shard = component_path / "0.safetensors"
+    second_shard = component_path / "1.safetensors"
+    metadata = {
+        "quantization_level": "8",
+        "mflux_version": VersionUtil.get_mflux_version(),
+    }
+    mx.save_safetensors(str(first_shard), {"a": mx.zeros((1,))}, metadata)
+    mx.save_safetensors(str(second_shard), {"b": mx.ones((1,))}, metadata)
+
+    original_load = mx.load
+    calls = []
+
+    def tracked_load(path, *args, **kwargs):
+        calls.append((Path(path).name, kwargs.get("return_metadata")))
+        return original_load(path, *args, **kwargs)
+
+    monkeypatch.setattr("mflux.models.common.weights.loading.weight_loader.mx.load", tracked_load)
+
+    weights, quantization_level, mflux_version = WeightLoader._try_load_mflux_format(component_path)
+
+    assert quantization_level == 8
+    assert mflux_version == VersionUtil.get_mflux_version()
+    assert weights["a"].shape == (1,)
+    assert weights["b"].shape == (1,)
+    assert calls == [("0.safetensors", None), ("1.safetensors", None)]
+
+
+def test_mflux_format_uses_index_instead_of_loading_extra_safetensors(monkeypatch, tmp_path):
+    component_path = tmp_path / "transformer"
+    component_path.mkdir()
+    metadata = {
+        "quantization_level": "8",
+        "mflux_version": VersionUtil.get_mflux_version(),
+    }
+    mx.save_safetensors(str(component_path / "0.safetensors"), {"a": mx.zeros((1,))}, metadata)
+    mx.save_safetensors(str(component_path / "unused-source.safetensors"), {"polluted": mx.ones((1,))}, metadata)
+    (component_path / "model.safetensors.index.json").write_text(
+        """
+        {
+          "metadata": {"quantization_level": "8", "mflux_version": "test"},
+          "weight_map": {"a": "0.safetensors"}
+        }
+        """
+    )
+
+    original_load = mx.load
+    calls = []
+
+    def tracked_load(path, *args, **kwargs):
+        calls.append(Path(path).name)
+        return original_load(path, *args, **kwargs)
+
+    monkeypatch.setattr("mflux.models.common.weights.loading.weight_loader.mx.load", tracked_load)
+
+    weights, quantization_level, _ = WeightLoader._try_load_mflux_format(component_path)
+
+    assert quantization_level == 8
+    assert weights["a"].shape == (1,)
+    assert "polluted" not in weights
+    assert calls == ["0.safetensors"]
+
+
 def test_skip_quantization_component_updates_without_quantizing(monkeypatch):
     quantize_calls = []
 

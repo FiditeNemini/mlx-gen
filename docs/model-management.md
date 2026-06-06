@@ -112,9 +112,9 @@ mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo
 mlxgen prepare --model baidu/ERNIE-Image-Turbo --path ./models/ernie-image-turbo-4bit --quantize 4
 ```
 
-The default ERNIE download pattern fetches the BF16 generation components used by ordinary text-to-image and experimental single-image image-to-image generation: tokenizer, text encoder, transformer, VAE, scheduler metadata, and repository metadata. It does not fetch ERNIE's Prompt Enhancer model. Use `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before generation when you plan to pass `--use-prompt-enhancer`.
+The default ERNIE download pattern fetches the BF16 generation components used by ordinary text-to-image and single-image latent image-to-image generation: tokenizer, text encoder, transformer, VAE, scheduler metadata, and repository metadata. It does not fetch ERNIE's Prompt Enhancer model. Use `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before generation when you plan to pass `--use-prompt-enhancer`.
 
-ERNIE q8 and q4 prepared folders load through the same `mlxgen generate` flow. q4 uses a model-specific mixed q4/q8 policy to reduce the quality drift seen with fully q4 ERNIE checkpoints. Prepared ERNIE folders contain the generation stack needed for text-to-image and experimental single-image image-to-image; they do not bundle Prompt Enhancer files.
+ERNIE q8 and q4 prepared folders load through the same `mlxgen generate` flow. q4 uses a model-specific mixed q4/q8 policy to reduce the quality drift seen with fully q4 ERNIE checkpoints. Prepared ERNIE folders contain the generation stack needed for text-to-image and single-image latent image-to-image; they do not bundle Prompt Enhancer files.
 
 Wan2.2 video models can be downloaded and used from the source snapshots:
 
@@ -124,7 +124,7 @@ mlxgen download --model Wan-AI/Wan2.2-T2V-A14B-Diffusers
 mlxgen download --model Wan-AI/Wan2.2-I2V-A14B-Diffusers
 ```
 
-Wan text-to-video currently uses the source snapshot plus a local-only Hugging Face UMT5 text encoder for prompt embeddings. TI2V-5B image-to-video uses the Diffusers first-frame latent-conditioning path and requires the same VAE encoder/decoder files from the source snapshot. A14B T2V uses two transformer folders, `transformer` and `transformer_2`, with boundary routing and optional low-noise `--guidance-2`. A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` source snapshot and requires that snapshot to be complete before generation.
+Wan text-to-video currently uses the source snapshot plus a local-only Hugging Face UMT5 text encoder for prompt embeddings. TI2V-5B image-to-video uses the Diffusers first-frame latent-conditioning path and requires the same VAE encoder/decoder files from the source snapshot. A14B T2V uses two transformer folders, `transformer` and `transformer_2`, with boundary routing and optional low-noise `--guidance-2`. A14B I2V uses the separate `Wan-AI/Wan2.2-I2V-A14B-Diffusers` source snapshot and requires that snapshot to be complete before generation. For Wan image-to-video, MLX-Gen resolves the final output dimensions from the input image aspect ratio and model spatial multiples.
 
 Published AbstractFramework Wan prepared folders currently include TI2V-5B BF16/q8 plus A14B
 T2V/I2V BF16 and mixed q8/BF16 packages. The upstream TI2V-5B source snapshot stores its
@@ -132,7 +132,7 @@ transformer and VAE as FP32 on disk, but MLX-Gen loads and prepares those compon
 runtime precision; the prepared BF16 TI2V-5B folder is primarily a smaller source-equivalent
 package. There is no published TI2V-5B q4 or mixed q4/q8 package yet.
 
-For visual validation, use the upstream model scale. TI2V-5B uses 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. A14B uses 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Lower settings are useful for quick command checks, not quality validation.
+For visual quality checks, use the upstream model scale. TI2V-5B uses 1280x704 or 704x1280, 121 frames, 50 steps, and 24 fps. A14B uses 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Lower settings are useful for quick command checks, not quality assessment.
 
 ## Depth Pro
 

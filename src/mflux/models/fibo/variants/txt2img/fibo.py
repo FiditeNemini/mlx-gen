@@ -2,6 +2,7 @@ from pathlib import Path
 
 import mlx.core as mx
 from mlx import nn
+from mlx.utils import tree_flatten
 
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
@@ -15,9 +16,11 @@ from mflux.models.fibo.model.fibo_text_encoder.smol_lm3_3b_text_encoder import S
 from mflux.models.fibo.model.fibo_transformer import FiboTransformer
 from mflux.models.fibo.model.fibo_vae.wan_2_2_vae import Wan2_2_VAE
 from mflux.models.fibo.weights.fibo_weight_definition import FIBOWeightDefinition
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class FIBO(nn.Module):
@@ -48,14 +51,21 @@ class FIBO(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 50,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
         image_path: Path | str | None = None,
         image_strength: float | None = None,
         scheduler: str = "flow_match_euler_discrete",
         negative_prompt: str | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        if image_path is not None:
+            raise ValueError(
+                "Base FIBO does not expose a validated latent image-to-image path. "
+                "Use FIBOEdit with a FIBO Edit model for image-conditioned editing."
+            )
+
         # 0. Create a new config based on the model type and input parameters
         effective_guidance = guidance
         if "fibo-lite" in self.model_config.aliases:
@@ -69,6 +79,8 @@ class FIBO(nn.Module):
             image_strength=image_strength,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
 
         # 1. Create the initial latents
@@ -82,17 +94,20 @@ class FIBO(nn.Module):
                 image_path=config.image_path,
                 sigmas=config.scheduler.sigmas,
                 init_time_step=config.init_time_step,
+                image_strength=config.image_strength,
                 tiling_config=self.tiling_config,
             ),
         )
 
         # 2. Encode the prompt
-        json_prompt, encoder_hidden_states, text_encoder_layers = PromptEncoder.encode_prompt(
+        json_prompt, encoder_hidden_states, text_encoder_layers, prompt_attention_mask = PromptEncoder.encode_prompt(
             prompt=prompt,
             negative_prompt=negative_prompt,
             tokenizer=self.tokenizers["fibo"],
             text_encoder=self.text_encoder,
             guidance=config.guidance,
+            dtype=self._transformer_dtype(),
+            total_transformer_layers=self._total_transformer_layers(),
         )
 
         # 3. Create callback context and call before_loop
@@ -108,8 +123,9 @@ class FIBO(nn.Module):
                     hidden_states=latents,
                     text_encoder_layers=text_encoder_layers,
                     encoder_hidden_states=encoder_hidden_states,
+                    prompt_attention_mask=prompt_attention_mask,
                 )
-                if config.guidance != 1.0:
+                if config.guidance > 1.0:
                     noise = FIBO._apply_classifier_free_guidance(noise, config.guidance)
 
                 # 5.t Take one denoise step
@@ -150,6 +166,15 @@ class FIBO(nn.Module):
         noise_uncond = noise[:half]
         noise_text = noise[half:]
         return noise_uncond + guidance * (noise_text - noise_uncond)
+
+    def _total_transformer_layers(self) -> int:
+        return len(self.transformer.transformer_blocks) + len(self.transformer.single_transformer_blocks)
+
+    def _transformer_dtype(self) -> mx.Dtype:
+        for _, value in tree_flatten(self.transformer.parameters()):
+            if hasattr(value, "dtype") and value.dtype in {mx.float16, mx.bfloat16, mx.float32}:
+                return value.dtype
+        return ModelConfig.precision
 
     def save_model(self, base_path: str) -> None:
         ModelSaver.save_model(

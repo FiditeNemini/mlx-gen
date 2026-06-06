@@ -16,6 +16,7 @@ class FiboUtil:
             json.loads(prompt)
             json_prompt = prompt
         except json.JSONDecodeError:
+            print("Preparing FIBO JSON prompt with the local VLM before denoising...", flush=True)
             vlm = FiboVLM(quantize=quantize)
             json_prompt = vlm.generate(prompt=prompt, seed=42)
             del vlm

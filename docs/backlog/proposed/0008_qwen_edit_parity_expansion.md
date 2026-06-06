@@ -19,6 +19,14 @@ editing. Online evidence as of 2026-05-28 makes Qwen-Image-Edit-2511 especially 
 model card describes better consistency, lower drift, improved character preservation, industrial
 design gains, geometric reasoning, and integrated LoRA capabilities.
 
+Update 2026-06-05: standardized local I2I sequence validation in
+[completed item 0025](../completed/0025_standardized_i2i_sequence_validation.md) found that
+`AbstractFramework/qwen-image-edit-2511-4bit` passed only the cinematic edit row and failed complex
+crash, pencil-crash, and composition rows. `AbstractFramework/qwen-image-edit-2511-8bit` passed
+cinematic and crash rows, but only partially handled pencil-crash and failed to carry crash/debris
+state into multi-reference composition. That makes Qwen edit parity a concrete follow-up rather
+than a vague expansion idea.
+
 The local Diffusers checkout has broader Qwen pipelines than MLX-Gen currently exposes.
 
 ## Current code reality
@@ -75,6 +83,8 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 - AbstractVision needs mask/inpaint or multi-image editing on Apple Silicon.
 - Users begin publishing Qwen-Image-Edit-2511 LoRA workflows that MLX-Gen cannot run or validate.
 - A Diffusers Qwen pipeline becomes the de facto upstream path for a feature that MLX-Gen lacks.
+- Release docs or product flows need Qwen Edit 2511 to pass the complex crash/composition sequence
+  from completed item 0025 rather than only simple style edits.
 
 ## Validation ideas
 

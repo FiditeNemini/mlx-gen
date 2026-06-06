@@ -7,6 +7,7 @@ import pytest
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.schedulers import try_import_external_scheduler
+from mflux.models.common.schedulers.flow_match_euler_discrete_scheduler import FlowMatchEulerDiscreteScheduler
 from mflux.models.common.schedulers.linear_scheduler import LinearScheduler
 
 
@@ -71,3 +72,34 @@ def test_linear_scheduler_sigmas_property_with_shift(test_config):
     )
     assert mx.allclose(scheduler.sigmas, expected_sigmas_from_mflux_0_9_0)
     assert scheduler.sigmas.shape == (test_config.num_inference_steps + 1,)
+
+
+@pytest.mark.fast
+def test_flow_match_dynamic_shift_uses_model_config_values():
+    config = Config(
+        model_config=ModelConfig.from_name("qwen-image-edit-2511"),
+        num_inference_steps=20,
+        width=432,
+        height=240,
+        scheduler="flow_match_euler_discrete",
+    )
+    scheduler = FlowMatchEulerDiscreteScheduler(config=config)
+    scheduler.set_image_seq_len(config.image_seq_len)
+
+    mu = FlowMatchEulerDiscreteScheduler._compute_linear_mu(
+        image_seq_len=config.image_seq_len,
+        base_seq_len=config.model_config.sigma_base_seq_len,
+        max_seq_len=config.model_config.sigma_max_seq_len,
+        base_shift=config.model_config.sigma_base_shift,
+        max_shift=config.model_config.sigma_max_shift,
+    )
+    raw_sigmas = mx.linspace(1.0, 1.0 / config.num_inference_steps, config.num_inference_steps, dtype=mx.float32)
+    shifted = FlowMatchEulerDiscreteScheduler._time_shift_exponential_array(mu, 1.0, raw_sigmas)
+    shifted = FlowMatchEulerDiscreteScheduler._stretch_to_terminal_array(
+        shifted,
+        config.model_config.sigma_shift_terminal,
+    )
+    expected = mx.concatenate([shifted, mx.zeros((1,), dtype=shifted.dtype)], axis=0)
+
+    assert np.isclose(mu, 0.5075100806451613)
+    assert mx.allclose(scheduler.sigmas, expected)

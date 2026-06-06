@@ -3,11 +3,13 @@ import mlx.core as mx
 
 class FiboLatentCreator:
     @staticmethod
-    def create_noise(seed: int, height: int, width: int) -> mx.array:
+    def create_noise(seed: int, height: int, width: int, dtype: mx.Dtype | None = None) -> mx.array:
         latents = mx.random.normal(
             shape=(1, 48, (height // 16), (width // 16)),
             key=mx.random.key(seed),
         )
+        if dtype is not None:
+            latents = latents.astype(dtype)
         return FiboLatentCreator.pack_latents(latents, height, width)
 
     @staticmethod

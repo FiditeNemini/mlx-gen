@@ -7,7 +7,11 @@ from tqdm import tqdm
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.schedulers import SCHEDULER_REGISTRY, try_import_external_scheduler
 from mflux.models.common.schedulers.linear_scheduler import LinearScheduler
-from mflux.utils.dimension_resolver import DimensionResolver
+from mflux.utils.dimension_resolver import (
+    CANVAS_POLICY_EXACT_RESIZE,
+    CANVAS_POLICY_SOURCE_ASPECT,
+    DimensionResolver,
+)
 from mflux.utils.scale_factor import ScaleFactor
 
 logger = logging.getLogger(__name__)
@@ -18,8 +22,8 @@ class Config:
         self,
         model_config: ModelConfig,
         num_inference_steps: int = 4,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = 1024,
+        width: int | ScaleFactor | None = 1024,
         guidance: float = 4.0,
         image_path: Path | str | None = None,
         image_strength: float | None = None,
@@ -29,22 +33,52 @@ class Config:
         masked_image_path: Path | str | None = None,
         controlnet_strength: float | None = None,
         scheduler: str = "linear",
+        canvas_policy: str = CANVAS_POLICY_EXACT_RESIZE,
+        preserve_image_aspect_ratio: bool = False,
+        dimension_multiple: int = 16,
     ):
-        # Resolve any missing dimension dynamically, using the reference image when available.
-        if width is None or height is None:
-            width, height = DimensionResolver.resolve(
-                width=ScaleFactor.parse("1x") if width is None else width,
-                height=ScaleFactor.parse("1x") if height is None else height,
+        if dimension_multiple <= 0:
+            raise ValueError("Dimension multiple must be positive.")
+        effective_canvas_policy = CANVAS_POLICY_SOURCE_ASPECT if preserve_image_aspect_ratio else canvas_policy
+        resolved_dimensions = DimensionResolver.resolve_image_canvas(
+            width=ScaleFactor.parse("1x") if width is None else width,
+            height=ScaleFactor.parse("1x") if height is None else height,
+            reference_image_path=image_path,
+            canvas_policy=effective_canvas_policy if image_path is not None else CANVAS_POLICY_EXACT_RESIZE,
+        )
+        width = resolved_dimensions.width
+        height = resolved_dimensions.height
+
+        if width <= 0 or height <= 0:
+            raise ValueError("Width and height must be positive.")
+
+        rounded_width = dimension_multiple * (width // dimension_multiple)
+        rounded_height = dimension_multiple * (height // dimension_multiple)
+        if rounded_width <= 0 or rounded_height <= 0:
+            raise ValueError(f"Width and height must be at least {dimension_multiple}px.")
+        if rounded_width != width or rounded_height != height:
+            logger.warning("Width and height should be multiples of %s. Rounding down.", dimension_multiple)
+        if (
+            resolved_dimensions.canvas_policy == CANVAS_POLICY_SOURCE_ASPECT
+            and (rounded_width != width or rounded_height != height)
+            and image_path is not None
+        ):
+            resolved_dimensions = DimensionResolver.resolve_image_canvas(
+                width=resolved_dimensions.requested_width,
+                height=resolved_dimensions.requested_height,
                 reference_image_path=image_path,
+                canvas_policy=CANVAS_POLICY_SOURCE_ASPECT,
+                multiple=dimension_multiple,
             )
-        # Ensure dimensions are multiples of 16
-        if width % 16 != 0 or height % 16 != 0:
-            logger.warning("Width and height should be multiples of 16. Rounding down.")
+            width = resolved_dimensions.width
+            height = resolved_dimensions.height
+            rounded_width = width
+            rounded_height = height
 
         self.model_config = model_config
         self._num_inference_steps = num_inference_steps
-        self._height = 16 * (height // 16)
-        self._width = 16 * (width // 16)
+        self._height = rounded_height
+        self._width = rounded_width
         self._guidance = 0.0 if guidance is None else float(guidance)
         self._image_path = Path(image_path) if isinstance(image_path, str) else image_path
         self._image_strength = image_strength
@@ -58,6 +92,11 @@ class Config:
         self._scheduler_str = scheduler
         self._scheduler = None
         self._time_steps = None
+        self._canvas_policy = resolved_dimensions.canvas_policy
+        self._requested_width = resolved_dimensions.requested_width
+        self._requested_height = resolved_dimensions.requested_height
+        self._source_image_width = resolved_dimensions.source_width
+        self._source_image_height = resolved_dimensions.source_height
 
     @property
     def height(self) -> int:
@@ -70,6 +109,26 @@ class Config:
     @width.setter
     def width(self, value):
         self._width = value
+
+    @property
+    def canvas_policy(self) -> str:
+        return self._canvas_policy
+
+    @property
+    def requested_width(self) -> int | None:
+        return self._requested_width
+
+    @property
+    def requested_height(self) -> int | None:
+        return self._requested_height
+
+    @property
+    def source_image_width(self) -> int | None:
+        return self._source_image_width
+
+    @property
+    def source_image_height(self) -> int | None:
+        return self._source_image_height
 
     @property
     def image_seq_len(self) -> int:
@@ -124,11 +183,9 @@ class Config:
         )  # fmt: off
 
         if is_img2img:
-            # 1. Clamp strength to [0, 1]
             strength = max(0.0, min(1.0, self._image_strength))  # type: ignore
-
-            # 2. Return start time in [1, floor(num_steps * strength)]
-            return max(1, int(self._num_inference_steps * strength))  # type: ignore
+            denoise_steps = min(self._num_inference_steps, max(1, int(self._num_inference_steps * strength)))
+            return self._num_inference_steps - denoise_steps
         else:
             return 0
 

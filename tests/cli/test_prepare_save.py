@@ -91,6 +91,68 @@ def test_prepare_still_passes_lora_kwargs_to_lora_model(tmp_path, monkeypatch):
     }
 
 
+def test_prepare_rejects_fibo_lora(tmp_path, capsys):
+    lora_path = tmp_path / "fibo-lora.safetensors"
+    lora_path.write_bytes(b"")
+
+    with patch(
+        "sys.argv",
+        [
+            "mlxgen prepare",
+            "--model",
+            "briaai/FIBO",
+            "--path",
+            str(tmp_path / "fibo-q8"),
+            "--quantize",
+            "8",
+            "--lora-paths",
+            str(lora_path),
+        ],
+    ):
+        with pytest.raises(SystemExit):
+            save.main()
+
+    assert "FIBO does not support LoRA" in capsys.readouterr().err
+
+
+def test_prepare_fibo_edit_uses_edit_model_class(tmp_path, monkeypatch):
+    observed = {}
+
+    class FakeFIBOEdit:
+        def __init__(self, *, quantize, model_config):
+            observed["init"] = {
+                "quantize": quantize,
+                "model_config": model_config.model_name,
+            }
+
+        def save_model(self, path):
+            observed["path"] = path
+
+    monkeypatch.setattr(save, "FIBOEdit", FakeFIBOEdit)
+
+    with patch(
+        "sys.argv",
+        [
+            "mlxgen prepare",
+            "--model",
+            "briaai/Fibo-Edit",
+            "--path",
+            str(tmp_path / "fibo-edit-q8"),
+            "--quantize",
+            "8",
+        ],
+    ):
+        save.main()
+
+    assert observed == {
+        "init": {
+            "quantize": 8,
+            "model_config": "briaai/Fibo-Edit",
+        },
+        "path": str(tmp_path / "fibo-edit-q8"),
+    }
+
+
 def test_prepare_rejects_prepacked_bonsai(tmp_path, capsys):
     with patch(
         "sys.argv",

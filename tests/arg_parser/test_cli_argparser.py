@@ -8,6 +8,7 @@ import pytest
 from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.fibo.cli.fibo_edit import _resolve_fibo_edit_model_config
+from mflux.models.fibo.cli.fibo_generate import _resolve_fibo_model_config
 from mflux.utils.box_values import BoxValues
 from mflux.utils.scale_factor import ScaleFactor
 
@@ -469,6 +470,29 @@ def test_steps_arg(mflux_generate_parser, mflux_generate_minimal_argv, base_meta
 
 
 @pytest.mark.fast
+def test_prepared_repo_steps_resolve_from_model_config(mflux_generate_parser, mflux_generate_minimal_argv):
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--model", "AbstractFramework/flux.2-klein-4b-8bit"]):
+        args = mflux_generate_parser.parse_args()
+        assert args.steps == 4
+
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--model", "AbstractFramework/qwen-image-edit-2511-8bit"]):
+        args = mflux_generate_parser.parse_args()
+        assert args.steps == 40
+
+
+@pytest.mark.fast
+def test_known_model_aliases_do_not_become_local_model_paths(mflux_generate_parser, mflux_generate_minimal_argv):
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--model", "qwen-image-edit-2511"]):
+        args = mflux_generate_parser.parse_args()
+        assert args.model == "qwen-image-edit-2511"
+        assert args.model_path is None
+
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--model", "AbstractFramework/flux.2-klein-4b-8bit"]):
+        args = mflux_generate_parser.parse_args()
+        assert args.model_path is None
+
+
+@pytest.mark.fast
 def test_lora_args(mflux_generate_parser, mflux_generate_minimal_argv, base_metadata_dict, temp_dir):  # fmt: off
     test_paths = ["/some/lora/1.safetensors", "/some/lora/2.safetensors"]
     metadata_file = temp_dir / "lora_args.json"
@@ -520,13 +544,13 @@ def test_image_to_image_args(mflux_generate_parser, mflux_generate_minimal_argv,
     with patch("sys.argv", mflux_generate_minimal_argv + ["-m", "dev"]):
         args = mflux_generate_parser.parse_args()
         assert args.image_path is None
-        assert args.image_strength == 0.4  # default
+        assert args.image_strength is None
 
     # test metadata config accepted
     with patch('sys.argv', mflux_generate_minimal_argv + ['--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
         args = mflux_generate_parser.parse_args()
         assert args.image_path == test_path
-        assert args.image_strength == 0.4  # default
+        assert args.image_strength is None
 
     # test strength override
     with patch('sys.argv', mflux_generate_minimal_argv + ['--image-strength', '0.7', '--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
@@ -538,7 +562,39 @@ def test_image_to_image_args(mflux_generate_parser, mflux_generate_minimal_argv,
     with patch('sys.argv', mflux_generate_minimal_argv + ['--image-path', '/some/better/image.png', '--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
         args = mflux_generate_parser.parse_args()
         assert args.image_path == Path("/some/better/image.png")
-        assert args.image_strength == 0.4  # default
+        assert args.image_strength is None
+
+
+@pytest.mark.fast
+def test_image_strength_requires_image_path_and_valid_range(mflux_generate_parser, mflux_generate_minimal_argv):
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--image-strength", "0.4"]):
+        with pytest.raises(SystemExit):
+            mflux_generate_parser.parse_args()
+
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--image-path", "input.png", "--image-strength", "0"]):
+        with pytest.raises(SystemExit):
+            mflux_generate_parser.parse_args()
+
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--image-path", "input.png", "--image-strength", "1.1"]):
+        with pytest.raises(SystemExit):
+            mflux_generate_parser.parse_args()
+
+
+@pytest.mark.fast
+def test_metadata_image_strength_uses_cli_range_validation(
+    mflux_generate_parser,
+    mflux_generate_minimal_argv,
+    base_metadata_dict,
+    temp_dir,
+):
+    metadata_file = temp_dir / "invalid_image_strength.json"
+    base_metadata_dict["image_path"] = "input.png"
+    base_metadata_dict["image_strength"] = 1.2
+    metadata_file.write_text(json.dumps(base_metadata_dict))
+
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--config-from-metadata", metadata_file.as_posix()]):
+        with pytest.raises(SystemExit):
+            mflux_generate_parser.parse_args()
 
 
 @pytest.mark.fast
@@ -1027,6 +1083,43 @@ def test_qwen_edit_args(mflux_qwen_edit_parser, mflux_qwen_edit_minimal_argv):
         assert args.width == ScaleFactor(2)
         assert args.height == ScaleFactor(1.5)
 
+    # Local/prepared edit checkpoints can identify their base model with a full alias.
+    with patch(
+        "sys.argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "../models/local-qwen-edit",
+            "--base-model",
+            "qwen-image-edit-2511",
+            "--prompt",
+            "make it blue",
+            "--image-paths",
+            "image1.png",
+        ],
+    ):
+        args = mflux_qwen_edit_parser.parse_args()
+        assert args.model == "../models/local-qwen-edit"
+        assert args.base_model == "qwen-image-edit-2511"
+        assert args.model_path == "../models/local-qwen-edit"
+
+    with patch(
+        "sys.argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit-2511",
+            "--prompt",
+            "make it blue",
+            "--image-paths",
+            "image1.png",
+        ],
+    ):
+        args = mflux_qwen_edit_parser.parse_args()
+        assert args.model == "qwen-image-edit-2511"
+        assert args.model_path is None
+        assert args.steps == 40
+
 
 # ============================================================================
 # FIBO Tests
@@ -1039,7 +1132,6 @@ def mflux_fibo_parser() -> CommandLineParser:
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     parser.set_defaults(model="fibo")
-    parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True)
     parser.add_image_to_image_arguments(required=False)
     parser.add_output_arguments()
@@ -1065,10 +1157,19 @@ def test_fibo_args(mflux_fibo_parser, mflux_fibo_minimal_argv):
         args = mflux_fibo_parser.parse_args()
         assert args.negative_prompt == "blurry, low quality"
 
+    # Test with negative prompt alias
+    with patch("sys.argv", mflux_fibo_minimal_argv + ["--negative", "blurry, low quality"]):
+        args = mflux_fibo_parser.parse_args()
+        assert args.negative_prompt == "blurry, low quality"
+
     # Test with image-to-image
     with patch("sys.argv", mflux_fibo_minimal_argv + ["--image-path", "input.png"]):
         args = mflux_fibo_parser.parse_args()
         assert args.image_path == Path("input.png")
+
+    with patch("sys.argv", mflux_fibo_minimal_argv + ["--no-progress"]):
+        args = mflux_fibo_parser.parse_args()
+        assert args.progress is False
 
 
 @pytest.mark.fast
@@ -1088,7 +1189,7 @@ def test_fibo_args_restore_model_from_metadata_even_with_cli_default(mflux_fibo_
     with patch("sys.argv", ["mflux-generate-fibo", "--config-from-metadata", metadata_file.as_posix()]):
         args = mflux_fibo_parser.parse_args()
         assert args.model == "briaai/Fibo-lite"
-        assert args.model_path == "briaai/Fibo-lite"
+        assert args.model_path is None
         assert args.steps == 8
 
 
@@ -1148,13 +1249,21 @@ def test_fibo_args_cli_model_short_concat_syntax_overrides_metadata(mflux_fibo_p
         assert args.model == "fibo"
 
 
+@pytest.mark.fast
+def test_fibo_generate_rejects_edit_model_config(mflux_fibo_parser):
+    with patch("sys.argv", ["mflux-generate-fibo", "--model", "fibo-edit", "--prompt", '{"scene":"forest"}']):
+        args = mflux_fibo_parser.parse_args()
+
+    with pytest.raises(SystemExit):
+        _resolve_fibo_model_config(mflux_fibo_parser, args)
+
+
 @pytest.fixture
 def mflux_fibo_edit_parser() -> CommandLineParser:
     parser = CommandLineParser(description="Generate an edited image using Bria FIBO Edit.")
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     parser.set_defaults(model="fibo-edit")
-    parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, require_prompt=False)
     parser.add_argument("--image-path", type=Path, required=False)
     parser.add_argument("--mask-path", type=Path, default=None)
@@ -1236,7 +1345,7 @@ def test_fibo_edit_args_restore_model_from_metadata_even_with_cli_default(mflux_
     with patch("sys.argv", ["mflux-generate-fibo-edit", "--config-from-metadata", metadata_file.as_posix()]):
         args = mflux_fibo_edit_parser.parse_args()
         assert args.model == "briaai/Fibo-Edit"
-        assert args.model_path == "briaai/Fibo-Edit"
+        assert args.model_path is None
         assert args.image_path == "input.png"
 
 

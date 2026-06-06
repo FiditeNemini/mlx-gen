@@ -20,28 +20,8 @@ class QwenVisionLanguageTokenizer:
         self.max_length = max_length
         self.use_picture_prefix = use_picture_prefix
 
-        if use_picture_prefix:
-            self.edit_template = (
-                "<|im_start|>system\n"
-                "Describe the key features of the input image (color, shape, size, texture, objects, background), "
-                "then explain how the user's text instruction should alter or modify the image. "
-                "Generate a new image that meets the user's requirements while maintaining consistency "
-                "with the original input where appropriate.<|im_end|>\n"
-                "<|im_start|>user\n"
-                "{}<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            )
-        else:
-            self.edit_template = (
-                "<|im_start|>system\n"
-                "Describe the key features of the input image (color, shape, size, texture, objects, background), "
-                "then explain how the user's text instruction should alter or modify the image. "
-                "Generate a new image that meets the user's requirements while maintaining consistency "
-                "with the original input where appropriate.<|im_end|>\n"
-                "<|im_start|>user\n"
-                "<|vision_start|><|image_pad|><|vision_end|>{}<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            )
+        self.edit_template_picture_prefix = self._edit_template("{}")
+        self.edit_template_inline_image = self._edit_template("<|vision_start|><|image_pad|><|vision_end|>{}")
         self.edit_template_start_idx = 64
 
     def tokenize_with_image(
@@ -50,6 +30,7 @@ class QwenVisionLanguageTokenizer:
         image: Union[Image.Image, np.ndarray, str, list],
         vl_width: int | None = None,
         vl_height: int | None = None,
+        use_picture_prefix: bool | None = None,
     ) -> tuple[mx.array, mx.array, mx.array, mx.array]:
         # Normalize image to list format
         if not isinstance(image, list):
@@ -58,21 +39,19 @@ class QwenVisionLanguageTokenizer:
             images = image
 
         # Format prompt based on tokenizer mode
-        if self.use_picture_prefix:
+        picture_prefix = self.use_picture_prefix if use_picture_prefix is None else use_picture_prefix
+        if picture_prefix:
             # Edit format: Add "Picture N:" prefix for each image
             # For multiple images: "Picture 1: ... Picture 2: ... Picture N: ..."
             img_prompt_template = "Picture {}: <|vision_start|><|image_pad|><|vision_end|>"
             base_img_prompt = ""
             for i in range(len(images)):
                 base_img_prompt += img_prompt_template.format(i + 1)
-            formatted_text = self.edit_template.format(base_img_prompt + prompt)
+            formatted_text = self.edit_template_picture_prefix.format(base_img_prompt + prompt)
         else:
             # Regular Edit format: Vision tokens already in template
             # Just format with user prompt directly
-            formatted_text = self.edit_template.format(prompt)
-
-        # Process images: convert to PIL Images and resize to CONDITION_IMAGE_SIZE
-        CONDITION_IMAGE_SIZE = 384 * 384
+            formatted_text = self.edit_template_inline_image.format(prompt)
 
         processed_images = []
         for img in images:
@@ -84,13 +63,11 @@ class QwenVisionLanguageTokenizer:
             elif not isinstance(img, Image.Image):
                 raise ValueError(f"Unsupported image type: {type(img)}")
 
-            # Resize to CONDITION_IMAGE_SIZE (384×384) maintaining aspect ratio
-            img_w, img_h = img.size
-            ratio = img_w / img_h
-            condition_width = math.sqrt(CONDITION_IMAGE_SIZE * ratio)
-            condition_height = condition_width / ratio
-            condition_width = round(condition_width / 32) * 32
-            condition_height = round(condition_height / 32) * 32
+            if vl_width is not None and vl_height is not None and len(images) == 1:
+                condition_width = int(vl_width)
+                condition_height = int(vl_height)
+            else:
+                condition_width, condition_height = self._condition_image_size(img)
 
             img = img.resize((int(condition_width), int(condition_height)), Image.BICUBIC)
             processed_images.append(img)
@@ -115,6 +92,30 @@ class QwenVisionLanguageTokenizer:
         image_grid_thw = mx.array(model_inputs["image_grid_thw"])
 
         return input_ids, attention_mask, pixel_values, image_grid_thw
+
+    @staticmethod
+    def _edit_template(user_template: str) -> str:
+        return (
+            "<|im_start|>system\n"
+            "Describe the key features of the input image (color, shape, size, texture, objects, background), "
+            "then explain how the user's text instruction should alter or modify the image. "
+            "Generate a new image that meets the user's requirements while maintaining consistency "
+            "with the original input where appropriate.<|im_end|>\n"
+            "<|im_start|>user\n"
+            f"{user_template}<|im_end|>\n"
+            "<|im_start|>assistant\n"
+        )
+
+    @staticmethod
+    def _condition_image_size(img: Image.Image) -> tuple[int, int]:
+        condition_image_size = 384 * 384
+        img_w, img_h = img.size
+        ratio = img_w / img_h
+        condition_width = math.sqrt(condition_image_size * ratio)
+        condition_height = condition_width / ratio
+        condition_width = round(condition_width / 32) * 32
+        condition_height = round(condition_height / 32) * 32
+        return int(condition_width), int(condition_height)
 
     def tokenize_text_only(self, prompt: str) -> tuple[mx.array, mx.array]:
         # Use the regular text-only template

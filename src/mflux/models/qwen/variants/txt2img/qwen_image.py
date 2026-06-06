@@ -15,9 +15,11 @@ from mflux.models.qwen.model.qwen_transformer.qwen_transformer import QwenTransf
 from mflux.models.qwen.model.qwen_vae.qwen_vae import QwenVAE
 from mflux.models.qwen.qwen_initializer import QwenImageInitializer
 from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class QwenImage(nn.Module):
@@ -48,13 +50,14 @@ class QwenImage(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 4,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
         image_path: Path | str | None = None,
         image_strength: float | None = None,
-        scheduler: str = "linear",
+        scheduler: str = "flow_match_euler_discrete",
         negative_prompt: str | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
         # 0. Create a new config based on the model type and input parameters
         config = Config(
@@ -66,6 +69,8 @@ class QwenImage(nn.Module):
             image_strength=image_strength,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
 
         # 1. Create the initial latents
@@ -78,6 +83,7 @@ class QwenImage(nn.Module):
                 latent_creator=QwenLatentCreator,
                 sigmas=config.scheduler.sigmas,
                 init_time_step=config.init_time_step,
+                image_strength=config.image_strength,
                 image_path=config.image_path,
                 tiling_config=self.tiling_config,
             ),

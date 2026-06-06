@@ -6,23 +6,24 @@ from mflux.models.qwen.latent_creator.qwen_latent_creator import QwenLatentCreat
 
 
 class QwenEditUtil:
+    CONDITION_IMAGE_SIZE = 384 * 384
+    VAE_IMAGE_SIZE = 1024 * 1024
+
     @staticmethod
     def create_image_conditioning_latents(
         vae,
-        height: int,
-        width: int,
+        height: int | None,
+        width: int | None,
         image_paths: list[str] | str,
         tiling_config: TilingConfig | None = None,
-    ) -> tuple[mx.array, mx.array, int, int, int]:
+    ) -> tuple[mx.array, mx.array, list[tuple[int, int, int]], int]:
         if not isinstance(image_paths, list):
             image_paths = [str(image_paths)]
 
-        # The vision-language encoder uses a smaller conditioning image resolution (~384px by area),
-        # but the edit transformer conditions on VAE latents encoded at the edit target dimensions.
-        calc_w, calc_h = width, height
-
         all_image_latents = []
+        all_image_grids = []
         for image_path in image_paths:
+            calc_w, calc_h = QwenEditUtil._conditioning_vae_size(image_path=image_path, width=width, height=height)
             input_image = LatentCreator.encode_image(
                 vae=vae,
                 image_path=image_path,
@@ -38,11 +39,13 @@ class QwenEditUtil:
                 num_channels_latents=16,
             )
             all_image_latents.append(image_latents)
+            all_image_grids.append((1, calc_h // 16, calc_w // 16))
 
         image_latents = mx.concatenate(all_image_latents, axis=1)
 
         all_image_ids = []
-        for _ in image_paths:
+        for image_path in image_paths:
+            calc_w, calc_h = QwenEditUtil._conditioning_vae_size(image_path=image_path, width=width, height=height)
             image_ids = QwenEditUtil._create_image_ids(
                 height=calc_h,
                 width=calc_w,
@@ -50,10 +53,27 @@ class QwenEditUtil:
             all_image_ids.append(image_ids)
         image_ids = mx.concatenate(all_image_ids, axis=1)
 
-        cond_h_patches = calc_h // 16
-        cond_w_patches = calc_w // 16
         num_images = len(image_paths)
-        return image_latents, image_ids, cond_h_patches, cond_w_patches, num_images
+        return image_latents, image_ids, all_image_grids, num_images
+
+    @staticmethod
+    def _conditioning_vae_size(image_path: str, width: int | None = None, height: int | None = None) -> tuple[int, int]:
+        if width is not None and height is not None:
+            return width, height
+
+        from PIL import Image
+
+        with Image.open(image_path) as image:
+            ratio = image.size[0] / image.size[1]
+        return QwenEditUtil._area_dimensions(target_area=QwenEditUtil.VAE_IMAGE_SIZE, ratio=ratio)
+
+    @staticmethod
+    def _area_dimensions(target_area: int, ratio: float) -> tuple[int, int]:
+        width = (target_area * ratio) ** 0.5
+        height = width / ratio
+        width = round(width / 32) * 32
+        height = round(height / 32) * 32
+        return int(width), int(height)
 
     @staticmethod
     def _create_image_ids(

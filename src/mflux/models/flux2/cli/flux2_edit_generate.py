@@ -5,9 +5,7 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.flux2.latent_creator.flux2_latent_creator import Flux2LatentCreator
 from mflux.models.flux2.variants import Flux2KleinEdit
-from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
-from mflux.utils.image_util import ImageUtil
 from mflux.utils.prompt_util import PromptUtil
 
 
@@ -51,32 +49,21 @@ def main():
     )
 
     image_paths = [Path(p) for p in args.image_paths]
-    primary_image_path = image_paths[0] if image_paths else None
 
     try:
-        width, height = DimensionResolver.resolve(
-            width=args.width,
-            height=args.height,
-            reference_image_path=primary_image_path,
-        )
-
         for seed in args.seed:
             image = model.generate_image(
                 seed=seed,
                 prompt=PromptUtil.read_prompt(args),
-                width=width,
-                height=height,
+                width=args.width,
+                height=args.height,
                 guidance=args.guidance,
                 image_paths=image_paths,
                 num_inference_steps=args.steps,
                 scheduler="flow_match_euler_discrete",
+                canvas_policy=args.canvas_policy,
             )
-            ImageUtil.save_image(
-                image=image,
-                path=args.output.format(seed=seed),
-                export_json_metadata=args.metadata,
-                overwrite=args.replace,
-            )
+            image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)
     except (StopImageGenerationException, PromptFileReadError) as exc:
         print(exc)
     finally:

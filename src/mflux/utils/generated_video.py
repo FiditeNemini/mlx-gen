@@ -31,6 +31,10 @@ class GeneratedVideo:
         image_path: str | Path | None = None,
         negative_prompt: str | None = None,
         guidance_2: float | None = None,
+        source_width: int | None = None,
+        source_height: int | None = None,
+        requested_width: int | None = None,
+        requested_height: int | None = None,
     ):
         if not frames:
             raise ValueError("GeneratedVideo requires at least one frame.")
@@ -50,6 +54,10 @@ class GeneratedVideo:
         self.task = task
         self.image_path = image_path
         self.negative_prompt = negative_prompt
+        self.source_width = source_width
+        self.source_height = source_height
+        self.requested_width = requested_width
+        self.requested_height = requested_height
 
     @property
     def num_frames(self) -> int:
@@ -93,6 +101,10 @@ class GeneratedVideo:
             "guidance_2": self.guidance_2 if self.model_config.supports_guidance else None,
             "height": self.height,
             "width": self.width,
+            "requested_height": self.requested_height,
+            "requested_width": self.requested_width,
+            "source_image_height": self.source_height,
+            "source_image_width": self.source_width,
             "frames": self.num_frames,
             "fps": self.fps,
             "duration_seconds": round(self.duration_seconds, 3),

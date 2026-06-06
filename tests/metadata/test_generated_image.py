@@ -80,6 +80,39 @@ def test_exported_metadata_uses_metadata_sidecar_suffix(tmp_path):
     assert json.loads(metadata_path.read_text())["seed"] == 42
 
 
+def test_generated_image_metadata_records_i2i_canvas_policy():
+    generated_image = GeneratedImage(
+        image=Image.new("RGB", (432, 240)),
+        model_config=ModelConfig.flux2_klein_4b(),
+        seed=42,
+        prompt="test",
+        steps=4,
+        guidance=1.0,
+        precision=mx.bfloat16,
+        quantization=None,
+        generation_time=1.0,
+        height=240,
+        width=432,
+        image_path="source.png",
+        image_strength=0.4,
+        canvas_policy="source-aspect",
+        requested_width=512,
+        requested_height=512,
+        source_image_width=432,
+        source_image_height=240,
+    )
+
+    metadata = generated_image._get_metadata()
+
+    assert metadata["width"] == 432
+    assert metadata["height"] == 240
+    assert metadata["canvas_policy"] == "source-aspect"
+    assert metadata["requested_width"] == 512
+    assert metadata["requested_height"] == 512
+    assert metadata["source_image_width"] == 432
+    assert metadata["source_image_height"] == 240
+
+
 def test_fibo_edit_save_keeps_prompt_json_and_exports_metadata_separately(tmp_path):
     output_path = tmp_path / "fibo_edit_output.png"
     prompt = json.dumps(

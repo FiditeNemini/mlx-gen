@@ -17,6 +17,7 @@ class SmolLM3_3B_SelfAttention(nn.Module):
         max_position_embeddings: int = 65_536,
         rope_theta: float = 5_000_000.0,
         attention_dropout: float = 0.0,
+        use_rope: bool = True,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -26,6 +27,7 @@ class SmolLM3_3B_SelfAttention(nn.Module):
         self.num_key_value_groups = num_attention_heads // num_key_value_heads
         self.scale = 1.0 / math.sqrt(self.head_dim)
         self.attention_dropout = attention_dropout
+        self.use_rope = use_rope
 
         # Projections – no bias, matching SmolLM3 config (attention_bias = False)
         self.q_proj = nn.Linear(hidden_size, num_attention_heads * self.head_dim, bias=False)
@@ -64,10 +66,11 @@ class SmolLM3_3B_SelfAttention(nn.Module):
         v = v.reshape(batch_size, seq_len, self.num_key_value_heads, self.head_dim).transpose(0, 2, 1, 3)
 
         # Rotary embeddings
-        if cos_sin is None:
-            cos_sin = self.rotary_emb(seq_len)
-        cos, sin = cos_sin
-        q, k = SmolLM3_3B_SelfAttention._apply_rope(q, k, cos, sin)
+        if self.use_rope:
+            if cos_sin is None:
+                cos_sin = self.rotary_emb(seq_len)
+            cos, sin = cos_sin
+            q, k = SmolLM3_3B_SelfAttention._apply_rope(q, k, cos, sin)
 
         # Grouped-query attention: repeat kv heads if needed
         if self.num_key_value_heads != self.num_attention_heads:

@@ -7,9 +7,12 @@ import typing as t
 from pathlib import Path
 
 from mflux.cli.defaults import defaults as ui_defaults
+from mflux.models.common.config import ModelConfig
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
 from mflux.utils import box_values, scale_factor
+from mflux.utils.dimension_resolver import CANVAS_POLICY_CHOICES, CANVAS_POLICY_SOURCE_ASPECT
+from mflux.utils.exceptions import ModelConfigError
 
 
 class ModelSpecAction(argparse.Action):
@@ -55,6 +58,51 @@ def boolean_flag_value(value: str) -> bool:
     raise argparse.ArgumentTypeError(f"'{value}' is not a valid boolean value")
 
 
+def image_strength_value(value: str) -> float:
+    parsed = positive_float(value)
+    if parsed > 1:
+        raise argparse.ArgumentTypeError(f"'{value}' must be <= 1")
+    return parsed
+
+
+def _model_config_for_parser(model_name: str | None, base_model: str | None = None) -> ModelConfig | None:
+    if model_name is None:
+        return None
+    try:
+        return ModelConfig.from_name(model_name=model_name, base_model=base_model)
+    except ModelConfigError:
+        return None
+
+
+def _model_step_default(model_name: str | None, base_model: str | None = None) -> int:
+    model_config = _model_config_for_parser(model_name, base_model=base_model)
+    for candidate in (
+        model_name,
+        *(model_config.aliases if model_config is not None else ()),
+        model_config.model_name if model_config is not None else None,
+        model_config.base_model if model_config is not None else None,
+    ):
+        if candidate in ui_defaults.MODEL_INFERENCE_STEPS:
+            return ui_defaults.MODEL_INFERENCE_STEPS[candidate]
+    return 25
+
+
+def _is_predefined_model_name(model_name: str | None, base_model: str | None = None) -> bool:
+    if model_name is None:
+        return False
+    if _looks_like_local_path(model_name):
+        return False
+    if model_name in ui_defaults.MODEL_CHOICES:
+        return True
+    return _model_config_for_parser(model_name, base_model=base_model) is not None
+
+
+def _looks_like_local_path(model_name: str) -> bool:
+    if model_name.startswith(("/", "./", "../", "~")):
+        return True
+    return Path(model_name).expanduser().exists()
+
+
 # fmt: off
 class CommandLineParser(argparse.ArgumentParser):
 
@@ -73,6 +121,8 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--battery-percentage-stop-limit", "-B", type=lambda v: max(min(int(v), 99), 1), default=ui_defaults.BATTERY_PERCENTAGE_STOP_LIMIT, help=f"On Macs powered by battery, stop image generation when battery reaches this percentage. Default: {ui_defaults.BATTERY_PERCENTAGE_STOP_LIMIT}")
         self.add_argument("--low-ram", action="store_true", help="Enable low-RAM mode to reduce memory usage (may impact performance).")
         self.add_argument("--mlx-cache-limit-gb", type=positive_float, default=None, help="Limit MLX cache size in GB without enabling full low-RAM mode (e.g. 8 or 16).")
+        self.add_argument("--progress", action="store_true", default=True, help="Show CLI progress when the selected backend supports it. Default is true.")
+        self.add_argument("--no-progress", action="store_false", dest="progress", help="Disable CLI progress output.")
 
     def add_seedvr2_upscale_arguments(self) -> None:
         self.supports_image_generation = True
@@ -95,7 +145,7 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--model", "-m", type=str, required=require_model_arg, action=ModelSpecAction, help=f"The model to use ({' or '.join(ui_defaults.MODEL_CHOICES)}, a HuggingFace repo org/model, or a local path).")
         if path_type == "save":
             self.add_argument("--path", type=str, required=True, help="Local path for saving a model to disk.")
-        self.add_argument("--base-model", type=str, required=False, choices=ui_defaults.MODEL_CHOICES, help="When using a third-party huggingface model, explicitly specify whether the base model is dev or schnell")
+        self.add_argument("--base-model", type=str, required=False, help="Base model alias or upstream repo id for prepared/custom checkpoints.")
         self.add_argument("--quantize",  "-q", type=int, choices=ui_defaults.QUANTIZE_CHOICES, default=None, help=f"Quantize the model ({' or '.join(map(str, ui_defaults.QUANTIZE_CHOICES))}, Default is None)")
 
     def add_lora_arguments(self) -> None:
@@ -117,12 +167,13 @@ class CommandLineParser(argparse.ArgumentParser):
 
         self.add_argument("--steps", type=int, default=None, help="Inference Steps")
         self.add_argument("--guidance", type=float, default=None, help=f"Guidance Scale (Default varies by tool: {ui_defaults.GUIDANCE_SCALE} for most, {ui_defaults.DEFAULT_DEV_FILL_GUIDANCE} for fill tools, {ui_defaults.DEFAULT_DEPTH_GUIDANCE} for depth)")
+        self.add_argument("--canvas-policy", choices=CANVAS_POLICY_CHOICES, default=CANVAS_POLICY_SOURCE_ASPECT, help="For ordinary image-to-image, resolve the output canvas from the source aspect ratio by default. Use exact-resize only when intentionally resizing/recomposing the source into the exact requested width and height.")
 
     def add_image_generator_arguments(self, supports_metadata_config=False, require_prompt=True, supports_dimension_scale_factor=False) -> None:
         prompt_group = self.add_mutually_exclusive_group(required=(require_prompt and not supports_metadata_config))
         prompt_group.add_argument("--prompt", type=str, help="The textual description of the image to generate.")
         prompt_group.add_argument("--prompt-file", type=Path, help="Path to a file containing the prompt text. The file will be re-read before each generation, allowing you to edit the prompt between iterations when using multiple seeds without restarting the program.")
-        self.add_argument("--negative-prompt", type=str, default="", help="The negative prompt to guide what the model should not generate.")
+        self.add_argument("--negative-prompt", "--negative", dest="negative_prompt", type=str, default="", help="The negative prompt to guide what the model should not generate.")
         self.add_argument("--seed", type=int, default=None, nargs='+', help="Specify 1+ Entropy Seeds (Default is 1 time-based random-seed)")
         self.add_argument("--auto-seeds", type=int, default=-1, help="Auto generate N Entropy Seeds (random ints between 0 and 1 billion")
         self.add_argument("--scheduler", type=str, default="linear", help="Choose from implemented schedulers (linear only for now). Or bring your own: 'your_package.some_module.FooScheduler'")
@@ -134,7 +185,7 @@ class CommandLineParser(argparse.ArgumentParser):
     def add_image_to_image_arguments(self, required=False) -> None:
         self.supports_image_to_image = True
         self.add_argument("--image-path", type=Path, required=required, default=None, help="Local path to init image")
-        self.add_argument("--image-strength", type=float, required=False, default=ui_defaults.IMAGE_STRENGTH, help=f"Controls how strongly the init image influences the output image. A value of 0.0 means no influence. (Default is {ui_defaults.IMAGE_STRENGTH})")
+        self.add_argument("--image-strength", type=image_strength_value, required=False, default=None, help=f"Latent image-to-image denoising strength in (0, 1]. Required for latent I2I. Higher values add more noise, allow more change, and run more denoise steps. A practical starting point is {ui_defaults.IMAGE_STRENGTH}.")
 
     def add_batch_image_generator_arguments(self) -> None:
         self.add_argument("--batch-prompts-file", type=Path, required=True, default=argparse.SUPPRESS, help="Local path for a file that holds a batch of prompts.")
@@ -313,8 +364,12 @@ class CommandLineParser(argparse.ArgumentParser):
                 )
 
             if self.supports_image_to_image:
-                if namespace.image_strength == self.get_default("image_strength") and (img_strength_from_metadata := prior_gen_metadata.get("image_strength", None)):
-                    namespace.image_strength = img_strength_from_metadata
+                img_strength_from_metadata = prior_gen_metadata.get("image_strength", None)
+                if namespace.image_strength == self.get_default("image_strength") and img_strength_from_metadata is not None:
+                    try:
+                        namespace.image_strength = image_strength_value(str(img_strength_from_metadata))
+                    except argparse.ArgumentTypeError as exc:
+                        self.error(f"Invalid image_strength in metadata: {exc}")
 
             if self.supports_controlnet:
                 if namespace.controlnet_image_path is None:
@@ -364,9 +419,16 @@ class CommandLineParser(argparse.ArgumentParser):
             if getattr(self, 'require_prompt', True):
                 self.error("Either --prompt or --prompt-file argument is required, or 'prompt' required in metadata config file")
 
+        if (
+            self.supports_image_to_image
+            and getattr(namespace, "image_strength", None) is not None
+            and getattr(namespace, "image_path", None) is None
+        ):
+            self.error("--image-strength requires --image-path.")
+
         if self.supports_image_generation and getattr(namespace, "steps", None) is None:
             model_name = getattr(namespace, "model", None)
-            namespace.steps = ui_defaults.MODEL_INFERENCE_STEPS.get(model_name, 25)
+            namespace.steps = _model_step_default(model_name, getattr(namespace, "base_model", None))
 
         # In-context edit specific validations
         if getattr(self, 'supports_in_context_edit', False):
@@ -395,7 +457,9 @@ class CommandLineParser(argparse.ArgumentParser):
         # Compute model_path: None for predefined names, otherwise use the model value
         # Predefined names like "schnell", "dev" are handled by ModelConfig, not PathResolution
         if hasattr(namespace, "model") and namespace.model is not None:
-            namespace.model_path = None if namespace.model in ui_defaults.MODEL_CHOICES else namespace.model
+            namespace.model_path = (
+                None if _is_predefined_model_name(namespace.model, getattr(namespace, "base_model", None)) else namespace.model
+            )
         else:
             namespace.model_path = None
 

@@ -54,6 +54,39 @@ def test_generated_video_saves_mp4_and_metadata(tmp_path):
     assert _video_codec_name(output_path) in (None, "h264")
 
 
+def test_generated_video_metadata_records_i2v_source_and_requested_dimensions():
+    video = GeneratedVideo(
+        frames=[_solid_frame((255, 0, 0))],
+        fps=12,
+        model_config=ModelConfig.wan2_2_i2v_a14b(),
+        seed=42,
+        prompt="test video prompt",
+        steps=2,
+        guidance=4.0,
+        guidance_2=3.0,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        height=336,
+        width=448,
+        task="image-to-video",
+        image_path="source.png",
+        source_width=320,
+        source_height=240,
+        requested_width=512,
+        requested_height=288,
+    )
+
+    metadata = video._get_metadata()
+
+    assert metadata["width"] == 448
+    assert metadata["height"] == 336
+    assert metadata["requested_width"] == 512
+    assert metadata["requested_height"] == 288
+    assert metadata["source_image_width"] == 320
+    assert metadata["source_image_height"] == 240
+
+
 def test_generated_video_respects_no_replace(tmp_path):
     output_path = tmp_path / "generated.mp4"
     output_path.write_bytes(b"existing")

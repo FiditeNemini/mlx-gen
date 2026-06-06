@@ -158,7 +158,6 @@ class CompletionGenerator:
         elif command == "mflux-generate-fibo":
             parser.add_general_arguments()
             parser.add_model_arguments(require_model_arg=False)
-            parser.add_lora_arguments()
             parser.add_image_generator_arguments(supports_metadata_config=True)
             parser.add_image_to_image_arguments()
             parser.add_output_arguments()
@@ -167,7 +166,6 @@ class CompletionGenerator:
             parser.add_general_arguments()
             parser.add_model_arguments(require_model_arg=False)
             parser.set_defaults(model="fibo-edit")
-            parser.add_lora_arguments()
             parser.add_image_generator_arguments(
                 supports_metadata_config=True,
                 require_prompt=False,
@@ -177,8 +175,14 @@ class CompletionGenerator:
                 "--image-path", type=Path, required=False, help="Local path to source image for editing."
             )
             parser.add_argument(
-                "--mask-path", type=Path, default=None, help="Optional mask image path for localized edits."
+                "--mask-path",
+                "--masked-image-path",
+                dest="mask_path",
+                type=Path,
+                default=None,
+                help="Optional mask image path for localized edits.",
             )
+            parser.add_argument("--matte-output", type=str, default=None, help="fibo-edit-rmbg only: also save the raw grayscale matte. Supports {seed} like --output.")  # fmt: skip
             parser.add_output_arguments()
 
         elif command == "mflux-generate-z-image-turbo":

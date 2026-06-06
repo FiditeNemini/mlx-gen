@@ -111,3 +111,74 @@ class QwenEmbedRopeMLX(nn.Module):
             (mx.array(vid_cos.astype(np.float32)), mx.array(vid_sin.astype(np.float32))),
             (mx.array(txt_cos.astype(np.float32)), mx.array(txt_sin.astype(np.float32))),
         )
+
+
+class QwenEmbedLayer3DRopeMLX(QwenEmbedRopeMLX):
+    def _compute_condition_freqs(self, frame: int, height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
+        seq_lens = frame * height * width
+
+        axes_splits = [x // 2 for x in self.axes_dim]
+        freqs_pos = np.split(self.pos_freqs, np.cumsum(axes_splits)[:-1], axis=1)
+        freqs_neg = np.split(self.neg_freqs, np.cumsum(axes_splits)[:-1], axis=1)
+
+        freqs_frame = freqs_neg[0][-1:].reshape(frame, 1, 1, -1, 2)
+        freqs_frame = np.broadcast_to(freqs_frame, (frame, height, width, freqs_frame.shape[-2], 2))
+
+        if self.scale_rope:
+            freqs_height = np.concatenate(
+                [freqs_neg[1][-(height - height // 2) :], freqs_pos[1][: height // 2]], axis=0
+            )
+        else:
+            freqs_height = freqs_pos[1][:height]
+        freqs_height = freqs_height.reshape(1, height, 1, -1, 2)
+        freqs_height = np.broadcast_to(freqs_height, (frame, height, width, freqs_height.shape[-2], 2))
+
+        if self.scale_rope:
+            freqs_width = np.concatenate([freqs_neg[2][-(width - width // 2) :], freqs_pos[2][: width // 2]], axis=0)
+        else:
+            freqs_width = freqs_pos[2][:width]
+        freqs_width = freqs_width.reshape(1, 1, width, -1, 2)
+        freqs_width = np.broadcast_to(freqs_width, (frame, height, width, freqs_width.shape[-2], 2))
+
+        freqs = np.concatenate([freqs_frame, freqs_height, freqs_width], axis=-2)
+        freqs = freqs.reshape(seq_lens, -1, 2)
+
+        return freqs[..., 0], freqs[..., 1]
+
+    def __call__(
+        self,
+        video_fhw: tuple[int, int, int] | list[tuple[int, int, int]] | list[list[tuple[int, int, int]]],
+        txt_seq_lens: list[int],
+    ) -> tuple[tuple[mx.array, mx.array], tuple[mx.array, mx.array]]:
+        if isinstance(video_fhw, list) and video_fhw and isinstance(video_fhw[0], list):
+            video_fhw = video_fhw[0]
+        if not isinstance(video_fhw, list):
+            video_fhw = [video_fhw]
+
+        vid_cos_list = []
+        vid_sin_list = []
+        max_vid_index = 0
+        layer_num = len(video_fhw) - 1
+        for idx, fhw in enumerate(video_fhw):
+            frame, height, width = fhw
+            if idx != layer_num:
+                cos_v, sin_v = self._compute_video_freqs(frame, height, width, idx)
+            else:
+                cos_v, sin_v = self._compute_condition_freqs(frame, height, width)
+            vid_cos_list.append(cos_v)
+            vid_sin_list.append(sin_v)
+
+            if self.scale_rope:
+                max_vid_index = max(height // 2, width // 2, max_vid_index)
+            else:
+                max_vid_index = max(height, width, max_vid_index)
+
+        max_vid_index = max(max_vid_index, layer_num)
+        max_len = max(txt_seq_lens)
+        txt_cos = self.pos_freqs[max_vid_index : max_vid_index + max_len, :, 0]
+        txt_sin = self.pos_freqs[max_vid_index : max_vid_index + max_len, :, 1]
+
+        return (
+            (mx.array(np.concatenate(vid_cos_list, axis=0).astype(np.float32)), mx.array(np.concatenate(vid_sin_list, axis=0).astype(np.float32))),
+            (mx.array(txt_cos.astype(np.float32)), mx.array(txt_sin.astype(np.float32))),
+        )

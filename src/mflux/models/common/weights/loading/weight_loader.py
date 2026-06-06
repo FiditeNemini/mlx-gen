@@ -10,6 +10,7 @@ import torch
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import LocalEntryNotFoundError
 from mlx.utils import tree_unflatten
+from safetensors import safe_open
 from safetensors.torch import load_file as torch_load_file
 
 from mflux.cli.defaults.defaults import MFLUX_CACHE_DIR
@@ -149,17 +150,13 @@ class WeightLoader:
         if not path.exists():
             return None, None, None
 
-        shard_files = sorted(f for f in path.glob("*.safetensors") if not f.name.startswith("._"))
+        shard_files = WeightLoader._mflux_shard_files(path)
         if not shard_files:
             return None, None, None
 
-        # Check metadata on first file
-        data = mx.load(str(shard_files[0]), return_metadata=True)
-        if len(data) <= 1:
-            return None, None, None
-
-        quantization_level_str = data[1].get("quantization_level")
-        mflux_version = data[1].get("mflux_version")
+        metadata = WeightLoader._load_safetensors_metadata(shard_files[0])
+        quantization_level_str = metadata.get("quantization_level")
+        mflux_version = metadata.get("mflux_version")
 
         # If no mflux metadata, this isn't our format
         if quantization_level_str is None and mflux_version is None:
@@ -174,11 +171,30 @@ class WeightLoader:
         # Load all shards
         all_weights: dict[str, mx.array] = {}
         for shard in shard_files:
-            shard_data = mx.load(str(shard), return_metadata=True)
-            all_weights.update(dict(shard_data[0].items()))
+            all_weights.update(mx.load(str(shard)))
 
         unflattened = tree_unflatten(list(all_weights.items()))
         return unflattened, quantization_level, mflux_version
+
+    @staticmethod
+    def _load_safetensors_metadata(path: Path) -> dict[str, str]:
+        with safe_open(str(path), framework="numpy") as handle:
+            return dict(handle.metadata() or {})
+
+    @staticmethod
+    def _mflux_shard_files(path: Path) -> list[Path]:
+        index_path = path / "model.safetensors.index.json"
+        if index_path.exists():
+            with open(index_path) as file:
+                index_data = json.load(file)
+            weight_map = index_data.get("weight_map")
+            if isinstance(weight_map, dict) and weight_map:
+                return [
+                    path / shard_name
+                    for shard_name in sorted(set(weight_map.values()))
+                    if isinstance(shard_name, str) and not shard_name.startswith("._")
+                ]
+        return sorted(f for f in path.glob("*.safetensors") if not f.name.startswith("._"))
 
     @staticmethod
     def _download_from_url(url: str, component_name: str) -> Path:

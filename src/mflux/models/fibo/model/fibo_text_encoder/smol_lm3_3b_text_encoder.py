@@ -21,6 +21,8 @@ class SmolLM3_3B_TextEncoder(nn.Module):
         rope_theta: float = 5_000_000.0,
         rms_norm_eps: float = 1e-6,
         hidden_act: str = "silu",
+        no_rope_layers: list[int] | None = None,
+        no_rope_layer_interval: int = 4,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -33,6 +35,14 @@ class SmolLM3_3B_TextEncoder(nn.Module):
         self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
         self.hidden_act = hidden_act
+        if no_rope_layers is None:
+            no_rope_layers = [
+                int((layer_idx + 1) % no_rope_layer_interval != 0)
+                for layer_idx in range(num_hidden_layers)
+            ]
+        if len(no_rope_layers) != num_hidden_layers:
+            raise ValueError("`no_rope_layers` must match `num_hidden_layers`.")
+        self.no_rope_layers = tuple(bool(value) for value in no_rope_layers)
         self.embed_tokens = nn.Embedding(vocab_size, hidden_size)
         self.layers: List[SmolLM3_3B_EncoderLayer] = [
             SmolLM3_3B_EncoderLayer(
@@ -44,8 +54,9 @@ class SmolLM3_3B_TextEncoder(nn.Module):
                 max_position_embeddings=max_position_embeddings,
                 rope_theta=rope_theta,
                 hidden_act=hidden_act,
+                use_rope=self.no_rope_layers[layer_idx],
             )
-            for _ in range(num_hidden_layers)
+            for layer_idx in range(num_hidden_layers)
         ]
         self.norm = SmolLM3_3B_RMSNorm(hidden_size, eps=rms_norm_eps)
         self.rotary_emb = SmolLM3_3B_RotaryEmbedding(
@@ -85,11 +96,11 @@ class SmolLM3_3B_TextEncoder(nn.Module):
     def _build_attention_mask(attention_mask: mx.array) -> mx.array:
         batch_size, seq_len = attention_mask.shape
         mask_dtype = mx.float32
-        min_dtype_value = mx.finfo(mask_dtype).min
+        negative_infinity = mx.array(-mx.inf, dtype=mask_dtype)
         padding_mask = mx.where(
             attention_mask == 1,
             mx.zeros_like(attention_mask).astype(mask_dtype),
-            mx.ones_like(attention_mask).astype(mask_dtype) * min_dtype_value,
+            mx.ones_like(attention_mask).astype(mask_dtype) * negative_infinity,
         )
         padding_mask = mx.expand_dims(mx.expand_dims(padding_mask, axis=1), axis=1)
         idx = mx.arange(seq_len, dtype=mx.int32)
@@ -97,8 +108,8 @@ class SmolLM3_3B_TextEncoder(nn.Module):
         i = mx.expand_dims(idx, axis=1)
         tri_bool = j > i
         zeros_2d = mx.zeros((seq_len, seq_len), dtype=mask_dtype)
-        minval_2d = mx.ones((seq_len, seq_len), dtype=mask_dtype) * min_dtype_value
-        causal_tri_mask = mx.where(tri_bool, minval_2d, zeros_2d)
+        negative_infinity_2d = mx.ones((seq_len, seq_len), dtype=mask_dtype) * negative_infinity
+        causal_tri_mask = mx.where(tri_bool, negative_infinity_2d, zeros_2d)
         causal_tri_mask = mx.expand_dims(mx.expand_dims(causal_tri_mask, axis=0), axis=0)
         causal_tri_mask = mx.broadcast_to(causal_tri_mask, (batch_size, 1, seq_len, seq_len))
         attention_mask_4d = causal_tri_mask + padding_mask

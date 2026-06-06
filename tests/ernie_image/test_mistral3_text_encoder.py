@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import mlx.core as mx
 import numpy as np
 import pytest
+from PIL import Image
 
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
@@ -309,12 +310,14 @@ def test_ernie_img2img_latent_helper_patchifies_and_normalizes(monkeypatch, tmp_
         )
     )
     model.tiling_config = None
+    image_path = tmp_path / "input.png"
+    Image.new("RGB", (512, 512), color=(128, 128, 128)).save(image_path)
     config = Config(
         model_config=ModelConfig.ernie_image_turbo(),
         width=512,
         height=512,
         num_inference_steps=8,
-        image_path=tmp_path / "input.png",
+        image_path=image_path,
         image_strength=0.4,
     )
     scheduler = ErnieImageScheduler(num_inference_steps=config.num_inference_steps)

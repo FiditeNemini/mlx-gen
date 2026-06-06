@@ -16,8 +16,10 @@ from mflux.models.ernie_image.model.ernie_image_vae import ErnieImageVAE
 from mflux.models.ernie_image.model.mistral3_text_encoder import Mistral3TextEncoder
 from mflux.models.ernie_image.scheduler import ErnieImageScheduler
 from mflux.models.ernie_image.weights.ernie_image_weight_definition import ErnieImageWeightDefinition
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class ErnieImageTurbo(nn.Module):
@@ -49,8 +51,8 @@ class ErnieImageTurbo(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 8,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float | None = 1.0,
         negative_prompt: str | None = "",
         image_path: Path | str | None = None,
@@ -61,15 +63,18 @@ class ErnieImageTurbo(nn.Module):
         pe_temperature: float = 0.6,
         pe_top_p: float = 0.95,
         pe_max_new_tokens: int | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> Image.Image:
         del scheduler
         if image_path is None:
             image_strength = None
         if use_pe:
+            pe_width = 1024 if width is None else width
+            pe_height = 1024 if height is None else height
             prompt = self._enhance_prompt(
                 prompt=prompt,
-                width=width,
-                height=height,
+                width=pe_width,
+                height=pe_height,
                 seed=seed,
                 system_prompt=pe_system_prompt,
                 temperature=pe_temperature,
@@ -86,6 +91,8 @@ class ErnieImageTurbo(nn.Module):
             image_strength=image_strength,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
 
         batch_size = 1
@@ -224,8 +231,10 @@ class ErnieImageTurbo(nn.Module):
             height=config.height,
             batch_size=batch_size,
         )
-        if config.image_path is None or config.image_strength is None or config.image_strength <= 0.0:
+        if config.image_path is None:
             return noise
+        if config.image_strength is None or config.image_strength <= 0.0:
+            raise ValueError("latent image-to-image requires image_strength > 0.")
 
         encoded = LatentCreator.encode_image(
             vae=self.vae,

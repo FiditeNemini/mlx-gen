@@ -20,6 +20,7 @@ class SmolLM3_3B_EncoderLayer(nn.Module):
         rope_theta: float = 5_000_000.0,
         attention_dropout: float = 0.0,
         hidden_act: str = "silu",
+        use_rope: bool = True,
     ):
         super().__init__()
         self.input_layernorm = SmolLM3_3B_RMSNorm(hidden_size, eps=rms_norm_eps)
@@ -30,6 +31,7 @@ class SmolLM3_3B_EncoderLayer(nn.Module):
             max_position_embeddings=max_position_embeddings,
             rope_theta=rope_theta,
             attention_dropout=attention_dropout,
+            use_rope=use_rope,
         )
         self.post_attention_layernorm = SmolLM3_3B_RMSNorm(hidden_size, eps=rms_norm_eps)
         self.mlp = SmolLM3_3B_MLP(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mflux.models.common.config import ModelConfig
+from mflux.utils.dimension_resolver import CANVAS_POLICY_EXACT_RESIZE, CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import ModelConfigError
 
 TASK_ALIASES = {
@@ -71,6 +72,10 @@ class GenerationCapability:
     supports_fps: bool = False
     default_for_task: bool = False
     model_override: str | None = None
+    canvas_policies: tuple[str, ...] = ()
+    default_canvas_policy: str | None = None
+    primary_image_index: int | None = None
+    dimension_multiple: int | None = None
 
     def allows_image_count(self, image_count: int) -> bool:
         if image_count < self.min_images:
@@ -92,6 +97,10 @@ class GenerationCapability:
             "supports_fps": self.supports_fps,
             "default_for_task": self.default_for_task,
             "model_override": self.model_override,
+            "canvas_policies": list(self.canvas_policies),
+            "default_canvas_policy": self.default_canvas_policy,
+            "primary_image_index": self.primary_image_index,
+            "dimension_multiple": self.dimension_multiple,
         }
 
 
@@ -123,6 +132,10 @@ class GenerationPlan:
     image_count: int
     model_name: str | None = None
     model_override: str | None = None
+    canvas_policies: tuple[str, ...] = ()
+    default_canvas_policy: str | None = None
+    primary_image_index: int | None = None
+    dimension_multiple: int | None = None
 
     @property
     def task(self) -> str:
@@ -139,6 +152,10 @@ class GenerationPlan:
             "image_count": self.image_count,
             "model_name": self.model_name,
             "model_override": self.model_override,
+            "canvas_policies": list(self.canvas_policies),
+            "default_canvas_policy": self.default_canvas_policy,
+            "primary_image_index": self.primary_image_index,
+            "dimension_multiple": self.dimension_multiple,
         }
 
 
@@ -214,6 +231,10 @@ def resolve_generation_plan(
     normalized_i2i_mode = normalize_i2i_mode(i2i_mode)
     identity = _resolve_model_identity(model=model, model_config=model_config, family=family)
     model_capabilities = _capabilities_for(identity)
+    if not model_capabilities.capabilities:
+        raise TaskInferenceError(
+            f"{model_capabilities.label} does not expose unified generation capabilities through mlxgen generate."
+        )
 
     public_task = _requested_public_task(
         model_capabilities=model_capabilities,
@@ -258,6 +279,13 @@ def resolve_generation_plan(
         image_count=image_count,
         candidates=candidates,
     )
+    if (
+        public_task == IMAGE_TO_IMAGE
+        and capability.mode == MODE_LATENT_IMG2IMG
+        and image_count > 0
+        and not has_image_strength
+    ):
+        raise TaskInferenceError("--image-strength is required for latent image-to-image mode.")
 
     return GenerationPlan(
         public_task=capability.public_task,
@@ -268,6 +296,10 @@ def resolve_generation_plan(
         image_count=image_count,
         model_name=model_capabilities.model_name,
         model_override=capability.model_override,
+        canvas_policies=capability.canvas_policies,
+        default_canvas_policy=capability.default_canvas_policy,
+        primary_image_index=capability.primary_image_index,
+        dimension_multiple=capability.dimension_multiple,
     )
 
 
@@ -406,6 +438,15 @@ def _capabilities_for(identity: _ModelIdentity) -> ModelCapabilities:
     raise TaskInferenceError(f"Unsupported generation family {family!r}.")
 
 
+def _ordinary_i2i_canvas_contract() -> dict:
+    return {
+        "canvas_policies": (CANVAS_POLICY_SOURCE_ASPECT, CANVAS_POLICY_EXACT_RESIZE),
+        "default_canvas_policy": CANVAS_POLICY_SOURCE_ASPECT,
+        "primary_image_index": 0,
+        "dimension_multiple": 16,
+    }
+
+
 def _image_latent_capabilities(
     *,
     family: str,
@@ -414,6 +455,7 @@ def _image_latent_capabilities(
     handler_id: str,
     supports_guidance: bool,
 ) -> ModelCapabilities:
+    i2i_canvas = _ordinary_i2i_canvas_contract()
     return ModelCapabilities(
         schema_version=1,
         family=family,
@@ -436,6 +478,7 @@ def _image_latent_capabilities(
                 max_images=1,
                 supports_image_strength=True,
                 default_for_task=True,
+                **i2i_canvas,
             ),
         ),
     )
@@ -443,8 +486,10 @@ def _image_latent_capabilities(
 
 def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     is_edit_model = _is_qwen_edit(identity.aliases, identity.model_key)
+    is_edit_plus_model = _is_qwen_edit_plus(identity.aliases, identity.model_key)
+    i2i_canvas = _ordinary_i2i_canvas_contract()
     if is_edit_model:
-        capabilities = (
+        capabilities: tuple[GenerationCapability, ...] = (
             GenerationCapability(
                 id="qwen.edit",
                 public_task=IMAGE_TO_IMAGE,
@@ -453,19 +498,23 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=1,
                 max_images=1,
                 default_for_task=True,
-            ),
-            GenerationCapability(
-                id="qwen.multi-reference",
-                public_task=IMAGE_TO_IMAGE,
-                mode=MODE_MULTI_REFERENCE,
-                handler_id="qwen.edit",
-                min_images=2,
-                max_images=None,
-                default_for_task=True,
+                **i2i_canvas,
             ),
         )
+        if is_edit_plus_model:
+            capabilities += (
+                GenerationCapability(
+                    id="qwen.multi-reference",
+                    public_task=IMAGE_TO_IMAGE,
+                    mode=MODE_MULTI_REFERENCE,
+                    handler_id="qwen.edit",
+                    min_images=2,
+                    max_images=None,
+                    default_for_task=True,
+                    **i2i_canvas,
+                ),
+            )
     else:
-        edit_override = None if identity.model_config is None else "qwen-image-edit"
         capabilities = (
             GenerationCapability(
                 id="qwen.text",
@@ -482,38 +531,20 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=1,
                 max_images=1,
                 supports_image_strength=True,
-                default_for_task=True,
-            ),
-            GenerationCapability(
-                id="qwen.edit",
-                public_task=IMAGE_TO_IMAGE,
-                mode=MODE_EDIT_REFERENCE,
-                handler_id="qwen.edit",
-                min_images=1,
-                max_images=1,
-                model_override=edit_override,
-            ),
-            GenerationCapability(
-                id="qwen.multi-reference",
-                public_task=IMAGE_TO_IMAGE,
-                mode=MODE_MULTI_REFERENCE,
-                handler_id="qwen.edit",
-                min_images=2,
-                max_images=None,
-                default_for_task=True,
-                model_override=edit_override,
+                **i2i_canvas,
             ),
         )
     return ModelCapabilities(
         schema_version=1,
         family=identity.family,
-        label="Qwen Image",
+        label=_qwen_label(identity),
         model_name=identity.model_name,
         capabilities=capabilities,
     )
 
 
 def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    i2i_canvas = _ordinary_i2i_canvas_contract()
     return ModelCapabilities(
         schema_version=1,
         family=identity.family,
@@ -535,6 +566,7 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=1,
                 max_images=1,
                 supports_image_strength=True,
+                **i2i_canvas,
             ),
             GenerationCapability(
                 id="flux2.edit",
@@ -544,6 +576,7 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=1,
                 max_images=1,
                 default_for_task=True,
+                **i2i_canvas,
             ),
             GenerationCapability(
                 id="flux2.multi-reference",
@@ -553,6 +586,7 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=2,
                 max_images=None,
                 default_for_task=True,
+                **i2i_canvas,
             ),
         ),
     )
@@ -561,20 +595,8 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
 def _fibo_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     is_edit_model = _is_fibo_edit(identity.aliases, identity.model_key)
     if is_edit_model:
-        capabilities = (
-            GenerationCapability(
-                id="fibo.edit",
-                public_task=IMAGE_TO_IMAGE,
-                mode=MODE_EDIT_REFERENCE,
-                handler_id="fibo.edit",
-                min_images=1,
-                max_images=1,
-                supports_mask=True,
-                default_for_task=True,
-            ),
-        )
+        capabilities = ()
     else:
-        edit_override = None if identity.model_config is None else "fibo-edit"
         capabilities = (
             GenerationCapability(
                 id="fibo.text",
@@ -582,26 +604,6 @@ def _fibo_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 mode=MODE_TEXT_ONLY,
                 handler_id="fibo.generate",
                 default_for_task=True,
-            ),
-            GenerationCapability(
-                id="fibo.latent",
-                public_task=IMAGE_TO_IMAGE,
-                mode=MODE_LATENT_IMG2IMG,
-                handler_id="fibo.generate",
-                min_images=1,
-                max_images=1,
-                supports_image_strength=True,
-                default_for_task=True,
-            ),
-            GenerationCapability(
-                id="fibo.edit",
-                public_task=IMAGE_TO_IMAGE,
-                mode=MODE_EDIT_REFERENCE,
-                handler_id="fibo.edit",
-                min_images=1,
-                max_images=1,
-                supports_mask=True,
-                model_override=edit_override,
             ),
         )
     return ModelCapabilities(
@@ -749,6 +751,10 @@ def _raise_no_capability(
     image_count: int,
 ) -> None:
     label = model_capabilities.label
+    if not model_capabilities.capabilities:
+        raise TaskInferenceError(
+            f"{label} does not expose unified generation capabilities through mlxgen generate."
+        )
     if public_task in VIDEO_TASKS and not any(cap.public_task in VIDEO_TASKS for cap in model_capabilities.capabilities):
         raise TaskInferenceError(f"{label} supports image generation tasks, not {public_task}.")
     if public_task in PUBLIC_IMAGE_TASKS and not any(cap.public_task in PUBLIC_IMAGE_TASKS for cap in model_capabilities.capabilities):
@@ -807,11 +813,57 @@ def _has_alias(aliases: set[str], *needles: str) -> bool:
 
 
 def _is_qwen(aliases: set[str], model_key: str) -> bool:
-    return _has_alias(aliases, "qwen-image", "qwen-image-edit", "qwen-image-edit-2511") or "qwen" in model_key
+    return _has_alias(
+        aliases,
+        "qwen-image",
+        "qwen-image-edit",
+        "qwen-image-edit-2509",
+        "qwen-image-edit-2511",
+    ) or "qwen" in model_key
 
 
 def _is_qwen_edit(aliases: set[str], model_key: str) -> bool:
-    return _has_alias(aliases, "qwen-image-edit", "qwen-image-edit-2511") or ("qwen" in model_key and "edit" in model_key)
+    return _has_alias(
+        aliases,
+        "qwen-image-edit",
+        "qwen-image-edit-2509",
+        "qwen-image-edit-2511",
+    ) or ("qwen" in model_key and "edit" in model_key)
+
+
+def _is_qwen_edit_plus(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(
+        aliases,
+        "qwen-image-edit-2509",
+        "qwen-edit-2509",
+        "qwen-edit-plus",
+        "qwen-edit-plus-2509",
+        "qwen-image-edit-2511",
+        "qwen-edit-2511",
+    ) or any(
+        token in model_key
+        for token in (
+            "qwen-image-edit-2509",
+            "qwen-edit-2509",
+            "qwen-edit-plus",
+            "qwen-image-edit-2511",
+            "qwen-edit-2511",
+        )
+    )
+
+
+def _qwen_label(identity: _ModelIdentity) -> str:
+    if not _is_qwen_edit(identity.aliases, identity.model_key):
+        return "Qwen Image"
+    if _has_alias(identity.aliases, "qwen-image-edit-2511", "qwen-edit-2511") or any(
+        token in identity.model_key for token in ("qwen-image-edit-2511", "qwen-edit-2511")
+    ):
+        return "Qwen Image Edit 2511"
+    if _has_alias(identity.aliases, "qwen-image-edit-2509", "qwen-edit-2509", "qwen-edit-plus") or any(
+        token in identity.model_key for token in ("qwen-image-edit-2509", "qwen-edit-2509", "qwen-edit-plus")
+    ):
+        return "Qwen Image Edit 2509"
+    return "Qwen Image Edit"
 
 
 def _is_flux2(aliases: set[str], model_key: str) -> bool:

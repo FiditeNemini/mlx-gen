@@ -48,7 +48,7 @@ multi-reference editing, and latent image-to-image are internal modes selected b
 image count, and options such as `image_strength`.
 
 ```python
-from mlxgen import get_model_capabilities, resolve_generation_plan, resolve_task
+from mlxgen import get_model_capabilities, get_model_validation, resolve_generation_plan, resolve_task
 
 capabilities = get_model_capabilities(model="flux2-klein-4b")
 print([capability.mode for capability in capabilities.capabilities])
@@ -61,8 +61,8 @@ print(resolve_task(model="flux2-klein-4b", image_count=1).task)
 # image-to-image
 
 plan = resolve_generation_plan(model="flux2-klein-4b", image_count=1)
-print(plan.task, plan.mode, plan.handler_id)
-# image-to-image edit-reference flux2.edit
+print(plan.task, plan.mode, plan.handler_id, plan.default_canvas_policy)
+# image-to-image edit-reference flux2.edit source-aspect
 
 latent_plan = resolve_generation_plan(
     model="flux2-klein-4b",
@@ -70,16 +70,61 @@ latent_plan = resolve_generation_plan(
     i2i_mode="latent",
     has_image_strength=True,
 )
-print(latent_plan.task, latent_plan.mode, latent_plan.handler_id)
-# image-to-image latent-img2img flux2.generate
+print(latent_plan.task, latent_plan.mode, latent_plan.handler_id, latent_plan.canvas_policies)
+# image-to-image latent-img2img flux2.generate ('source-aspect', 'exact-resize')
 
 print(resolve_task(model="Wan-AI/Wan2.2-I2V-A14B-Diffusers", image_count=1).task)
 # image-to-video
+
+validation = get_model_validation("AbstractFramework/qwen-image-edit-2509-8bit")
+print(validation.status)
+# PASS
 ```
 
 `--task edit` in the CLI is only a compatibility alias. Python integrations should request
 `task="image-to-image"` and, when they need disambiguation, pass `i2i_mode="edit"` or
 `i2i_mode="latent"`.
+
+For ordinary image-to-image, capabilities expose the canvas contract. `default_canvas_policy` is
+`"source-aspect"` for latent img2img, edit/reference I2I, and multi-reference I2I. The first input
+image is the geometry anchor (`primary_image_index == 0`), and generated metadata records the
+requested, source, and final dimensions.
+
+`get_model_capabilities(...)` is route-only: it tells an application which request shapes can be
+dispatched and which options are legal. `get_model_validation(...)` is release-evidence metadata:
+it reports exact model/package status rows for the current validation profiles. Applications such
+as AbstractVision can use capabilities for routing and validation status for UI warnings, filtering,
+or release gates.
+
+Qwen edit versions are distinct. `qwen-image-edit` is the original single-reference edit
+checkpoint. `qwen-image-edit-2509` and `qwen-image-edit-2511` are Edit-Plus checkpoints and expose
+multi-reference capabilities when the selected package supports that route.
+
+Negative prompts are part of the model-specific generation API. The CLI aliases
+`--negative-prompt` and `--negative` both map to `negative_prompt=...` in Python. For Qwen image
+edit, passing a negative prompt enables true classifier-free guidance when `guidance > 1`; when the
+caller omits it, MLX-Gen applies the official blank negative-prompt behavior for Qwen edit models.
+
+```python
+from mflux.models.common.config import ModelConfig
+from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit
+
+model = QwenImageEdit(
+    model_path="AbstractFramework/qwen-image-edit-8bit",
+    model_config=ModelConfig.qwen_image_edit(),
+)
+image = model.generate_image(
+    seed=9501,
+    prompt="Convert the scene into a clean graphite pencil sketch while preserving layout",
+    negative_prompt="color, blur, crop, text, watermark",
+    image_paths=["input.png"],
+    width=768,
+    height=432,
+    num_inference_steps=30,
+    guidance=4,
+)
+image.save("sketch.png")
+```
 
 Contradictions fail early:
 
@@ -156,7 +201,7 @@ video = model.generate_video(
 video.save("video.mp4")
 ```
 
-For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`.
+For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`. For Wan image-to-video, `width` and `height` are size targets; the model API resolves the final output canvas from the source image aspect ratio and model spatial multiples.
 
 Image progress phases are `start`, `denoise`, and `complete`; image generation can also emit `interrupted` when a keyboard interruption is handled. Wan video generation emits `start`, `denoise`, `decode`, `convert`, and `generated` from `generate_video()`. The Wan CLI emits `save` and reserves `complete` for a saved MP4 that passes video-health validation. Progress callback exceptions propagate to the caller, so production applications should keep handlers small and defensive.
 

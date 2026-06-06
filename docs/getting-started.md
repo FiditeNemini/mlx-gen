@@ -99,7 +99,7 @@ image-to-image mode from the model and image inputs:
 
 ```sh
 mlxgen generate \
-  --model AbstractFramework/qwen-image-edit-2511-4bit \
+  --model AbstractFramework/qwen-image-edit-2509-8bit \
   --image input.png \
   --prompt "Turn the room into a pencil sketch" \
   --steps 20 \
@@ -110,6 +110,18 @@ mlxgen generate \
 Use `mlxgen capabilities --model <model>` to check whether a model supports latent img2img,
 edit/reference image-to-image, or multi-reference image-to-image. `--image-strength` is for latent
 img2img variation only; edit/reference models do not use it.
+
+Use `qwen-image-edit` for the original single-reference edit checkpoint; use
+`qwen-image-edit-2509` or `qwen-image-edit-2511` when you need an Edit-Plus multi-reference route.
+Current validation evidence for Qwen Image Edit 2511 source, q8, and q4 is published in
+[Image Edit Capabilities](edit-capabilities.md).
+Use `--negative-prompt` or `--negative` to block concrete failure modes such as crop, blur, text,
+or unwanted color. Qwen edit models use the official blank negative-prompt behavior by default when
+guidance is above `1`, but explicit negative prompts are useful for stricter edits.
+
+Ordinary image-to-image preserves the first source image's aspect ratio by default. `--width` and
+`--height` act as a size target under `--canvas-policy source-aspect`; pass
+`--canvas-policy exact-resize` only when you intentionally want the exact requested canvas.
 
 For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image
@@ -122,7 +134,7 @@ run `mlxgen generate`. TI2V-5B infers text-to-video when no image is supplied an
 when one image is supplied. The fixed A14B models are stricter: T2V-A14B rejects image inputs and
 I2V-A14B requires one image.
 
-Use TI2V-5B when you want the smaller text-to-video or experimental first-frame image-to-video path:
+Use TI2V-5B when you want the smaller text-to-video or first-frame image-to-video path:
 
 ```sh
 mlxgen download --model Wan-AI/Wan2.2-TI2V-5B-Diffusers
@@ -164,7 +176,7 @@ and `--guidance` are both omitted, MLX-Gen uses the model's two-stage defaults. 
 means `--guidance 4` for the high-noise stage and `--guidance-2 3` for the low-noise stage. If you
 set `--guidance` and omit `--guidance-2`, the low-noise stage follows your `--guidance` value.
 
-For image-to-video, pass one input image. TI2V-5B uses an experimental first-frame conditioning
+For image-to-video, pass one input image. TI2V-5B uses first-frame conditioning
 route:
 
 ```sh
@@ -200,13 +212,16 @@ mlxgen generate \
   --output video.mp4
 ```
 
-TI2V-5B image-to-video uses the Diffusers first-frame latent-conditioning path. The separate A14B I2V route requires the complete I2V source snapshot before generation. Treat current Wan video support as experimental: the pipeline can produce MP4 output, but quality, speed, and practical defaults still need broader validation.
+TI2V-5B image-to-video uses the Diffusers first-frame latent-conditioning path. The separate A14B I2V route requires the complete I2V source snapshot before generation. Current Wan video support can produce MP4 output; quality, speed, and practical defaults depend strongly on model family, prompt, size, and frame count.
 
 Wan does not have a separate duration option. Control duration with `--frames` and `--fps`: duration
 is `frames / fps`, so `--frames 121 --fps 24` is about 5.04 seconds and `--frames 81 --fps 16` is
 about 5.06 seconds. Wan frame counts must be `4n + 1`; MLX-Gen adjusts other values to that shape.
 
-Width and height are adjusted down to the selected Wan model's VAE/patch multiple:
+Width and height are adjusted up to the selected Wan model's VAE/patch multiple. For image-to-video,
+MLX-Gen also preserves the source image aspect ratio: the requested `--width` and `--height` act as
+a size target, and the actual output canvas is resolved from the input image ratio and model
+multiples before generation.
 
 | Model | Required multiple | Recommended/native size | Practical lower-cost sizes |
 | --- | ---: | --- | --- |
@@ -214,9 +229,13 @@ Width and height are adjusted down to the selected Wan model's VAE/patch multipl
 | T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
 | I2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
 
-For TI2V-5B, `1280x720` adjusts to `1280x704`, and `432x240` adjusts to `416x224`. For A14B,
-`1280x720`, `832x480`, `448x256`, and `432x240` are valid multiples of 16. Keep image-to-video
-source images composed for the requested/adjusted video aspect ratio.
+For TI2V-5B text-to-video, `1280x720` adjusts to `1280x736`, and `432x240` adjusts to `448x256`.
+For A14B text-to-video, `1280x720`, `832x480`, `448x256`, and `432x240` are valid multiples of 16.
+For image-to-video, saved metadata records the requested size, source image size, and resolved
+output size.
+
+Wan uses the official model negative prompt by default. For simple abstract tests, pass
+`--negative-prompt ""` to run without it.
 
 Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
@@ -229,5 +248,5 @@ Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 - See [Model Management](model-management.md) for the full download, prepare, and runtime failure contract.
 - See [API And CLI](api.md) for the supported command surface and Python integration notes.
 - See [Spaceship Snow Workflow](examples/spaceship-snow.md) for a reproducible image and Wan A14B video example with included assets.
-- See [Quantization](quantization.md) for q4/q8 behavior, Bonsai low-bit packed support, and current Qwen/ERNIE mixed q4/q8 policies.
+- See [Quantization](quantization.md) for q4/q8 behavior, Bonsai low-bit packed support, Qwen/ERNIE mixed q4/q8 policies, and Wan mixed q8/BF16 packages.
 - See [Troubleshooting](troubleshooting.md) when a required artifact is missing or a local path cannot be classified.

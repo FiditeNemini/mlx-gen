@@ -77,6 +77,14 @@ class Flux2KleinBase9B:
     )
 
 
+class FIBO:
+    model_config = SimpleNamespace(
+        model_name="briaai/FIBO",
+        base_model=None,
+        aliases=["fibo"],
+    )
+
+
 class EmptyWeightDefinition:
     @staticmethod
     def get_tokenizers():
@@ -129,6 +137,32 @@ def test_model_card_for_q8_keeps_standard_quantization_wording(tmp_path):
     assert "--guidance 0" in card
 
 
+def test_model_card_for_fibo_q8_documents_mixed_bf16_policy(tmp_path):
+    card = ModelCardSaver.render_model_card(str(tmp_path / "fibo-8bit"), FIBO(), 8)
+
+    assert "base_model: briaai/FIBO" in card
+    assert "license: other" in card
+    assert "license_name: bria-fibo" in card
+    assert "- mixed-q8-bf16" in card
+    assert "mixed q8/BF16 checkpoint for base FIBO text-to-image generation" in card
+    assert "q8 for quantizable FIBO transformer and text-encoder linears" in card
+    assert "BF16 for the FIBO VAE" in card
+    assert "FIBO conditioning, timestep, caption-projection, normalization" in card
+
+
+def test_model_card_for_fibo_q4_documents_mixed_bf16_policy(tmp_path):
+    card = ModelCardSaver.render_model_card(str(tmp_path / "fibo-4bit"), FIBO(), 4)
+
+    assert "base_model: briaai/FIBO" in card
+    assert "license: other" in card
+    assert "license_name: bria-fibo" in card
+    assert "- mixed-q4-bf16" in card
+    assert "- mixed-q4-q8" not in card
+    assert "mixed q4/BF16 checkpoint for base FIBO text-to-image generation" in card
+    assert "q4 for quantizable FIBO transformer and text-encoder linears" in card
+    assert "BF16 for the FIBO VAE" in card
+
+
 def test_model_card_for_ernie_documents_bf16_usage(tmp_path):
     card = ModelCardSaver.render_model_card(str(tmp_path / "ernie-image-turbo"), ErnieImageTurbo(), None)
 
@@ -178,6 +212,8 @@ def test_model_card_for_wan_q8_uses_video_metadata_and_usage(tmp_path):
     assert "pipeline_tag: text-to-video" in card
     assert "- video-generation" in card
     assert "- image-to-video" in card
+    assert "- mixed-q8-bf16" in card
+    assert "mixed q8/BF16 package" in card
     assert "q8 for quantizable Wan transformer attention and feed-forward modules" in card
     assert "BF16 for the Wan VAE" in card
     assert "BF16 for Wan transformer conditioning/output projection linears" in card
@@ -203,6 +239,9 @@ def test_model_card_for_wan_bf16_documents_prepared_runtime_precision(tmp_path):
     assert "without an explicit quantization level" in card
     assert "loads transformer and VAE weights at BF16 runtime precision" in card
     assert "The UMT5 text encoder is preserved" in card
+    assert "recommended full-size Wan A14B shape" in card
+    assert "separate short low-RAM validation profiles" in card
+    assert "`Max RSS` can under-report Apple unified-memory/Metal pressure" in card
     assert "--frames 81" in card
     assert "--guidance-2 3" in card
     assert "Prepared and contributed by" in card
@@ -217,11 +256,15 @@ def test_model_card_for_wan_a14b_q8_uses_validation_sized_usage(tmp_path):
 
     assert "intentionally validation-sized" in card
     assert "full-size `1280x720`, 81-frame, 40-step readiness" in card
+    assert "short low-RAM profiles" in card
+    assert "Apple M5 Max with 128 GiB unified memory" in card
+    assert "`MLX Peak` is only the MLX allocator high-water mark" in card
     assert "--width 384" in card
     assert "--height 224" in card
     assert "--frames 33" in card
     assert "--steps 12" in card
     assert "--fps 8" in card
+    assert "--low-ram" in card
     assert "--metadata" in card
     assert "--width 1280" not in card
     assert "--frames 81" not in card
@@ -256,8 +299,9 @@ def test_model_card_for_wan_i2v_a14b_uses_image_to_video_metadata(tmp_path):
     assert "- text-to-video" not in card
     assert "--task image-to-video" not in card
     assert "--image input.png" in card
-    assert "--width 224" in card
+    assert "--width 384" in card
     assert "--height 384" in card
+    assert "--low-ram" in card
     assert "--frames 33" in card
     assert "--guidance 3.5" in card
     assert "--guidance-2 3.5" in card

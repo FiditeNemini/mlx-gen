@@ -1,9 +1,11 @@
+import sys
+
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.common.config import ModelConfig
 from mflux.models.qwen.latent_creator.qwen_latent_creator import QwenLatentCreator
 from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
-from mflux.utils.dimension_resolver import DimensionResolver
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
@@ -19,12 +21,16 @@ def main():
     parser.add_output_arguments()
     args = parser.parse_args()
 
-    # 0. Set default guidance value if not provided by user
+    # 0. Set model-specific defaults if not provided by user
+    if "--scheduler" not in sys.argv:
+        args.scheduler = "flow_match_euler_discrete"
     if args.guidance is None:
         args.guidance = ui_defaults.GUIDANCE_SCALE
 
     # 1. Load the model
+    model_config = ModelConfig.from_name(model_name=args.model or "qwen-image", base_model=args.base_model)
     qwen = QwenImage(
+        model_config=model_config,
         quantize=args.quantize,
         model_path=args.model_path,
         lora_paths=args.lora_paths,
@@ -39,26 +45,20 @@ def main():
     )
 
     try:
-        # Resolve dimensions (supports ScaleFactor like "2x" when --image-path is provided)
-        width, height = DimensionResolver.resolve(
-            width=args.width,
-            height=args.height,
-            reference_image_path=args.image_path,
-        )
-
         for seed in args.seed:
             # 3. Generate an image for each seed value
             image = qwen.generate_image(
                 seed=seed,
                 prompt=PromptUtil.read_prompt(args),
                 negative_prompt=PromptUtil.read_negative_prompt(args),
-                width=width,
-                height=height,
+                width=args.width,
+                height=args.height,
                 guidance=args.guidance,
                 scheduler=args.scheduler,
                 image_path=args.image_path,
                 num_inference_steps=args.steps,
                 image_strength=args.image_strength,
+                canvas_policy=args.canvas_policy,
             )
             # 4. Save the image
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)

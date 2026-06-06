@@ -1,3 +1,5 @@
+import os
+
 import mlx.core as mx
 from mlx import nn
 
@@ -8,6 +10,7 @@ from mflux.models.fibo.model.fibo_transformer.single_transformer_block import Fi
 from mflux.models.fibo.model.fibo_transformer.text_projection import BriaFiboTextProjection
 from mflux.models.fibo.model.fibo_transformer.time_embed import BriaFiboTimestepProjEmbeddings
 from mflux.models.flux.model.flux_transformer.ada_layer_norm_continuous import AdaLayerNormContinuous
+from mflux.utils.tensor_health import TensorHealth
 
 
 class FiboTransformer(nn.Module):
@@ -24,7 +27,7 @@ class FiboTransformer(nn.Module):
         self.context_embedder = nn.Linear(4096, 3072)
         self.transformer_blocks = [FiboJointTransformerBlock(i) for i in range(num_layers)]
         self.single_transformer_blocks = [FiboSingleTransformerBlock(i) for i in range(num_single_layers)]
-        self.norm_out = AdaLayerNormContinuous(3072, 3072)
+        self.norm_out = AdaLayerNormContinuous(3072, 3072, bias=True)
         self.proj_out = nn.Linear(3072, in_channels)
         self.caption_projection = [BriaFiboTextProjection() for _ in range(num_layers + num_single_layers)]
 
@@ -35,6 +38,7 @@ class FiboTransformer(nn.Module):
         hidden_states: mx.array,
         encoder_hidden_states: mx.array,
         text_encoder_layers: list[mx.array],
+        prompt_attention_mask: mx.array | None = None,
         conditioning_seq_len: int = 0,
         conditioning_image_ids: mx.array | None = None,
     ) -> mx.array:
@@ -57,6 +61,7 @@ class FiboTransformer(nn.Module):
             batch_size=hidden_states.shape[0],
             encoder_hidden_states=encoder_hidden_states,
             max_tokens=encoder_hidden_states.shape[1],
+            prompt_attention_mask=prompt_attention_mask,
             conditioning_seq_len=conditioning_seq_len,
         )
 
@@ -78,6 +83,14 @@ class FiboTransformer(nn.Module):
                 image_rotary_emb=image_rotary_emb,
                 attention_mask=attention_mask,
             )
+            FiboTransformer._check_block_outputs(
+                enabled=FiboTransformer._block_health_enabled(),
+                block_name=f"joint.{block_id}",
+                t=t,
+                config=config,
+                hidden_states=hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+            )
             block_id += 1
 
         # 5. Run the single transformer blocks
@@ -90,6 +103,14 @@ class FiboTransformer(nn.Module):
                 text_encoder_layer=text_encoder_layers[block_id],
                 image_rotary_emb=image_rotary_emb,
                 attention_mask=attention_mask,
+            )
+            FiboTransformer._check_block_outputs(
+                enabled=FiboTransformer._block_health_enabled(),
+                block_name=f"single.{block_id - len(self.transformer_blocks)}",
+                t=t,
+                config=config,
+                hidden_states=hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
             )
             block_id += 1
 
@@ -211,11 +232,11 @@ class FiboTransformer(nn.Module):
     def _prepare_attention_mask(attention_mask_2d: mx.array) -> mx.array:
         attention_matrix = mx.einsum("bi,bj->bij", attention_mask_2d, attention_mask_2d)
         mask_dtype = attention_mask_2d.dtype
-        min_dtype_value = mx.finfo(mask_dtype).min
+        negative_infinity = mx.array(-mx.inf, dtype=mask_dtype)
         attention_matrix = mx.where(
             attention_matrix == 1,
             mx.zeros_like(attention_matrix).astype(mask_dtype),
-            (mx.ones_like(attention_matrix) * min_dtype_value).astype(mask_dtype),
+            (mx.ones_like(attention_matrix) * negative_infinity).astype(mask_dtype),
         )
         attention_matrix = mx.expand_dims(attention_matrix, axis=1)
         return attention_matrix
@@ -226,13 +247,23 @@ class FiboTransformer(nn.Module):
         config: Config,
         encoder_hidden_states: mx.array,
         max_tokens: int,
+        prompt_attention_mask: mx.array | None = None,
         conditioning_seq_len: int = 0,
     ) -> mx.array:
         vae_scale_factor = 16
         latent_height = config.height // vae_scale_factor
         latent_width = config.width // vae_scale_factor
         latent_seq_len = latent_height * latent_width
-        prompt_attention_mask = mx.ones((batch_size, max_tokens), dtype=mx.float32)
+        if prompt_attention_mask is None:
+            prompt_attention_mask = mx.ones((batch_size, max_tokens), dtype=mx.float32)
+        else:
+            prompt_attention_mask = prompt_attention_mask.astype(mx.float32)
+            if prompt_attention_mask.ndim != 2:
+                raise ValueError("FIBO prompt attention mask must be 2D.")
+            if prompt_attention_mask.shape[1] != max_tokens:
+                raise ValueError("FIBO prompt attention mask length must match encoder hidden states.")
+            if prompt_attention_mask.shape[0] != batch_size:
+                raise ValueError("FIBO prompt attention mask batch must match transformer batch.")
         latent_attention_mask = mx.ones((batch_size, latent_seq_len), dtype=mx.float32)
         if conditioning_seq_len > 0:
             conditioning_attention_mask = mx.ones((batch_size, conditioning_seq_len), dtype=mx.float32)
@@ -244,3 +275,40 @@ class FiboTransformer(nn.Module):
         attention_mask = FiboTransformer._prepare_attention_mask(attention_mask_2d)
         attention_mask = attention_mask.astype(encoder_hidden_states.dtype)
         return attention_mask
+
+    @staticmethod
+    def _block_health_enabled() -> bool:
+        return os.environ.get("MFLUX_FIBO_BLOCK_HEALTH", "").lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _check_block_outputs(
+        *,
+        enabled: bool,
+        block_name: str,
+        t: int,
+        config: Config,
+        hidden_states: mx.array,
+        encoder_hidden_states: mx.array,
+    ) -> None:
+        if not enabled:
+            return
+        step = t + 1
+        timestep = float(config.scheduler.timesteps[t].item())
+        TensorHealth.ensure_finite(
+            hidden_states,
+            name=f"fibo.transformer.{block_name}.hidden_states",
+            phase="fibo-transformer-block",
+            step=step,
+            total_steps=config.num_inference_steps,
+            timestep=timestep,
+            guidance=config.guidance,
+        )
+        TensorHealth.ensure_finite(
+            encoder_hidden_states,
+            name=f"fibo.transformer.{block_name}.encoder_hidden_states",
+            phase="fibo-transformer-block",
+            step=step,
+            total_steps=config.num_inference_steps,
+            timestep=timestep,
+            guidance=config.guidance,
+        )

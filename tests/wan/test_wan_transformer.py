@@ -55,3 +55,27 @@ def test_wan_transformer_tiny_forward_supports_expanded_timesteps():
     mx.eval(output)
 
     assert output.shape == hidden_states.shape
+
+
+def test_wan_transformer_can_clear_cache_after_each_block(monkeypatch):
+    model = _tiny_transformer(num_layers=2)
+    hidden_states = mx.zeros((1, 4, 2, 4, 4), dtype=mx.float32)
+    timestep = mx.array([999.0], dtype=mx.float32)
+    encoder_hidden_states = mx.zeros((1, 5, 12), dtype=mx.float32)
+    clear_calls = []
+
+    monkeypatch.setattr(
+        "mflux.models.wan.model.wan_transformer.wan_transformer.mx.clear_cache",
+        lambda: clear_calls.append(True),
+    )
+
+    output = model(
+        hidden_states,
+        timestep,
+        encoder_hidden_states,
+        clear_cache_each_block=True,
+    )
+    mx.eval(output)
+
+    assert output.shape == hidden_states.shape
+    assert clear_calls == [True, True]

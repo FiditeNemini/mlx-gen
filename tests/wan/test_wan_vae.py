@@ -28,6 +28,27 @@ def test_wan_vae_decode_normalized_latents_expands_temporal_dimension():
     assert float(mx.max(decoded).item()) <= 1.0
 
 
+def test_wan_vae_decode_low_ram_clears_cache_after_each_latent_slice(monkeypatch):
+    vae = Wan2_2_VAE()
+    clear_calls = []
+
+    monkeypatch.setattr("mflux.models.wan.model.wan_vae.wan_2_2_vae.gc.collect", lambda: None)
+    monkeypatch.setattr("mflux.models.wan.model.wan_vae.wan_2_2_vae.mx.synchronize", lambda: None)
+    monkeypatch.setattr(
+        "mflux.models.wan.model.wan_vae.wan_2_2_vae.mx.clear_cache",
+        lambda: clear_calls.append(True),
+    )
+
+    decoded = vae.decode_normalized_latents(
+        mx.zeros((1, 48, 2, 4, 4), dtype=mx.float32),
+        clear_cache_each_slice=True,
+    )
+    mx.eval(decoded)
+
+    assert decoded.shape == (1, 3, 5, 64, 64)
+    assert clear_calls == [True, True]
+
+
 def test_wan_vae_encode_normalized_first_frame_matches_i2v_condition_shape():
     vae = Wan2_2_VAE()
     image = mx.zeros((1, 3, 64, 64), dtype=mx.float32)

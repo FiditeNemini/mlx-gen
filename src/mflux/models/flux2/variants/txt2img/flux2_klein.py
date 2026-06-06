@@ -16,9 +16,11 @@ from mflux.models.flux2.model.flux2_vae.vae import Flux2VAE
 from mflux.models.flux2.variants.edit.flux2_klein_edit_helpers import _Flux2KleinEditHelpers
 from mflux.models.flux2.weights.flux2_weight_definition import Flux2KleinWeightDefinition
 from mflux.utils.apple_silicon import AppleSiliconUtil
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class Flux2Klein(nn.Module):
@@ -49,12 +51,13 @@ class Flux2Klein(nn.Module):
         seed: int,
         prompt: str,
         num_inference_steps: int = 4,
-        height: int = 1024,
-        width: int = 1024,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 1.0,
         image_path: Path | str | None = None,
         image_strength: float | None = None,
         scheduler: str = "flow_match_euler_discrete",
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
         # 0. Create a new config based on the model type and input parameters
         config = Config(
@@ -66,6 +69,8 @@ class Flux2Klein(nn.Module):
             image_path=image_path,
             image_strength=image_strength,
             scheduler=scheduler,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
         self._configure_generation_scheduler(config)
         # 1. Encode prompt(s)
@@ -165,13 +170,15 @@ class Flux2Klein(nn.Module):
         seed: int,
         config: Config,
     ) -> tuple[mx.array, mx.array, int, int]:
-        if config.image_path is None or config.image_strength is None or config.image_strength <= 0.0:
+        if config.image_path is None:
             return Flux2LatentCreator.prepare_packed_latents(
                 seed=seed,
                 height=config.height,
                 width=config.width,
                 batch_size=1,
             )
+        if config.image_strength is None or config.image_strength <= 0.0:
+            raise ValueError("latent image-to-image requires image_strength > 0.")
         return self._prepare_img2img_latents(seed=seed, config=config)
 
     def _prepare_img2img_latents(

@@ -10,6 +10,7 @@ from huggingface_hub import snapshot_download
 
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import allow_downloads, is_huggingface_repo_id
+from mflux.release.validation_registry import get_model_validation, get_validation_profile, list_validation_profiles
 from mflux.task_inference import TaskInferenceError, get_model_capabilities, normalize_task, resolve_generation_plan
 from mflux.utils.exceptions import ModelConfigError
 
@@ -36,7 +37,7 @@ def main() -> None:
         _top_level_parser().print_help()
         return
 
-    if argv and argv[0] in {"download", "prepare", "capabilities"}:
+    if argv and argv[0] in {"download", "prepare", "capabilities", "validation"}:
         _run_model_command(argv)
         return
 
@@ -85,7 +86,11 @@ def _route_accepts_base_model(route: _Route) -> bool:
         "mflux-generate-fibo-edit",
         "mflux-generate-flux2",
         "mflux-generate-flux2-edit",
+        "mflux-generate-ernie-image",
+        "mflux-generate-qwen",
+        "mflux-generate-qwen-edit",
         "mflux-generate-z-image",
+        "mflux-generate-z-image-turbo",
     }
 
 
@@ -156,12 +161,13 @@ def _normalize_command(argv: list[str]) -> list[str]:
 def _top_level_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlxgen",
-        usage="mlxgen [generate|capabilities|download|prepare] ...",
+        usage="mlxgen [generate|capabilities|validation|download|prepare] ...",
         description="Prepare local model assets and generate images or videos with MLX-Gen.",
         epilog=(
             "Commands:\n"
             "  generate    Generate or edit images and videos from a prepared or cached model.\n"
             "  capabilities Inspect model generation tasks, modes, and option support.\n"
+            "  validation   Inspect release-validation evidence for exact model/package rows.\n"
             "  download     Explicitly download a model snapshot into the Hugging Face cache.\n"
             "  prepare      Create a reusable local MLX-Gen model folder, optionally quantized.\n"
             "\n"
@@ -169,6 +175,7 @@ def _top_level_parser() -> argparse.ArgumentParser:
             "  mlxgen generate --model z-image-turbo --prompt 'A puffin standing on a cliff'\n"
             "  mlxgen generate --model wan2.2-ti2v-5b --prompt 'A city timelapse'\n"
             "  mlxgen capabilities --model flux2-klein-4b\n"
+            "  mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit\n"
             "  mlxgen download --model Qwen/Qwen-Image\n"
             "  mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8\n"
             "\n"
@@ -262,7 +269,7 @@ def _parser() -> argparse.ArgumentParser:
         epilog=(
             "Common generation options are forwarded to the selected backend, including --prompt, "
             "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
-            "--negative-prompt, --quantize, --lora-paths, --lora-scales, --metadata, "
+            "--negative-prompt/--negative, --canvas-policy, --quantize, --lora-paths, --lora-scales, --metadata, "
             "--config-from-metadata/-C, --output, --replace, --frames, --fps, --guidance-2, "
             "and --progress/--no-progress."
         ),
@@ -341,6 +348,9 @@ def _run_model_command(argv: list[str]) -> None:
     if command == "capabilities":
         _show_capabilities(argv[1:])
         return
+    if command == "validation":
+        _show_validation(argv[1:])
+        return
     if command == "download":
         _download_model(argv[1:])
         return
@@ -370,6 +380,49 @@ def _show_capabilities(argv: list[str]) -> None:
     except TaskInferenceError as exc:
         parser.error(str(exc))
     print(json.dumps(capabilities.to_dict(), indent=2, sort_keys=True))
+
+
+def _show_validation(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        prog="mlxgen validation",
+        description=(
+            "Inspect release-validation evidence for exact model/package rows. This is separate from "
+            "route capabilities and does not control mlxgen generate."
+        ),
+    )
+    parser.add_argument("--model", "-m", default=None, help="Model alias, Hugging Face repo, or local model path.")
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Validation profile id. Defaults to the current I2I edit 5x4 profile.",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List available validation profiles instead of returning profile/model rows.",
+    )
+    args = parser.parse_args(argv)
+    try:
+        if args.list:
+            payload = {
+                "profiles": [
+                    {
+                        "id": profile.id,
+                        "title": profile.title,
+                        "canonical_source": profile.canonical_source,
+                        "description": profile.description,
+                        "record_count": len(profile.records),
+                    }
+                    for profile in list_validation_profiles()
+                ]
+            }
+        elif args.model:
+            payload = get_model_validation(args.model, profile_id=args.profile or get_validation_profile().id).to_dict()
+        else:
+            payload = get_validation_profile(args.profile or get_validation_profile().id).to_dict()
+    except KeyError as exc:
+        parser.error(str(exc))
+    print(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def _download_model(argv: list[str]) -> None:
@@ -548,6 +601,7 @@ def _validate_family_override(
     handlers_requiring_model_config = {
         "flux2.generate",
         "flux2.edit",
+        "ernie-image.generate",
         "fibo.generate",
         "z-image.generate",
         "z-image-turbo.generate",
@@ -606,11 +660,22 @@ def _has_alias(aliases: set[str], *needles: str) -> bool:
 
 
 def _is_qwen(aliases: set[str], model_key: str) -> bool:
-    return _has_alias(aliases, "qwen-image", "qwen-image-edit") or "qwen" in model_key
+    return _has_alias(
+        aliases,
+        "qwen-image",
+        "qwen-image-edit",
+        "qwen-image-edit-2509",
+        "qwen-image-edit-2511",
+    ) or "qwen" in model_key
 
 
 def _is_qwen_edit(aliases: set[str], model_key: str) -> bool:
-    return _has_alias(aliases, "qwen-image-edit") or ("qwen" in model_key and "edit" in model_key)
+    return _has_alias(
+        aliases,
+        "qwen-image-edit",
+        "qwen-image-edit-2509",
+        "qwen-image-edit-2511",
+    ) or ("qwen" in model_key and "edit" in model_key)
 
 
 def _is_flux2(aliases: set[str], model_key: str) -> bool:

@@ -9,21 +9,22 @@ The current quantized-model compatibility surface is:
 | Model family | q8 prepared folders | q4 prepared folders | Notes |
 | --- | --- | --- | --- |
 | Qwen Image | Supported | Supported with mixed q4/q8 | Applies to Qwen Image and Qwen Image 2512 text-to-image checkpoints. |
-| Qwen Image Edit | Supported | Supported with mixed q4/q8 | Applies to Qwen Image Edit, 2509, and 2511 image-edit checkpoints. |
-| ERNIE Image Turbo | Supported | Supported with mixed q4/q8 | Text-to-image plus experimental single-image image-to-image. Prompt Enhancer is optional and requires a full source snapshot. |
+| Qwen Image Edit | Supported | Supported with mixed q4/q8 | Applies to the original Qwen Image Edit plus the 2509 and 2511 Edit-Plus checkpoints. The original checkpoint routes single-image edit-reference only; 2509 and 2511 also route multi-reference. Validation reports record exact pass/fail quality evidence per package. |
+| ERNIE Image Turbo | Supported | Supported with mixed q4/q8 | Text-to-image plus single-image latent image-to-image. Prompt Enhancer is optional and requires a full source snapshot. |
 | FLUX.2 Klein | Supported | Supported | Standard MLX quantization policy. 9B derivatives follow the source gated/non-commercial access requirements. |
 | Bonsai Image | Not a prepared q8 folder | Ternary 2-bit pre-packed checkpoint supported | Bonsai checkpoints are already packed MLX artifacts. Use `mlxgen download` and `mlxgen generate`; do not run `prepare`. Binary 1-bit is detected but blocked until stock MLX supports 1-bit packed affine matmul. |
 | Z-Image / Z-Image Turbo | Supported | Supported | Standard MLX quantization policy with model-specific generation defaults. |
-| FIBO | Supported when source access is available | Supported when source access is available | Source repositories may require access approval before download or preparation. |
-| Wan2.2 | Supported with mixed q8/BF16 | Under validation | T2V-A14B full q8 collapsed to near-black static output; MLX-Gen keeps Wan conditioning/output projection linears BF16 and quantizes the bulky transformer block linears at q8. |
+| FIBO | Supported with mixed q8/BF16 when source access is available | Supported with mixed q4/BF16 when source access is available | Base FIBO text-to-image only. FIBO Edit is a separate model family and is not exposed as a public unified generation capability in this release. |
+| Wan2.2 | Supported with mixed q8/BF16 | Not published | MLX-Gen keeps Wan conditioning/output projection linears BF16 and quantizes the bulky transformer block linears at q8. |
 
-MLX-Gen treats low-bit quality as model-specific, not automatic. Qwen and ERNIE use mixed q4/q8 policies because fully q4 checkpoints showed unacceptable quality loss in generation validation. Bonsai uses Prism's pre-packed ternary 2-bit transformer plus a 4-bit Qwen3 text encoder rather than MLX-Gen's `prepare` flow. q8 remains the closest prepared-folder option to BF16 when memory allows.
+MLX-Gen treats low-bit quality as model-specific, not automatic. Qwen and ERNIE use mixed q4/q8 policies to preserve generation quality. FIBO uses mixed q8/BF16 and q4/BF16 policies that keep precision-sensitive conditioning and output paths at BF16. Bonsai uses Prism's pre-packed ternary 2-bit transformer plus a 4-bit Qwen3 text encoder rather than MLX-Gen's `prepare` flow. q8 remains the closest prepared-folder option to BF16 when memory allows.
 
 The difference between Bonsai ternary 2-bit and MLX-Gen's mixed q4/q8 policies is mostly packaging and runtime ownership, not the quality philosophy. Both avoid blind full low-bit conversion:
 
 | Strategy | Used by | Quality-preserving rule | Representative footprint and runtime |
 | --- | --- | --- | --- |
 | Mixed q4/q8 prepared folders | Qwen Image/Edit and ERNIE Image Turbo q4 folders created by `mlxgen prepare` | q4 for bulk transformer paths, q8 for empirically sensitive linears, BF16 for non-quantizable weights and selected runtime components. | ERNIE mixed q4/q8: 8.2 GiB folder, 9.34 GiB peak RSS, 7.83 s at 512px. Qwen uses the same policy shape on larger source models. |
+| Mixed q4/BF16 and q8/BF16 prepared folders | Base FIBO text-to-image folders created by `mlxgen prepare` | q4 or q8 for quantizable transformer/text-encoder linears, BF16 for the VAE and precision-sensitive FIBO conditioning, timestep, caption-projection, norm, and output paths. | FIBO q8/BF16: 14.5 GiB folder, 15.89 GB max RSS, 16.45 s at 512px. FIBO q4/BF16: 10.2 GiB folder, 11.39 GB max RSS, 15.24 s at 512px. |
 | Pre-packed ternary 2-bit checkpoint | Bonsai Image 2-bit from Prism | The transformer is already packed at 2-bit, the Qwen3 text encoder is 4-bit, and the Flux2 VAE stays BF16. | Bonsai ternary: 3.6 GiB cached snapshot, 3.57 GiB peak RSS, 2.92 s at 512px. |
 
 These are not model-quality rankings across unrelated models. They show the current MLX-Gen rule: use the smallest validated layout that still stays in the same visual family as a higher-precision baseline.
@@ -47,30 +48,31 @@ package size is the prepared AbstractFramework repository total.
 | FLUX.2 Klein Base 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-base-9b-4bit`<br>`flux.2-klein-base-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 prepared folders; inherits the source model's gated/non-commercial terms. |
 | Qwen Image | T2I | 53.7 GiB | `qwen-image-4bit`<br>`qwen-image-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
 | Qwen Image 2512 | T2I | 53.7 GiB | `qwen-image-2512-4bit`<br>`qwen-image-2512-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
-| ERNIE Image Turbo | T2I, experimental latent I2I | 29.5 GiB | `ernie-image-turbo-8bit`<br>`ernie-image-turbo-4bit` | 11.5 GiB<br>11.5 GiB | The public `-8bit` package is q8. The public `-4bit` repository currently has q8 metadata and the same size as `-8bit`; do not treat it as a valid q4 memory package until it is republished. |
+| ERNIE Image Turbo | T2I, latent I2I | 29.5 GiB | `ernie-image-turbo-8bit`<br>`ernie-image-turbo-4bit` | 11.5 GiB<br>11.5 GiB | The public `-8bit` package is q8. The public `-4bit` repository currently has q8 metadata and the same size as `-8bit`; do not treat it as a valid q4 memory package until it is republished. |
 | Z-Image | T2I | 19.1 GiB | `z-image-4bit`<br>`z-image-8bit` | 5.5 GiB<br>10.2 GiB | Standard MLX q4/q8 prepared folders. |
 | Z-Image Turbo | T2I | 30.6 GiB | `z-image-turbo-4bit`<br>`z-image-turbo-8bit` | 5.5 GiB<br>10.2 GiB | Standard MLX q4/q8 prepared folders. |
+| FIBO | T2I | 23.8 GiB | `fibo-4bit`<br>`fibo-8bit` | 10.2 GiB<br>14.5 GiB | q8 uses mixed q8/BF16; q4 uses mixed q4/BF16. FIBO Edit is not included in these base FIBO packages. |
 
 ### Edit-Conditioned Image-To-Image
 
 | Source model | Public task / mode | Source size | Published packages | Package sizes | Quantization status |
 | --- | --- | ---: | --- | ---: | --- |
-| Qwen Image Edit | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-4bit`<br>`qwen-image-edit-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. |
-| Qwen Image Edit 2509 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2509-4bit`<br>`qwen-image-edit-2509-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. |
-| Qwen Image Edit 2511 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2511-4bit`<br>`qwen-image-edit-2511-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. |
+| Qwen Image Edit | I2I edit/reference | 53.8 GiB | `qwen-image-edit-4bit`<br>`qwen-image-edit-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. The original Qwen Image Edit checkpoint is single-reference; use the explicit 2509 or 2511 checkpoints for multi-reference routes. |
+| Qwen Image Edit 2509 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2509-4bit`<br>`qwen-image-edit-2509-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. The 2026-06-05 source and prepared q8 validation passed the B/C/D/E spaceship edit sequence. The q4 package passed single-image B/C/D rows, but its multi-reference composition only partially applied the color reference. |
+| Qwen Image Edit 2511 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2511-4bit`<br>`qwen-image-edit-2511-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. Source, q8, and q4 passed the 2026-06-06 pencil sketch, hard-landing edit, and multi-reference composition profile. |
 
 ### Text-To-Video And Image-To-Video
 
 | Source model | Public task / mode | Source size | Published packages | Package sizes | Quantization status |
 | --- | --- | ---: | --- | ---: | --- |
-| Wan2.2 TI2V-5B | T2V and first-frame I2V | 31.9 GiB | `wan2.2-ti2v-5b-diffusers-bf16`<br>`wan2.2-ti2v-5b-diffusers-8bit` | 21.2 GiB<br>16.9 GiB | BF16 prepared package plus q8/BF16 package. BF16 mainly reduces storage versus the FP32/BF16 source snapshot; q8 further reduces storage. No validated q4 or mixed q4/q8 package is published. |
+| Wan2.2 TI2V-5B | T2V and first-frame I2V | 31.9 GiB | `wan2.2-ti2v-5b-diffusers-bf16`<br>`wan2.2-ti2v-5b-diffusers-8bit` | 21.2 GiB<br>16.9 GiB | BF16 prepared package plus q8/BF16 package. BF16 reduces storage/download size versus the FP32/BF16 source snapshot but does not reduce measured runtime memory. q8 further reduces storage and MLX model/allocator footprint in the documented 1280x704 benchmark. No q4 or mixed q4/q8 package is published. |
 | Wan2.2 T2V-A14B | T2V | 117.5 GiB | `wan2.2-t2v-a14b-diffusers-bf16`<br>`wan2.2-t2v-a14b-diffusers-8bit` | 64.1 GiB<br>39.5 GiB | BF16 prepared package plus mixed q8/BF16 package. Runtime measurements are below. |
 | Wan2.2 I2V-A14B | I2V | 117.5 GiB | `wan2.2-i2v-a14b-diffusers-bf16`<br>`wan2.2-i2v-a14b-diffusers-8bit` | 64.1 GiB<br>39.5 GiB | BF16 prepared package plus mixed q8/BF16 package. Runtime measurements are below. |
 
 Runtime memory and timing measurements are currently complete in this document for ERNIE Image
-Turbo, Bonsai Image, and Wan A14B validation profiles. Other published packages are documented here
-by package size and quantization policy, with representative visual panels where local validation
-has produced them.
+Turbo, Bonsai Image, Wan TI2V-5B, and Wan A14B benchmark profiles. Other published packages are
+documented here by package size and quantization policy, with representative visual panels where
+local benchmark runs have produced them.
 
 ## Qwen q4
 
@@ -84,9 +86,38 @@ Qwen Image and Qwen Image Edit use a mixed q4/q8 policy when prepared with `--qu
 
 This policy applies to Qwen q4 prepared folders only. It is used for Qwen Image and Qwen Image Edit variants, including 2509 and 2511 edit checkpoints.
 
-Representative Qwen Image 2512 512x512 validation at 15 steps:
+Representative Qwen Image 2512 512x512 benchmark at 15 steps:
 
 ![Qwen Image 2512 BF16, q8, full q4, and mixed q4/q8 comparison](assets/quantization/qwen-image-2512-q4-q8-comparison.png)
+
+## FIBO q8 And q4
+
+Base FIBO supports text-to-image prepared folders when the user has access to the gated
+`briaai/FIBO` source model:
+
+```bash
+mlxgen prepare --model briaai/FIBO --path models/fibo-8bit -q 8
+mlxgen prepare --model briaai/FIBO --path models/fibo-4bit -q 4
+```
+
+FIBO q8 uses a mixed q8/BF16 policy, and FIBO q4 uses a mixed q4/BF16 policy:
+
+- q8 or q4 for quantizable FIBO transformer and text-encoder linears.
+- BF16 for the FIBO VAE.
+- BF16 for FIBO conditioning, timestep, caption-projection, normalization, and output-projection
+  paths that are precision-sensitive in MLX-Gen.
+
+The 512x512 benchmark below used the same JSON prompt, seed 103, 8 denoise steps, and guidance 5.
+The q8/BF16 package stayed close to the source result; the q4/BF16 package remained coherent but
+shows more drift on fine text.
+
+| Package | Disk | Time | Max RSS | MAE vs source |
+| --- | ---: | ---: | ---: | ---: |
+| Source `briaai/FIBO` | 23.8 GiB cache | 15.13 s | 24.13 GB | baseline |
+| `AbstractFramework/fibo-8bit` | 14.5 GiB | 16.45 s | 15.89 GB | 8.81 |
+| `AbstractFramework/fibo-4bit` | 10.2 GiB | 15.24 s | 11.39 GB | 17.56 |
+
+![FIBO BF16, q8, and q4 comparison](assets/quantization/fibo-q4-q8-comparison.png)
 
 ## q8
 
@@ -96,9 +127,8 @@ Other model families use their existing model-specific quantization predicates.
 
 ## Wan q8
 
-Wan q8 uses a mixed q8/BF16 policy. A fully q8 Wan A14B layout did not preserve video quality in
-validation, so MLX-Gen quantizes the bulky transformer block linears and keeps sensitive paths at
-BF16:
+Wan q8 uses a mixed q8/BF16 policy. MLX-Gen quantizes the bulky transformer block linears and keeps
+sensitive paths at BF16:
 
 - q8 for quantizable Wan transformer attention and feed-forward linears.
 - BF16 for the Wan VAE.
@@ -110,35 +140,69 @@ The published TI2V-5B prepared packages are
 `AbstractFramework/wan2.2-ti2v-5b-diffusers-bf16` and
 `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit`. The upstream TI2V-5B source snapshot is about
 31.9 GiB and is not uniformly 16-bit on disk: its transformer and VAE safetensors are FP32, while
-the UMT5 text encoder is BF16. MLX-Gen loads and prepares Wan transformer/VAE weights at BF16
-runtime precision, so the 21.2 GiB prepared BF16 package mainly reduces storage and provides a
-reusable MLX-Gen folder; it is not expected to materially reduce runtime memory versus source
-generation. The q8 package is 16.9 GiB. TI2V-5B q4 or mixed q4/q8 remains under validation and is
-not published as a supported package.
+the UMT5 text encoder is BF16. MLX-Gen loads Wan transformer/VAE weights at BF16 runtime precision,
+so the 21.2 GiB prepared BF16 package is a storage and download-size optimization, not a runtime
+memory optimization. The q8 package is 16.9 GiB and reduces stored model bytes plus the active MLX
+model footprint. In the benchmark below, full-process `Physical Peak` is similar across source,
+prepared BF16, and q8/BF16 layouts. TI2V-5B q4 or mixed q4/q8 is not published as a supported
+package.
 
-The upstream Wan A14B source snapshots are about 118 GiB. MLX-Gen also publishes prepared BF16
-folders for users who want a smaller reusable MLX-Gen package without quantizing runtime-sensitive
-weights.
+TI2V-5B benchmark on an Apple M5 Max used the same prompt, seed, resolution, frame count, steps,
+guidance, fps, and explicit empty negative prompt for source, prepared BF16, and q8/BF16:
 
-The current published-card validation uses small repeatable low-RAM runs on Apple Silicon. It
-records the MLX allocator peak and Darwin full-process physical footprint from model init through
-MP4 save and health validation. RSS is included for comparison, but physical footprint is the more
-useful MLX/Metal unified-memory signal.
+```sh
+--prompt "A short cinematic video of a glowing orange glass sphere floating above calm teal water, soft reflections, gentle camera movement" \
+--negative-prompt "" \
+--width 1280 --height 704 --frames 17 --steps 20 --guidance 5 --fps 24 --seed 321
+```
 
-| Model | Package | Disk | Physical Peak | Max RSS | MLX Peak | Generation Time | Validation Profile |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Wan2.2 T2V-A14B | BF16 | 64.3 GiB | 33.0 GiB | 31.8 GiB | 27.7 GiB | 152.7 s | 384x224, 33 frames, 12 steps, 8 fps |
-| Wan2.2 T2V-A14B | mixed q8/BF16 | 39.7 GiB | 20.7 GiB | 19.5 GiB | 15.5 GiB | 154.8 s | 384x224, 33 frames, 12 steps, 8 fps |
-| Wan2.2 I2V-A14B | BF16 | 64.1 GiB | 33.7 GiB | 31.8 GiB | 28.2 GiB | 228.2 s | 384x384, 33 frames, 12 steps, 8 fps |
-| Wan2.2 I2V-A14B | mixed q8/BF16 | 39.7 GiB | 21.5 GiB | 19.6 GiB | 15.9 GiB | 242.2 s | 384x384, 33 frames, 12 steps, 8 fps |
+| Layout | Package | Storage | Wan MLX model | MLX active after generation | Physical Peak | Max RSS | MLX Peak | Time | Runtime profile | MP4 | Decoded-frame comparison |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |
+| Upstream source snapshot | `Wan-AI/Wan2.2-TI2V-5B-Diffusers` | 31.9 GiB | 10.6 GiB | 10.3 GiB | 102.7 GiB | 13.7 GiB | 58.5 GiB | 216.2 s | 1280x704, 17 frames, 20 steps, 24 fps, default cache | [base-source.mp4](assets/quantization/wan-ti2v5b-clean/base-source.mp4) | Baseline. |
+| Prepared BF16 folder | `AbstractFramework/wan2.2-ti2v-5b-diffusers-bf16` | 21.2 GiB | 10.6 GiB | 10.3 GiB | 102.6 GiB | 14.5 GiB | 58.5 GiB | 261.6 s | Same profile | [prepared-bf16.mp4](assets/quantization/wan-ti2v5b-clean/prepared-bf16.mp4) | Byte-identical decoded frames versus source. |
+| Mixed q8/BF16 folder | `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` | 16.9 GiB | 6.3 GiB | 6.1 GiB | 103.7 GiB | 13.8 GiB | 54.2 GiB | 243.4 s | Same profile | [mixed-q8-bf16.mp4](assets/quantization/wan-ti2v5b-clean/mixed-q8-bf16.mp4) | Mean frame MAE 1.7 versus source/BF16. |
 
-In these validation runs, mixed q8/BF16 cuts disk usage by about 38% versus the prepared BF16
-folders and reduces full-process physical peak memory by about 36-37%. It is not currently claimed
-as a speed improvement.
+`Storage` is the Hugging Face repository total. `Wan MLX model` is the loaded Wan transformer plus
+VAE tensor footprint measured from MLX arrays; it excludes the UMT5 text encoder, tokenizer, Python
+objects, video buffers, and save validation. `MLX active after generation` is the MLX allocator
+memory still live after `generate_video()` returns, before cleanup. `Physical Peak` is the sampled
+Darwin full-process physical-footprint high-water mark from model initialization through MP4 save
+and health validation; it includes MLX/Metal allocations, the PyTorch UMT5 prompt encoder, Python
+and native-library transients, decoded video buffers, and save validation. `Max RSS` is resident set
+high-water memory reported by the process tools; on Apple unified memory it can under-report Metal
+and other physical-footprint allocations. `MLX Peak` is only the MLX allocator high-water mark and
+does not include every process-level allocation.
 
-Full-size Wan A14B q8 generation remains a separate validation target. Model cards and public docs
-should keep full-size claims tied to the exact settings that have passed MP4 health checks and
-manual visual inspection.
+![Wan2.2 TI2V-5B clean source, BF16, and q8 comparison](assets/quantization/wan-ti2v5b-clean/contact-sheet.png)
+
+Detailed frame metrics are available in
+[metrics.json](assets/quantization/wan-ti2v5b-clean/metrics.json). Wan uses the model's official
+negative prompt when `--negative-prompt` is omitted. This benchmark passes `--negative-prompt ""`
+to run without the default negative prompt for a simple abstract object/water scene.
+
+The upstream Wan A14B Diffusers source snapshots are about 117.5 GiB. MLX-Gen also publishes
+prepared BF16 folders for users who want a smaller reusable MLX-Gen package without quantizing
+runtime-sensitive weights.
+
+The A14B benchmark table uses small repeatable low-RAM runs on an Apple M5 Max with 128 GiB unified
+memory. Current CLI `--low-ram` clears cache between denoise steps, clears transformer-block
+boundaries, releases inactive denoisers before decode, and clears cache during VAE temporal-slice
+decode.
+
+| Model | Package | Disk | Physical Peak | Max RSS | MLX Peak | Generation Time | Benchmark Profile | Metrics |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| Wan2.2 T2V-A14B | BF16 | 64.1 GiB | 33.0 GiB | 31.8 GiB | 27.7 GiB | 152.7 s | 384x224, 33 frames, 12 steps, 8 fps, low-RAM | [JSON](assets/quantization/wan-a14b-lowram/t2v_bf16_384x224_33f_12steps_seed4242.metrics.json) |
+| Wan2.2 T2V-A14B | mixed q8/BF16 | 39.5 GiB | 20.7 GiB | 19.5 GiB | 15.5 GiB | 154.8 s | 384x224, 33 frames, 12 steps, 8 fps, low-RAM | [JSON](assets/quantization/wan-a14b-lowram/t2v_q8bf16_384x224_33f_12steps_seed4242.metrics.json) |
+| Wan2.2 I2V-A14B | BF16 | 64.1 GiB | 33.7 GiB | 31.8 GiB | 28.2 GiB | 228.2 s | 384x384, 33 frames, 12 steps, 8 fps, low-RAM | [JSON](assets/quantization/wan-a14b-lowram/i2v_bf16_384x384_33f_12steps_seed4242.metrics.json) |
+| Wan2.2 I2V-A14B | mixed q8/BF16 | 39.5 GiB | 21.5 GiB | 19.6 GiB | 15.9 GiB | 242.2 s | 384x384, 33 frames, 12 steps, 8 fps, low-RAM | [JSON](assets/quantization/wan-a14b-lowram/i2v_q8bf16_384x384_33f_12steps_seed4242.metrics.json) |
+
+In these A14B low-RAM benchmarks, mixed q8/BF16 cuts disk usage by about 38% versus the
+prepared BF16 folders and reduces full-process physical peak memory by about 36-37%. It is not
+currently claimed as a speed improvement.
+
+Full-size Wan video memory and runtime vary with resolution, frame count, step count, task, cache
+settings, and prompt/image conditioning. Measure the profile you plan to use before starting long
+production jobs.
 
 ## ERNIE Image Turbo
 
@@ -159,34 +223,34 @@ ERNIE q4 uses a model-specific mixed q4/q8 policy. Fully q4 ERNIE checkpoints ca
 - q8 for quantizable ERNIE VAE attention modules.
 - BF16 for norms, convolutions, and other non-quantizable parameters.
 
-Local validation on Apple Silicon with 512x512, 8 steps, guidance 1:
+Local benchmark on Apple Silicon with 512x512, 8 steps, guidance 1:
 
 | Layout | Folder Size | Peak RSS | Average Generation Time | Notes |
 | --- | ---: | ---: | ---: | --- |
 | BF16 source generation components | ~22.4 GiB | 23.5 GiB | 6.38 s | Fastest at 512px, largest memory footprint. |
 | q8 prepared folder | 12 GiB | 12.9 GiB | 7.57 s | About half the memory footprint. |
-| full q4 experimental folder | 6.2 GiB | 7.2 GiB | 9.31 s | Too much visual drift on controlled poster tests; not recommended. |
+| full q4 exploratory folder | 6.2 GiB | 7.2 GiB | 9.31 s | Too much visual drift on controlled poster tests; not recommended. |
 | mixed q4/q8 prepared folder | 8.2 GiB | 9.34 GiB | 7.83 s | Default q4 policy; preserves BF16/q8 behavior more closely. |
 
-At 1024x1024 with 8 steps and guidance 1, q8 generated in 84.69 s with 12.9 GiB peak RSS, and the older full-q4 experimental layout generated in 78.94 s with 7.2 GiB peak RSS. The mixed q4/q8 default should be used for new ERNIE q4 folders because the full-q4 layout does not preserve quality reliably.
+At 1024x1024 with 8 steps and guidance 1, q8 generated in 84.69 s with 12.9 GiB peak RSS, and the older full-q4 exploratory layout generated in 78.94 s with 7.2 GiB peak RSS. The mixed q4/q8 default should be used for new ERNIE q4 folders because the full-q4 layout does not preserve quality reliably.
 
 On a controlled 512x512 poster prompt with seed 123, q8 stayed close to BF16 while full q4 visibly changed text color and composition. Mean absolute pixel error against q8 was 26.00 for full q4 and 12.03 for mixed q4/q8. Across a 3-seed poster repeat, full q4 averaged 33.48 MAE against q8 while mixed q4/q8 averaged 16.39 MAE.
 
 Prepared ERNIE q8/q4 folders contain the ordinary text-to-image generation components. ERNIE Prompt Enhancer remains an optional full-source-snapshot feature and is not bundled into prepared quantized folders.
 
-Representative ERNIE Image Turbo 512x512 validation panels:
+Representative ERNIE Image Turbo 512x512 benchmark panels:
 
 ![ERNIE Image Turbo BF16, q8, and mixed q4/q8 poster comparison](assets/quantization/ernie-image-turbo-q4-q8-comparison.png)
 
 ![ERNIE Image Turbo full q4 versus mixed q4/q8 comparison](assets/quantization/ernie-image-turbo-full-vs-mixed-q4.png)
 
-ERNIE Image Turbo also supports experimental single-image image-to-image in MLX-Gen. The image path is encoded with the ERNIE VAE, patchified to the ERNIE denoising latent shape, normalized with the model's VAE batch-normalization statistics, and then blended with generation noise before denoising. This is an MLX-Gen extension; use it for stylization and guided variation rather than exact multi-image editing.
+ERNIE Image Turbo also supports single-image image-to-image in MLX-Gen. The image path is encoded with the ERNIE VAE, patchified to the ERNIE denoising latent shape, normalized with the model's VAE batch-normalization statistics, and then blended with generation noise before denoising. This is an MLX-Gen extension; use it for stylization and guided variation rather than exact multi-image editing.
 
 The same 512x512 image-to-image pencil-sketch prompt with seed 503 stayed coherent across BF16, q8, and mixed q4/q8:
 
 ![ERNIE Image Turbo image-to-image BF16, q8, and mixed q4/q8 comparison](assets/generation/ernie-image-turbo-i2i-pencil-quant-comparison.png)
 
-ERNIE image-to-image is not a substitute for a true edit-conditioned model. It initializes ERNIE's text-to-image denoising from encoded image latents, so it is useful for fast stylization and guided variation, while Qwen Image Edit remains better when the exact source layout must be preserved. Use dimensions that match the source aspect ratio and consider 12-16 steps for stronger stylization.
+ERNIE image-to-image is not a substitute for a true edit-conditioned model. It initializes ERNIE's text-to-image denoising from encoded image latents, so it is useful for fast stylization and guided variation. Use Qwen Image Edit for one-image instruction edits when the source layout should remain active as conditioning, and use FLUX.2 when the workflow needs validated multi-reference composition. Use dimensions that match the source aspect ratio and consider 12-16 steps for stronger stylization.
 
 Representative ERNIE q8 image-to-image versus Qwen Image Edit 2511 q4 comparisons:
 
@@ -198,7 +262,7 @@ Representative ERNIE q8 image-to-image versus Qwen Image Edit 2511 q4 comparison
 
 ![ERNIE Image Turbo q8 versus Qwen Image Edit 2511 q4 object replacement comparison](assets/generation/ernie-vs-qwen2511-replace-laptop.png)
 
-In the object-replacement comparison, ERNIE can introduce the requested fruit-basket concept, but it does so by reimagining the room from its encoded latent initialization. Qwen Image Edit keeps the source image active as conditioning throughout denoising and is therefore the better choice for exact layout and local-object edits.
+In the object-replacement comparison, ERNIE can introduce the requested fruit-basket concept, but it does so by reimagining the room from its encoded latent initialization. Qwen Image Edit keeps the source image active as conditioning throughout denoising and is therefore better suited to one-image layout-preserving instruction edits.
 
 ## Bonsai Image
 
@@ -241,25 +305,23 @@ The 512px timing values are three cold-process repeats captured with `/usr/bin/t
 baseline used on-the-fly q8 from the parent source cache because local disk space was tight during
 validation.
 
-Representative Bonsai ternary versus FLUX.2 Klein 4B q8 validation:
+Representative Bonsai ternary versus FLUX.2 Klein 4B q8 benchmark:
 
 ![Bonsai ternary 2-bit versus FLUX.2 Klein 4B q8 comparison](assets/quantization/bonsai-ternary-vs-klein4b-q8.png)
 
 ## Other Quantized Families
 
-FLUX.2 Klein, Z-Image, Z-Image Turbo, and FIBO currently use their standard model-specific MLX quantization predicates. The following panels are representative checks, not a claim that every prompt has identical visual behavior across quantization levels.
+FLUX.2 Klein, Z-Image, and Z-Image Turbo currently use their standard model-specific MLX
+quantization predicates. The following panels are representative checks, not a claim that every
+prompt has identical visual behavior across quantization levels.
 
-Z-Image 512x512 validation:
+Z-Image 512x512 benchmark:
 
 ![Z-Image BF16, q8, and q4 comparison](assets/quantization/z-image-q4-q8-comparison.png)
 
-Z-Image Turbo 512x512 validation:
+Z-Image Turbo 512x512 benchmark:
 
 ![Z-Image Turbo BF16, q8, and q4 comparison](assets/quantization/z-image-turbo-q4-q8-comparison.png)
-
-FIBO 512x512 validation:
-
-![FIBO BF16, q8, and q4 comparison](assets/quantization/fibo-q4-q8-comparison.png)
 
 ## Compatibility
 

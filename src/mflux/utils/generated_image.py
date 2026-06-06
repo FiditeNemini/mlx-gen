@@ -41,6 +41,11 @@ class GeneratedImage:
         concept_heatmap: ConceptHeatmap | None = None,
         negative_prompt: str | None = None,
         init_metadata: dict | None = None,
+        canvas_policy: str | None = None,
+        requested_width: int | None = None,
+        requested_height: int | None = None,
+        source_image_width: int | None = None,
+        source_image_height: int | None = None,
     ):
         self.image = image
         self.model_config = model_config
@@ -67,6 +72,11 @@ class GeneratedImage:
         self.concept_heatmap = concept_heatmap
         self.negative_prompt = negative_prompt
         self.init_metadata = init_metadata
+        self.canvas_policy = canvas_policy
+        self.requested_width = requested_width
+        self.requested_height = requested_height
+        self.source_image_width = source_image_width
+        self.source_image_height = source_image_height
 
     def get_right_half(self) -> "GeneratedImage":
         # Calculate the coordinates for the right half
@@ -96,6 +106,11 @@ class GeneratedImage:
             depth_image_path=self.depth_image_path,
             concept_heatmap=self.concept_heatmap,
             init_metadata=self.init_metadata,
+            canvas_policy=self.canvas_policy,
+            requested_width=self.requested_width,
+            requested_height=self.requested_height,
+            source_image_width=self.source_image_width,
+            source_image_height=self.source_image_height,
         )
 
     def save(
@@ -226,6 +241,11 @@ class GeneratedImage:
             "image_path": str(self.image_path) if self.image_path else None,
             "image_paths": [str(p) for p in self.image_paths] if self.image_paths else None,
             "image_strength": self.image_strength if (self.image_path or self.image_paths) else None,
+            "canvas_policy": self.canvas_policy if (self.image_path or self.image_paths) else None,
+            "requested_width": self.requested_width if (self.image_path or self.image_paths) else None,
+            "requested_height": self.requested_height if (self.image_path or self.image_paths) else None,
+            "source_image_width": self.source_image_width if (self.image_path or self.image_paths) else None,
+            "source_image_height": self.source_image_height if (self.image_path or self.image_paths) else None,
             "controlnet_image_path": str(self.controlnet_image_path) if self.controlnet_image_path else None,
             "controlnet_strength": round(self.controlnet_strength, 2) if self.controlnet_strength else None,
             "masked_image_path": str(self.masked_image_path) if self.masked_image_path else None,

@@ -30,7 +30,7 @@ Supported router families are `qwen`, `flux2`, `bonsai`, `fibo`, `z-image`, `ern
 
 ERNIE Image Turbo is validated for practical generation at 384px and above. Very small outputs, such as 256x256, can crop or truncate subjects even when the pipeline is working.
 
-Use 512x512 for small validation runs:
+Use 512x512 for small benchmark runs:
 
 ```sh
 mlxgen generate \
@@ -63,7 +63,7 @@ Then retry generation with `--use-prompt-enhancer`.
 
 ## ERNIE Rejects Multiple Image Inputs Or Edit Tasks
 
-ERNIE Image Turbo supports text-to-image and experimental single-image latent image-to-image. It
+ERNIE Image Turbo supports text-to-image and single-image latent image-to-image. It
 does not support edit/reference or multi-reference image-to-image.
 
 Use one input image for ERNIE image-to-image:
@@ -85,11 +85,23 @@ If you pass `--task edit`, `--i2i-mode edit`, multiple `--images`, or `--image-s
 image, MLX-Gen fails before loading the model and tells you which input shape and mode ERNIE
 supports.
 
-If ERNIE image-to-image does not preserve enough of the source image, increase `--image-strength`, keep the output aspect ratio close to the input aspect ratio, or use Qwen Image Edit for a true image-conditioned edit. If ERNIE preserves the source too strongly and barely applies the requested style, lower `--image-strength` or increase `--steps` to 12-16.
+If ERNIE image-to-image changes the source too much, lower `--image-strength` or use Qwen Image
+Edit for a true image-conditioned edit. If ERNIE barely applies the requested style, raise
+`--image-strength` or increase `--steps` to 12-16.
+
+## Image-To-Image Output Size Differs From `--width` And `--height`
+
+This is expected with the default `--canvas-policy source-aspect`. For ordinary I2I, MLX-Gen treats
+`--width` and `--height` as a size target and preserves the first input image's aspect ratio. Check
+the generated metadata for `canvas_policy`, `requested_width`, `requested_height`,
+`source_image_width`, `source_image_height`, and final `width`/`height`.
+
+Use `--canvas-policy exact-resize` only when you intentionally want the exact requested canvas and
+accept that the model may reshape or recompose the source.
 
 ## Wan Video Quality Looks Weak At Tiny Sizes
 
-Wan2.2 supports TI2V-5B text-to-video, experimental TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B image-to-video. Very small or very short runs are useful for quick command checks, but they are not quality settings.
+Wan2.2 supports TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B image-to-video. Very small or very short runs are useful for quick command checks, but they are not quality settings.
 
 Use the upstream TI2V-5B settings when validating visual quality:
 
@@ -117,9 +129,13 @@ hands`, `oversized foot`, `black frames`, and `sudden scene cut` in the negative
 [How Should I Prompt Wan Image-To-Video?](faq.md#how-should-i-prompt-wan-image-to-video) for
 examples.
 
-For T2V-A14B source/BF16 quality validation, use 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. Do not treat those settings as a full-size mixed q8/BF16 validation claim until the q8 ladder and video-health release gate have passed. The separate I2V-A14B path requires a complete local `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and one `--image` input.
+Wan defaults to the model's official negative prompt when the option is omitted. If a simple
+abstract scene turns into noisy texture, retry with `--negative-prompt ""` to disable the default
+negative prompt explicitly.
 
-Wan uses frame-count control rather than a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, and at 16 fps, 81 frames is about 5.06 seconds. Frame counts are normalized to `4n + 1`, and width/height are normalized to the selected Wan model's VAE/patch multiple. TI2V-5B requires 32-pixel width/height multiples; A14B requires 16-pixel multiples. `832x480` works for both families, `448x256` works for both families, and `432x240` works for A14B but adjusts to `416x224` on TI2V-5B. See [What Wan Video Resolutions Should I Use?](faq.md#what-wan-video-resolutions-should-i-use) for the full table.
+For T2V-A14B source/BF16 quality checks, use 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`, optional `--guidance-2 3`, and 16 fps. For mixed q8/BF16 packages, use the exact documented benchmark settings when comparing published measurements, and measure your target full-size profile before planning a long job. The separate I2V-A14B path requires a complete local `Wan-AI/Wan2.2-I2V-A14B-Diffusers` snapshot and one `--image` input.
+
+Wan uses frame-count control rather than a separate duration flag. Duration is `frames / fps`; at 24 fps, 121 frames is about 5.04 seconds, and at 16 fps, 81 frames is about 5.06 seconds. Frame counts are normalized to `4n + 1`, and width/height are normalized to the selected Wan model's VAE/patch multiple. TI2V-5B requires 32-pixel width/height multiples; A14B requires 16-pixel multiples. For image-to-video, MLX-Gen also preserves the source image aspect ratio and resolves the final output canvas from the input image plus the requested size target. See [What Wan Video Resolutions Should I Use?](faq.md#what-wan-video-resolutions-should-i-use) for the full table.
 
 If Wan generation or MP4 save validation fails, the CLI writes a failure manifest next to the intended output path, for example `video.failure.json` for `video.mp4`. The manifest includes the error, tensor-health report when available, seed, prompt, dimensions, frames, steps, guidance, fps, output path, and memory-related runtime flags.
 

@@ -139,6 +139,33 @@ class TestConfigResolutionInferSubstring:
         assert config.model_name == "AbstractFramework/qwen-image-edit-2511-4bit"
 
     @pytest.mark.fast
+    def test_qwen_edit_versions_are_distinct(self):
+        regular = ConfigResolution.resolve(model_name="qwen-image-edit")
+        edit_2509 = ConfigResolution.resolve(model_name="qwen-image-edit-2509")
+        edit_2511 = ConfigResolution.resolve(model_name="qwen-image-edit-2511")
+
+        assert regular.model_name == "Qwen/Qwen-Image-Edit"
+        assert regular.transformer_overrides == {}
+        assert edit_2509.model_name == "Qwen/Qwen-Image-Edit-2509"
+        assert edit_2509.transformer_overrides == {"qwen_edit_plus": True}
+        assert edit_2511.model_name == "Qwen/Qwen-Image-Edit-2511"
+        assert edit_2511.transformer_overrides["qwen_edit_plus"] is True
+        assert edit_2511.transformer_overrides["zero_cond_t"] is True
+
+    @pytest.mark.fast
+    def test_qwen_prepared_edit_versions_infer_by_longest_alias(self):
+        regular = ConfigResolution.resolve(model_name="AbstractFramework/qwen-image-edit-8bit")
+        edit_2509 = ConfigResolution.resolve(model_name="AbstractFramework/qwen-image-edit-2509-8bit")
+        edit_2511 = ConfigResolution.resolve(model_name="AbstractFramework/qwen-image-edit-2511-8bit")
+
+        assert regular.base_model == "Qwen/Qwen-Image-Edit"
+        assert regular.transformer_overrides == {}
+        assert edit_2509.base_model == "Qwen/Qwen-Image-Edit-2509"
+        assert edit_2509.transformer_overrides == {"qwen_edit_plus": True}
+        assert edit_2511.base_model == "Qwen/Qwen-Image-Edit-2511"
+        assert edit_2511.transformer_overrides["zero_cond_t"] is True
+
+    @pytest.mark.fast
     def test_infers_ernie_image_turbo_from_local_path(self):
         config = ConfigResolution.resolve(model_name="/models/ernie-image-turbo-8bit")
 

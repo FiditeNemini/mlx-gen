@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from mflux.callbacks.callback_manager import CallbackManager
@@ -6,7 +7,7 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.qwen.latent_creator.qwen_latent_creator import QwenLatentCreator
 from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit
-from mflux.utils.dimension_resolver import DimensionResolver
+from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit as _QwenImageEditImplementation
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
@@ -22,18 +23,34 @@ def main():
     parser.add_output_arguments()
     args = parser.parse_args()
 
-    # 0. Set default guidance value if not provided by user
-    if args.guidance is None:
-        args.guidance = ui_defaults.GUIDANCE_SCALE_KONTEXT
-
     # 1. Load the model
-    model_config = ModelConfig.qwen_image_edit()
-    if args.model is not None:
-        try:
-            model_config = ModelConfig.from_name(args.model)
-        except ModelConfigError:
-            if args.model_path is None:
-                raise
+    try:
+        model_config = ModelConfig.from_name(args.model or "qwen-image-edit", base_model=args.base_model)
+    except ModelConfigError:
+        if args.model_path is None:
+            raise
+        model_config = ModelConfig.from_name(args.base_model or "qwen-image-edit")
+    image_paths = [str(p) for p in args.image_paths]
+    if len(image_paths) > 1 and not _QwenImageEditImplementation._is_edit_plus_model_config(
+        model_config=model_config,
+        image_paths=image_paths,
+    ):
+        parser.error(
+            "Multiple Qwen edit reference images require an Edit-Plus model, such as "
+            "qwen-image-edit-2509 or qwen-image-edit-2511."
+        )
+    if not _option_was_provided(sys.argv[1:], "--scheduler"):
+        args.scheduler = "flow_match_euler_discrete"
+    if args.guidance is None:
+        if _QwenImageEditImplementation._is_edit_plus_model_config(model_config=model_config, image_paths=image_paths):
+            args.guidance = 4.0
+        else:
+            args.guidance = 4.0
+    if not _option_was_provided(sys.argv[1:], "--steps") and _QwenImageEditImplementation._is_edit_plus_model_config(
+        model_config=model_config,
+        image_paths=image_paths,
+    ):
+        args.steps = 40
 
     qwen = QwenImageEdit(
         quantize=args.quantize,
@@ -51,27 +68,20 @@ def main():
     )
 
     try:
-        # 3. Prepare image paths and resolve dimensions against the source image by default.
-        image_paths = [str(p) for p in args.image_paths]
-        width, height = DimensionResolver.resolve(
-            width=args.width,
-            height=args.height,
-            reference_image_path=image_paths[0],
-        )
-
         for seed in args.seed:
             # 4. Generate an image for each seed value
             image = qwen.generate_image(
                 seed=seed,
                 prompt=PromptUtil.read_prompt(args),
-                negative_prompt=PromptUtil.read_negative_prompt(args),
-                width=width,
-                height=height,
+                negative_prompt=_read_negative_prompt(args),
+                width=args.width,
+                height=args.height,
                 guidance=args.guidance,
                 image_path=image_paths[0],  # Use first image for metadata
                 image_paths=image_paths,
                 num_inference_steps=args.steps,
                 scheduler=args.scheduler,
+                canvas_policy=args.canvas_policy,
             )
 
             # 5. Save the image
@@ -83,6 +93,23 @@ def main():
     finally:
         if memory_saver:
             print(memory_saver.memory_stats())
+
+
+def _read_negative_prompt(args) -> str | None:
+    if _any_option_was_provided(sys.argv[1:], ("--negative-prompt", "--negative")):
+        return PromptUtil.read_negative_prompt(args)
+    return None
+
+
+def _any_option_was_provided(argv: list[str], option_names: tuple[str, ...]) -> bool:
+    return any(_option_was_provided(argv, option_name) for option_name in option_names)
+
+
+def _option_was_provided(argv: list[str], option_name: str) -> bool:
+    for token in argv:
+        if token == option_name or token.startswith(f"{option_name}="):
+            return True
+    return False
 
 
 if __name__ == "__main__":
