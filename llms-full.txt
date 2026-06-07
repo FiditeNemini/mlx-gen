@@ -217,12 +217,53 @@ abstract scenes where the default negative prompt creates unwanted texture.
 ## Published Models
 
 Prepared MLX-Gen model folders are published under the Hugging Face
-`AbstractFramework` organization. Representative current repositories include FLUX.2 Klein 4B/9B
-q4/q8 packages, Qwen Image q4/q8 packages, Qwen Image Edit single-reference q4/q8 packages, Qwen
-Image Edit 2509/2511 Edit-Plus q4/q8 packages, Z-Image and Z-Image Turbo q4/q8 packages,
-ERNIE Image Turbo q8, a nominal ERNIE `-4bit` repo that currently has q8 metadata,
-Wan2.2 TI2V-5B BF16/q8, and Wan2.2 A14B T2V/I2V BF16 and mixed q8/BF16 packages. There is no
-published TI2V-5B q4/mixed q4/q8 package yet.
+`AbstractFramework` organization. Current repositories include:
+
+FLUX.2 Klein:
+
+- `AbstractFramework/flux.2-klein-4b-4bit`
+- `AbstractFramework/flux.2-klein-4b-8bit`
+- `AbstractFramework/flux.2-klein-9b-4bit`
+- `AbstractFramework/flux.2-klein-9b-8bit`
+- `AbstractFramework/flux.2-klein-base-4b-4bit`
+- `AbstractFramework/flux.2-klein-base-4b-8bit`
+- `AbstractFramework/flux.2-klein-base-9b-4bit`
+- `AbstractFramework/flux.2-klein-base-9b-8bit`
+
+Qwen Image and Qwen Image Edit:
+
+- `AbstractFramework/qwen-image-4bit`
+- `AbstractFramework/qwen-image-8bit`
+- `AbstractFramework/qwen-image-2512-4bit`
+- `AbstractFramework/qwen-image-2512-8bit`
+- `AbstractFramework/qwen-image-edit-4bit`
+- `AbstractFramework/qwen-image-edit-8bit`
+- `AbstractFramework/qwen-image-edit-2509-4bit`
+- `AbstractFramework/qwen-image-edit-2509-8bit`
+- `AbstractFramework/qwen-image-edit-2511-4bit`
+- `AbstractFramework/qwen-image-edit-2511-8bit`
+
+Z-Image, ERNIE, and FIBO:
+
+- `AbstractFramework/z-image-4bit`
+- `AbstractFramework/z-image-8bit`
+- `AbstractFramework/z-image-turbo-4bit`
+- `AbstractFramework/z-image-turbo-8bit`
+- `AbstractFramework/ernie-image-turbo-4bit`
+- `AbstractFramework/ernie-image-turbo-8bit`
+- `AbstractFramework/fibo-4bit`
+- `AbstractFramework/fibo-8bit`
+
+Wan2.2 video:
+
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-bf16`
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-bf16`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-bf16`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit`
+
+There is no published TI2V-5B q4/mixed q4/q8 package yet.
 
 Prepared folders are MLX-Gen/mflux saved-weight layouts. They are intended for MLX-Gen and
 compatible mflux code, not direct Diffusers or Transformers `from_pretrained()` loading.
