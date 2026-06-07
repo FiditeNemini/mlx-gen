@@ -11,13 +11,15 @@ dedicated `mflux-upscale-seedvr2` command for SeedVR2 image super-resolution.
 
 > [!IMPORTANT]
 > MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux). Most credit for the
-> current codebase goes to Filip Strand and the original mflux contributors. Compared with the
-> mflux baseline this fork started from, MLX-Gen adds the `mlx-gen` package identity, the unified
-> cache-only `mlxgen` command surface, model capability and validation reporting, application
-> progress callbacks, Wan2.2 text-to-video/image-to-video routes, ERNIE Image Turbo and Bonsai Image
-> routes, model-specific mixed quantization policies, published AbstractFramework prepared folders,
-> and curated validation evidence. It keeps the original attribution visible while evolving these
-> Apple Silicon workflows.
+> current codebase goes to Filip Strand and the original mflux contributors. MLX-Gen's contribution
+> is not a rename: it turns the inherited MLX ports into a cache-only, application-friendly runtime
+> with one `mlxgen` interface to generate, prepare, query capabilities, and inspect validation
+> status across supported models. Post-fork work includes working/release-validated T2I/I2I routes,
+> Qwen Image Edit 2509/2511 routing, parity fixes, and validation, Bonsai Image support, Wan2.2
+> text-to-video and image-to-video support, model-specific mixed quantization policies, published
+> prepared folders, and progress callbacks for embedding apps. The fork exists so AbstractFramework
+> projects can move quickly without losing the option to merge useful changes back upstream if that
+> becomes valuable for the wider mflux community.
 
 ![MLX-Gen workflow example](https://raw.githubusercontent.com/lpalbou/mlx-gen/main/docs/assets/examples/spaceship-snow/mlx-gen-example.png)
 
