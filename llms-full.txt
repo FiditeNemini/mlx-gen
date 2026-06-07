@@ -33,7 +33,11 @@
 MLX-Gen runs supported image and video generation models locally with MLX. It started as a fork of
 `filipstrand/mflux`, and most credit for the current codebase remains with Filip Strand and the
 original mflux contributors. MLX-Gen now publishes independently as `mlx-gen` and exposes `mlxgen`
-as the public command surface.
+as the public command surface. Compared with the mflux baseline this fork started from, MLX-Gen
+adds the `mlx-gen` package identity, unified cache-only `mlxgen` commands, model capability and
+validation reporting, application progress callbacks, Wan2.2 text-to-video/image-to-video routes,
+ERNIE Image Turbo and Bonsai Image routes, model-specific mixed quantization policies, published
+AbstractFramework prepared folders, and curated validation evidence.
 
 The project focuses on practical Apple Silicon workflows:
 

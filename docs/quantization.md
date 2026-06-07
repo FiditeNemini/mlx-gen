@@ -210,6 +210,8 @@ target to 448x256 to preserve the source aspect ratio.
 | `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` | T2V | 480x240 | 480x240 | 41 | 15 | 4 / 3 | 348.9 s | 19.5 GiB | [MP4](assets/quantization/wan-a14b-q8-release/t2v_a14b_q8_480x240_41f_15steps_seed4242.mp4), [metadata](assets/quantization/wan-a14b-q8-release/t2v_a14b_q8_480x240_41f_15steps_seed4242.metadata.json) |
 | `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` | I2V | 480x240 | 448x256 | 41 | 15 | 4 / 3 | 360.3 s | 19.6 GiB | [MP4](assets/quantization/wan-a14b-q8-release/i2v_a14b_q8_480x240_41f_15steps_seed4243.mp4), [metadata](assets/quantization/wan-a14b-q8-release/i2v_a14b_q8_480x240_41f_15steps_seed4243.metadata.json) |
 
+The contact sheets below are extracted from the MP4 outputs linked in the table.
+
 ![Wan A14B q8 T2V release-validation contact sheet](assets/quantization/wan-a14b-q8-release/t2v_a14b_q8_480x240_41f_15steps_seed4242_contact_sheet.jpg)
 
 ![Wan A14B q8 I2V release-validation contact sheet](assets/quantization/wan-a14b-q8-release/i2v_a14b_q8_480x240_41f_15steps_seed4243_contact_sheet.jpg)
