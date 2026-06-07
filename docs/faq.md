@@ -274,6 +274,33 @@ mlxgen generate \
 Exact resize can reshape or recompose the source. Use it for deliberate whole-image remixes, not
 for preserving original pixels in place.
 
+## How Does SeedVR2 Upscale Sizing Work?
+
+SeedVR2 uses `mflux-upscale-seedvr2`. Its `--resolution` option supports two sizing styles:
+
+| Form | Meaning | Example from `320x192` |
+| --- | --- | --- |
+| `--resolution 1024` | Set the shorter output edge to 1024px and preserve the source aspect ratio. | `1706x1024` after even-dimension normalization |
+| `--resolution 2x` | Multiply both source dimensions by 2. | `640x384` |
+| `--resolution 3x` | Multiply both source dimensions by 3. | `960x576` |
+
+Shortest-edge sizing is useful when you want a predictable target class across different source
+ratios. Scale factors are useful when you want direct 2x/3x comparisons.
+
+SeedVR2 is a diffusion super-resolution/restoration model, so it may also denoise and reconstruct
+detail. If the target is only slightly larger than the source, the result can mainly demonstrate
+restoration rather than upscale quality. For visual upscale validation, use a source with visible
+low-resolution artifacts and choose a target that materially increases pixel dimensions, such as
+`2x`, `3x`, or a much larger shorter-edge target.
+
+For noisy low-resolution sources, use `--softness 0.25` to `0.5` to smooth source grain before the
+diffusion reconstruction. SeedVR2 defaults to untiled VAE encode/decode for image quality; use
+`--vae-tiling` only for very large upscales where lowering peak memory matters more than avoiding
+tile-boundary risk.
+
+See [Image Upscaling](upscaling.md) for a checked-in 5x SeedVR2 comparison where the original
+source is enlarged to the generated output resolution for side-by-side assessment.
+
 ## Why Does Image-To-Image Run Fewer Steps Than `--steps`?
 
 This is normal for latent image-to-image pipelines. They commonly start partway through the

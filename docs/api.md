@@ -20,7 +20,10 @@ The public workflows are:
 | `mlxgen download` | Explicitly download model or LoRA files into the local cache. |
 | `mlxgen prepare` | Create a reusable local MLX-Gen model folder, optionally quantized, and write a Hugging Face model card. |
 
-The package also installs compatibility entry points from the mflux codebase. New MLX-Gen documentation and application integrations should prefer the `mlxgen` commands above.
+The package also installs dedicated entry points from the mflux codebase for workflows that are not
+yet routed through unified `mlxgen generate`, including `mflux-upscale-seedvr2` for SeedVR2 image
+super-resolution. New generation and model-management integrations should prefer the `mlxgen`
+commands above when the workflow is available there.
 
 For a full copy/pasteable workflow that exercises T2I, I2I edit, multi-reference I2I, T2V A14B,
 and I2V A14B, see [Spaceship Snow Workflow](examples/spaceship-snow.md).
@@ -363,6 +366,46 @@ Example outputs at 1280x704, 17 frames, and 20 steps:
 
 These panels are examples at the model's spatial scale. Evaluate final visual quality with the
 recommended full-resolution, frame-count, and step-count settings for your target model.
+
+## SeedVR2 Upscale Command
+
+SeedVR2 image super-resolution uses the dedicated `mflux-upscale-seedvr2` command. See
+[Image Upscaling](upscaling.md) for a reproducible 5x source/output comparison.
+
+```sh
+mflux-upscale-seedvr2 \
+  --image-path input.png \
+  --resolution 1024 \
+  --quantize 8 \
+  --metadata \
+  --output input_short_edge_1024.png
+```
+
+`--resolution` accepts either an integer target or a scale factor:
+
+| Value | Meaning | Example from `320x192` |
+| --- | --- | --- |
+| `1024` | Set the shorter output edge to 1024px and preserve the source aspect ratio. | `1706x1024` after even-dimension normalization |
+| `2x` | Multiply both source dimensions by 2 and preserve the source aspect ratio. | `640x384` |
+| `3x` | Multiply both source dimensions by 3 and preserve the source aspect ratio. | `960x576` |
+
+Use integer shortest-edge sizing when you want a predictable target size across mixed source image
+ratios. Use scale factors when you want to compare direct 2x/3x upscaling behavior. SeedVR2 also
+restores and denoises, so a target close to the source size can be useful for restoration checks but
+is not a good visual proof of super-resolution. For upscale quality checks, choose a target that
+materially increases the pixel dimensions.
+
+Useful options:
+
+| Option | Behavior |
+| --- | --- |
+| `--image-path` | One or more image files or directories. Directories are expanded to supported image files. |
+| `--resolution` | Integer shorter-edge target or scale factor such as `2x` or `3x`. Default: `384`. |
+| `--model` | Optional SeedVR2 model selector. Defaults to `seedvr2-3b`; pass `seedvr2-7b` for the larger model. |
+| `--quantize` | Optional runtime quantization. Supported values are `4` and `8`. |
+| `--softness` | Optional input pre-downsampling control from `0.0` to `1.0`; use about `0.25` to `0.5` when noisy source texture should be smoothed before reconstruction. |
+| `--vae-tiling` | Enable tiled VAE encode/decode for very large memory-bound upscales. The default is off for best quality. |
+| `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
 
 ## Model Management Commands
 

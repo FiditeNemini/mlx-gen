@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.12] - 2026-06-07
+
+### Added
+
+- **SeedVR2 upscaling guide**: add a dedicated image-upscaling documentation page with a real
+  `5x` SeedVR2 comparison, including the original `133x113` source enlarged to the generated
+  `658x560` output size for direct quality assessment.
+
+### Changed
+
+- **SeedVR2 upscale quality default**: SeedVR2 now defaults to untiled VAE encode/decode for image
+  quality, with `--vae-tiling` available as an explicit memory-saving opt-in for very large
+  upscales. The docs now recommend `--softness 0.25` to `0.5` for visibly noisy sources.
+- **Acknowledgements**: refresh model-family credits for the routed MLX-Gen model surface,
+  including FLUX, Qwen, Wan, Z-Image, ERNIE, FIBO, Bonsai, SeedVR2, and inherited mflux routes.
+
+### Fixed
+
+- **SeedVR2 output metadata**: `mflux-upscale-seedvr2 --metadata` now writes JSON sidecars, records
+  source image path/dimensions, and reports final even output dimensions for non-16-multiple upscale
+  targets.
+
 ## [0.18.11] - 2026-06-06
 
 ### Added

@@ -2,12 +2,13 @@ import sys
 from pathlib import Path
 
 from mflux.callbacks.callback_manager import CallbackManager
-from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.qwen.latent_creator.qwen_latent_creator import QwenLatentCreator
-from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit
-from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit as _QwenImageEditImplementation
+from mflux.models.qwen.variants.edit.qwen_image_edit import (
+    QwenImageEdit,
+    QwenImageEdit as _QwenImageEditImplementation,
+)
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 

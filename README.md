@@ -4,9 +4,10 @@
 [![MLX](https://img.shields.io/pypi/v/mlx?label=MLX&logo=pypi&logoColor=white)](https://pypi.org/project/mlx/)
 [![CI](https://github.com/lpalbou/mlx-gen/actions/workflows/tests.yml/badge.svg)](https://github.com/lpalbou/mlx-gen/actions/workflows/tests.yml)
 
-MLX-Gen is a local image and video generation runtime for Apple Silicon and MLX. It exposes one
-`mlxgen` command for text-to-image, image-to-image, text-to-video, image-to-video, model download,
-model preparation, quantized local folders, and application progress callbacks.
+MLX-Gen is a local image and video generation runtime for Apple Silicon and MLX. It exposes
+`mlxgen` for text-to-image, image-to-image, text-to-video, image-to-video, model download, model
+preparation, quantized local folders, and application progress callbacks. It also includes the
+dedicated `mflux-upscale-seedvr2` command for SeedVR2 image super-resolution.
 
 > [!IMPORTANT]
 > MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux). Most credit for the
@@ -31,6 +32,8 @@ The main capabilities are:
 - Wan2.2 text-to-video and image-to-video, including TI2V-5B BF16/q8 packages plus A14B
   T2V/I2V prepared BF16 and mixed q8/BF16 packages; Wan I2V resolves output size from the source
   image aspect ratio so inputs are not stretched into a mismatched canvas;
+- SeedVR2 image super-resolution through `mflux-upscale-seedvr2`, with shortest-edge target sizing
+  or explicit scale factors such as `2x` and `3x`;
 - explicit `download` and `prepare` workflows for reproducible local model folders;
 - JSON model capability inspection before starting a heavy run;
 - shared progress events for applications embedding MLX-Gen.
@@ -81,6 +84,24 @@ mlxgen generate \
   --seed 6107 \
   --output spaceship.png
 ```
+
+Upscale an image with SeedVR2:
+
+```sh
+mflux-upscale-seedvr2 \
+  --image-path input.png \
+  --resolution 2x \
+  --quantize 8 \
+  --softness 0.25 \
+  --metadata \
+  --output input_2x.png
+```
+
+For SeedVR2, an integer `--resolution` is the target shorter edge while values such as `2x` and
+`3x` are scale factors. Both modes preserve the source aspect ratio. Use `--softness 0.25` to
+`0.5` when the source has visible grain in smooth areas; keep the default no-tiling path for best
+quality, and add `--vae-tiling` only for very large memory-bound upscales. See
+[docs/upscaling.md](docs/upscaling.md) for a reproducible 5x SeedVR2 comparison.
 
 Inspect model capabilities before a run:
 
@@ -206,14 +227,15 @@ without surprise network transfers or ambiguous model routing.
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md): installation and first runs.
-- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, Wan video sizes, capabilities, and Python entry points.
+- [Getting started](docs/getting-started.md): installation, first runs, SeedVR2 upscaling, and Wan video.
+- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
+- [Image upscaling](docs/upscaling.md): SeedVR2 sizing, quality controls, and a 5x source/output comparison.
 - [Image edit capabilities](docs/edit-capabilities.md): visual edit-validation contact sheets, exact model/package status, and command logs.
 - [Model management](docs/model-management.md): download, prepare, cache-only runtime policy.
 - [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
 - [Python integration](docs/python-integration.md): embedding, progress callbacks, and AbstractVision notes.
-- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, and usage limits.
+- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, SeedVR2 sizing, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, and usage limits.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime failures.
 - [Acknowledgements](ACKNOWLEDGEMENTS.md): upstream mflux and model-community credits.
 

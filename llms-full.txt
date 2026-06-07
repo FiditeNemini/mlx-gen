@@ -8,15 +8,16 @@
 
 - `README.md`: project overview, install commands, mflux credit, main workflows, published model links, Wan TI2V/A14B notes, and ecosystem links.
 - `docs/README.md`: documentation tree index.
-- `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, and Wan video examples.
-- `docs/api.md`: public CLI, router behavior, task/mode resolution, I2I mode selection and canvas policy, negative prompts, Qwen edit-version routing, outpaint/reframe status, Wan video sizes, `mlxgen capabilities`, and Python routing helpers.
+- `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, SeedVR2 upscaling, and Wan video examples.
+- `docs/api.md`: public CLI, router behavior, task/mode resolution, I2I mode selection and canvas policy, SeedVR2 shortest-edge/scale-factor upscaling plus softness and tiling controls, negative prompts, Qwen edit-version routing, outpaint/reframe status, Wan video sizes, `mlxgen capabilities`, and Python routing helpers.
+- `docs/upscaling.md`: SeedVR2 image upscaling guide with shortest-edge and scale-factor sizing, quality controls, and a real 5x source/output comparison.
 - `docs/edit-capabilities.md`: image-edit validation evidence, contact sheets, model/package status summaries, and exact command logs for Qwen Image Edit, Qwen EditPlus, FLUX.2 Klein, and latent I2I rows. FIBO Edit is unsupported through unified `mlxgen generate` in the current release.
 - `docs/examples/spaceship-snow.md`: complete model-backed workflow across T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B.
 - `docs/model-management.md`: cache-only runtime policy, explicit `download` and `prepare`, local model folders, matching Hugging Face handle resolution, and `DownloadRequiredError`.
 - `docs/quantization.md`: complete published package matrix, q8/q4/BF16 policies, model-family compatibility, Wan TI2V/A14B package status, and A14B q8 release-validation evidence.
 - `docs/huggingface-publishing.md`: generated model cards and AbstractFramework Hugging Face upload guidance.
 - `docs/python-integration.md`: embedding MLX-Gen, capability checks, negative prompts, progress callbacks, AbstractVision integration, and threading behavior.
-- `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, prompting guidance, and usage limits.
+- `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 sizing and quality controls, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, prompting guidance, and usage limits.
 - `docs/troubleshooting.md`: user-facing failure symptoms, diagnostics, and fixes.
 - `docs/release.md`: release and publishing process.
 - `ACKNOWLEDGEMENTS.md`: upstream mflux credit and model/community acknowledgements.
@@ -38,7 +39,7 @@ The project focuses on practical Apple Silicon workflows:
 
 - cache-only generation after explicit setup;
 - prepared local model folders, including quantized layouts;
-- Qwen Image/Edit, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image, base FIBO, and Wan2.2 support;
+- Qwen Image/Edit, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image, base FIBO, Wan2.2, and SeedVR2 support;
 - model capability inspection before heavy runs;
 - progress events for applications;
 - integration with AbstractVision, AbstractFramework, and AbstractFlow.
@@ -124,6 +125,32 @@ edit-reference, and multi-reference rows; Qwen Image Edit 2509 source/q8 pass th
 and multi-reference rows while q4 is partial on composition; Qwen Image Edit 2511 source/q8/q4 pass
 the 2026-06-06 pencil sketch, hard-landing edit, and multi-reference composition profile. FIBO Edit
 is unsupported through unified `mlxgen generate` in the current release.
+
+---
+
+## SeedVR2 Upscaling
+
+SeedVR2 image super-resolution uses the dedicated `mflux-upscale-seedvr2` command. It is not yet
+routed through unified `mlxgen generate`.
+
+`--resolution` accepts either an integer shorter-edge target or a scale factor:
+
+- `--resolution 1024` sets the shorter output edge to 1024px and preserves source aspect ratio.
+- `--resolution 2x` doubles both source dimensions.
+- `--resolution 3x` triples both source dimensions.
+
+For a `320x192` source, `2x` resolves to `640x384` and `3x` resolves to `960x576`. Integer
+shortest-edge sizing is useful for predictable target classes across mixed source ratios; scale
+factors are useful for direct 2x/3x comparisons. SeedVR2 also restores and denoises, so near-source
+target sizes mainly validate restoration behavior rather than visible super-resolution quality.
+
+Use `--softness 0.25` to `0.5` when noisy source texture should be smoothed before reconstruction.
+SeedVR2 defaults to untiled VAE encode/decode for image quality; `--vae-tiling` opts into tiled
+VAE processing for very large memory-bound upscales.
+
+`docs/upscaling.md` includes a checked-in 5x comparison: a `133x113` source enlarged to the
+generated `658x560` size next to the SeedVR2 q8 output generated with `--resolution 5x`,
+`--seed 42`, and `--metadata`.
 
 ---
 

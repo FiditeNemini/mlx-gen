@@ -435,7 +435,7 @@ def _runtime_diagnostics() -> dict:
     def _mlx_memory(name: str):
         try:
             return int(getattr(mx, name)())
-        except Exception:
+        except (AttributeError, RuntimeError, TypeError, ValueError):
             return None
 
     return {

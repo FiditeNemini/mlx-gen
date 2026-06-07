@@ -127,6 +127,47 @@ For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image
 edits, and multi-reference image-to-image with copy/pasteable commands.
 
+## Upscale An Image
+
+SeedVR2 is available through the dedicated `mflux-upscale-seedvr2` command. It is a diffusion
+super-resolution/restoration model: it can increase image size while also cleaning noise and
+reconstructing detail.
+
+Use an integer `--resolution` when you want to set the shorter output edge while preserving aspect
+ratio:
+
+```sh
+mflux-upscale-seedvr2 \
+  --image-path input.png \
+  --resolution 1024 \
+  --quantize 8 \
+  --metadata \
+  --output input_short_edge_1024.png
+```
+
+Use a scale factor when you want a direct multiplier:
+
+```sh
+mflux-upscale-seedvr2 \
+  --image-path input.png \
+  --resolution 2x \
+  --quantize 8 \
+  --softness 0.25 \
+  --metadata \
+  --output input_2x.png
+```
+
+For example, a `320x192` source becomes `640x384` with `--resolution 2x` and `960x576` with
+`--resolution 3x`. For visual quality checks, choose a target that changes the dimensions
+materially; a near-same-size target is mainly useful for restoration/denoising checks.
+
+SeedVR2 defaults to untiled VAE encode/decode for image quality. If the source has visible grain in
+smooth regions, use `--softness 0.25` to `0.5` to smooth the conditioning image before
+reconstruction. Add `--vae-tiling` only when a very large upscale needs lower peak memory.
+
+See [Image Upscaling](upscaling.md) for a 5x SeedVR2 example that compares a low-resolution source
+enlarged to the output size against the generated upscale.
+
 ## Generate A Video
 
 Wan2.2 support is available as an initial video backend. Download the source snapshot first, then

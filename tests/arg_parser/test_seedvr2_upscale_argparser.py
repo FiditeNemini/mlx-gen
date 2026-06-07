@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.seedvr2.cli import seedvr2_upscale
 from mflux.models.seedvr2.cli.seedvr2_upscale import _expand_image_paths, _resolve_seedvr2_model
 from mflux.utils.scale_factor import ScaleFactor
 
@@ -103,6 +104,109 @@ def test_seedvr2_softness(seedvr2_upscale_parser, seedvr2_upscale_minimal_argv):
     with patch("sys.argv", seedvr2_upscale_minimal_argv + ["--softness", "0.5"]):
         args = seedvr2_upscale_parser.parse_args()
         assert args.softness == 0.5
+
+
+@pytest.mark.fast
+def test_seedvr2_vae_tiling_flag(seedvr2_upscale_parser, seedvr2_upscale_minimal_argv):
+    with patch("sys.argv", seedvr2_upscale_minimal_argv):
+        args = seedvr2_upscale_parser.parse_args()
+        assert args.vae_tiling is False
+
+    with patch("sys.argv", seedvr2_upscale_minimal_argv + ["--vae-tiling"]):
+        args = seedvr2_upscale_parser.parse_args()
+        assert args.vae_tiling is True
+
+
+@pytest.mark.fast
+def test_seedvr2_main_passes_metadata_flag_to_save(monkeypatch, tmp_path):
+    image_path = tmp_path / "source.png"
+    image_path.touch()
+    output_path = tmp_path / "upscaled.png"
+    saved: dict[str, object] = {}
+
+    class FakeResult:
+        def save(self, path, export_json_metadata=False, overwrite=True):
+            saved["path"] = path
+            saved["export_json_metadata"] = export_json_metadata
+            saved["overwrite"] = overwrite
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            saved["quantize"] = quantize
+            saved["model_path"] = model_path
+            saved["model_config"] = model_config.model_name
+            self.tiling_config = None
+
+        def generate_image(self, *, seed, image_path, resolution, softness):
+            saved["seed"] = seed
+            saved["image_path"] = image_path
+            saved["resolution"] = resolution
+            saved["softness"] = softness
+            return FakeResult()
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--image-path",
+            str(image_path),
+            "--resolution",
+            "2x",
+            "--seed",
+            "123",
+            "--metadata",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saved["path"] == str(output_path)
+    assert saved["export_json_metadata"] is True
+    assert saved["overwrite"] is True
+
+
+@pytest.mark.fast
+def test_seedvr2_main_enables_vae_tiling_when_requested(monkeypatch, tmp_path):
+    image_path = tmp_path / "source.png"
+    image_path.touch()
+    output_path = tmp_path / "upscaled.png"
+    saved: dict[str, object] = {}
+
+    class FakeResult:
+        def save(self, path, export_json_metadata=False, overwrite=True):
+            pass
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            self.tiling_config = None
+            saved["model"] = self
+
+        def generate_image(self, *, seed, image_path, resolution, softness):
+            saved["tiling_config"] = self.tiling_config
+            return FakeResult()
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--image-path",
+            str(image_path),
+            "--vae-tiling",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saved["tiling_config"].vae_encode_tiled is True
+    assert saved["tiling_config"].vae_decode_tiles_per_dim == 8
 
 
 @pytest.mark.fast

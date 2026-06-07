@@ -3,6 +3,7 @@ from pathlib import Path
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config.model_config import ModelConfig
+from mflux.models.common.vae.tiling_config import TilingConfig
 from mflux.models.seedvr2.latent_creator.seedvr2_latent_creator import SeedVR2LatentCreator
 from mflux.models.seedvr2.variants.upscale.seedvr2 import SeedVR2
 from mflux.utils.exceptions import StopImageGenerationException
@@ -87,6 +88,8 @@ def main():
         model_path=resolved_model_path,
         model_config=model_config,
     )
+    if args.vae_tiling:
+        model.tiling_config = TilingConfig()
 
     # 4. Register callbacks
     memory_saver = CallbackManager.register_callbacks(
@@ -107,7 +110,11 @@ def main():
                 )
 
                 # 6. Save result
-                result.save(args.output.format(seed=seed, image_name=image_path.stem), overwrite=args.replace)
+                result.save(
+                    args.output.format(seed=seed, image_name=image_path.stem),
+                    export_json_metadata=args.metadata,
+                    overwrite=args.replace,
+                )
     except StopImageGenerationException as exc:
         print(exc)
     finally:

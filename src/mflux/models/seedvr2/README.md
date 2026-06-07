@@ -13,7 +13,7 @@ SeedVR2 is more recent and the preferred method for high-fidelity upscaling and 
 mflux-upscale-seedvr2 \
   --image-path "input.png" \
   --resolution 2160 \
-  --softness 0.5
+  --softness 0.25
 ```
 
 <details>
@@ -34,11 +34,15 @@ image.save("input_upscaled.png")
 ```
 </details>
 
-This will upscale the image such that the shortest side is 2160 pixels while maintaining the aspect ratio. If `--model` is omitted, MFLUX defaults to `seedvr2-3b`. Pass `--model seedvr2-7b` to use the 7B model. 
+This will upscale the image such that the shortest side is 2160 pixels while maintaining the aspect ratio. An integer `--resolution` is a target shortest-edge size, not a multiplier. If the source is already close to that size, the result may look more like restoration/denoising than a large upscale. If `--model` is omitted, MFLUX defaults to `seedvr2-3b`. Pass `--model seedvr2-7b` to use the 7B model.
 
-Instead of specifying a target resolution, you can also use `--resolution 2x` or `--resolution 3x` to upscale by a factor of 2 or 3 respectively.
+For true scale-factor upscaling, use `--resolution 2x` or `--resolution 3x`. For example, a `320x192` image becomes `640x384` with `2x` and `960x576` with `3x`.
 
-You can also adjust the `--softness` parameter (0.0 to 1.0) to control input pre-downsampling, which can help achieve smoother upscaling results. A value of 0.0 (default) disables pre-downsampling, while higher values up to 1.0 increase the downsampling factor (up to 8x internally) before upscaling. A value of `0.5` is often a good starting point.
+You can also adjust the `--softness` parameter (0.0 to 1.0) to control input pre-downsampling, which can help achieve smoother upscaling results. A value of 0.0 (default) disables pre-downsampling, while higher values up to 1.0 increase the downsampling factor (up to 8x internally) before upscaling.
+
+SeedVR2 defaults to untiled VAE encode/decode for image quality. Add `--vae-tiling` only for very
+large upscales that need lower peak memory. For visibly noisy sources, start with
+`--softness 0.25`; increase toward `0.5` if smooth backgrounds still retain source grain.
 
 > [!NOTE]
 > Upscaling to very large resolutions can require a lot of memory. If you run into memory pressure, try `--low-ram` or set an MLX cache limit with `--mlx-cache-limit-gb 16` (replace `16` with a value that fits your machine).
@@ -54,7 +58,7 @@ Pass a directory to `--image-path` to upscale every image inside.
 mflux-upscale-seedvr2 \
   --image-path "./inputs" \
   --resolution 2160 \
-  --softness 0.5
+  --softness 0.25
 ```
 
 <details>

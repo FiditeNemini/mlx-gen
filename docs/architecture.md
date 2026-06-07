@@ -1,15 +1,16 @@
 # Architecture
 
-MLX-Gen is an independent package forked from mflux. It keeps the MLX-native model runtime from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The supported video paths include Wan2.2 TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, Wan2.2 A14B text-to-video, and Wan2.2 A14B image-to-video.
+MLX-Gen is an independent package forked from mflux. It keeps the MLX-native model runtime from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The supported video paths include Wan2.2 TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, Wan2.2 A14B text-to-video, and Wan2.2 A14B image-to-video. SeedVR2 image super-resolution currently uses the dedicated `mflux-upscale-seedvr2` entry point.
 
 ## Package Shape
 
 - PyPI distribution: `mlx-gen`
 - Public CLI root: `mlxgen`
+- Dedicated compatibility CLI for SeedVR2 upscaling: `mflux-upscale-seedvr2`
 - New application import identity: `mlxgen`
 - Current runtime internals: primarily `mflux.*`
 
-The project keeps some mflux vocabulary and compatibility entry points while the fork evolves. New docs and integrations should use `mlxgen` commands and treat `mflux.*` internals as inherited implementation detail unless a specific model class currently requires them.
+The project keeps some mflux vocabulary and compatibility entry points while the fork evolves. New docs and integrations should use `mlxgen` commands where the workflow is available and treat `mflux.*` internals as inherited implementation detail unless a specific model class or dedicated command currently requires them.
 
 ## Command Boundary
 
@@ -18,6 +19,8 @@ The public command surface separates setup from inference:
 - `mlxgen download` is an explicit cache population command.
 - `mlxgen prepare` is an explicit local model-folder creation command.
 - `mlxgen generate` is the inference command and does not start downloads by default.
+- `mflux-upscale-seedvr2` is the current dedicated inference command for SeedVR2 image
+  super-resolution; it is documented separately until that workflow is unified under `mlxgen`.
 
 This boundary is important for embedded workflow systems such as AbstractVision: a generation request should not unexpectedly start a large network transfer in the middle of a larger job.
 

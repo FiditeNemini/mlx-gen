@@ -28,7 +28,7 @@ class SeedVR2Initializer:
     def _init_config(model, model_config: ModelConfig) -> None:
         model.model_config = model_config
         model.callbacks = CallbackRegistry()
-        model.tiling_config = TilingConfig()
+        model.tiling_config = TilingConfig(vae_encode_tiled=False, vae_decode_tiles_per_dim=0)
 
     @staticmethod
     def _load_weights(model_path: str, weight_definition) -> LoadedWeights:

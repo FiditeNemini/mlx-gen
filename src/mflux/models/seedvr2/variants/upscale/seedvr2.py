@@ -59,6 +59,7 @@ class SeedVR2(nn.Module):
             image_path=image_path,
             scheduler="seedvr2_euler",
             model_config=self.model_config,
+            dimension_multiple=2,
         )
 
         # 2. Create the initial latents and conditioning
@@ -110,5 +111,6 @@ class SeedVR2(nn.Module):
             quantization=self.bits,
             decoded_latents=decoded,
             generation_time=config.time_steps.format_dict["elapsed"],
+            image_path=image_path,
             init_metadata=init_metadata,
         )
