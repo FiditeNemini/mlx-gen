@@ -49,10 +49,10 @@ package size is the published AbstractFramework repository total.
 
 | Source model | Public task / mode | Source size | Published packages | Package sizes | Quantization status |
 | --- | --- | ---: | --- | ---: | --- |
-| FLUX.2 Klein 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-4b-4bit`<br>`flux.2-klein-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. |
-| FLUX.2 Klein 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-9b-4bit`<br>`flux.2-klein-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. |
-| FLUX.2 Klein Base 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-base-4b-4bit`<br>`flux.2-klein-base-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. |
-| FLUX.2 Klein Base 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-base-9b-4bit`<br>`flux.2-klein-base-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. |
+| FLUX.2 Klein 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-4b-4bit`<br>`flux.2-klein-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Source/q8/q4 passed the 2026-06-08 reframe/outpaint profile. |
+| FLUX.2 Klein 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-9b-4bit`<br>`flux.2-klein-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Source/q8/q4 passed the 2026-06-08 reframe/outpaint profile. |
+| FLUX.2 Klein Base 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-base-4b-4bit`<br>`flux.2-klein-base-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Not part of the 2026-06-08 reframe/outpaint profile. |
+| FLUX.2 Klein Base 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-base-9b-4bit`<br>`flux.2-klein-base-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Not part of the 2026-06-08 reframe/outpaint profile. |
 | Qwen Image | T2I | 53.7 GiB | `qwen-image-4bit`<br>`qwen-image-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
 | Qwen Image 2512 | T2I | 53.7 GiB | `qwen-image-2512-4bit`<br>`qwen-image-2512-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
 | ERNIE Image Turbo | T2I, latent I2I | 29.5 GiB | `ernie-image-turbo-8bit`<br>`ernie-image-turbo-4bit` | 11.5 GiB<br>11.5 GiB | The public `-8bit` package is q8. The public `-4bit` repository currently has q8 metadata and the same size as `-8bit`; do not treat it as a valid q4 memory package until it is republished. |
@@ -64,9 +64,9 @@ package size is the published AbstractFramework repository total.
 
 | Source model | Public task / mode | Source size | Published packages | Package sizes | Quantization status |
 | --- | --- | ---: | --- | ---: | --- |
-| Qwen Image Edit | I2I edit/reference | 53.8 GiB | `qwen-image-edit-4bit`<br>`qwen-image-edit-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. The original Qwen Image Edit checkpoint is single-reference; use the explicit 2509 or 2511 checkpoints for multi-reference routes. |
-| Qwen Image Edit 2509 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2509-4bit`<br>`qwen-image-edit-2509-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. The 2026-06-05 source and q8 validation passed the B/C/D/E spaceship edit sequence. The q4 package passed single-image B/C/D rows, but its multi-reference composition only partially applied the color reference. |
-| Qwen Image Edit 2511 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2511-4bit`<br>`qwen-image-edit-2511-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. Source, q8, and q4 passed the 2026-06-06 pencil sketch, hard-landing edit, and multi-reference composition profile. |
+| Qwen Image Edit | I2I edit/reference | 53.8 GiB | `qwen-image-edit-4bit`<br>`qwen-image-edit-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. The original Qwen Image Edit checkpoint is single-reference; use the explicit 2509 or 2511 checkpoints for multi-reference routes. Source/q8/q4 passed the 2026-06-08 reframe/outpaint profile. |
+| Qwen Image Edit 2509 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2509-4bit`<br>`qwen-image-edit-2509-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. The 2026-06-05 source and q8 validation passed the B/C/D/E spaceship edit sequence. The q4 package passed single-image B/C/D rows, but its multi-reference composition only partially applied the color reference. Source/q8/q4 passed the 2026-06-08 reframe/outpaint profile. |
+| Qwen Image Edit 2511 | I2I edit/reference and multi-reference | 53.8 GiB | `qwen-image-edit-2511-4bit`<br>`qwen-image-edit-2511-8bit` | 17.0 GiB<br>28.3 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen edit policy; q8 uses the standard q8 path. Source, q8, and q4 passed the 2026-06-06 pencil sketch, hard-landing edit, multi-reference composition profile, and the 2026-06-08 reframe/outpaint profile. |
 
 ### Image Upscaling
 
@@ -87,6 +87,25 @@ Runtime memory and timing measurements are currently complete in this document f
 ERNIE Image Turbo, Bonsai Image, Wan TI2V-5B, and Wan A14B benchmark profiles. Other published
 packages are documented here by package size and quantization policy, with representative visual
 panels where local benchmark runs have produced them.
+
+## Reframe And Outpaint Package Validation
+
+The 2026-06-08 reframe/outpaint profile validates source, q8, and q4 rows for Qwen Image Edit,
+Qwen Image Edit 2509/2511, and FLUX.2 Klein 4B/9B. The profile uses one cropped source image and
+two single-image edit-reference operations: `--reframe-padding` and `--outpaint-padding`.
+
+![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
+
+Inspect the machine-readable records for a package:
+
+```sh
+mlxgen validation \
+  --profile reframe_outpaint_2026_06_08 \
+  --model AbstractFramework/qwen-image-edit-2511-8bit
+```
+
+The exact commands and per-family contact sheets are listed in
+[Reframe and Outpaint](reframe-outpaint.md).
 
 ## Qwen q4
 

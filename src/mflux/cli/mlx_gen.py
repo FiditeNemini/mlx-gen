@@ -372,7 +372,8 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "Canvas outpaint request: CSS-style top,right,bottom,left padding such as "
             "'0,25%%,0,25%%'. Supported edit models generate the expanded view and MLX-Gen "
-            "restores the source region with a feathered mask."
+            "uses an adaptive source blend when the generated source window still matches "
+            "the original image."
         ),
     )
     return parser

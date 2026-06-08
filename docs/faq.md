@@ -415,15 +415,17 @@ mlxgen generate \
   --output outpaint.png
 ```
 
-For FLUX.2 and Qwen Image Edit 2511, MLX-Gen builds an expanded canvas and runs the edit model on
-that canvas. After generation, it compares the generated source window with the original source. If
-they are close, it applies a content-aware source blend; if the model reconstructed or moved the
-scene, it keeps the generated canvas to avoid ghosting. The current validated proof is in
-[Image Edit Capabilities](edit-capabilities.md#canvas-outpaint).
+For validated FLUX.2 Klein 4B/9B and Qwen Image Edit variants, MLX-Gen builds an expanded canvas
+and runs the edit model on that canvas. After generation, it compares the generated source window
+with the original source. If they are close, it applies a content-aware source blend; if the model
+reconstructed or moved the scene, it keeps the generated canvas to avoid ghosting. The current
+validated proof is in [Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint) and
+[Reframe and Outpaint](reframe-outpaint.md).
 
 This is not a native fill/inpaint backend with an explicit diffusion mask, and it is not an exact
-pixel-lock guarantee. Latent I2I models, Z-Image, ERNIE, FIBO, base Qwen Image, Qwen Image
-Edit/2509, and unsupported edit models reject `--outpaint-padding` before loading weights.
+pixel-lock guarantee. Latent I2I models, Z-Image, ERNIE, FIBO, base Qwen Image, Qwen Image 2512,
+FLUX.2 Klein Base, Wan, SeedVR2, and unsupported edit models reject `--outpaint-padding` before
+loading weights.
 
 For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
 to the first source image. That prevents accidental stretching, but it does not expand the original

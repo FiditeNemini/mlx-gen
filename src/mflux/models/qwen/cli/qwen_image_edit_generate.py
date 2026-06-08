@@ -38,8 +38,8 @@ def main():
         dest="outpaint_padding",
         default=None,
         help=(
-            "Expand one source image by CSS-style top,right,bottom,left padding and restore "
-            "the source region with a feathered mask after generation."
+            "Expand one source image by CSS-style top,right,bottom,left padding and use an adaptive "
+            "source blend when the generated source window still matches the original image."
         ),
     )
     parser.add_output_arguments()

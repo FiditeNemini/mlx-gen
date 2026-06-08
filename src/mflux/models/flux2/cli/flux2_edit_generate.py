@@ -34,8 +34,8 @@ def main():
         dest="outpaint_padding",
         default=None,
         help=(
-            "Expand one source image by CSS-style top,right,bottom,left padding and restore "
-            "the source region with a feathered mask after generation."
+            "Expand one source image by CSS-style top,right,bottom,left padding and use an adaptive "
+            "source blend when the generated source window still matches the original image."
         ),
     )
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
@@ -55,6 +55,10 @@ def main():
     model_name_lower = model_config.model_name.lower()
     base_model_lower = (model_config.base_model or "").lower()
     is_flux2 = any(identifier in model_name_lower or identifier in base_model_lower for identifier in ("flux.2", "flux2"))
+    if (args.reframe_padding is not None or args.outpaint_padding is not None) and (
+        "klein-base" in model_name_lower or "klein-base" in base_model_lower
+    ):
+        parser.error("--reframe-padding and --outpaint-padding require a validated non-base FLUX.2 Klein model.")
     if args.guidance != 1.0 and not is_flux2:
         parser.error("--guidance is only supported for FLUX.2 models. Use --guidance 1.0.")
 

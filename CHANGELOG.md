@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Generative reframe and canvas-guided outpaint**: add `--reframe-padding` and
-  `--outpaint-padding` support for validated FLUX.2 and Qwen Image Edit 2511 routes, including
-  model capability reporting, router validation, generated metadata, and proof contact sheets.
+  `--outpaint-padding` support for validated FLUX.2 Klein 4B/9B and Qwen Image Edit original,
+  2509, and 2511 routes, including model capability reporting, router validation, generated
+  metadata, source/q8/q4 proof contact sheets, and a `mlxgen validation` profile.
 
 ### Changed
 

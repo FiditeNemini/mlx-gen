@@ -1,3 +1,4 @@
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -6,6 +7,7 @@ import pytest
 import toml
 from PIL import Image, ImageChops
 
+import mlxgen
 from mflux.cli import mlx_gen
 from mflux.cli.mlx_gen import RouterInvocation
 from mflux.models.common.download_policy import downloads_enabled
@@ -21,6 +23,55 @@ def test_generate_help_renders_padding_examples(monkeypatch, capsys):
     help_output = capsys.readouterr().out
     assert "--reframe-padding" in help_output
     assert "0,25%,0,25%" in help_output
+
+
+@pytest.mark.parametrize(
+    "module_name,argv0",
+    [
+        ("mflux.models.flux2.cli.flux2_edit_generate", "mflux-generate-flux2-edit"),
+        ("mflux.models.qwen.cli.qwen_image_edit_generate", "mflux-generate-qwen-edit"),
+    ],
+)
+def test_backend_edit_help_renders_canvas_expansion_options(module_name, argv0, monkeypatch, capsys):
+    module = importlib.import_module(module_name)
+    monkeypatch.setattr(sys, "argv", [argv0, "--help"])
+
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+
+    assert exc.value.code == 0
+    help_output = capsys.readouterr().out
+    assert "--reframe-padding" in help_output
+    assert "--outpaint-padding" in help_output
+    assert "adaptive" in help_output
+    assert "source blend" in help_output
+
+
+def test_flux2_edit_backend_rejects_base_canvas_expansion_before_model_load(tmp_path, monkeypatch, capsys):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-base-4b",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "0,25%,0,25%",
+            "--prompt",
+            "extend",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        flux2_edit_generate.main()
+
+    assert "validated non-base FLUX.2 Klein model" in capsys.readouterr().err
 
 
 def test_qwen_base_single_image_requires_latent_strength(capsys):
@@ -376,9 +427,7 @@ def test_capabilities_command_reports_model_modes(capsys):
 
 
 def test_capabilities_command_accepts_base_model_for_local_paths(capsys):
-    mlx_gen._show_capabilities(
-        ["--model", "../models/local-flux2-folder", "--base-model", "flux2-klein-4b"]
-    )
+    mlx_gen._show_capabilities(["--model", "../models/local-flux2-folder", "--base-model", "flux2-klein-4b"])
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["family"] == "flux2"
@@ -398,7 +447,27 @@ def test_validation_command_lists_profiles(capsys):
     mlx_gen._show_validation(["--list"])
 
     payload = json.loads(capsys.readouterr().out)
-    assert [profile["id"] for profile in payload["profiles"]] == ["i2i_edit_5x4_2026_06_05"]
+    assert [profile["id"] for profile in payload["profiles"]] == [
+        "i2i_edit_5x4_2026_06_05",
+        "reframe_outpaint_2026_06_08",
+    ]
+
+
+def test_validation_command_reports_reframe_outpaint_profile(capsys):
+    mlx_gen._show_validation(
+        [
+            "--profile",
+            "reframe_outpaint_2026_06_08",
+            "--model",
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["model"] == "AbstractFramework/qwen-image-edit-2511-8bit"
+    assert payload["status"] == "PASS"
+    assert {record["step"] for record in payload["records"]} == {"RF", "OP"}
+    assert {record["mode"] for record in payload["records"]} == {"edit-reference"}
 
 
 def test_generate_with_path_reports_prepare_command(capsys):
@@ -842,31 +911,36 @@ def test_outpaint_padding_routes_flux2_edit():
 
 
 def test_outpaint_padding_routes_qwen_edit():
-    invocation = mlx_gen._resolve_invocation(
-        [
+    for model in [
+        "AbstractFramework/qwen-image-edit-8bit",
+        "AbstractFramework/qwen-image-edit-2509-8bit",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
+    ]:
+        invocation = mlx_gen._resolve_invocation(
+            [
+                "--model",
+                model,
+                "--image",
+                "input.png",
+                "--image-outpaint-padding",
+                "25%,0,25%,0",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+        assert invocation.target_name == "mflux-generate-qwen-edit"
+        assert invocation.argv == [
+            "mflux-generate-qwen-edit",
             "--model",
-            "AbstractFramework/qwen-image-edit-2511-8bit",
-            "--image",
+            model,
+            "--image-paths",
             "input.png",
-            "--image-outpaint-padding",
-            "25%,0,25%,0",
             "--prompt",
             "extend the room",
+            "--outpaint-padding",
+            "25%,0,25%,0",
         ]
-    )
-
-    assert invocation.target_name == "mflux-generate-qwen-edit"
-    assert invocation.argv == [
-        "mflux-generate-qwen-edit",
-        "--model",
-        "AbstractFramework/qwen-image-edit-2511-8bit",
-        "--image-paths",
-        "input.png",
-        "--prompt",
-        "extend the room",
-        "--outpaint-padding",
-        "25%,0,25%,0",
-    ]
 
 
 def test_outpaint_padding_is_rejected_for_latent_only_models(capsys):
@@ -942,31 +1016,67 @@ def test_reframe_padding_routes_qwen_edit_with_computed_canvas(tmp_path):
     source = tmp_path / "source.png"
     Image.new("RGB", (128, 64), color="white").save(source)
 
-    invocation = mlx_gen._resolve_invocation(
-        [
+    for model in [
+        "AbstractFramework/qwen-image-edit-8bit",
+        "AbstractFramework/qwen-image-edit-2509-8bit",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
+    ]:
+        invocation = mlx_gen._resolve_invocation(
+            [
+                "--model",
+                model,
+                "--image",
+                str(source),
+                "--reframe-padding",
+                "25%,0,25%,0",
+                "--prompt",
+                "zoom out vertically",
+            ]
+        )
+
+        assert invocation.target_name == "mflux-generate-qwen-edit"
+        assert invocation.argv == [
+            "mflux-generate-qwen-edit",
             "--model",
-            "AbstractFramework/qwen-image-edit-2511-8bit",
-            "--image",
+            model,
+            "--image-paths",
             str(source),
-            "--reframe-padding",
-            "25%,0,25%,0",
             "--prompt",
             "zoom out vertically",
+            "--reframe-padding",
+            "25%,0,25%,0",
         ]
-    )
 
-    assert invocation.target_name == "mflux-generate-qwen-edit"
-    assert invocation.argv == [
-        "mflux-generate-qwen-edit",
-        "--model",
-        "AbstractFramework/qwen-image-edit-2511-8bit",
-        "--image-paths",
-        str(source),
-        "--prompt",
-        "zoom out vertically",
-        "--reframe-padding",
-        "25%,0,25%,0",
-    ]
+
+def test_reframe_outpaint_validation_profile_records_route_to_supported_backends(tmp_path):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+    profile = mlxgen.get_validation_profile(mlxgen.REFRAME_OUTPAINT_PROFILE_ID)
+
+    expected_targets = {
+        "FLUX.2 Klein 4B": "mflux-generate-flux2-edit",
+        "FLUX.2 Klein 9B": "mflux-generate-flux2-edit",
+        "Qwen Image Edit": "mflux-generate-qwen-edit",
+        "Qwen Image Edit 2509": "mflux-generate-qwen-edit",
+        "Qwen Image Edit 2511": "mflux-generate-qwen-edit",
+    }
+    for record in profile.records:
+        option = "--reframe-padding" if record.step == "RF" else "--outpaint-padding"
+        invocation = mlx_gen._resolve_invocation(
+            [
+                "--model",
+                record.model,
+                "--image",
+                str(source),
+                option,
+                "0,25%,0,25%",
+                "--prompt",
+                "expand the image",
+            ]
+        )
+
+        assert invocation.target_name == expected_targets[record.family]
+        assert option in invocation.argv
 
 
 def test_reframe_padding_is_rejected_for_latent_only_models(tmp_path, capsys):
@@ -988,6 +1098,28 @@ def test_reframe_padding_is_rejected_for_latent_only_models(tmp_path, capsys):
         )
 
     assert "reframe-padding is only supported" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("option", ["--reframe-padding", "--outpaint-padding"])
+def test_flux2_klein_base_rejects_unvalidated_canvas_expansion(option, tmp_path, capsys):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-base-4b",
+                "--image",
+                str(source),
+                option,
+                "0,25%,0,25%",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+
+    assert f"{option.lstrip('-')} is only supported" in capsys.readouterr().err
 
 
 def test_reframe_padding_rejects_conflicting_canvas_options(tmp_path, capsys):

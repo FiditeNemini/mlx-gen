@@ -101,15 +101,9 @@ def test_qwen_edit_versions_expose_distinct_reference_modes():
     regular_capabilities = mlxgen.get_model_capabilities(model="qwen-image-edit")
     edit_2509_capabilities = mlxgen.get_model_capabilities(model="qwen-image-edit-2509")
     edit_2511_capabilities = mlxgen.get_model_capabilities(model="qwen-image-edit-2511")
-    regular_modes = {
-        capability.mode for capability in regular_capabilities.capabilities
-    }
-    edit_2509_modes = {
-        capability.mode for capability in edit_2509_capabilities.capabilities
-    }
-    edit_2511_modes = {
-        capability.mode for capability in edit_2511_capabilities.capabilities
-    }
+    regular_modes = {capability.mode for capability in regular_capabilities.capabilities}
+    edit_2509_modes = {capability.mode for capability in edit_2509_capabilities.capabilities}
+    edit_2511_modes = {capability.mode for capability in edit_2511_capabilities.capabilities}
 
     assert regular_capabilities.label == "Qwen Image Edit"
     assert edit_2509_capabilities.label == "Qwen Image Edit 2509"
@@ -120,9 +114,7 @@ def test_qwen_edit_versions_expose_distinct_reference_modes():
 
     with pytest.raises(TaskInferenceError, match="does not support multi-reference"):
         mlxgen.resolve_generation_plan(model="qwen-image-edit", image_count=2)
-    assert (
-        mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=2).mode == MODE_MULTI_REFERENCE
-    )
+    assert mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=2).mode == MODE_MULTI_REFERENCE
 
 
 def test_qwen_prepared_edit_versions_inherit_distinct_reference_modes():
@@ -174,39 +166,51 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
         image_count=1,
         has_outpaint=True,
     )
+    qwen_base_outpaint = mlxgen.resolve_generation_plan(
+        model="qwen-image-edit",
+        image_count=1,
+        has_outpaint=True,
+    )
+    qwen_2509_outpaint = mlxgen.resolve_generation_plan(
+        model="qwen-image-edit-2509",
+        image_count=1,
+        has_outpaint=True,
+    )
     assert flux2_outpaint.capability_id == "flux2.edit"
     assert qwen_outpaint.capability_id == "qwen.edit"
+    assert qwen_base_outpaint.capability_id == "qwen.edit"
+    assert qwen_2509_outpaint.capability_id == "qwen.edit"
 
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
         mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_outpaint=True)
 
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="qwen-image-edit", image_count=1, has_outpaint=True)
-
-    with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=1, has_outpaint=True)
+        mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_outpaint=True)
 
 
 def test_reframe_option_is_limited_to_validated_edit_capabilities():
     flux2 = mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_reframe=True)
     qwen = mlxgen.resolve_generation_plan(model="qwen-image-edit-2511", image_count=1, has_reframe=True)
+    qwen_base = mlxgen.resolve_generation_plan(model="qwen-image-edit", image_count=1, has_reframe=True)
+    qwen_2509 = mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=1, has_reframe=True)
 
     assert flux2.mode == MODE_EDIT_REFERENCE
     assert flux2.capability_id == "flux2.edit"
     assert qwen.mode == MODE_EDIT_REFERENCE
     assert qwen.capability_id == "qwen.edit"
+    assert qwen_base.mode == MODE_EDIT_REFERENCE
+    assert qwen_base.capability_id == "qwen.edit"
+    assert qwen_2509.mode == MODE_EDIT_REFERENCE
+    assert qwen_2509.capability_id == "qwen.edit"
 
     with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
         mlxgen.resolve_generation_plan(model="qwen-image", image_count=1, has_reframe=True)
 
     with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="qwen-image-edit", image_count=1, has_reframe=True)
-
-    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=1, has_reframe=True)
-
-    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
         mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_reframe=True)
+
+    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_reframe=True)
 
     with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
         mlxgen.resolve_generation_plan(model="ernie-image-turbo", image_count=1, has_reframe=True)
@@ -291,6 +295,42 @@ def test_validation_registry_reports_variant_specific_statuses():
     assert {record.step for record in qwen2511_q4.records} == {"B", "C", "E"}
     assert {record.model for record in qwen2511_q4.records} == {"AbstractFramework/qwen-image-edit-2511-4bit"}
     assert next(record for record in qwen2511_q4.records if record.step == "E").status == "PASS"
+
+
+def test_reframe_outpaint_validation_profile_reports_supported_variants():
+    profile = mlxgen.get_validation_profile(mlxgen.REFRAME_OUTPAINT_PROFILE_ID)
+    assert (
+        profile.canonical_source == "docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png"
+    )
+    assert len(profile.records) == 30
+    for record in profile.records:
+        assert Path(record.artifact_path).exists()
+        assert record.source_images == (profile.canonical_source,)
+        assert Path(record.source_images[0]).exists()
+        plan = mlxgen.resolve_generation_plan(
+            model=record.model,
+            image_count=1,
+            has_reframe=record.step == "RF",
+            has_outpaint=record.step == "OP",
+        )
+        assert plan.mode == MODE_EDIT_REFERENCE
+
+    qwen2509_q4 = mlxgen.get_model_validation(
+        "AbstractFramework/qwen-image-edit-2509-4bit",
+        profile_id=mlxgen.REFRAME_OUTPAINT_PROFILE_ID,
+    )
+    assert qwen2509_q4.status == "PASS"
+    assert {record.step for record in qwen2509_q4.records} == {"RF", "OP"}
+    assert {record.mode for record in qwen2509_q4.records} == {MODE_EDIT_REFERENCE}
+
+    flux9_source = mlxgen.get_model_validation(
+        "black-forest-labs/FLUX.2-klein-9B",
+        profile_id=mlxgen.REFRAME_OUTPAINT_PROFILE_ID,
+    )
+    assert flux9_source.status == "PASS"
+    assert next(record for record in flux9_source.records if record.step == "RF").artifact_path.endswith(
+        "flux2_9b_source_reframe_b_wide_anchors.png"
+    )
 
 
 def test_multi_reference_validation_records_list_reference_inputs():

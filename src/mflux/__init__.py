@@ -7,6 +7,7 @@ if "TOKENIZERS_PARALLELISM" not in os.environ:
 
 from mflux.release.validation_registry import (
     I2I_EDIT_5X4_PROFILE_ID,
+    REFRAME_OUTPAINT_PROFILE_ID,
     ModelValidation,
     ValidationProfile,
     ValidationRecord,
@@ -34,6 +35,7 @@ __all__ = [
     "I2I_EDIT_5X4_PROFILE_ID",
     "ModelValidation",
     "ModelCapabilities",
+    "REFRAME_OUTPAINT_PROFILE_ID",
     "ResolvedTask",
     "TaskInferenceError",
     "ValidationProfile",

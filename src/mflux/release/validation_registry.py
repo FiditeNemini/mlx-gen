@@ -20,9 +20,12 @@ _STATUS_RANK = {
 }
 
 I2I_EDIT_5X4_PROFILE_ID = "i2i_edit_5x4_2026_06_05"
+REFRAME_OUTPAINT_PROFILE_ID = "reframe_outpaint_2026_06_08"
 
 CANONICAL_SOURCE = "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png"
 QWEN2511_PARITY_DIR = "docs/assets/validation/qwen-edit-2511-parity-2026-06-06"
+REFRAME_OUTPAINT_DIR = "docs/assets/validation/reframe-outpaint-2026-06-08"
+REFRAME_OUTPAINT_SOURCE = f"{REFRAME_OUTPAINT_DIR}/source-b-cropped-starship.png"
 
 
 @dataclass(frozen=True)
@@ -133,7 +136,7 @@ _MATRIX_DIR = "docs/assets/validation/i2i-edit-5x4-2026-06-05"
 
 
 def list_validation_profiles() -> tuple[ValidationProfile, ...]:
-    return (_i2i_edit_profile(),)
+    return (_i2i_edit_profile(), _reframe_outpaint_profile())
 
 
 def get_validation_profile(profile_id: str = I2I_EDIT_5X4_PROFILE_ID) -> ValidationProfile:
@@ -193,6 +196,20 @@ def _i2i_edit_profile() -> ValidationProfile:
     )
 
 
+def _reframe_outpaint_profile() -> ValidationProfile:
+    return ValidationProfile(
+        id=REFRAME_OUTPAINT_PROFILE_ID,
+        title="Reframe And Outpaint Spaceship Validation",
+        canonical_source=REFRAME_OUTPAINT_SOURCE,
+        description=(
+            "Manual visual QA for single-image edit-reference reframe and canvas-guided outpaint. "
+            "The profile covers upstream source models plus q8 and q4 MLX-Gen packages for Qwen "
+            "Image Edit, Qwen Image Edit 2509/2511, and FLUX.2 Klein 4B/9B."
+        ),
+        records=tuple(_reframe_outpaint_records()),
+    )
+
+
 def _records() -> list[ValidationRecord]:
     records: list[ValidationRecord] = []
     records.extend(_fibo_records())
@@ -221,6 +238,291 @@ def _records() -> list[ValidationRecord]:
     records.extend(_qwen2509_records())
     records.extend(_qwen2511_records())
     return records
+
+
+QWEN_REFRAME_PROMPT = (
+    "Generatively reframe this close-up into a wider establishing shot. Reveal the entire futuristic "
+    "silver starship in the snowy alien plain, including the nose, full hull, both engines, landing "
+    "legs, surrounding snow, and icy cliffs. Keep the same starship identity and material. Do not "
+    "crop the ship. Keep it sharp and centered in a coherent wide frame."
+)
+
+QWEN_OUTPAINT_PROMPT = (
+    "Outpaint this close cropped starship image into a much wider realistic shot of the full "
+    "spacecraft in the snowy canyon. Keep the existing central spacecraft surface consistent, and "
+    "complete the missing nose, full hull, tail, engines, snow field, and ice cliffs in the newly "
+    "added space. The entire ship must fit inside the final wide frame with empty snow visible "
+    "around it. Preserve the same lighting and camera angle. No text, no frame, no border, no "
+    "duplicate ship."
+)
+
+QWEN2511_OUTPAINT_PROMPT = (
+    "Outpaint this close cropped image into a wider realistic snowy canyon shot while keeping the "
+    "same compact pod-like silver starship design from the source. Complete the missing nose, "
+    "rounded hull, short tail, twin round rear engines, snow field, and ice cliffs in the newly "
+    "added space. The final ship must remain a compact rounded spacecraft, not an airplane, with no "
+    "large wings. Preserve the same lighting and camera angle. No text, no frame, no border, no "
+    "duplicate ship."
+)
+
+FLUX_REFRAME_PROMPT = (
+    "Generatively reframe this close-up into a wider establishing shot. Reveal the entire "
+    "futuristic silver starship in the snowy alien plain, including the nose, full hull, both "
+    "engines, landing legs, surrounding snow, and icy cliffs. Keep the same starship identity and "
+    "material. Do not crop the ship. Keep it sharp and centered in a coherent wide frame. No "
+    "duplicated spacecraft, no text, no border."
+)
+
+FLUX9_REFRAME_PROMPT = (
+    "Zoom out from the source image into a wider snowy canyon view while keeping the exact same "
+    "visible spacecraft design: a smooth silver sci-fi hull seen from the side, pointed nose on "
+    "the left, one large circular black side engine intake, rounded metal body, short landing legs, "
+    "and snowy canyon background. Use the larger canvas to reveal the missing rear, tail, full "
+    "hull, surrounding snow, and ice cliffs. Keep the original side-view camera angle. Do not "
+    "redesign it as an airplane, do not add long wings, propellers, or a front-facing cockpit "
+    "aircraft view. No duplicate ship, no text, no border."
+)
+
+FLUX_OUTPAINT_PROMPT = (
+    "Outpaint this close cropped starship image into a much wider realistic shot of the full "
+    "spacecraft in the snowy canyon. Keep the existing compact silver spacecraft consistent, "
+    "complete the missing nose, rounded hull, short tail, twin round rear engines, snow field, and "
+    "ice cliffs in the newly added space. The entire ship must fit inside the final wide frame. No "
+    "duplicated spacecraft, no repeated mountains, no text, no border."
+)
+
+
+def _reframe_outpaint_records() -> list[ValidationRecord]:
+    records: list[ValidationRecord] = []
+    specs = (
+        (
+            "Qwen Image Edit",
+            QWEN_REFRAME_PROMPT,
+            QWEN_OUTPAINT_PROMPT,
+            8201,
+            8212,
+            20,
+            4,
+            "25%,50%,25%,50%",
+            "5%,80%,5%,60%",
+            (
+                (
+                    "source",
+                    "Qwen/Qwen-Image-Edit",
+                    "qwen_edit_source_reframe_b.png",
+                    "qwen_edit_source_outpaint_b_wide.png",
+                ),
+                (
+                    "q8 prepared",
+                    "AbstractFramework/qwen-image-edit-8bit",
+                    "qwen_edit_q8_reframe_b.png",
+                    "qwen_edit_q8_outpaint_b.png",
+                ),
+                (
+                    "q4 prepared",
+                    "AbstractFramework/qwen-image-edit-4bit",
+                    "qwen_edit_q4_reframe_b.png",
+                    "qwen_edit_q4_outpaint_b.png",
+                ),
+            ),
+        ),
+        (
+            "Qwen Image Edit 2509",
+            QWEN_REFRAME_PROMPT,
+            QWEN_OUTPAINT_PROMPT,
+            8301,
+            8312,
+            20,
+            4,
+            "25%,50%,25%,50%",
+            "5%,80%,5%,60%",
+            (
+                (
+                    "source",
+                    "Qwen/Qwen-Image-Edit-2509",
+                    "qwen2509_source_reframe_b.png",
+                    "qwen2509_source_outpaint_b.png",
+                ),
+                (
+                    "q8 prepared",
+                    "AbstractFramework/qwen-image-edit-2509-8bit",
+                    "qwen2509_q8_reframe_b.png",
+                    "qwen2509_q8_outpaint_b.png",
+                ),
+                (
+                    "q4 prepared",
+                    "AbstractFramework/qwen-image-edit-2509-4bit",
+                    "qwen2509_q4_reframe_b.png",
+                    "qwen2509_q4_outpaint_b.png",
+                ),
+            ),
+        ),
+        (
+            "Qwen Image Edit 2511",
+            QWEN_REFRAME_PROMPT,
+            QWEN2511_OUTPAINT_PROMPT,
+            8401,
+            8413,
+            20,
+            4,
+            "25%,50%,25%,50%",
+            "5%,80%,5%,60%",
+            (
+                (
+                    "source",
+                    "Qwen/Qwen-Image-Edit-2511",
+                    "qwen2511_source_reframe_b.png",
+                    "qwen2511_source_outpaint_b_retry_compact.png",
+                ),
+                (
+                    "q8 prepared",
+                    "AbstractFramework/qwen-image-edit-2511-8bit",
+                    "qwen2511_q8_reframe_b.png",
+                    "qwen2511_q8_outpaint_b.png",
+                ),
+                (
+                    "q4 prepared",
+                    "AbstractFramework/qwen-image-edit-2511-4bit",
+                    "qwen2511_q4_reframe_b.png",
+                    "qwen2511_q4_outpaint_b.png",
+                ),
+            ),
+        ),
+        (
+            "FLUX.2 Klein 4B",
+            FLUX_REFRAME_PROMPT,
+            FLUX_OUTPAINT_PROMPT,
+            8501,
+            8512,
+            16,
+            1,
+            "25%,50%,25%,50%",
+            "5%,80%,5%,60%",
+            (
+                (
+                    "source",
+                    "black-forest-labs/FLUX.2-klein-4B",
+                    "flux2_4b_source_reframe_b.png",
+                    "flux2_4b_source_outpaint_b.png",
+                ),
+                (
+                    "q8 prepared",
+                    "AbstractFramework/flux.2-klein-4b-8bit",
+                    "flux2_4b_q8_reframe_b.png",
+                    "flux2_4b_q8_outpaint_b.png",
+                ),
+                (
+                    "q4 prepared",
+                    "AbstractFramework/flux.2-klein-4b-4bit",
+                    "flux2_4b_q4_reframe_b.png",
+                    "flux2_4b_q4_outpaint_b.png",
+                ),
+            ),
+        ),
+        (
+            "FLUX.2 Klein 9B",
+            FLUX9_REFRAME_PROMPT,
+            FLUX_OUTPAINT_PROMPT,
+            8604,
+            8612,
+            16,
+            1,
+            "25%,80%,25%,60%",
+            "5%,80%,5%,60%",
+            (
+                (
+                    "source",
+                    "black-forest-labs/FLUX.2-klein-9B",
+                    "flux2_9b_source_reframe_b_wide_anchors.png",
+                    "flux2_9b_source_outpaint_b.png",
+                ),
+                (
+                    "q8 prepared",
+                    "AbstractFramework/flux.2-klein-9b-8bit",
+                    "flux2_9b_q8_reframe_b.png",
+                    "flux2_9b_q8_outpaint_b.png",
+                ),
+                (
+                    "q4 prepared",
+                    "AbstractFramework/flux.2-klein-9b-4bit",
+                    "flux2_9b_q4_reframe_b.png",
+                    "flux2_9b_q4_outpaint_b.png",
+                ),
+            ),
+        ),
+    )
+    for (
+        family,
+        reframe_prompt,
+        outpaint_prompt,
+        reframe_seed,
+        outpaint_seed,
+        steps,
+        guidance,
+        reframe_padding,
+        outpaint_padding,
+        variants,
+    ) in specs:
+        for package_variant, model, reframe_output, outpaint_output in variants:
+            records.append(
+                _reframe_outpaint_record(
+                    model=model,
+                    family=family,
+                    package_variant=package_variant,
+                    step="RF",
+                    step_label="generative reframe",
+                    artifact_file=reframe_output,
+                    prompt=reframe_prompt,
+                    reviewer_notes=(
+                        f"PASS at padding {reframe_padding}, seed {reframe_seed}, {steps} steps, guidance {guidance}."
+                    ),
+                )
+            )
+            records.append(
+                _reframe_outpaint_record(
+                    model=model,
+                    family=family,
+                    package_variant=package_variant,
+                    step="OP",
+                    step_label="canvas-guided outpaint",
+                    artifact_file=outpaint_output,
+                    prompt=outpaint_prompt,
+                    reviewer_notes=(
+                        f"PASS at padding {outpaint_padding}, seed {outpaint_seed}, {steps} steps, guidance {guidance}. "
+                        "This is a generative canvas expansion, not a native masked fill/inpaint run."
+                    ),
+                )
+            )
+    return records
+
+
+def _reframe_outpaint_record(
+    *,
+    model: str,
+    family: str,
+    package_variant: str,
+    step: str,
+    step_label: str,
+    artifact_file: str,
+    prompt: str,
+    reviewer_notes: str,
+) -> ValidationRecord:
+    return ValidationRecord(
+        profile_id=REFRAME_OUTPAINT_PROFILE_ID,
+        model=model,
+        family=family,
+        package_variant=package_variant,
+        step=step,
+        step_label=step_label,
+        public_task="image-to-image",
+        mode="edit-reference",
+        status=STATUS_PASS,
+        artifact_path=f"{REFRAME_OUTPAINT_DIR}/{artifact_file}",
+        source_images=(REFRAME_OUTPAINT_SOURCE,),
+        prompt=prompt,
+        reviewer_notes=reviewer_notes,
+        evidence_date="2026-06-08",
+    )
 
 
 def _source_images(step: str, slug: str | None = None) -> tuple[str, ...]:
@@ -363,9 +665,24 @@ def _flux2_records(
     for package_variant, model, _slug in specs:
         for step, suffix, mode, notes in (
             ("B", "cinematic", "latent-img2img", "Preserves spaceship and scene while adding cinematic polish."),
-            ("D", "pencil_crash", "edit-reference", "Clean pencil hard-landing sketch with recognizable ship and crash/smoke cues."),
-            ("C", "crash", "edit-reference", "Solid hard-landing edit with smoke/snow disruption and preserved spaceship identity."),
-            ("E", "composition", "multi-reference", "Uses pencil/crash and cinematic references coherently; preserves hard-landing scene."),
+            (
+                "D",
+                "pencil_crash",
+                "edit-reference",
+                "Clean pencil hard-landing sketch with recognizable ship and crash/smoke cues.",
+            ),
+            (
+                "C",
+                "crash",
+                "edit-reference",
+                "Solid hard-landing edit with smoke/snow disruption and preserved spaceship identity.",
+            ),
+            (
+                "E",
+                "composition",
+                "multi-reference",
+                "Uses pencil/crash and cinematic references coherently; preserves hard-landing scene.",
+            ),
         ):
             records.append(
                 _record(
@@ -394,8 +711,18 @@ def _qwen2509_records() -> list[ValidationRecord]:
     for package_variant, model, _slug in specs:
         for step, suffix, status, notes in (
             ("B", "cinematic", STATUS_PASS, "Preserves spaceship and scene while adding cinematic polish."),
-            ("D", "pencil_crash", STATUS_PASS, "Clean pencil hard-landing sketch with recognizable ship and crash/smoke cues."),
-            ("C", "crash", STATUS_PASS, "Solid hard-landing edit with smoke/snow disruption and preserved spaceship identity."),
+            (
+                "D",
+                "pencil_crash",
+                STATUS_PASS,
+                "Clean pencil hard-landing sketch with recognizable ship and crash/smoke cues.",
+            ),
+            (
+                "C",
+                "crash",
+                STATUS_PASS,
+                "Solid hard-landing edit with smoke/snow disruption and preserved spaceship identity.",
+            ),
             (
                 "E",
                 "composition",

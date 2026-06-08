@@ -70,6 +70,18 @@ class CompletionGenerator:
                 required=True,
                 help="Local paths to one or more init images. For single image editing, provide one path. For multiple image editing, provide multiple paths.",
             )
+            parser.add_argument(
+                "--reframe-padding",
+                default=None,
+                help="CSS-style top,right,bottom,left padding for generative reframe.",
+            )
+            parser.add_argument(
+                "--outpaint-padding",
+                "--image-outpaint-padding",
+                dest="outpaint_padding",
+                default=None,
+                help="CSS-style top,right,bottom,left padding for canvas-guided outpaint.",
+            )
             parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
             parser.add_output_arguments()
 
@@ -153,6 +165,18 @@ class CompletionGenerator:
             parser.add_lora_arguments()
             parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
             parser.add_argument("--image-paths", type=Path, nargs="+", required=True, help="Local paths to init images")
+            parser.add_argument(
+                "--reframe-padding",
+                default=None,
+                help="CSS-style top,right,bottom,left padding for generative reframe.",
+            )
+            parser.add_argument(
+                "--outpaint-padding",
+                "--image-outpaint-padding",
+                dest="outpaint_padding",
+                default=None,
+                help="CSS-style top,right,bottom,left padding for canvas-guided outpaint.",
+            )
             parser.add_output_arguments()
 
         elif command == "mflux-generate-fibo":

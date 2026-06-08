@@ -115,8 +115,8 @@ img2img variation only; edit/reference models do not use it.
 
 Use `qwen-image-edit` for the original single-reference edit checkpoint; use
 `qwen-image-edit-2509` or `qwen-image-edit-2511` when you need multi-reference editing.
-Current contact sheets and commands for Qwen Image Edit 2511 source, q8, and q4 are published in
-[Image Edit Capabilities](edit-capabilities.md).
+Current contact sheets and commands for Qwen Image Edit, Qwen Image Edit 2509/2511, and FLUX.2
+Klein source/q8/q4 packages are published in [Image Edit Capabilities](edit-capabilities.md).
 Use `--negative-prompt` or `--negative` to block concrete failure modes such as crop, blur, text,
 or unwanted color. Qwen edit models use the official blank negative-prompt behavior by default when
 guidance is above `1`, but explicit negative prompts are useful for stricter edits.
@@ -155,14 +155,14 @@ mlxgen generate \
   --output outpaint.png
 ```
 
-For FLUX.2 and Qwen Image Edit 2511, this route uses an edge-extended conditioning canvas and an
-adaptive source blend. If the generated source window still matches the original source, MLX-Gen
-blends source detail back in; if the model has reconstructed the scene, it skips the blend to avoid
-ghosted fragments. This is not a native fill/inpaint pipeline with an explicit diffusion mask, and
-it is not an exact pixel-lock guarantee.
+For validated FLUX.2 Klein 4B/9B and Qwen Image Edit variants, this route uses an edge-extended
+conditioning canvas and an adaptive source blend. If the generated source window still matches the
+original source, MLX-Gen blends source detail back in; if the model has reconstructed the scene, it
+skips the blend to avoid ghosted fragments. This is not a native fill/inpaint pipeline with an
+explicit diffusion mask, and it is not an exact pixel-lock guarantee.
 
 Current reframe and outpaint proof assets are published in
-[Image Edit Capabilities](edit-capabilities.md).
+[Image Edit Capabilities](edit-capabilities.md) and [Reframe and Outpaint](reframe-outpaint.md).
 
 For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image

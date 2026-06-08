@@ -28,3 +28,15 @@ def test_completion_generator_fibo_does_not_advertise_lora():
     script = generator.generate_command_function("mflux-generate-fibo", parser)
 
     assert "--lora-paths" not in script
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("command", ["mflux-generate-flux2-edit", "mflux-generate-qwen-edit"])
+def test_completion_generator_edit_backends_advertise_canvas_expansion_options(command):
+    generator = CompletionGenerator()
+    parser = generator.create_parser_for_command(command)
+    script = generator.generate_command_function(command, parser)
+
+    assert "--reframe-padding" in script
+    assert "--outpaint-padding" in script
+    assert "--image-outpaint-padding" in script

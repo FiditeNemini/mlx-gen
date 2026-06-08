@@ -21,12 +21,11 @@ outside chat history.
 
 1. Implement
    [first-class I2I modes and outpaint/reframe UX](planned/0019_first_class_i2i_modes_and_outpaint_reframe.md):
-   FLUX.2 and Qwen Image Edit 2511 q8 generative reframe are implemented and have model-backed
-   proof. FLUX.2 and Qwen Image Edit 2511 q8 canvas-guided outpaint is implemented with
-   edge-extended conditioning and adaptive source blending. Decide whether Qwen source/q4 packages
-   need the same proof before release claims, then evaluate Z-Image and ERNIE only if their latent
-   I2I behavior can preserve source identity. Keep native fill/inpaint outpaint separate until a
-   fill/mask backend is deliberately revalidated.
+   FLUX.2 Klein 4B/9B plus Qwen Image Edit original, 2509, and 2511 now have source/q8/q4
+   model-backed proof for `--reframe-padding` and canvas-guided `--outpaint-padding`. Keep native
+   fill/inpaint outpaint separate until a fill/mask backend is deliberately revalidated. Evaluate
+   Z-Image and ERNIE only if their latent I2I behavior can preserve source identity on a dedicated
+   profile.
 2. Implement the
    [LoRA capability matrix and strict application](planned/0007_lora_capability_matrix_and_strict_application.md)
    item so user-requested adapters cannot be silently ignored and callers can know which task

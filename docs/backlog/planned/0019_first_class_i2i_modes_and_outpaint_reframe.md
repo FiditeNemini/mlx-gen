@@ -76,7 +76,7 @@ advertise `supports_outpaint=true`. Exact source locking belongs to a native fil
   `--canvas-policy`, validates the padding value, and is rejected unless a capability advertises
   `supports_outpaint`.
 - `src/mflux/utils/outpaint_util.py` implements the canvas outpaint helper used by the current
-  FLUX.2 and Qwen Image Edit 2511 routes. It parses CSS-style padding, builds a larger
+  FLUX.2 and Qwen Image Edit routes. It parses CSS-style padding, builds a larger
   edge-extended context canvas, records the source paste rectangle, creates a feathered
   preservation mask, and performs adaptive source blending after generation.
 - `src/mflux/models/flux2/cli/flux2_edit_generate.py` and
@@ -84,12 +84,12 @@ advertise `supports_outpaint=true`. Exact source locking belongs to a native fil
   `--outpaint-padding`, build the expanded conditioning canvas in the backend, preserve side
   placement from the padding request, set exact output dimensions from that canvas, and save
   reframe/outpaint metadata.
-- FLUX.2 edit and Qwen Image Edit 2511 single-image capabilities now advertise
-  `supports_outpaint=true`. Other Qwen edit variants and model families reject
-  `--outpaint-padding` before loading weights.
+- FLUX.2 edit plus Qwen Image Edit, Qwen Image Edit 2509, and Qwen Image Edit 2511 single-image
+  capabilities now advertise `supports_outpaint=true` and `supports_reframe=true`. Other model
+  families reject `--outpaint-padding` and `--reframe-padding` before loading weights.
 - `tests/cli/test_mlx_gen_router.py` now covers FLUX.2 default edit/reference I2I, explicit
   latent I2I with `--image-strength`, multi-reference I2I, and mode/option rejection.
-- Focused router tests cover FLUX.2 and Qwen Image Edit 2511 reframe routing, backend canvas
+- Focused router tests cover FLUX.2 and Qwen Image Edit variant reframe routing, backend canvas
   creation, side placement, metadata, latent model rejection, and conflicting canvas-option
   rejection.
 - `src/mflux/models/common/latent_creator/latent_creator.py` implements latent img2img by resizing
@@ -115,9 +115,11 @@ advertise `supports_outpaint=true`. Exact source locking belongs to a native fil
   variation/restyle with `--image-strength`; edit/reference and multi-reference I2I do not use
   `--image-strength`; generative reframe uses `--reframe-padding`; canvas outpaint uses
   `--outpaint-padding`.
-- Qwen Image Edit 2511 and FLUX.2 Klein Edit have current canvas outpaint proof. FIBO Edit, ERNIE
-  I2I, Z-Image I2I, base Qwen Image, Qwen Image Edit/2509, and FLUX.1 Kontext should not be
-  documented as reliable unified outpaint paths unless they get their own model-backed validation.
+- Qwen Image Edit, Qwen Image Edit 2509/2511, and FLUX.2 Klein Edit have current source/q8/q4
+  reframe and canvas outpaint proof in `docs/assets/validation/reframe-outpaint-2026-06-08/`.
+  FIBO Edit, ERNIE I2I, Z-Image I2I, base Qwen Image, Qwen Image 2512, and FLUX.1 Kontext should
+  not be documented as reliable unified outpaint paths unless they get their own model-backed
+  validation.
 
 ## Model capability assessment and priority
 
@@ -127,8 +129,8 @@ different guarantees.
 
 | Priority | Family/model | Current MLX-Gen status | Reframe stance | Canvas outpaint stance | Difficulty |
 | --- | --- | --- | --- | --- | --- |
-| 1 | FLUX.2 Klein Edit | Edit-reference and multi-reference I2I work and have recent validation artifacts. | Implemented and validated for isolated-object background extension and cropped-starship zoom-out. | Implemented for single-image edit routes with edge-extended canvas plus adaptive source blend. Native fill/inpaint masking remains separate. | Medium: routing/UX is straightforward, but validation must catch redraw/crop failures. |
-| 2 | Qwen Image Edit / 2509 / 2511 | Edit and multi-reference work; 2511 parity was fixed and validated after the scheduler correction. | Implemented and validated for Qwen Image Edit 2511 q8 on the same two-source profile. Qwen Image Edit and 2509 are not advertised for this route until validated. | Implemented and validated for Qwen Image Edit 2511 q8 single-image edit routes with edge-extended canvas plus adaptive source blend. Qwen Image Edit and 2509 reject outpaint until validated. Native Qwen inpaint/outpaint parity remains future work. | Medium to high: strong model capability, but variant-specific prompt contracts matter. |
+| 1 | FLUX.2 Klein Edit | Edit-reference and multi-reference I2I work and have recent validation artifacts. | Implemented and validated for 4B/9B source, q8, and q4 rows on cropped-starship zoom-out. | Implemented for 4B/9B source, q8, and q4 single-image edit routes with edge-extended canvas plus adaptive source blend. Native fill/inpaint masking remains separate. | Medium: routing/UX is straightforward, but validation must catch redraw/crop failures. |
+| 2 | Qwen Image Edit / 2509 / 2511 | Edit and multi-reference work; 2511 parity was fixed and validated after the scheduler correction. | Implemented and validated for Qwen Image Edit, 2509, and 2511 source, q8, and q4 rows on cropped-starship zoom-out. | Implemented and validated for Qwen Image Edit, 2509, and 2511 source, q8, and q4 single-image edit routes with edge-extended canvas plus adaptive source blend. Native Qwen inpaint/outpaint parity remains future work. | Medium to high: strong model capability, but variant-specific prompt contracts matter. |
 | 3 | Z-Image / Z-Image Turbo | Text-to-image and latent I2I routes exist; no edit-conditioned route. | Exploratory latent recompose/reframe only, with clear warnings. Use after FLUX.2/Qwen because it may restyle or lose identity. | Not supported. | Medium: easy to route, hard to trust. |
 | 4 | ERNIE Image Turbo | Text-to-image and latent I2I route exist; Prompt Enhancer support exists. | Exploratory latent recompose/reframe only, useful if prompt adherence is strong enough. | Not supported. | Medium to high: promising instruction model, but no hard source-preservation contract. |
 | 5 | FLUX.1 Fill (`dev-fill`, `black-forest-labs/FLUX.1-Fill-dev`) | Fill model and mask path exist from mflux-derived code; unified route is not current product focus. | Not the first reframe target. | Candidate native fill/inpaint backend once FLUX.1 support is deliberately revalidated. | Low to medium technically, but lower priority because current effort has centered on FLUX.2/Qwen. |
@@ -246,9 +248,10 @@ same preservation guarantee as canvas outpaint.
    - preferred options: `--reframe-padding` and/or `--reframe-width` / `--reframe-height`;
    - reject `--reframe-*` unless the selected capability supports generative reframe;
    - ensure `--outpaint-padding` still means mask/canvas outpaint only.
-3. Route FLUX.2 and Qwen Image Edit 2511 first:
+3. Route FLUX.2 and Qwen Image Edit first:
    - FLUX.2: use `flux2.edit` with edit-reference mode;
-   - Qwen Image Edit 2511: use `qwen.edit` for edit-reference and later multi-reference if useful;
+   - Qwen Image Edit, Qwen Image Edit 2509, and Qwen Image Edit 2511: use `qwen.edit` for
+     single-reference edit-reference mode;
    - require explicit prompts that say whether the source is fully visible or cropped.
 4. Add validation assets before claiming support:
    - source A: fully isolated object, where reframe extends background;
@@ -257,7 +260,7 @@ same preservation guarantee as canvas outpaint.
    be useful. Otherwise keep them unsupported for reframe despite having generic I2I.
 6. Add canvas outpaint for validated edit routes:
    - build the expanded canvas and feathered preservation mask with `OutpaintUtil`;
-  - route only FLUX.2/Qwen Image Edit 2511 capabilities that advertise `supports_outpaint`;
+   - route only FLUX.2/Qwen Image Edit capabilities that advertise `supports_outpaint`;
    - reject multiple images and explicit canvas sizing options.
 7. Add native fill/inpaint outpaint later:
    - first validate whether FLUX.1 Fill should be included in the current product surface;
@@ -269,9 +272,10 @@ same preservation guarantee as canvas outpaint.
 
 ## Scope
 
-- First-class generative reframe command/API for FLUX.2 first, then Qwen Image Edit 2511.
-- First-class canvas outpaint command/API for FLUX.2 and Qwen Image Edit 2511 capabilities after
-  validation.
+- First-class generative reframe command/API for FLUX.2 Klein 4B/9B and Qwen Image Edit original,
+  2509, and 2511.
+- First-class canvas outpaint command/API for FLUX.2 Klein 4B/9B and Qwen Image Edit original,
+  2509, and 2511 capabilities after validation.
 - Explicit unsupported or exploratory status for Z-Image and ERNIE until validation proves useful
   source preservation.
 - Separate future native fill/inpaint outpaint only for a validated fill/mask backend.
@@ -319,9 +323,10 @@ same preservation guarantee as canvas outpaint.
 
 ## Expected outcomes
 
-- Generative reframe has a working command/API for FLUX.2 and Qwen Image Edit 2511 capabilities.
-- Canvas outpaint has a working command/API for FLUX.2 and Qwen Image Edit 2511 routes with model-backed
-  proof.
+- Generative reframe has a working command/API for FLUX.2 Klein 4B/9B and Qwen Image Edit
+  original, 2509, and 2511 capabilities.
+- Canvas outpaint has a working command/API for FLUX.2 Klein 4B/9B and Qwen Image Edit original,
+  2509, and 2511 routes with model-backed proof.
 - Native fill/inpaint outpaint remains separate and unavailable unless a validated fill/mask
   backend is wired.
 - Docs accurately distinguish:
@@ -339,18 +344,16 @@ fill/inpaint route for exact source locking.
 
 ## Current release boundary
 
-As of 2026-06-07, this item is partially implemented and remains planned for broader model coverage
-and native fill/inpaint work. The generative reframe contract is implemented for FLUX.2 and Qwen
-edit capabilities. FLUX.2 and Qwen Image Edit 2511 q8 have two-source model-backed reframe proof.
-Canvas outpaint is implemented and validated for FLUX.2 and Qwen Image Edit 2511 q8 single-image
-edit routes, including generated canvas/mask assets and source-interior pixel preservation checks.
-The remaining work is:
+As of 2026-06-08, this item is partially implemented and remains planned for lower-confidence
+latent candidates and native fill/inpaint work. The generative reframe and canvas outpaint
+contracts are implemented for FLUX.2 Klein 4B/9B and Qwen Image Edit original, 2509, and 2511
+single-image edit capabilities. Source, q8, and q4 rows passed the cropped-starship
+`reframe_outpaint_2026_06_08` profile. The remaining work is:
 
-1. decide whether Qwen source/q4 packages need the same reframe/outpaint proof before release
-   claims;
-2. evaluate Z-Image and ERNIE as lower-confidence latent reframe candidates;
-3. decide whether any non-FLUX.2/Qwen route should get canvas outpaint support;
-4. keep native fill/inpaint outpaint separate until FLUX.1 Fill or another fill/mask backend is
+1. evaluate Z-Image and ERNIE as lower-confidence latent reframe candidates only if they can
+   preserve source identity on a dedicated profile;
+2. decide whether any non-FLUX.2/Qwen edit route should get canvas outpaint support;
+3. keep native fill/inpaint outpaint separate until FLUX.1 Fill or another fill/mask backend is
    explicitly revalidated.
 
 ## Validation
@@ -364,12 +367,11 @@ The remaining work is:
   - `--image-strength` remains latent-img2img-only and is rejected for edit-reference reframe.
 - Fast router tests:
   - FLUX.2 plus `--reframe-padding` routes to the FLUX.2 edit backend, not the latent backend;
-  - Qwen Image Edit 2511 plus `--reframe-padding` routes to the Qwen edit backend;
+  - Qwen Image Edit, 2509, and 2511 plus `--reframe-padding` route to the Qwen edit backend;
   - base Qwen Image, Z-Image, and ERNIE reject or clearly label reframe until their validation
     status is promoted;
-  - `--outpaint-padding` routes for FLUX.2/Qwen Image Edit 2511 capabilities and fails closed for
-    Z-Image/ERNIE/base Qwen/Qwen Image Edit/2509/FIBO unless a validated outpaint capability is
-    added.
+  - `--outpaint-padding` routes for FLUX.2/Qwen Image Edit capabilities and fails closed for
+    Z-Image/ERNIE/base Qwen/Qwen Image 2512/FIBO unless a validated outpaint capability is added.
 - Utility tests:
   - percent and pixel reframe padding resolve expected target dimensions;
   - no-op, negative, or malformed padding fails before model load;
@@ -433,16 +435,19 @@ The remaining work is:
 
 - [x] Add generative reframe capability metadata and Python/API semantics.
 - [x] Add CLI routing and parser support for `--reframe-padding`.
-- [ ] Add shell completion support for reframe/outpaint options.
+- [x] Add shell completion support for reframe/outpaint options.
 - [x] Add dedicated reframe metadata fields.
 - [x] Validate FLUX.2 on the two canonical T2I source cases.
 - [x] Validate Qwen Image Edit 2511 q8 on the same two canonical source cases.
-- [ ] Decide whether Qwen source/q4 packages need the same reframe proof before release claims.
+- [x] Validate Qwen Image Edit, Qwen Image Edit 2509, and Qwen Image Edit 2511 source/q8/q4 on the
+      cropped-starship reframe profile.
 - [ ] Decide whether Z-Image and ERNIE should be promoted or explicitly rejected for reframe.
-- [x] Add canvas outpaint capability metadata and CLI routing for FLUX.2/Qwen Image Edit 2511 routes.
+- [x] Add canvas outpaint capability metadata and CLI routing for FLUX.2/Qwen Image Edit routes.
 - [x] Add canvas/mask utility validation for `OutpaintUtil`.
 - [x] Validate FLUX.2 canvas outpaint on the two canonical source cases.
 - [x] Validate Qwen Image Edit 2511 q8 canvas outpaint on the same two canonical source cases.
+- [x] Validate Qwen Image Edit, Qwen Image Edit 2509, and Qwen Image Edit 2511 source/q8/q4 on the
+      cropped-starship outpaint profile.
 - [x] Keep `--outpaint-padding` rejected for unsupported families and conflicting options.
 - [x] Run focused tests.
 - [x] Run model-backed FLUX.2 reframe smoke and preserve source/output proof.

@@ -101,9 +101,9 @@ single-reference edit model in MLX-Gen. Use it for one-source semantic or appear
 pencil sketch, object-state changes, style changes, and layout-preserving instruction edits. Qwen
 Image Edit 2509 and 2511 expose multi-reference edit routes through unified
 `mlxgen generate` when a package supports that route. The validation command records which exact
-source model or MLX-Gen optimized package rows passed visual review. Qwen Image Edit 2511 source, q8, and q4 now have
-passing 2026-06-06 proof rows for single-image pencil sketch, single-image hard-landing edit, and
-two-reference pencil-plus-crash composition.
+source model or MLX-Gen optimized package rows passed visual review. The reframe/outpaint
+validation profile covers Qwen Image Edit, Qwen Image Edit 2509/2511, and validated FLUX.2 Klein
+4B/9B source/q8/q4 rows.
 
 Latent-only image models such as ERNIE Image Turbo, Z-Image, and base Qwen Image require explicit
 `--image-strength` for `latent-img2img`. Base FIBO exposes text-to-image through unified
@@ -192,20 +192,20 @@ mlxgen generate \
   --output outpaint.png
 ```
 
-For FLUX.2 and Qwen Image Edit 2511, this route creates a larger temporary canvas, initializes the
-new area with edge-extended source context, and runs the edit model on the expanded canvas. After
-generation, MLX-Gen compares the generated source window with the original source. If they are
-close, it applies a content-aware source blend; if the model has reconstructed or moved the scene,
-it skips the blend to avoid ghosted fragments. This is validated for
-`AbstractFramework/flux.2-klein-4b-8bit` and
-`AbstractFramework/qwen-image-edit-2511-8bit` in
-[Image Edit Capabilities](edit-capabilities.md#canvas-outpaint).
+For validated FLUX.2 Klein 4B/9B and Qwen Image Edit variants, this route creates a larger temporary canvas,
+initializes the new area with edge-extended source context, and runs the edit model on the expanded
+canvas. After generation, MLX-Gen compares the generated source window with the original source. If
+they are close, it applies a content-aware source blend; if the model has reconstructed or moved
+the scene, it skips the blend to avoid ghosted fragments. Source, q8, and q4 rows for FLUX.2 Klein
+4B/9B plus Qwen Image Edit, 2509, and 2511 are documented in
+[Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint) and
+[Reframe and Outpaint](reframe-outpaint.md).
 
 This is not the same as a native fill/inpaint pipeline that receives an explicit diffusion mask.
 It is not an exact pixel-lock guarantee. MLX-Gen still keeps lower-level FLUX.1 Fill support
-separate from the current unified FLUX.2/Qwen Image Edit 2511 route. Z-Image, ERNIE, FIBO, base
-Qwen Image, Qwen Image Edit/2509, and latent I2I routes reject `--outpaint-padding` before loading
-weights.
+separate from the current unified edit-reference canvas route. Z-Image, ERNIE, FIBO, base Qwen
+Image, Qwen Image 2512, FLUX.2 Klein Base, latent I2I routes, video routes, and SeedVR2 reject
+`--outpaint-padding` before loading weights.
 
 ### Negative Prompts
 

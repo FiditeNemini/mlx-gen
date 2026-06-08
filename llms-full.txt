@@ -13,6 +13,7 @@
 - `docs/api.md`: public CLI, router behavior, task/mode resolution, I2I mode selection and canvas policy, generative reframe, canvas-guided outpaint with adaptive source blending, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor upscaling plus softness and tiling controls, negative prompts, Qwen edit-version routing, Wan video sizes, `mlxgen capabilities`, and Python routing helpers.
 - `docs/upscaling.md`: SeedVR2 image upscaling guide with official 3B/7B source usage, published 3B/7B q8/q4 package handles, shortest-edge and scale-factor sizing, quality controls, and real 5x source/output comparisons.
 - `docs/edit-capabilities.md`: image-edit contact sheets, model/package status summaries, and exact command logs for Qwen Image Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I rows. FIBO Edit is unsupported through unified `mlxgen generate` in the current release.
+- `docs/reframe-outpaint.md`: supported reframe/outpaint workflows, exact commands, source/q8/q4 proof sheets, and the `reframe_outpaint_2026_06_08` validation profile.
 - `docs/examples/spaceship-snow.md`: complete model-backed workflow across T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B.
 - `docs/model-management.md`: explicit `download` and `prepare`, generation from local model files, local MLX-Gen packages, matching Hugging Face handle resolution, and `DownloadRequiredError`.
 - `docs/quantization.md`: complete published package matrix, q8/q4/BF16 policies, model-family compatibility, Wan TI2V/A14B package status, and A14B q8 generated-output records.
@@ -115,10 +116,10 @@ source images as conditioning or references, so MLX-Gen rejects `--image-strengt
 before loading weights. Generative reframe is available through `--reframe-padding` for models that
 advertise `supports_reframe=true`; it asks the edit model to generate a larger view and may redraw
 source content. Canvas-guided outpaint is available through `--outpaint-padding` for capabilities
-that advertise `supports_outpaint=true`; the current validated routes are FLUX.2 edit and Qwen
-Image Edit 2511. MLX-Gen builds an expanded canvas, runs the edit backend, and applies adaptive
-source blending only when it will not create ghosted fragments. Unsupported model families and
-unvalidated Qwen edit variants reject `--outpaint-padding` before loading weights.
+that advertise `supports_outpaint=true`. The current validated routes are Qwen Image Edit, Qwen
+Image Edit 2509/2511, and FLUX.2 Klein 4B/9B source/q8/q4 rows. MLX-Gen builds an expanded canvas,
+runs the edit backend, and applies adaptive source blending only when it will not create ghosted
+fragments. Unsupported model families reject `--outpaint-padding` before loading weights.
 
 The unified CLI accepts both `--negative-prompt` and `--negative`. Python callers pass the same
 value as `negative_prompt=...` on the model-specific generation method. For Qwen image edit,
@@ -132,12 +133,14 @@ route.
 
 `docs/edit-capabilities.md` is the current visual evidence page for image editing. It publishes the
 regular Qwen Image Edit base/q8/q4 contact sheet, the Qwen Image Edit 2511 source/q8/q4 parity
-sheet, the 5x4 FLUX.2/Qwen Image Edit 2509 matrices, and links the exact command logs used for the
-validation profiles. In the documented spaceship profiles, FLUX.2 Klein 4B/9B q4/q8 pass latent,
-edit-reference, and multi-reference rows; Qwen Image Edit 2509 source/q8 pass the edit-reference
-and multi-reference rows while q4 is partial on composition; Qwen Image Edit 2511 source/q8/q4 pass
-the 2026-06-06 pencil sketch, hard-landing edit, and multi-reference composition profile. FIBO Edit
-is unsupported through unified `mlxgen generate` in the current release.
+sheet, the 5x4 FLUX.2/Qwen Image Edit 2509 matrices, the 2026-06-08 reframe/outpaint source/q8/q4
+matrices, and links the exact command logs used for the validation profiles. In the documented
+spaceship profiles, FLUX.2 Klein 4B/9B q4/q8 pass latent, edit-reference, multi-reference,
+reframe, and canvas outpaint rows; Qwen Image Edit 2509 source/q8 pass the edit-reference and
+multi-reference rows while q4 is partial on composition; Qwen Image Edit, 2509, and 2511 source/q8/q4
+pass the 2026-06-08 reframe/outpaint profile. Qwen Image Edit 2511 source/q8/q4 pass the
+2026-06-06 pencil sketch, hard-landing edit, and multi-reference composition profile. FIBO Edit is
+unsupported through unified `mlxgen generate` in the current release.
 
 ---
 

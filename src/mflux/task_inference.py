@@ -503,7 +503,6 @@ def _image_latent_capabilities(
 def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     is_edit_model = _is_qwen_edit(identity.aliases, identity.model_key)
     is_edit_plus_model = _is_qwen_edit_plus(identity.aliases, identity.model_key)
-    is_validated_reframe_outpaint_model = _is_qwen_edit_2511(identity.aliases, identity.model_key)
     i2i_canvas = _ordinary_i2i_canvas_contract()
     if is_edit_model:
         capabilities: tuple[GenerationCapability, ...] = (
@@ -514,8 +513,8 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="qwen.edit",
                 min_images=1,
                 max_images=1,
-                supports_outpaint=is_validated_reframe_outpaint_model,
-                supports_reframe=is_validated_reframe_outpaint_model,
+                supports_outpaint=True,
+                supports_reframe=True,
                 default_for_task=True,
                 **i2i_canvas,
             ),
@@ -564,6 +563,7 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
 
 def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     i2i_canvas = _ordinary_i2i_canvas_contract()
+    supports_canvas_expansion = not _is_flux2_klein_base(identity.aliases, identity.model_key)
     return ModelCapabilities(
         schema_version=1,
         family=identity.family,
@@ -594,8 +594,8 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="flux2.edit",
                 min_images=1,
                 max_images=1,
-                supports_outpaint=True,
-                supports_reframe=True,
+                supports_outpaint=supports_canvas_expansion,
+                supports_reframe=supports_canvas_expansion,
                 default_for_task=True,
                 **i2i_canvas,
             ),
@@ -894,6 +894,12 @@ def _qwen_label(identity: _ModelIdentity) -> str:
 def _is_flux2(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("flux2") or alias.startswith("klein") for alias in aliases) or any(
         token in model_key for token in ("flux2", "flux.2", "klein")
+    )
+
+
+def _is_flux2_klein_base(aliases: set[str], model_key: str) -> bool:
+    return any("klein-base" in alias or "flux2-base" in alias or "flux.2-klein-base" in alias for alias in aliases) or (
+        "klein-base" in model_key or "flux2-base" in model_key or "flux.2-klein-base" in model_key
     )
 
 

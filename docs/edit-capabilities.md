@@ -64,49 +64,30 @@ The 5x4 edit validation profile tests the same spaceship source across:
 | Qwen Image Edit 2511 | `Qwen/Qwen-Image-Edit-2511`, `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2511-4bit` | `edit-reference`, `multi-reference` | source, q8, and q4 passed the 2026-06-06 pencil/crash/composition profile | [matrix](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-source-q8-q4-parity.jpg) |
 | FIBO Edit | `briaai/Fibo-Edit` | Not supported through unified `mlxgen generate` | no public image-edit support in the current release; capability discovery fails closed | N/A |
 
-## Generative Reframe
+## Reframe And Outpaint
 
-`--reframe-padding` asks an edit-capable model to generate a larger view from one source image.
-The 2026-06-07 proof uses two source cases: a fully visible object where the model extends the
-snowy background, and a close-cropped starship where the model reveals a plausible full ship in a
-wider snowy scene.
+`--reframe-padding` and `--outpaint-padding` are validated single-image edit-reference routes for
+the Qwen Image Edit family and FLUX.2 Klein 4B/9B. Reframe asks the model to generate a wider view.
+Outpaint first builds an expanded conditioning canvas and then applies adaptive source blending
+when the generated source window still matches the original image.
 
-![FLUX.2 generative reframe proof](assets/validation/reframe-2026-06-07/flux2-reframe-contact-sheet.png)
+![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
 
-![Qwen Image Edit 2511 q8 generative reframe proof](assets/validation/reframe-2026-06-07/qwen2511-q8-reframe-contact-sheet.png)
-
-| Model/package | Mode | Source cases | Result | Command log |
+| Family | Exact handles/packages | Reframe | Outpaint | Contact sheet |
 | --- | --- | --- | --- | --- |
-| `AbstractFramework/flux.2-klein-4b-8bit` | `edit-reference` with `--reframe-padding` | isolated object background extension; cropped starship zoom-out | `PASS` | [commands](assets/validation/reframe-2026-06-07/reframe-command-log.md) |
-| `AbstractFramework/qwen-image-edit-2511-8bit` | `edit-reference` with `--reframe-padding` | isolated object background extension; cropped starship zoom-out | `PASS` | [commands](assets/validation/reframe-2026-06-07/reframe-command-log.md) |
+| Qwen Image Edit | `Qwen/Qwen-Image-Edit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-edit-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-reframe-outpaint-matrix.jpg) |
+| Qwen Image Edit 2509 | `Qwen/Qwen-Image-Edit-2509`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-2509-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-2509-reframe-outpaint-matrix.jpg) |
+| Qwen Image Edit 2511 | `Qwen/Qwen-Image-Edit-2511`, `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2511-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-2511-reframe-outpaint-matrix.jpg) |
+| FLUX.2 Klein 4B | `black-forest-labs/FLUX.2-klein-4B`, `AbstractFramework/flux.2-klein-4b-8bit`, `AbstractFramework/flux.2-klein-4b-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-4b-reframe-outpaint-matrix.jpg) |
+| FLUX.2 Klein 9B | `black-forest-labs/FLUX.2-klein-9B`, `AbstractFramework/flux.2-klein-9b-8bit`, `AbstractFramework/flux.2-klein-9b-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-9b-reframe-outpaint-matrix.jpg) |
 
-Generative reframe can redraw source content. Use it when a plausible wider view is acceptable.
+Use the dedicated [Reframe and Outpaint](reframe-outpaint.md) guide for copy/pasteable examples,
+canvas/mask assets, the validation manifest, and exact commands. The validation profile id is
+`reframe_outpaint_2026_06_08`.
 
-## Canvas Outpaint
-
-`--outpaint-padding` creates an expanded canvas from one source image and asks the selected edit
-model to generate the larger view. After generation, MLX-Gen compares the generated source window
-with the original source. If they are close, it applies a content-aware source blend; if the edit
-model has reconstructed or moved the scene, it skips the blend to avoid ghost fragments. This is
-different from a native fill/inpaint pipeline that receives an explicit diffusion mask.
-
-![FLUX.2 and Qwen Image Edit 2511 q8 outpaint proof](assets/validation/outpaint-2026-06-07/outpaint-contact-sheet.png)
-
-| Model/package | Mode | Source cases | Result | Evidence |
-| --- | --- | --- | --- | --- |
-| `AbstractFramework/flux.2-klein-4b-8bit` | `edit-reference` with `--outpaint-padding` | isolated object background extension; cropped starship canvas extension | `PASS` | [commands](assets/validation/outpaint-2026-06-07/outpaint-command-log.md), [adaptive restore report](assets/validation/outpaint-2026-06-07/outpaint-preservation-check.json) |
-| `AbstractFramework/qwen-image-edit-2511-8bit` | `edit-reference` with `--outpaint-padding` | isolated object background extension; cropped starship canvas extension | `PASS` | [commands](assets/validation/outpaint-2026-06-07/outpaint-command-log.md), [adaptive restore report](assets/validation/outpaint-2026-06-07/outpaint-preservation-check.json) |
-
-The validation assets also include generated canvas and adaptive blend-mask examples:
-
-- [source A canvas](assets/validation/outpaint-2026-06-07/source-a-outpaint-canvas.png)
-- [source A mask](assets/validation/outpaint-2026-06-07/source-a-outpaint-mask.png)
-- [source B canvas](assets/validation/outpaint-2026-06-07/source-b-outpaint-canvas.png)
-- [source B mask](assets/validation/outpaint-2026-06-07/source-b-outpaint-mask.png)
-
-Use this route when you want a canvas-guided image expansion. Use `--reframe-padding` when you want
-a fully generative zoom-out and accept that the source may be redrawn. Use a future native
-fill/inpaint route when exact pixel-locked source preservation is required.
+These workflows are generative image expansion routes, not native masked fill/inpaint pipelines.
+Use them when a plausible wider view is acceptable. Use a future native fill/inpaint route when
+exact pixel-locked source preservation is required.
 
 ### FLUX.2 Klein 4B
 
@@ -179,4 +160,5 @@ The full command logs are published with the proof assets:
 - [regular Qwen Image Edit command log](assets/validation/i2i-edit-5x4-2026-06-05/qwen-image-edit-command-log.md)
 - [Qwen Image Edit 2511 parity command log](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-command-log.md)
 - [5x4 FLUX.2 and Qwen Image Edit 2509 command log](assets/validation/i2i-edit-5x4-2026-06-05/edit-capability-command-log.md)
+- [reframe and outpaint command log](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-command-log.md)
 - [latent I2I command log](assets/validation/i2i-edit-5x4-2026-06-05/latent-i2i-command-log.md)
