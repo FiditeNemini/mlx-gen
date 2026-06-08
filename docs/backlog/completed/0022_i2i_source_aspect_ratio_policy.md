@@ -238,5 +238,5 @@ instead of silently swapping to an edit checkpoint.
 
 ## Residual work
 
-First-class masked outpainting/reframing remains planned in
+First-class reframe and outpaint follow-up work is tracked in
 [0019](../planned/0019_first_class_i2i_modes_and_outpaint_reframe.md).

@@ -21,6 +21,10 @@ This item was originally opened while unified `mlxgen capabilities` failed close
 That is again the current release state: unified `mlxgen generate` exposes no public FIBO Edit
 capability. The dedicated FIBO Edit command remains available only for parity testing.
 
+Priority note, 2026-06-07: this item is retained as future validation history only. FIBO Edit is
+deprioritized and should stay behind its dedicated command until item 0027 or a later parity effort
+produces release-quality source-model proof.
+
 The upstream `briaai/Fibo-Edit` model card identifies the package as `pipeline_tag: image-to-image`
 with `image-editing` and `inpainting` tags, and describes a source-image plus optional-mask JSON
 editing contract. So FIBO Edit is supposed to support editing in principle; MLX-Gen simply does not
@@ -177,6 +181,10 @@ FIBO Edit remains unavailable through unified `mlxgen generate`; prepared-packag
 tracked separately in item 0026 and follow-up parity work is tracked in item 0027. Masked FIBO Edit
 remains dedicated-command gated because visual QA still fails for localized mask edits, and
 `briaai/Fibo-Edit-RMBG` still lacks a local release-quality proof.
+
+Scheduling decision, 2026-06-07: do not promote or implement this before outpaint/reframe and LoRA
+strictness. If FIBO becomes important again, start with item 0027 source-route parity, not this
+unified validation item.
 
 ## Porting correction - 2026-06-05
 

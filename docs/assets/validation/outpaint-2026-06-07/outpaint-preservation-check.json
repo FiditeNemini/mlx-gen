@@ -1,0 +1,70 @@
+{
+  "date": "2026-06-07",
+  "profile": "FLUX.2 and Qwen Image Edit 2511 q8 canvas-guided outpaint validation",
+  "preservation_policy": "adaptive-content-aware-source-blend",
+  "interpretation": "When the generated source window remains close to the source, MLX-Gen applies the adaptive source blend. When the model reconstructs or repositions the scene, MLX-Gen skips the blend to avoid ghosted source fragments.",
+  "canvas_assets": {
+    "source-a": {
+      "source": "docs/assets/validation/outpaint-2026-06-07/source-a-isolated-beacon.png",
+      "padding": "0,25%,0,25%",
+      "target_width": 656,
+      "target_height": 240,
+      "paste_left": 108,
+      "paste_top": 0,
+      "canvas_asset": "docs/assets/validation/outpaint-2026-06-07/source-a-outpaint-canvas.png",
+      "adaptive_blend_mask_asset": "docs/assets/validation/outpaint-2026-06-07/source-a-outpaint-mask.png"
+    },
+    "source-b": {
+      "source": "docs/assets/validation/outpaint-2026-06-07/source-b-cropped-starship.png",
+      "padding": "5%,35%,5%,35%",
+      "target_width": 736,
+      "target_height": 272,
+      "paste_left": 151,
+      "paste_top": 12,
+      "canvas_asset": "docs/assets/validation/outpaint-2026-06-07/source-b-outpaint-canvas.png",
+      "adaptive_blend_mask_asset": "docs/assets/validation/outpaint-2026-06-07/source-b-outpaint-mask.png"
+    }
+  },
+  "outputs": {
+    "flux2_background": {
+      "model": "AbstractFramework/flux.2-klein-4b-8bit",
+      "output": "validation_outputs/outpaint_edge_fix_2026_06_07/flux2_outpaint_a_background_final.png",
+      "outpaint_padding": "0,25%,0,25%",
+      "target_width": 656,
+      "target_height": 240,
+      "source_restore_applied": false,
+      "source_restore_difference": 17.814530922431864,
+      "visual_result": "PASS"
+    },
+    "flux2_cropped_starship": {
+      "model": "AbstractFramework/flux.2-klein-4b-8bit",
+      "output": "validation_outputs/outpaint_edge_fix_2026_06_07/flux2_outpaint_b_cropped_starship_final.png",
+      "outpaint_padding": "5%,35%,5%,35%",
+      "target_width": 736,
+      "target_height": 272,
+      "source_restore_applied": false,
+      "source_restore_difference": 41.263037211740034,
+      "visual_result": "PASS"
+    },
+    "qwen2511_q8_background": {
+      "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+      "output": "validation_outputs/outpaint_edge_fix_2026_06_07/qwen2511_q8_outpaint_a_background_final.png",
+      "outpaint_padding": "0,25%,0,25%",
+      "target_width": 656,
+      "target_height": 240,
+      "source_restore_applied": true,
+      "source_restore_difference": 6.9942348008385755,
+      "visual_result": "PASS"
+    },
+    "qwen2511_q8_cropped_starship": {
+      "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+      "output": "validation_outputs/outpaint_edge_fix_2026_06_07/qwen2511_q8_outpaint_b_cropped_starship_final.png",
+      "outpaint_padding": "5%,35%,5%,35%",
+      "target_width": 736,
+      "target_height": 272,
+      "source_restore_applied": false,
+      "source_restore_difference": 31.39216457023061,
+      "visual_result": "PASS"
+    }
+  }
+}

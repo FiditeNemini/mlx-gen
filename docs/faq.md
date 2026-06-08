@@ -379,17 +379,51 @@ steps to run from pure noise.
 
 ## Can MLX-Gen Outpaint Or Reframe An Image?
 
-Not yet as a first-class unified `mlxgen generate` workflow.
+MLX-Gen supports generative reframe for edit models that advertise `supports_reframe=true` in
+`mlxgen capabilities`. Use `--reframe-padding` with one input image to ask the edit model for a
+larger view:
 
-The reliable operation is usually called masked outpainting or canvas expansion: create a larger
-canvas, paste the original image into the desired position, create a mask for the new empty area,
-and use a fill/inpaint model to synthesize only the new region. Generic image-to-image with a
-larger `--width` or `--height` is not the same thing because it resizes or recomposes the source
-instead of preserving original pixels in place.
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-4b-8bit \
+  --image input.png \
+  --reframe-padding "25%,50%,25%,50%" \
+  --prompt "Generatively reframe this close-up into a wider establishing shot. Reveal the full subject and extend the background naturally." \
+  --steps 16 \
+  --seed 42 \
+  --output reframed.png
+```
 
-MLX-Gen has lower-level FLUX.1 Fill support inherited from mflux, but the unified outpaint/reframe
-command and Python API are still planned. Until that is implemented, do not rely on latent img2img
-or edit/reference I2I for controlled canvas extension.
+This is a generative edit. It is useful for zoom-out, background extension, and plausible
+reconstruction of missing object boundaries, but the model may redraw source content. The prompt
+remains important, especially when the source object is cropped and the missing parts must be
+inferred.
+
+Use `--outpaint-padding` when you want MLX-Gen to create a larger canvas and guide a supported edit
+model to fill the expanded view:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --image input.png \
+  --outpaint-padding "5%,35%,5%,35%" \
+  --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing subject and background outside the original frame." \
+  --negative "text, border, frame, hard seam, duplicate subject" \
+  --steps 24 \
+  --guidance 4 \
+  --seed 42 \
+  --output outpaint.png
+```
+
+For FLUX.2 and Qwen Image Edit 2511, MLX-Gen builds an expanded canvas and runs the edit model on
+that canvas. After generation, it compares the generated source window with the original source. If
+they are close, it applies a content-aware source blend; if the model reconstructed or moved the
+scene, it keeps the generated canvas to avoid ghosting. The current validated proof is in
+[Image Edit Capabilities](edit-capabilities.md#canvas-outpaint).
+
+This is not a native fill/inpaint backend with an explicit diffusion mask, and it is not an exact
+pixel-lock guarantee. Latent I2I models, Z-Image, ERNIE, FIBO, base Qwen Image, Qwen Image
+Edit/2509, and unsupported edit models reject `--outpaint-padding` before loading weights.
 
 For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
 to the first source image. That prevents accidental stretching, but it does not expand the original

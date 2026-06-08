@@ -46,6 +46,7 @@ class GeneratedImage:
         requested_height: int | None = None,
         source_image_width: int | None = None,
         source_image_height: int | None = None,
+        extra_metadata: dict | None = None,
     ):
         self.image = image
         self.model_config = model_config
@@ -77,6 +78,7 @@ class GeneratedImage:
         self.requested_height = requested_height
         self.source_image_width = source_image_width
         self.source_image_height = source_image_height
+        self.extra_metadata = extra_metadata
 
     def get_right_half(self) -> "GeneratedImage":
         # Calculate the coordinates for the right half
@@ -111,6 +113,7 @@ class GeneratedImage:
             requested_height=self.requested_height,
             source_image_width=self.source_image_width,
             source_image_height=self.source_image_height,
+            extra_metadata=self.extra_metadata,
         )
 
     def save(
@@ -255,6 +258,8 @@ class GeneratedImage:
             "prompt": self.prompt,
             "negative_prompt": self.negative_prompt if self.negative_prompt else None,
         }
+        if self.extra_metadata:
+            metadata.update(self.extra_metadata)
 
         # If we have initial metadata from a source image, merge it
         if self.init_metadata and (old_exif := self.init_metadata.get("exif")):

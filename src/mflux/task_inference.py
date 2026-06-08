@@ -68,6 +68,7 @@ class GenerationCapability:
     supports_image_strength: bool = False
     supports_mask: bool = False
     supports_outpaint: bool = False
+    supports_reframe: bool = False
     supports_frames: bool = False
     supports_fps: bool = False
     default_for_task: bool = False
@@ -93,6 +94,7 @@ class GenerationCapability:
             "supports_image_strength": self.supports_image_strength,
             "supports_mask": self.supports_mask,
             "supports_outpaint": self.supports_outpaint,
+            "supports_reframe": self.supports_reframe,
             "supports_frames": self.supports_frames,
             "supports_fps": self.supports_fps,
             "default_for_task": self.default_for_task,
@@ -217,6 +219,7 @@ def resolve_generation_plan(
     has_image_strength: bool = False,
     has_mask: bool = False,
     has_outpaint: bool = False,
+    has_reframe: bool = False,
 ) -> GenerationPlan:
     if image_count < 0:
         raise TaskInferenceError("image_count must be greater than or equal to zero.")
@@ -226,6 +229,8 @@ def resolve_generation_plan(
         raise TaskInferenceError("--mask-path requires --image or --image-path.")
     if has_outpaint and image_count == 0:
         raise TaskInferenceError("--outpaint-padding requires --image or --image-path.")
+    if has_reframe and image_count == 0:
+        raise TaskInferenceError("--reframe-padding requires --image or --image-path.")
 
     normalized_task = normalize_task(task)
     normalized_i2i_mode = normalize_i2i_mode(i2i_mode)
@@ -271,6 +276,13 @@ def resolve_generation_plan(
         candidates = [capability for capability in candidates if capability.supports_outpaint]
         if not candidates:
             raise TaskInferenceError("--outpaint-padding is only supported for image-to-image modes with outpaint support.")
+    if has_reframe:
+        candidates = [capability for capability in candidates if capability.supports_reframe]
+        if not candidates:
+            raise TaskInferenceError(
+                "--reframe-padding is only supported for image-to-image edit models "
+                "with generative reframe support."
+            )
 
     capability = _select_capability(
         model_capabilities=model_capabilities,
@@ -314,6 +326,7 @@ def resolve_task(
     has_image_strength: bool = False,
     has_mask: bool = False,
     has_outpaint: bool = False,
+    has_reframe: bool = False,
 ) -> ResolvedTask:
     plan = resolve_generation_plan(
         model=model,
@@ -325,6 +338,7 @@ def resolve_task(
         has_image_strength=has_image_strength,
         has_mask=has_mask,
         has_outpaint=has_outpaint,
+        has_reframe=has_reframe,
     )
     return ResolvedTask(
         task=plan.public_task,
@@ -348,6 +362,7 @@ def infer_task(
     has_image_strength: bool = False,
     has_mask: bool = False,
     has_outpaint: bool = False,
+    has_reframe: bool = False,
 ) -> str:
     return resolve_task(
         model=model,
@@ -359,6 +374,7 @@ def infer_task(
         has_image_strength=has_image_strength,
         has_mask=has_mask,
         has_outpaint=has_outpaint,
+        has_reframe=has_reframe,
     ).task
 
 
@@ -487,6 +503,7 @@ def _image_latent_capabilities(
 def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     is_edit_model = _is_qwen_edit(identity.aliases, identity.model_key)
     is_edit_plus_model = _is_qwen_edit_plus(identity.aliases, identity.model_key)
+    is_validated_reframe_outpaint_model = _is_qwen_edit_2511(identity.aliases, identity.model_key)
     i2i_canvas = _ordinary_i2i_canvas_contract()
     if is_edit_model:
         capabilities: tuple[GenerationCapability, ...] = (
@@ -497,6 +514,8 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="qwen.edit",
                 min_images=1,
                 max_images=1,
+                supports_outpaint=is_validated_reframe_outpaint_model,
+                supports_reframe=is_validated_reframe_outpaint_model,
                 default_for_task=True,
                 **i2i_canvas,
             ),
@@ -575,6 +594,8 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="flux2.edit",
                 min_images=1,
                 max_images=1,
+                supports_outpaint=True,
+                supports_reframe=True,
                 default_for_task=True,
                 **i2i_canvas,
             ),
@@ -852,12 +873,16 @@ def _is_qwen_edit_plus(aliases: set[str], model_key: str) -> bool:
     )
 
 
+def _is_qwen_edit_2511(aliases: set[str], model_key: str) -> bool:
+    return _has_alias(aliases, "qwen-image-edit-2511", "qwen-edit-2511") or any(
+        token in model_key for token in ("qwen-image-edit-2511", "qwen-edit-2511")
+    )
+
+
 def _qwen_label(identity: _ModelIdentity) -> str:
     if not _is_qwen_edit(identity.aliases, identity.model_key):
         return "Qwen Image"
-    if _has_alias(identity.aliases, "qwen-image-edit-2511", "qwen-edit-2511") or any(
-        token in identity.model_key for token in ("qwen-image-edit-2511", "qwen-edit-2511")
-    ):
+    if _is_qwen_edit_2511(identity.aliases, identity.model_key):
         return "Qwen Image Edit 2511"
     if _has_alias(identity.aliases, "qwen-image-edit-2509", "qwen-edit-2509", "qwen-edit-plus") or any(
         token in identity.model_key for token in ("qwen-image-edit-2509", "qwen-edit-2509", "qwen-edit-plus")

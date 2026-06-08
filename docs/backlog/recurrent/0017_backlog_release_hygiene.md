@@ -48,3 +48,13 @@ The backlog is useful only when planned work names what remains rather than what
   docs, added release-readiness evidence to completed item 0020, narrowed planned item 0019 to the
   remaining first-class FLUX.1 Fill outpaint/reframe adapter, and confirmed item 0016 still gates
   full-size Wan A14B q8 readiness claims.
+- 2026-06-07: Post-0.18.13 priority hygiene checked planned/proposed/completed counts, confirmed
+  global backlog IDs remain unique, deprioritized FIBO Edit parity work without deleting its
+  history, promoted first-class outpaint/reframe and LoRA strictness in the recommendation order,
+  added proposed item 0032 for SeedVR2 video restoration/upscaling, and added proposed item 0033
+  for future T2V/I2V LoRA support.
+- 2026-06-07: Re-scoped item 0019 after the FLUX.1 priority concern. Generative reframe starts
+  with FLUX.2 and then Qwen Image Edit 2511; canvas outpaint is validated first for FLUX.2 and
+  Qwen Image Edit 2511;
+  Z-Image and ERNIE remain validation-gated candidates; FIBO Edit stays linked to deferred items
+  0024/0027; native fill/inpaint outpaint remains separate until a fill/mask backend is proven.

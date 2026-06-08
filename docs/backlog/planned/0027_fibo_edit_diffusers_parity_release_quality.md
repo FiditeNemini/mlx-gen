@@ -16,6 +16,11 @@ validated true `briaai/Fibo-Edit` source weights plus local BF16 and q8 prepared
 the same edit sequence used for Qwen and FLUX.2. The route executed, but FIBO Edit did not pass
 release-quality visual validation for the spaceship edit sequence.
 
+Priority note, 2026-06-07: FIBO Edit remains useful historical and parity work, but it is no
+longer a near-term priority. Keep it fail-closed in unified `mlxgen generate` and do not schedule
+more FIBO Edit work ahead of outpaint/reframe, LoRA strictness, or video quality work unless a
+specific user or product requirement changes that priority.
+
 The follow-up Diffusers parity audit found concrete MLX-Gen issues:
 
 - Empty negative prompts in FIBO CFG must encode as the FIBO begin-of-text token, matching
@@ -66,6 +71,10 @@ must fail closed for FIBO Edit until source-model parity and visual validation p
 
 Bring FIBO Edit to a defensible release-quality state or keep it unavailable through unified
 capability discovery.
+
+Current scheduling stance: deferred planned work. The backlog keeps the parity ladder because it is
+the right way to fix FIBO later, but the recommended next action is to leave FIBO Edit unsupported
+and spend active engineering time elsewhere.
 
 ## Requirements
 

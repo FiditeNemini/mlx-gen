@@ -12,6 +12,7 @@ from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import allow_downloads, is_huggingface_repo_id
 from mflux.release.validation_registry import get_model_validation, get_validation_profile, list_validation_profiles
 from mflux.task_inference import TaskInferenceError, get_model_capabilities, normalize_task, resolve_generation_plan
+from mflux.utils.box_values import BoxValueError, BoxValues
 from mflux.utils.exceptions import ModelConfigError
 
 
@@ -60,6 +61,8 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     route = _resolve_route(args, image_count=len(images))
     if route.requires_image and not images:
         _parser().error(f"{route.target_name} requires --image or --images.")
+    reframe_argv = _reframe_forwarded_argv(args=args, images=images, forwarded=forwarded)
+    outpaint_argv = _outpaint_forwarded_argv(args=args, images=images, forwarded=forwarded)
 
     forwarded_model = route.model_override or args.model
     normalized_argv = [route.target_name]
@@ -69,8 +72,10 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
         normalized_argv.extend(["--base-model", args.base_model])
     if route.image_argument is not None and images:
         normalized_argv.append(route.image_argument)
-        normalized_argv.extend(images)
+    normalized_argv.extend(images)
     normalized_argv.extend(forwarded)
+    normalized_argv.extend(reframe_argv)
+    normalized_argv.extend(outpaint_argv)
 
     return RouterInvocation(
         target_name=route.target_name,
@@ -112,8 +117,15 @@ def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
         metadata,
         "image_strength",
     )
+    if args.reframe_padding is None:
+        args.reframe_padding = metadata.get("reframe_padding")
+    if args.outpaint_padding is None:
+        args.outpaint_padding = metadata.get("outpaint_padding") or metadata.get("image_outpaint_padding")
     args.has_mask = _has_mask_option(argv, metadata)
-    args.has_outpaint = _has_outpaint_option(argv, metadata)
+    args.has_outpaint = args.outpaint_padding is not None or _has_outpaint_option(argv, metadata)
+    args.has_reframe = args.reframe_padding is not None
+    if args.has_reframe and args.has_outpaint:
+        parser.error("--reframe-padding and --outpaint-padding are different workflows and cannot be used together.")
     if args.model is None:
         parser.error("--model is required so mlx-gen can choose the right backend, unless metadata provides it.")
     return args, forwarded
@@ -273,7 +285,8 @@ def _parser() -> argparse.ArgumentParser:
             "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
             "--negative-prompt/--negative, --canvas-policy, --quantize, --lora-paths, --lora-scales, --metadata, "
             "--config-from-metadata/-C, --output, --replace, --frames, --fps, --guidance-2, "
-            "--low-ram, --tensor-health-check-interval, --failure-diagnostics, and --progress/--no-progress."
+            "--reframe-padding, --outpaint-padding, --low-ram, --tensor-health-check-interval, "
+            "--failure-diagnostics, and --progress/--no-progress."
         ),
     )
     parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")
@@ -341,6 +354,26 @@ def _parser() -> argparse.ArgumentParser:
         dest="image_path",
         default=None,
         help="Compatibility alias for a single input image.",
+    )
+    parser.add_argument(
+        "--reframe-padding",
+        default=None,
+        help=(
+            "Generative reframe request: CSS-style top,right,bottom,left padding such as "
+            "'0,25%%,0,25%%'. Supported edit models redraw into the larger canvas; this is not "
+            "masked outpainting and does not preserve source pixels exactly."
+        ),
+    )
+    parser.add_argument(
+        "--outpaint-padding",
+        "--image-outpaint-padding",
+        dest="outpaint_padding",
+        default=None,
+        help=(
+            "Canvas outpaint request: CSS-style top,right,bottom,left padding such as "
+            "'0,25%%,0,25%%'. Supported edit models generate the expanded view and MLX-Gen "
+            "restores the source region with a feathered mask."
+        ),
     )
     return parser
 
@@ -580,12 +613,78 @@ def _collect_images(args: argparse.Namespace) -> list[str]:
     return images or args.metadata_images
 
 
+def _reframe_forwarded_argv(args: argparse.Namespace, images: list[str], forwarded: list[str]) -> list[str]:
+    if not args.has_reframe:
+        return []
+    _validate_padding_value(args.reframe_padding, option_name="--reframe-padding")
+    if len(images) != 1:
+        _parser().error("--reframe-padding requires exactly one --image or --image-path.")
+    if _option_was_provided(forwarded, "--width") or _option_was_provided(forwarded, "--height"):
+        _parser().error(
+            "--reframe-padding computes --width and --height from the source image; "
+            "do not pass either option."
+        )
+    if _option_was_provided(forwarded, "--canvas-policy"):
+        _parser().error("--reframe-padding uses --canvas-policy exact-resize; do not pass --canvas-policy.")
+
+    return ["--reframe-padding", args.reframe_padding]
+
+
+def _outpaint_forwarded_argv(args: argparse.Namespace, images: list[str], forwarded: list[str]) -> list[str]:
+    if not args.has_outpaint:
+        return []
+    _validate_padding_value(args.outpaint_padding, option_name="--outpaint-padding")
+    if len(images) != 1:
+        _parser().error("--outpaint-padding requires exactly one --image or --image-path.")
+    if _option_was_provided(forwarded, "--width") or _option_was_provided(forwarded, "--height"):
+        _parser().error(
+            "--outpaint-padding computes --width and --height from the source image; "
+            "do not pass either option."
+        )
+    if _option_was_provided(forwarded, "--canvas-policy"):
+        _parser().error("--outpaint-padding uses --canvas-policy exact-resize; do not pass --canvas-policy.")
+
+    return ["--outpaint-padding", args.outpaint_padding]
+
+
+def _validate_padding_value(padding_value: str | None, *, option_name: str) -> None:
+    if padding_value is None:
+        _parser().error(f"{option_name} requires a padding value.")
+    try:
+        padding = BoxValues.parse(padding_value)
+    except BoxValueError as exc:
+        _parser().error(str(exc))
+    try:
+        values = [
+            _padding_part_number(padding.top),
+            _padding_part_number(padding.right),
+            _padding_part_number(padding.bottom),
+            _padding_part_number(padding.left),
+        ]
+    except ValueError as exc:
+        _parser().error(str(exc))
+    if any(value < 0 for value in values):
+        _parser().error(f"{option_name} values must be zero or positive.")
+    if not any(value > 0 for value in values):
+        _parser().error(f"{option_name} must add pixels on at least one side.")
+
+
+def _padding_part_number(value: int | str) -> int:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value.strip("%"))
+    except ValueError as exc:
+        raise ValueError(f"Invalid padding value: {value}") from exc
+
+
 def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
     has_images = image_count > 0
     model_config = _model_config(args.model, base_model=args.base_model)
     plan = _resolve_generation_plan(args, image_count=image_count, model_config=model_config)
     _validate_family_override(args, model_config=model_config, plan=plan)
     return _route_for_plan(plan.handler_id, has_image=has_images, model_override=plan.model_override)
+
 
 def _resolve_generation_plan(
     args: argparse.Namespace,
@@ -604,6 +703,7 @@ def _resolve_generation_plan(
             has_image_strength=args.has_image_strength,
             has_mask=args.has_mask,
             has_outpaint=args.has_outpaint,
+            has_reframe=args.has_reframe,
         )
     except TaskInferenceError as exc:
         _parser().error(str(exc))

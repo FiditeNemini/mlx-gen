@@ -125,6 +125,45 @@ Ordinary image-to-image preserves the first source image's aspect ratio by defau
 `--height` act as a size target under `--canvas-policy source-aspect`; pass
 `--canvas-policy exact-resize` only when you intentionally want the exact requested canvas.
 
+Use `--reframe-padding` when you want an edit model to generate a wider view from one source image.
+This is a generative edit:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-4b-8bit \
+  --image input.png \
+  --reframe-padding "25%,50%,25%,50%" \
+  --prompt "Generatively reframe this close-up into a wider establishing shot. Reveal the full subject and extend the background naturally." \
+  --steps 16 \
+  --seed 42 \
+  --output reframed.png
+```
+
+Use `--outpaint-padding` when you want MLX-Gen to expand the canvas and guide a supported edit
+model to fill the larger view:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --image input.png \
+  --outpaint-padding "5%,35%,5%,35%" \
+  --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing subject and background outside the original frame." \
+  --negative "text, border, frame, hard seam, duplicate subject" \
+  --steps 24 \
+  --guidance 4 \
+  --seed 42 \
+  --output outpaint.png
+```
+
+For FLUX.2 and Qwen Image Edit 2511, this route uses an edge-extended conditioning canvas and an
+adaptive source blend. If the generated source window still matches the original source, MLX-Gen
+blends source detail back in; if the model has reconstructed the scene, it skips the blend to avoid
+ghosted fragments. This is not a native fill/inpaint pipeline with an explicit diffusion mask, and
+it is not an exact pixel-lock guarantee.
+
+Current reframe and outpaint proof assets are published in
+[Image Edit Capabilities](edit-capabilities.md).
+
 For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image
 edits, and multi-reference image-to-image with copy/pasteable commands.

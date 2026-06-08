@@ -10,7 +10,7 @@
 - `README.md`: project overview, install commands, mflux credit, main workflows, published model links, Wan TI2V/A14B notes, and ecosystem links.
 - `docs/README.md`: documentation tree index.
 - `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, SeedVR2 upscaling, and Wan video examples.
-- `docs/api.md`: public CLI, router behavior, task/mode resolution, I2I mode selection and canvas policy, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor upscaling plus softness and tiling controls, negative prompts, Qwen edit-version routing, outpaint/reframe status, Wan video sizes, `mlxgen capabilities`, and Python routing helpers.
+- `docs/api.md`: public CLI, router behavior, task/mode resolution, I2I mode selection and canvas policy, generative reframe, canvas-guided outpaint with adaptive source blending, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor upscaling plus softness and tiling controls, negative prompts, Qwen edit-version routing, Wan video sizes, `mlxgen capabilities`, and Python routing helpers.
 - `docs/upscaling.md`: SeedVR2 image upscaling guide with official 3B/7B source usage, published 3B/7B q8/q4 package handles, shortest-edge and scale-factor sizing, quality controls, and real 5x source/output comparisons.
 - `docs/edit-capabilities.md`: image-edit contact sheets, model/package status summaries, and exact command logs for Qwen Image Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I rows. FIBO Edit is unsupported through unified `mlxgen generate` in the current release.
 - `docs/examples/spaceship-snow.md`: complete model-backed workflow across T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B.
@@ -18,7 +18,7 @@
 - `docs/quantization.md`: complete published package matrix, q8/q4/BF16 policies, model-family compatibility, Wan TI2V/A14B package status, and A14B q8 generated-output records.
 - `docs/huggingface-publishing.md`: generated model cards and AbstractFramework Hugging Face upload guidance.
 - `docs/python-integration.md`: embedding MLX-Gen, capability checks, negative prompts, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
-- `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 sizing and quality controls, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, prompting guidance, and usage limits.
+- `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 sizing and quality controls, Qwen edit variants, negative prompts, generative reframe, canvas outpaint, Wan resolutions, prompting guidance, and usage limits.
 - `docs/troubleshooting.md`: user-facing failure symptoms, diagnostics, and fixes.
 - `docs/release.md`: release and publishing process.
 - `ACKNOWLEDGEMENTS.md`: upstream mflux credit and model/community acknowledgements.
@@ -96,7 +96,8 @@ uses model capabilities, image count, and options to choose a generation plan:
 - one image with FLUX.2 or a dedicated edit checkpoint and no `--image-strength`: edit/reference I2I;
 - one image with a latent image model such as ERNIE Image Turbo, Z-Image, or base Qwen Image: latent img2img only when `--image-strength` is explicit;
 - repeated `--image`: multi-reference I2I when supported;
-- mask/outpaint options: accepted only by a capability that supports them.
+- mask/fill options: accepted only by mask/fill capabilities; canvas outpaint options are accepted
+  only by capabilities that advertise `supports_outpaint=true`.
 
 Applications can use `get_model_capabilities(...)` and `resolve_generation_plan(...)` from the
 `mlxgen` package to make the same routing decision before launching a job. Applications can use
@@ -111,9 +112,13 @@ image size, and final output size.
 
 `--image-strength` belongs only to latent img2img. Edit/reference and multi-reference I2I use
 source images as conditioning or references, so MLX-Gen rejects `--image-strength` for those modes
-before loading weights. Reframing/outpainting is not first-class in unified `mlxgen generate` yet;
-generic I2I resizing is not a substitute for masked outpainting because it does not preserve the
-original pixels in place.
+before loading weights. Generative reframe is available through `--reframe-padding` for models that
+advertise `supports_reframe=true`; it asks the edit model to generate a larger view and may redraw
+source content. Canvas-guided outpaint is available through `--outpaint-padding` for capabilities
+that advertise `supports_outpaint=true`; the current validated routes are FLUX.2 edit and Qwen
+Image Edit 2511. MLX-Gen builds an expanded canvas, runs the edit backend, and applies adaptive
+source blending only when it will not create ghosted fragments. Unsupported model families and
+unvalidated Qwen edit variants reject `--outpaint-padding` before loading weights.
 
 The unified CLI accepts both `--negative-prompt` and `--negative`. Python callers pass the same
 value as `negative_prompt=...` on the model-specific generation method. For Qwen image edit,

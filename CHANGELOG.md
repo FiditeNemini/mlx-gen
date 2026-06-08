@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Generative reframe and canvas-guided outpaint**: add `--reframe-padding` and
+  `--outpaint-padding` support for validated FLUX.2 and Qwen Image Edit 2511 routes, including
+  model capability reporting, router validation, generated metadata, and proof contact sheets.
+
+### Changed
+
+- **Outpaint source blending**: canvas-guided outpaint now uses edge-extended conditioning and an
+  adaptive source blend. MLX-Gen blends source detail back only when the generated source window
+  still matches the original source; otherwise it keeps the generated canvas to avoid ghosted
+  fragments.
+- **I2I documentation**: clarify the difference between latent I2I, edit-reference I2I,
+  multi-reference I2I, generative reframe, canvas-guided outpaint, and future native fill/inpaint
+  outpaint.
+
 ## [0.18.13] - 2026-06-07
 
 ### Added

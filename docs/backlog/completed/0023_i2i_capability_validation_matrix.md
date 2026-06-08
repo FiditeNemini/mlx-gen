@@ -105,7 +105,8 @@ must prove the actual model/mode contract, not only that a route exists.
 ## Non-goals
 
 - Do not test video models here.
-- Do not claim outpainting/reframing; item 0019 tracks true masked outpaint UX.
+- Do not claim outpainting/reframing from this historical matrix; item 0019 tracks the current
+  reframe and outpaint UX.
 - Do not publish validation images automatically.
 - Do not run unrelated release steps.
 

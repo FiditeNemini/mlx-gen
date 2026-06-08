@@ -4,10 +4,23 @@ from pathlib import Path
 
 import pytest
 import toml
+from PIL import Image, ImageChops
 
 from mflux.cli import mlx_gen
 from mflux.cli.mlx_gen import RouterInvocation
 from mflux.models.common.download_policy import downloads_enabled
+
+
+def test_generate_help_renders_padding_examples(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["mlxgen", "generate", "--help"])
+
+    with pytest.raises(SystemExit) as exc:
+        mlx_gen.main()
+
+    assert exc.value.code == 0
+    help_output = capsys.readouterr().out
+    assert "--reframe-padding" in help_output
+    assert "0,25%,0,25%" in help_output
 
 
 def test_qwen_base_single_image_requires_latent_strength(capsys):
@@ -90,6 +103,155 @@ def test_qwen_backend_defaults_to_flow_match_scheduler(monkeypatch):
     qwen_image_generate.main()
 
     assert observed["generate"]["scheduler"] == "flow_match_euler_discrete"
+
+
+def test_qwen_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_path):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeQwenEdit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage(Image.open(kwargs["image_paths"][0]).convert("RGB"))
+
+    monkeypatch.setattr(qwen_image_edit_generate, "QwenImageEdit", FakeQwenEdit)
+    monkeypatch.setattr(qwen_image_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit-2511",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "2,4,2,4",
+            "--prompt",
+            "extend the icy canyon",
+            "--output",
+            str(output),
+        ],
+    )
+
+    qwen_image_edit_generate.main()
+
+    assert observed["generate"]["width"] == 32
+    assert observed["generate"]["height"] == 16
+    assert observed["generate"]["canvas_policy"] == "exact-resize"
+    assert observed["generate"]["image_path"] == str(source)
+    assert Path(observed["generate"]["image_paths"][0]).name == "outpaint_canvas.png"
+    generated = Image.open(output).convert("RGB")
+    source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
+    output_interior = generated.crop((5, 3, 15, 9))
+    assert ImageChops.difference(output_interior, source_interior).getbbox() is None
+
+
+def test_qwen_edit_backend_reframe_uses_expanded_canvas(monkeypatch, tmp_path):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            observed["extra_metadata"] = dict(getattr(self, "extra_metadata", {}))
+            self.image.save(kwargs["path"])
+
+    class FakeQwenEdit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            canvas = Image.open(kwargs["image_paths"][0]).convert("RGB")
+            observed["canvas_region"] = canvas.crop((0, 2, 12, 10)).copy()
+            return FakeImage(Image.new("RGB", (kwargs["width"], kwargs["height"]), color=(0, 255, 0)))
+
+    monkeypatch.setattr(qwen_image_edit_generate, "QwenImageEdit", FakeQwenEdit)
+    monkeypatch.setattr(qwen_image_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit-2511",
+            "--image-paths",
+            str(source),
+            "--reframe-padding",
+            "2,4,2,0",
+            "--prompt",
+            "zoom out to reveal more canyon",
+            "--output",
+            str(output),
+        ],
+    )
+
+    qwen_image_edit_generate.main()
+
+    assert observed["generate"]["width"] == 16
+    assert observed["generate"]["height"] == 16
+    assert observed["generate"]["canvas_policy"] == "exact-resize"
+    assert Path(observed["generate"]["image_paths"][0]).name == "reframe_canvas.png"
+    assert ImageChops.difference(observed["canvas_region"], Image.open(source).convert("RGB")).getbbox() is None
+    assert observed["extra_metadata"]["reframe_padding"] == "2,4,2,0"
+    assert observed["extra_metadata"]["reframe_source_paste_left"] == 0
+    assert observed["extra_metadata"]["reframe_source_paste_top"] == 2
+
+
+def test_qwen_edit_backend_canvas_options_reject_explicit_size(monkeypatch, tmp_path, capsys):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit-2511",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "2,4,2,4",
+            "--width",
+            "512",
+            "--prompt",
+            "extend the icy canyon",
+            "--output",
+            str(tmp_path / "out.png"),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        qwen_image_edit_generate.main()
+
+    assert "computes --width and --height" in capsys.readouterr().err
 
 
 def test_qwen_base_multiple_images_requires_edit_model(capsys):
@@ -283,6 +445,156 @@ def test_routes_flux2_with_image_to_image_generation():
         "--prompt",
         "add sunglasses",
     ]
+
+
+def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_path):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(80, 20, 10)).save(source)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_path = None
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeFlux2Edit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage(Image.open(kwargs["image_paths"][0]).convert("RGB"))
+
+    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinEdit", FakeFlux2Edit)
+    monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-4b",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "2,4,2,4",
+            "--prompt",
+            "extend the icy canyon",
+            "--output",
+            str(output),
+        ],
+    )
+
+    flux2_edit_generate.main()
+
+    assert observed["generate"]["width"] == 32
+    assert observed["generate"]["height"] == 16
+    assert observed["generate"]["canvas_policy"] == "exact-resize"
+    assert Path(observed["generate"]["image_paths"][0]).name == "outpaint_canvas.png"
+    generated = Image.open(output).convert("RGB")
+    source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
+    output_interior = generated.crop((5, 3, 15, 9))
+    assert ImageChops.difference(output_interior, source_interior).getbbox() is None
+
+
+def test_flux2_edit_backend_reframe_uses_expanded_canvas(monkeypatch, tmp_path):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(80, 20, 10)).save(source)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_path = None
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            observed["extra_metadata"] = dict(getattr(self, "extra_metadata", {}))
+            self.image.save(kwargs["path"])
+
+    class FakeFlux2Edit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            canvas = Image.open(kwargs["image_paths"][0]).convert("RGB")
+            observed["canvas_region"] = canvas.crop((0, 2, 12, 10)).copy()
+            return FakeImage(Image.new("RGB", (kwargs["width"], kwargs["height"]), color=(0, 255, 0)))
+
+    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinEdit", FakeFlux2Edit)
+    monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-4b",
+            "--image-paths",
+            str(source),
+            "--reframe-padding",
+            "2,4,2,0",
+            "--prompt",
+            "zoom out to reveal more canyon",
+            "--output",
+            str(output),
+        ],
+    )
+
+    flux2_edit_generate.main()
+
+    assert observed["generate"]["width"] == 16
+    assert observed["generate"]["height"] == 16
+    assert observed["generate"]["canvas_policy"] == "exact-resize"
+    assert Path(observed["generate"]["image_paths"][0]).name == "reframe_canvas.png"
+    assert ImageChops.difference(observed["canvas_region"], Image.open(source).convert("RGB")).getbbox() is None
+    assert observed["extra_metadata"]["reframe_padding"] == "2,4,2,0"
+    assert observed["extra_metadata"]["reframe_source_paste_left"] == 0
+    assert observed["extra_metadata"]["reframe_source_paste_top"] == 2
+
+
+def test_flux2_edit_backend_canvas_options_reject_explicit_size(monkeypatch, tmp_path, capsys):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (12, 8), color=(80, 20, 10)).save(source)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-4b",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "2,4,2,4",
+            "--width",
+            "512",
+            "--prompt",
+            "extend the icy canyon",
+            "--output",
+            str(tmp_path / "out.png"),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        flux2_edit_generate.main()
+
+    assert "computes --width and --height" in capsys.readouterr().err
 
 
 def test_routes_flux2_explicit_edit_with_image_to_edit_generation():
@@ -501,12 +813,68 @@ def test_mask_path_is_rejected_for_flux2_edit_mode(capsys):
     assert "mask-path is only supported" in capsys.readouterr().err
 
 
-def test_outpaint_padding_is_rejected_until_a_model_supports_it(capsys):
+def test_outpaint_padding_routes_flux2_edit():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/flux.2-klein-4b-8bit",
+            "--image",
+            "input.png",
+            "--outpaint-padding",
+            "0,25%,0,25%",
+            "--prompt",
+            "extend the room",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert invocation.argv == [
+        "mflux-generate-flux2-edit",
+        "--model",
+        "AbstractFramework/flux.2-klein-4b-8bit",
+        "--image-paths",
+        "input.png",
+        "--prompt",
+        "extend the room",
+        "--outpaint-padding",
+        "0,25%,0,25%",
+    ]
+
+
+def test_outpaint_padding_routes_qwen_edit():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "--image",
+            "input.png",
+            "--image-outpaint-padding",
+            "25%,0,25%,0",
+            "--prompt",
+            "extend the room",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen-edit"
+    assert invocation.argv == [
+        "mflux-generate-qwen-edit",
+        "--model",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
+        "--image-paths",
+        "input.png",
+        "--prompt",
+        "extend the room",
+        "--outpaint-padding",
+        "25%,0,25%,0",
+    ]
+
+
+def test_outpaint_padding_is_rejected_for_latent_only_models(capsys):
     with pytest.raises(SystemExit):
         mlx_gen._resolve_invocation(
             [
                 "--model",
-                "AbstractFramework/flux.2-klein-4b-8bit",
+                "z-image-turbo",
                 "--image",
                 "input.png",
                 "--outpaint-padding",
@@ -517,6 +885,205 @@ def test_outpaint_padding_is_rejected_until_a_model_supports_it(capsys):
         )
 
     assert "outpaint-padding is only supported" in capsys.readouterr().err
+
+
+def test_outpaint_padding_rejects_conflicting_canvas_options(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-4b",
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "0,25%,0,25%",
+                "--height",
+                "512",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    assert "computes --width and --height" in capsys.readouterr().err
+
+
+def test_reframe_padding_routes_flux2_edit_with_computed_canvas(tmp_path):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (100, 50), color="white").save(source)
+
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/flux.2-klein-4b-8bit",
+            "--image",
+            str(source),
+            "--reframe-padding",
+            "0,50%,0,0",
+            "--prompt",
+            "zoom out to reveal more background",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert invocation.argv == [
+        "mflux-generate-flux2-edit",
+        "--model",
+        "AbstractFramework/flux.2-klein-4b-8bit",
+        "--image-paths",
+        str(source),
+        "--prompt",
+        "zoom out to reveal more background",
+        "--reframe-padding",
+        "0,50%,0,0",
+    ]
+
+
+def test_reframe_padding_routes_qwen_edit_with_computed_canvas(tmp_path):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "--image",
+            str(source),
+            "--reframe-padding",
+            "25%,0,25%,0",
+            "--prompt",
+            "zoom out vertically",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen-edit"
+    assert invocation.argv == [
+        "mflux-generate-qwen-edit",
+        "--model",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
+        "--image-paths",
+        str(source),
+        "--prompt",
+        "zoom out vertically",
+        "--reframe-padding",
+        "25%,0,25%,0",
+    ]
+
+
+def test_reframe_padding_is_rejected_for_latent_only_models(tmp_path, capsys):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "z-image-turbo",
+                "--image",
+                str(source),
+                "--reframe-padding",
+                "0,25%,0,25%",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+
+    assert "reframe-padding is only supported" in capsys.readouterr().err
+
+
+def test_reframe_padding_rejects_conflicting_canvas_options(tmp_path, capsys):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-4b",
+                "--image",
+                str(source),
+                "--reframe-padding",
+                "0,25%,0,25%",
+                "--width",
+                "512",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+
+    assert "computes --width and --height" in capsys.readouterr().err
+
+
+def test_reframe_padding_rejects_noop_and_negative_values(tmp_path, capsys):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-4b",
+                "--image",
+                str(source),
+                "--reframe-padding",
+                "0,0,0,0",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+    assert "must add pixels on at least one side" in capsys.readouterr().err
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-4b",
+                "--image",
+                str(source),
+                "--reframe-padding=-1,0,0,0",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+    assert "must be zero or positive" in capsys.readouterr().err
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-4b",
+                "--image",
+                str(source),
+                "--reframe-padding=abc%,0,0,0",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+    assert "Invalid padding value: abc%" in capsys.readouterr().err
+
+
+def test_reframe_padding_rejects_multi_reference_inputs(tmp_path, capsys):
+    source = tmp_path / "source.png"
+    reference = tmp_path / "reference.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+    Image.new("RGB", (128, 64), color="black").save(reference)
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "flux2-klein-4b",
+                "--image",
+                str(source),
+                "--image",
+                str(reference),
+                "--reframe-padding",
+                "0,25%,0,25%",
+                "--prompt",
+                "zoom out",
+            ]
+        )
+
+    assert "reframe-padding is only supported" in capsys.readouterr().err
 
 
 def test_routes_flux2_without_image_to_text_generation():

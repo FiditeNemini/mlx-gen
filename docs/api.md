@@ -81,7 +81,8 @@ specific path.
 | Whole-image variation or restyle from a source image | `latent-img2img` | exactly one image | pass `--image-strength` or `--i2i-mode latent` on a model that supports latent I2I | Yes |
 | Instruction edit, object/layout change, or composition-preserving style edit | `edit-reference` | one image | default for FLUX.2 and dedicated edit checkpoints when one image is supplied without `--image-strength`; or pass `--i2i-mode edit` | No |
 | Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
-| Inpainting, outpainting, or reframing with a preserved canvas | fill/outpaint mode | image plus mask/canvas | not first-class in unified `mlxgen generate` yet | No |
+| Generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
+| Canvas-guided outpaint with adaptive source blend | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
 
 Use latent img2img when you want a whole-image variation driven by source-image noise injection:
 restyle the whole scene, change the mood, or make a loose variation. Higher `--image-strength`
@@ -154,12 +155,57 @@ mlxgen generate \
 `--task image-to-image --i2i-mode edit`, but new commands and integrations should prefer
 `--i2i-mode`.
 
-Reframing and outpainting are not ordinary image-to-image resizing. Generic I2I with a larger
-`--width` or `--height` resizes/recomposes the source instead of preserving original pixels in place.
-The reliable operation is masked outpainting: create a larger canvas, paste the source image into
-it, create a mask for the new area, and run a fill/inpaint model. MLX-Gen has lower-level FLUX.1
-Fill support inherited from mflux, but the unified `mlxgen generate --outpaint-padding ...` flow is
-not available yet.
+Generative reframe is available through `--reframe-padding` for edit models that advertise
+`supports_reframe=true` in `mlxgen capabilities`. It asks the edit model to generate a larger view
+from one source image. Padding accepts CSS-style values in `top,right,bottom,left` order. MLX-Gen
+builds a larger conditioning canvas with the source pasted at that offset, then asks the edit model
+to generate the larger view:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-4b-8bit \
+  --image input.png \
+  --reframe-padding "15%,35%,15%,35%" \
+  --prompt "Generatively reframe this image into a wider view. Keep the subject fully visible and extend the background naturally." \
+  --steps 16 \
+  --seed 42 \
+  --output reframed.png
+```
+
+This is a generative edit workflow. It may redraw source content, and the prompt still controls
+where the model places or reconstructs the subject. Use it for zoom-out, background extension, or
+revealing plausible missing object boundaries.
+
+Use `--outpaint-padding` when you want MLX-Gen to build an expanded canvas and guide an edit model
+to fill the larger view:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --image input.png \
+  --outpaint-padding "5%,35%,5%,35%" \
+  --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing background and subject outside the original frame." \
+  --negative "text, border, frame, hard seam, duplicate subject" \
+  --steps 24 \
+  --guidance 4 \
+  --seed 42 \
+  --output outpaint.png
+```
+
+For FLUX.2 and Qwen Image Edit 2511, this route creates a larger temporary canvas, initializes the
+new area with edge-extended source context, and runs the edit model on the expanded canvas. After
+generation, MLX-Gen compares the generated source window with the original source. If they are
+close, it applies a content-aware source blend; if the model has reconstructed or moved the scene,
+it skips the blend to avoid ghosted fragments. This is validated for
+`AbstractFramework/flux.2-klein-4b-8bit` and
+`AbstractFramework/qwen-image-edit-2511-8bit` in
+[Image Edit Capabilities](edit-capabilities.md#canvas-outpaint).
+
+This is not the same as a native fill/inpaint pipeline that receives an explicit diffusion mask.
+It is not an exact pixel-lock guarantee. MLX-Gen still keeps lower-level FLUX.1 Fill support
+separate from the current unified FLUX.2/Qwen Image Edit 2511 route. Z-Image, ERNIE, FIBO, base
+Qwen Image, Qwen Image Edit/2509, and latent I2I routes reject `--outpaint-padding` before loading
+weights.
 
 ### Negative Prompts
 

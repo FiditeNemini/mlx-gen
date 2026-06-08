@@ -283,14 +283,14 @@ progress callbacks make long runs observable.
 ## Documentation
 
 - [Getting started](docs/getting-started.md): installation, first runs, SeedVR2 upscaling, and Wan video.
-- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
+- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, generative reframe, canvas outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
 - [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, quality controls, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.
 - [Model management](docs/model-management.md): download, prepare, and run from local model files.
 - [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
 - [Python integration](docs/python-integration.md): embedding, progress callbacks, and AbstractVision/AbstractCore notes.
-- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, SeedVR2 sizing, Qwen edit variants, negative prompts, outpaint/reframe status, Wan resolutions, and usage limits.
+- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, SeedVR2 sizing, Qwen edit variants, negative prompts, generative reframe, canvas outpaint, Wan resolutions, and usage limits.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime failures.
 - [Acknowledgements](ACKNOWLEDGEMENTS.md): upstream mflux and model-community credits.
 

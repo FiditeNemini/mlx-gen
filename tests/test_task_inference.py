@@ -168,8 +168,51 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
     with pytest.raises(TaskInferenceError, match="mask-path is only supported"):
         mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_mask=True)
 
+    flux2_outpaint = mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_outpaint=True)
+    qwen_outpaint = mlxgen.resolve_generation_plan(
+        model="qwen-image-edit-2511",
+        image_count=1,
+        has_outpaint=True,
+    )
+    assert flux2_outpaint.capability_id == "flux2.edit"
+    assert qwen_outpaint.capability_id == "qwen.edit"
+
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_outpaint=True)
+        mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_outpaint=True)
+
+    with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="qwen-image-edit", image_count=1, has_outpaint=True)
+
+    with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=1, has_outpaint=True)
+
+
+def test_reframe_option_is_limited_to_validated_edit_capabilities():
+    flux2 = mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_reframe=True)
+    qwen = mlxgen.resolve_generation_plan(model="qwen-image-edit-2511", image_count=1, has_reframe=True)
+
+    assert flux2.mode == MODE_EDIT_REFERENCE
+    assert flux2.capability_id == "flux2.edit"
+    assert qwen.mode == MODE_EDIT_REFERENCE
+    assert qwen.capability_id == "qwen.edit"
+
+    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="qwen-image", image_count=1, has_reframe=True)
+
+    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="qwen-image-edit", image_count=1, has_reframe=True)
+
+    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=1, has_reframe=True)
+
+    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_reframe=True)
+
+    with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
+        mlxgen.resolve_generation_plan(model="ernie-image-turbo", image_count=1, has_reframe=True)
+
+    with pytest.raises(TaskInferenceError, match="does not expose unified generation capabilities"):
+        mlxgen.resolve_generation_plan(model="fibo-edit", image_count=1, has_reframe=True)
 
 
 def test_model_capabilities_are_publicly_inspectable():
@@ -188,6 +231,9 @@ def test_model_capabilities_are_publicly_inspectable():
     assert latent.canvas_policies == (CANVAS_POLICY_SOURCE_ASPECT, CANVAS_POLICY_EXACT_RESIZE)
     assert latent.primary_image_index == 0
     assert latent.dimension_multiple == 16
+    edit = next(capability for capability in capabilities.capabilities if capability.mode == MODE_EDIT_REFERENCE)
+    assert edit.supports_reframe is True
+    assert edit.supports_outpaint is True
 
 
 def test_fibo_edit_exposes_no_public_generation_capabilities():
