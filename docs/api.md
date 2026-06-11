@@ -58,7 +58,7 @@ repositories or local paths whose name does not identify the architecture, const
 LoRA support is experimental and route-specific. Capability rows include `supports_lora`, `lora_status`,
 `lora_target_roles`, and `lora_validation_profile`. `mapped-unvalidated` means the route has a
 mapping and strict loader path, but the exact model/package has not yet passed a visible A/B
-validation with a public adapter.
+validation with an accepted adapter.
 
 Generation does not download LoRA files. Download LoRA repositories explicitly, then pass a local
 `.safetensors` file or a cached Hugging Face adapter id:
@@ -80,11 +80,12 @@ supports FLUX.2 Klein 4B/9B, so that adapter is rejected for Klein routes. The n
 `--lora-scales` values must match the number of `--lora-paths` values exactly. See
 [LoRA](lora.md) for the source/no-LoRA/with-LoRA validation method.
 
-Wan video routes currently reject LoRA. This is a missing integration, not a packed-runtime
-blocker: the current MLX Wan transformer still uses ordinary linear attention and FFN layers, but
-MLX-Gen does not yet implement Wan-specific adapter conversion, TI2V-5B versus A14B target-role
-resolution, or I2V image-projection expansion. Bonsai remains a separate fail-closed case because
-its packed ternary runtime does not expose standard replaceable linear-module targets.
+Wan video LoRA is now route-specific instead of globally unsupported. Exact validated q8 rows exist
+for TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and
+I2V-A14B first-frame image-to-video. A14B requests still require explicit
+`high_noise_transformer` / `low_noise_transformer` role assignment when you pass separate adapter
+files. Bonsai remains a separate fail-closed case because its packed ternary runtime does not
+expose standard replaceable linear-module targets.
 
 Most image and video backends accept a negative prompt. In the unified CLI,
 `--negative-prompt` and `--negative` are aliases. Python callers pass the same value as
@@ -101,6 +102,15 @@ path, and reviewer notes. Route support and visual validation are intentionally 
 `mlxgen capabilities --model briaai/Fibo-Edit` currently exposes no unified public generation
 capability, while `mlxgen validation --model AbstractFramework/qwen-image-edit-2511-8bit` reports
 the current Qwen 2511 edit proof rows.
+
+For LoRA routes, pass the exact `lora_validation_profile` value surfaced by `mlxgen capabilities`
+when you want the accepted proof row for that route:
+
+```sh
+mlxgen validation \
+  --model AbstractFramework/qwen-image-edit-8bit \
+  --profile lora_qwen_edit_q8_ghibli_edit_2026_06_11
+```
 
 ### Image-To-Image Modes
 
@@ -339,6 +349,11 @@ ERNIE LoRA support is experimental and route-specific. The public q8 text-to-ima
 `AbstractFramework/ernie-image-turbo-8bit` now has an exact validated anime-style LoRA proof;
 ERNIE latent img2img still remains `mapped-unvalidated`. Check `mlxgen capabilities --model ...`
 before relying on a specific ERNIE LoRA workflow.
+
+Wan LoRA support is also route-specific. Exact validated q8 rows now exist for TI2V-5B
+text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B
+first-frame image-to-video. Wan uses explicit target roles: `transformer` for TI2V-5B, and
+`high_noise_transformer` plus `low_noise_transformer` for A14B routes.
 
 Wan2.2 routes through the same command surface for video generation. TI2V-5B is the smaller text-to-video and first-frame image-to-video path:
 

@@ -73,6 +73,7 @@ class LoRALoader:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         role: str | None = None,
+        state_dict_transform: Callable[[dict[str, mx.array], nn.Module], dict[str, mx.array]] | None = None,
     ) -> tuple[list[str], list[float]]:
         result = LoRALoader.load_and_apply_lora_detailed(
             lora_mapping=lora_mapping,
@@ -80,6 +81,7 @@ class LoRALoader:
             lora_paths=lora_paths,
             lora_scales=lora_scales,
             role=role,
+            state_dict_transform=state_dict_transform,
         )
         return result.resolved_paths, result.resolved_scales
 
@@ -90,6 +92,7 @@ class LoRALoader:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         role: str | None = None,
+        state_dict_transform: Callable[[dict[str, mx.array], nn.Module], dict[str, mx.array]] | None = None,
     ) -> LoRAApplicationResult:
         resolved_paths = LoraResolution.resolve_paths(lora_paths)
         if not resolved_paths:
@@ -116,6 +119,7 @@ class LoRALoader:
                     scale=scale,
                     lora_mapping=lora_mapping,
                     role=role,
+                    state_dict_transform=state_dict_transform,
                 )
             )
 
@@ -144,6 +148,7 @@ class LoRALoader:
         lora_mapping: list[LoRATarget],
         *,
         role: str | None,
+        state_dict_transform: Callable[[dict[str, mx.array], nn.Module], dict[str, mx.array]] | None,
     ) -> LoRAFileReport:
         if not Path(resolved_path).exists():
             raise LoRAApplicationError(f"LoRA file not found: {resolved_path}")
@@ -154,6 +159,8 @@ class LoRALoader:
             weights = dict(mx.load(resolved_path, return_metadata=True)[0].items())
         except (FileNotFoundError, ValueError, RuntimeError) as e:
             raise LoRAApplicationError(f"Failed to load LoRA file {resolved_path}: {e}") from e
+        if state_dict_transform is not None:
+            weights = state_dict_transform(weights, transformer)
 
         pattern_mappings = LoRALoader._build_pattern_mappings(lora_mapping)
 

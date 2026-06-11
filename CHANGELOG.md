@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.18.16] - 2026-06-11
+
+### Added
+
+- **Wan video LoRA runtime**: add Wan-specific LoRA mapping, explicit Wan CLI support for
+  `--lora-paths`, `--lora-scales`, and `--lora-target-roles`, generated-video metadata for applied
+  Wan adapters, and focused tests for TI2V-5B single-transformer plus A14B dual-transformer LoRA
+  routing.
+- **Original Qwen Image Edit q8 LoRA proof**: add an accepted single-image edit A/B contact sheet
+  for `AbstractFramework/qwen-image-edit-8bit` using the current Ghibli-style adapter profile.
+- **Wan TI2V-5B q8 text-to-video LoRA proof**: add an exact q8 text-to-video A/B contact sheet
+  using `AlekseyCalvin/HSToric_Color_Wan2.2_5B_LoRA_BySilverAgePoets`.
+- **Wan video LoRA proof assets**: add exact q8 proof contact sheets for TI2V I2V, T2V-A14B, and
+  I2V-A14B, plus a combined Wan route matrix built from the final A/B artifacts.
+
+### Changed
+
+- **LoRA support snapshot**: Wan video LoRA is now documented as exact-route validated on all
+  current Wan q8 public rows: TI2V-5B text-to-video, TI2V-5B first-frame image-to-video,
+  T2V-A14B text-to-video, and I2V-A14B first-frame image-to-video. Original Qwen Image Edit q8 is
+  now also treated as an accepted exact `qwen.edit` proof row.
+- **LoRA validation command surface**: `mlxgen validation --profile <lora_validation_profile>` now
+  resolves the current exact LoRA proof rows exposed by `mlxgen capabilities`.
+- **Backlog status**: close the Wan video LoRA item as completed, keep Wan follow-up work on
+  parity/performance/extra package variants separate, and narrow the remaining LoRA backlog to
+  unfinished image-family proofs plus Bonsai deferral.
+
 ## [0.18.15] - 2026-06-11
 
 ### Added
@@ -36,9 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Experimental feature wording**: mark LoRA and reframe/outpaint documentation as experimental
   while preserving the existing fail-closed adapter and capability contracts.
-- **LoRA support snapshot**: document the exact validated q8 rows, keep base Qwen Image and
-  original Qwen Image Edit experimental, keep Wan video unsupported, and explicitly deprioritize
-  Bonsai packed-runtime LoRA work.
+- **LoRA support snapshot**: document the exact validated q8 rows, keep base Qwen Image
+  experimental, and explicitly deprioritize Bonsai packed-runtime LoRA work.
 - **Wan guidance**: document that A14B at `480x240` or `240x480`, `101` frames, 20 fps, and
   `20-25` steps is the preferred practical M5 Max profile for the recorded starship prompt, and
   document `--flow-shift 3` for new 480p-class TI2V-5B checks.

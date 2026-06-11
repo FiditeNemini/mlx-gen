@@ -1,10 +1,10 @@
-# Proposed: Video LoRA support for T2V and I2V
+# Completed: Video LoRA support for T2V and I2V
 
 ## Metadata
 
 - Created: 2026-06-07
-- Status: Proposed
-- Completed: N/A
+- Status: Completed
+- Completed: 2026-06-11
 
 ## ADR status
 
@@ -24,28 +24,51 @@ video families such as LTX are tracked separately in proposed items 0009 and 001
 
 ## Current code reality
 
-- Wan model classes do not accept `lora_paths` in their public constructor path.
-- `src/mflux/models/wan/wan_initializer.py` builds a normal MLX `WanTransformer` for TI2V-5B and,
-  when configured, a second `WanTransformer` for the A14B low-noise stage. This is not a packed
-  Bonsai-style execution boundary.
-- `src/mflux/models/wan/model/wan_transformer/wan_transformer.py`,
-  `wan_attention.py`, and `wan_transformer_block.py` still use ordinary MLX linear layers for
-  attention projections, optional image-conditioning projections, FFN layers, and the output head.
-- There is no Wan LoRA mapping in `src/mflux/models/common/lora/mapping/` or
-  `src/mflux/models/wan/`.
-- Wan A14B uses separate high-noise and low-noise transformers; a LoRA policy must decide whether
-  an adapter applies to one transformer, both transformers, or a model-specific subset.
-- `GenerationCapability` does not yet expose task-specific LoRA support for T2V/I2V.
-- Existing LoRA mappings are image-family mappings for FLUX, FLUX.2, Qwen, Z-Image, and ERNIE.
-- Local Diffusers already proves the target shape of the problem:
-  - `diffusers.loaders.lora_pipeline.WanLoraLoaderMixin` defines the public Wan LoRA loading path;
-  - `_convert_non_diffusers_wan_lora_to_diffusers(...)` handles non-Diffusers Wan checkpoints;
-  - `_convert_musubi_wan_lora_to_diffusers(...)` handles Musubi/Kohya-style Wan checkpoints;
-  - `_maybe_expand_t2v_lora_for_i2v(...)` fills in zero LoRA tensors for `add_k_proj` and
-    `add_v_proj` when an I2V route loads a T2V adapter with no image-projection weights.
-- Item 0007 is expected to add strict LoRA capability metadata, loader reports, and fail-closed
-  unsupported-family handling. Video LoRA should reuse that contract rather than introducing a
-  parallel set of CLI flags or metadata fields.
+- Wan model constructors now accept `lora_paths`, `lora_scales`, and `lora_target_roles` through
+  the public `mlxgen generate` route.
+- `src/mflux/models/wan/wan_initializer.py` now applies Wan LoRAs through the shared strict LoRA
+  loader and stores adapter application reports in generated video metadata.
+- `src/mflux/models/wan/weights/wan_lora_mapping.py` now maps:
+  - Diffusers-style Wan adapter keys;
+  - non-Diffusers `diffusion_model.blocks.*` Wan adapter keys;
+  - Musubi/Kohya-style `lora_unet_blocks_*` Wan adapter keys.
+- MLX-Gen now supports explicit role targeting:
+  - `transformer` for TI2V-5B;
+  - `high_noise_transformer` and `low_noise_transformer` for A14B.
+- TI2V-5B I2V now mirrors Diffusers' T2V-to-I2V image-projection expansion behavior by
+  synthesizing zero LoRA tensors for missing `add_k_proj` and `add_v_proj` families when a T2V
+  adapter is loaded on an I2V-capable transformer.
+- `GenerationCapability` now surfaces Wan LoRA support and target roles per video route.
+- Focused unit and router tests cover:
+  - Wan adapter-key conversion;
+  - TI2V T2V compatibility;
+  - prepared-package compatibility via `base_model` fallback;
+  - generated-video metadata propagation;
+  - CLI forwarding of `--lora-target-roles`.
+
+## Completion status as of 2026-06-11
+
+Current Wan q8 public rows are now validated route-by-route with model-backed A/B artifacts:
+
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` on `wan.text-video`
+  - adapter: `AlekseyCalvin/HSToric_Color_Wan2.2_5B_LoRA_BySilverAgePoets`
+  - evidence: `docs/assets/validation/wan-lora-2026-06-11/ti2v_t2v_hstoric_ab_contact_sheet.jpg`
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` on `wan.first-frame`
+  - adapter: `ostris/wan22_5b_i2v_crush_it_lora`
+  - evidence: `docs/assets/validation/wan-lora-2026-06-11/ti2v_i2v_crushit_ab_contact_sheet.jpg`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` on `wan.text-video`
+  - adapter: `artificialguybr/FollowCam-Redmond-WAN2-T2V-14B`
+  - evidence: `docs/assets/validation/wan-lora-2026-06-11/a14b_t2v_followcam_ab_contact_sheet.jpg`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` on `wan.first-frame`
+  - adapter: `ostris/wan22_i2v_14b_orbit_shot_lora`
+  - evidence: `docs/assets/validation/wan-lora-2026-06-11/a14b_i2v_orbit_spaceship_ab_contact_sheet.jpg`
+
+The combined summary sheet is:
+
+- `docs/assets/validation/wan-lora-2026-06-11/wan_video_lora_route_matrix.jpg`
+
+All four validated rows use explicit role assignment, matching base-model cards, and same-seed A/B
+comparisons with only the adapter changed.
 
 ## Problem or opportunity
 
@@ -54,9 +77,10 @@ image-to-video. Treating LoRA as a generic option would be wrong for video becau
 adapters could be ignored, partially applied to the wrong transformer, or damage temporal
 consistency while still producing a plausible MP4.
 
-## Proposed direction
+## Direction
 
-Keep video LoRA proposed until image LoRA strictness lands, then investigate Wan first:
+Keep Wan video LoRA tied to item 0007's strict capability contract and continue promotion
+route-by-route:
 
 1. Add task-specific capability fields through item 0007:
    - `supports_lora`;
@@ -75,19 +99,18 @@ Keep video LoRA proposed until image LoRA strictness lands, then investigate Wan
      modules;
    - whether A14B adapters target both denoisers or a single denoiser role.
 
-3. Implement a Wan LoRA mapping only when a known adapter can be loaded and visually changes a
-   small video output.
+3. Keep the current implementation fail-closed:
+   - no silent role duplication for A14B;
+   - no unsupported video-family fallback;
+   - no promotion from key matching alone.
 
-4. Implement in stages:
-   - TI2V-5B T2V first if the priority is the smallest MLX-Gen code change: it has one
-     transformer role and is the smallest Wan LoRA integration target.
-   - A14B T2V can legitimately be first instead if the priority is the fastest public proof. It is
-     more complex in routing terms, but the public A14B LoRA ecosystem is much stronger and
-     already exposes paired high-noise/low-noise files that match the two-transformer boundary.
-   - TI2V-5B I2V next, reusing the same transformer role but only after MLX-Gen has a clear
-     equivalent for Diffusers' T2V-to-I2V image-projection expansion behavior.
-   - A14B T2V next, only after the high-noise/low-noise adapter role is explicit.
-   - A14B I2V last, because it combines dual denoisers with source-image identity preservation.
+4. Continue promotion in stages:
+   - keep TI2V-5B T2V as the first validated Wan row;
+   - promote TI2V-5B I2V only after a public adapter shows a clear source-conditioned A/B delta;
+   - promote A14B T2V only after a paired or explicitly duplicated adapter demonstrates a clear
+     high-noise/low-noise effect;
+   - promote A14B I2V last, because it combines dual denoisers with source-image identity
+     preservation.
 
 5. Validate by task direction:
    - T2V: prompt-only video with and without adapter, same seed/settings, visible style or motion
@@ -182,15 +205,14 @@ base video routes are quality-stable enough that adapter effects can be judged.
 
 ## Promotion criteria
 
-Promote to `planned/` when:
+Promote an exact Wan row from `mapped-unvalidated` to `validated` only when:
 
-- item 0007 has fail-closed LoRA capability metadata and strict loader behavior;
-- at least one Wan-compatible public LoRA or local adapter is available for validation;
-- item 0015 or later Wan parity work confirms the base T2V/I2V route is healthy enough for adapter
-  comparisons;
-- a small MP4 validation profile is selected, such as `480x240`, 41 frames, 10 to 15 steps.
-- the selected adapter's target role is known and can be recorded in capability metadata and video
-  metadata before generation starts.
+- the route has a public adapter with a compatible model card or directly inspected tensor keys;
+- the selected role assignment is explicit and recorded in capability plus output metadata;
+- the model-backed MP4 A/B uses the same source or prompt, seed, frames, steps, guidance, and
+  output size with and without the adapter;
+- the contact sheet or MP4 shows a clear effect that matches the adapter's intended use instead of
+  a subtle or ambiguous drift.
 
 ## Validation ideas
 
@@ -213,6 +235,15 @@ Promote to `planned/` when:
 - Do not spend time on Bonsai LoRA here; that remains a separate low-priority architectural item.
 - Do not implement LTX, HunyuanVideo, or another second video family inside this item; proposed
   items 0009 and 0010 remain the place to select or spike a second video backend.
+
+## Completion notes
+
+This item is complete for the current Wan2.2 surface served by MLX-Gen. Follow-up work, if needed,
+belongs in separate items:
+
+- second video-family LoRA support;
+- broader q4/package proof coverage;
+- richer validation-registry or `mlxgen validation` integration for LoRA-specific profiles.
 
 ## Guidance for future agents
 

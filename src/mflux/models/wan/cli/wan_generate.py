@@ -43,6 +43,9 @@ def main() -> None:
             model_config=model_config,
             quantize=args.quantize,
             model_path=model_path,
+            lora_paths=args.lora_paths,
+            lora_scales=args.lora_scales,
+            lora_target_roles=args.lora_target_roles,
         )
         single_seed = len(args.seed) == 1
         release_inactive_denoiser = single_seed and bool(
@@ -177,6 +180,29 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", "-s", type=int, default=None, nargs="+", help="One or more random seeds.")
     parser.add_argument("--auto-seeds", type=int, default=-1, help="Generate N random seeds.")
     parser.add_argument("--quantize", "-q", type=int, choices=ui_defaults.QUANTIZE_CHOICES, default=None)
+    parser.add_argument(
+        "--lora-paths",
+        type=str,
+        nargs="*",
+        default=None,
+        help="Wan LoRA paths: local files, Hugging Face repos, or repo:file.safetensors entries.",
+    )
+    parser.add_argument(
+        "--lora-scales",
+        type=float,
+        nargs="*",
+        default=None,
+        help="Per-file Wan LoRA scaling factors. Must match --lora-paths when provided.",
+    )
+    parser.add_argument(
+        "--lora-target-roles",
+        nargs="*",
+        default=None,
+        help=(
+            "Per-file Wan LoRA target roles. Use 'transformer' for TI2V-5B. Use "
+            "'high_noise_transformer' and/or 'low_noise_transformer' for Wan A14B."
+        ),
+    )
     parser.add_argument("--max-sequence-length", type=int, default=512, help="UMT5 prompt token length.")
     parser.add_argument("--metadata", action="store_true", help="Export video metadata as JSON.")
     parser.add_argument("--output", type=str, default="video.mp4", help='Output path. Default is "video.mp4".')
@@ -257,6 +283,15 @@ def _apply_metadata_defaults(args: argparse.Namespace) -> set[str]:
     if args.image_path is None and metadata.get("image_path") is not None:
         args.image_path = metadata.get("image_path")
         provided_options.add("--image-path")
+    if args.lora_paths is None and metadata.get("lora_paths") is not None:
+        args.lora_paths = metadata.get("lora_paths")
+        provided_options.add("--lora-paths")
+    if args.lora_scales is None and metadata.get("lora_scales") is not None:
+        args.lora_scales = metadata.get("lora_scales")
+        provided_options.add("--lora-scales")
+    if args.lora_target_roles is None and metadata.get("lora_target_roles") is not None:
+        args.lora_target_roles = metadata.get("lora_target_roles")
+        provided_options.add("--lora-target-roles")
     for name in ("width", "height", "frames", "fps", "steps", "guidance", "guidance_2", "flow_shift"):
         value = metadata.get(name)
         if value is not None and getattr(args, name) == _parser().get_default(name):
@@ -276,6 +311,10 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--max-sequence-length must be greater than zero.")
     if args.image_path is not None and not Path(args.image_path).exists():
         parser.error(f"--image-path does not exist: {args.image_path}")
+    if args.lora_scales is not None and not args.lora_paths:
+        parser.error("--lora-scales requires --lora-paths.")
+    if args.lora_target_roles is not None and not args.lora_paths:
+        parser.error("--lora-target-roles requires --lora-paths.")
 
 
 def _apply_seed_defaults(args: argparse.Namespace) -> None:

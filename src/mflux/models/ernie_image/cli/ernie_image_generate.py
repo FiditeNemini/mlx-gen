@@ -89,8 +89,8 @@ def main():
                 pe_top_p=args.prompt_enhancer_top_p,
                 pe_max_new_tokens=args.prompt_enhancer_max_new_tokens,
                 canvas_policy=args.canvas_policy,
-                lora_paths=model.lora_paths,
-                lora_scales=model.lora_scales,
+                lora_paths=getattr(model, "lora_paths", None),
+                lora_scales=getattr(model, "lora_scales", None),
                 extra_metadata=LoRALoader.extra_metadata_for_model(model),
             )
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)

@@ -2,6 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mflux.lora_validation_registry import (
+    ERNIE_TURBO_Q8_ANIME_STYLE_PROFILE_ID,
+    FLUX2_KLEIN9B_Q8_CONSISTENCY_EDIT_PROFILE_ID,
+    QWEN2509_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
+    QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
+    QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
+    QWEN_EDIT_Q8_GHIBLI_PROFILE_ID,
+    WAN_A14B_Q8_FOLLOWCAM_T2V_PROFILE_ID,
+    WAN_A14B_Q8_ORBIT_I2V_PROFILE_ID,
+    WAN_TI2V5B_Q8_CRUSHIT_I2V_PROFILE_ID,
+    WAN_TI2V5B_Q8_HSTORIC_T2V_PROFILE_ID,
+    ZIMAGE_Q8_TECHNICALLYCOLOR_PROFILE_ID,
+)
+
 STATUS_PASS = "PASS"
 STATUS_PARTIAL = "PARTIAL"
 STATUS_FAIL = "FAIL"
@@ -29,6 +43,8 @@ REFRAME_OUTPAINT_DIR = "docs/assets/validation/reframe-outpaint-2026-06-08"
 REFRAME_OUTPAINT_SOURCE = f"{REFRAME_OUTPAINT_DIR}/source-b-cropped-starship.png"
 FLUX2_KLEIN_BASE_STARSHIP_DIR = "docs/assets/validation/flux2-klein-base-starship-2026-06-10"
 FLUX2_KLEIN_BASE_STARSHIP_SOURCE = REFRAME_OUTPAINT_SOURCE
+LORA_VALIDATION_DIR = "docs/assets/validation/lora-2026-06-11"
+WAN_LORA_VALIDATION_DIR = "docs/assets/validation/wan-lora-2026-06-11"
 
 
 @dataclass(frozen=True)
@@ -139,7 +155,12 @@ _MATRIX_DIR = "docs/assets/validation/i2i-edit-5x4-2026-06-05"
 
 
 def list_validation_profiles() -> tuple[ValidationProfile, ...]:
-    return (_i2i_edit_profile(), _reframe_outpaint_profile(), _flux2_klein_base_starship_profile())
+    return (
+        _i2i_edit_profile(),
+        _reframe_outpaint_profile(),
+        _flux2_klein_base_starship_profile(),
+        *_lora_profiles(),
+    )
 
 
 def get_validation_profile(profile_id: str = I2I_EDIT_5X4_PROFILE_ID) -> ValidationProfile:
@@ -226,6 +247,253 @@ def _flux2_klein_base_starship_profile() -> ValidationProfile:
             "share the route surface through capabilities, but their starship contact sheets are still pending."
         ),
         records=tuple(_flux2_klein_base_starship_records()),
+    )
+
+
+def _lora_profiles() -> tuple[ValidationProfile, ...]:
+    return (
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN_EDIT_Q8_GHIBLI_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-8bit",
+                family="Qwen Image Edit",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{LORA_VALIDATION_DIR}/qwen_edit_q8_ghibli_trials_contact_sheet.png",
+                source_images=(CANONICAL_SOURCE,),
+                prompt=(
+                    "ghibli style. Transform the source into a whimsical hand-painted animated film "
+                    "frame with soft brushwork, warm pastel sky, painterly snow, and gentle storybook "
+                    "lighting. Preserve the same spaceship, snowy canyon, wide framing, and overall layout."
+                ),
+                reviewer_notes=(
+                    "PASS on the accepted 2026-06-11 same-seed Ghibli-style A/B proof. The adapter "
+                    "matched 1680/1680 tensors, applied 840 targets, and produces a visible style shift "
+                    "while keeping the edit route stable."
+                ),
+            ),
+            title="Qwen Image Edit q8 Ghibli-style LoRA Validation",
+            canonical_source=CANONICAL_SOURCE,
+            description="Accepted single-image edit LoRA proof for the original Qwen Image Edit q8 route.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-2511-8bit",
+                family="Qwen Image Edit 2511",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path="docs/assets/validation/lora-2026-06-08/qwen2511-q8-multi-angle-lora-ab-contact-sheet.png",
+                source_images=(CANONICAL_SOURCE,),
+                prompt="Use the source spaceship as the same object. <sks> back view low-angle shot wide shot.",
+                reviewer_notes="PASS on the 2026-06-08 multi-angle A/B proof for the q8 edit row.",
+            ),
+            title="Qwen Image Edit 2511 q8 Multi-Angle LoRA Validation",
+            canonical_source=CANONICAL_SOURCE,
+            description="Exact single-image edit LoRA proof for Qwen Image Edit 2511 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2509_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-2509-8bit",
+                family="Qwen Image Edit 2509",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{LORA_VALIDATION_DIR}/qwen2509_q8_multi_angle_ab_contact_sheet.png",
+                source_images=(CANONICAL_SOURCE,),
+                prompt="Move the camera to the right and keep the same spaceship design and wide scene.",
+                reviewer_notes="PASS on the validated Lightning-style 8-step q8 edit proof.",
+            ),
+            title="Qwen Image Edit 2509 q8 Multi-Angle LoRA Validation",
+            canonical_source=CANONICAL_SOURCE,
+            description="Exact single-image edit LoRA proof for Qwen Image Edit 2509 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
+                model="AbstractFramework/qwen-image-2512-8bit",
+                family="Qwen Image 2512",
+                package_variant="q8 prepared",
+                public_task="text-to-image",
+                mode="text-only",
+                artifact_path=f"{LORA_VALIDATION_DIR}/qwen2512_q8_pixel_art_ab_contact_sheet.png",
+                source_images=(),
+                prompt="Pixel Art, a pixelated image of a space astronaut floating in zero gravity.",
+                reviewer_notes="PASS on the q8 pixel-art A/B proof.",
+            ),
+            title="Qwen Image 2512 q8 Pixel-Art LoRA Validation",
+            canonical_source=f"{LORA_VALIDATION_DIR}/qwen2512_q8_pixel_art_ab_contact_sheet.png",
+            description="Exact text-to-image LoRA proof for Qwen Image 2512 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=ZIMAGE_Q8_TECHNICALLYCOLOR_PROFILE_ID,
+                model="AbstractFramework/z-image-turbo-8bit",
+                family="Z-Image Turbo",
+                package_variant="q8 prepared",
+                public_task="text-to-image",
+                mode="text-only",
+                artifact_path=f"{LORA_VALIDATION_DIR}/zimage_q8_technically_color_ab_contact_sheet.png",
+                source_images=(),
+                prompt="t3chnic4lly vibrant 1960s close-up portrait by a lake.",
+                reviewer_notes="PASS on the q8 Technically Color A/B proof.",
+            ),
+            title="Z-Image Turbo q8 Technically Color LoRA Validation",
+            canonical_source=f"{LORA_VALIDATION_DIR}/zimage_q8_technically_color_ab_contact_sheet.png",
+            description="Exact text-to-image LoRA proof for Z-Image Turbo q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=FLUX2_KLEIN9B_Q8_CONSISTENCY_EDIT_PROFILE_ID,
+                model="AbstractFramework/flux.2-klein-9b-8bit",
+                family="FLUX.2 Klein 9B",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{LORA_VALIDATION_DIR}/flux2_klein9b_q8_consistency_ab_contact_sheet.png",
+                source_images=(CANONICAL_SOURCE,),
+                prompt="Edit the source into the same spaceship after a hard landing in the snow at blue hour.",
+                reviewer_notes="PASS on the q8 consistency-edit A/B proof.",
+            ),
+            title="FLUX.2 Klein 9B q8 Consistency LoRA Validation",
+            canonical_source=CANONICAL_SOURCE,
+            description="Exact single-image edit LoRA proof for FLUX.2 Klein 9B q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=ERNIE_TURBO_Q8_ANIME_STYLE_PROFILE_ID,
+                model="AbstractFramework/ernie-image-turbo-8bit",
+                family="ERNIE Image Turbo",
+                package_variant="q8 prepared",
+                public_task="text-to-image",
+                mode="text-only",
+                artifact_path=f"{LORA_VALIDATION_DIR}/ernie_turbo_q8_anime_style_ab_contact_sheet.png",
+                source_images=(),
+                prompt="elusarca anime style, a young woman with silver hair and a red trench coat.",
+                reviewer_notes="PASS on the q8 anime-style A/B proof.",
+            ),
+            title="ERNIE Image Turbo q8 Anime-Style LoRA Validation",
+            canonical_source=f"{LORA_VALIDATION_DIR}/ernie_turbo_q8_anime_style_ab_contact_sheet.png",
+            description="Exact text-to-image LoRA proof for ERNIE Image Turbo q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=WAN_TI2V5B_Q8_HSTORIC_T2V_PROFILE_ID,
+                model="AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit",
+                family="Wan2.2 TI2V-5B",
+                package_variant="q8 prepared",
+                public_task="text-to-video",
+                mode="text-only",
+                artifact_path=f"{WAN_LORA_VALIDATION_DIR}/ti2v_t2v_hstoric_ab_contact_sheet.jpg",
+                source_images=(),
+                prompt="HST style HD film, early 1900s, autochrome, analog cinema. A horse-drawn carriage crossing a snowy town square at dusk.",
+                reviewer_notes="PASS on the q8 TI2V-5B text-to-video LoRA proof.",
+            ),
+            title="Wan2.2 TI2V-5B q8 Text-to-Video LoRA Validation",
+            canonical_source=f"{WAN_LORA_VALIDATION_DIR}/ti2v_t2v_hstoric_ab_contact_sheet.jpg",
+            description="Exact text-to-video LoRA proof for Wan2.2 TI2V-5B q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=WAN_TI2V5B_Q8_CRUSHIT_I2V_PROFILE_ID,
+                model="AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit",
+                family="Wan2.2 TI2V-5B",
+                package_variant="q8 prepared",
+                public_task="image-to-video",
+                mode="first-frame-i2v",
+                artifact_path=f"{WAN_LORA_VALIDATION_DIR}/ti2v_i2v_crushit_ab_contact_sheet.jpg",
+                source_images=(),
+                prompt="crush it. An invisible hydraulic press crushes the centered aluminum soda can flat on the clean studio floor.",
+                reviewer_notes="PASS on the q8 TI2V-5B first-frame image-to-video LoRA proof.",
+            ),
+            title="Wan2.2 TI2V-5B q8 First-Frame Image-to-Video LoRA Validation",
+            canonical_source=f"{WAN_LORA_VALIDATION_DIR}/ti2v_i2v_crushit_ab_contact_sheet.jpg",
+            description="Exact first-frame image-to-video LoRA proof for Wan2.2 TI2V-5B q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=WAN_A14B_Q8_FOLLOWCAM_T2V_PROFILE_ID,
+                model="AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit",
+                family="Wan2.2 T2V-A14B",
+                package_variant="q8 prepared",
+                public_task="text-to-video",
+                mode="text-only",
+                artifact_path=f"{WAN_LORA_VALIDATION_DIR}/a14b_t2v_followcam_ab_contact_sheet.jpg",
+                source_images=(),
+                prompt="FollowCam. A continuous wide-angle shot as we follow a rider on horseback galloping through a foggy meadow at dawn.",
+                reviewer_notes="PASS on the q8 T2V-A14B text-to-video LoRA proof.",
+            ),
+            title="Wan2.2 T2V-A14B q8 Text-to-Video LoRA Validation",
+            canonical_source=f"{WAN_LORA_VALIDATION_DIR}/a14b_t2v_followcam_ab_contact_sheet.jpg",
+            description="Exact text-to-video LoRA proof for Wan2.2 T2V-A14B q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=WAN_A14B_Q8_ORBIT_I2V_PROFILE_ID,
+                model="AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit",
+                family="Wan2.2 I2V-A14B",
+                package_variant="q8 prepared",
+                public_task="image-to-video",
+                mode="first-frame-i2v",
+                artifact_path=f"{WAN_LORA_VALIDATION_DIR}/a14b_i2v_orbit_spaceship_ab_contact_sheet.jpg",
+                source_images=(CANONICAL_SOURCE,),
+                prompt="orbit 360 around the landed silver spaceship in the snowy canyon.",
+                reviewer_notes="PASS on the q8 I2V-A14B first-frame image-to-video LoRA proof.",
+            ),
+            title="Wan2.2 I2V-A14B q8 First-Frame Image-to-Video LoRA Validation",
+            canonical_source=CANONICAL_SOURCE,
+            description="Exact first-frame image-to-video LoRA proof for Wan2.2 I2V-A14B q8.",
+        ),
+    )
+
+
+def _single_record_profile(
+    record: ValidationRecord,
+    *,
+    title: str,
+    canonical_source: str,
+    description: str,
+) -> ValidationProfile:
+    return ValidationProfile(
+        id=record.profile_id,
+        title=title,
+        canonical_source=canonical_source,
+        description=description,
+        records=(record,),
+    )
+
+
+def _lora_record(
+    *,
+    profile_id: str,
+    model: str,
+    family: str,
+    package_variant: str,
+    public_task: str,
+    mode: str,
+    artifact_path: str,
+    source_images: tuple[str, ...],
+    prompt: str,
+    reviewer_notes: str,
+) -> ValidationRecord:
+    return ValidationRecord(
+        profile_id=profile_id,
+        model=model,
+        family=family,
+        package_variant=package_variant,
+        step="L",
+        step_label="LoRA A/B validation",
+        public_task=public_task,
+        mode=mode,
+        status=STATUS_PASS,
+        artifact_path=artifact_path,
+        source_images=source_images,
+        prompt=prompt,
+        reviewer_notes=reviewer_notes,
+        evidence_date="2026-06-11",
     )
 
 

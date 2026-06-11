@@ -103,6 +103,49 @@ def test_ernie_image_lora_is_accepted_for_ernie_turbo(monkeypatch):
     )
 
 
+def test_wan_ti2v_lora_is_accepted_for_ti2v(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(lambda repo_id: ("Wan-AI/Wan2.2-TI2V-5B-Diffusers",)),
+    )
+
+    LoRACompatibility.validate_for_model_config(
+        model_config=ModelConfig.wan2_2_ti2v_5b(),
+        selected_model="Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+        lora_paths=["wouterverweirder/wan_2_2_5B_woven_fabric_02-lora:wan_2_2_5B_woven_fabric_02.safetensors"],
+    )
+
+
+def test_wan_ti2v_lora_is_accepted_for_prepared_q8_package(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(lambda repo_id: ("Wan-AI/Wan2.2-TI2V-5B-Diffusers",)),
+    )
+
+    LoRACompatibility.validate_for_model_config(
+        model_config=ModelConfig.from_name("AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit"),
+        selected_model="AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit",
+        lora_paths=["AlekseyCalvin/HSToric_Color_Wan2.2_5B_LoRA_BySilverAgePoets:HSToric_color_Wan22_5b_LoRA.safetensors"],
+    )
+
+
+def test_wan_ti2v_lora_is_rejected_for_a14b(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(lambda repo_id: ("Wan-AI/Wan2.2-TI2V-5B-Diffusers",)),
+    )
+
+    with pytest.raises(LoRAApplicationError, match="not compatible"):
+        LoRACompatibility.validate_for_model_config(
+            model_config=ModelConfig.wan2_2_t2v_a14b(),
+            selected_model="Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            lora_paths=["wouterverweirder/wan_2_2_5B_woven_fabric_02-lora:wan_2_2_5B_woven_fabric_02.safetensors"],
+        )
+
+
 def test_local_lora_without_card_metadata_is_left_to_loader_shape_checks(tmp_path):
     lora_path = tmp_path / "adapter.safetensors"
     lora_path.touch()

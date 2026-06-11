@@ -36,6 +36,9 @@ class VideoUtil:
         source_height: int | None = None,
         requested_width: int | None = None,
         requested_height: int | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        extra_metadata: dict | None = None,
     ):
         from mflux.utils.generated_video import GeneratedVideo
 
@@ -63,6 +66,9 @@ class VideoUtil:
             source_height=source_height,
             requested_width=requested_width,
             requested_height=requested_height,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            extra_metadata=extra_metadata,
         )
 
     @staticmethod

@@ -54,9 +54,9 @@ The main capabilities are:
 - JSON model capability inspection before starting a heavy run;
 - experimental LoRA routing and strict adapter application checks, with model-card compatibility
   preflight when cached adapter metadata is available and exact q8 proof rows for Qwen Image Edit
-  2509/2511, Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, and ERNIE Image Turbo
-  text-to-image; base Qwen Image and original Qwen Image Edit remain experimental, Wan video LoRA
-  is not supported yet, and Bonsai LoRA stays fail-closed;
+  original/2509/2511, Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, ERNIE Image Turbo
+  text-to-image, and all current Wan q8 video routes; base Qwen Image remains experimental, and
+  Bonsai LoRA stays fail-closed;
 - shared progress events for applications embedding MLX-Gen.
 
 Use `mlxgen capabilities --model ...` before long image-edit runs. Capability output describes the
@@ -141,8 +141,9 @@ mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit
 
 LoRA support is experimental. For LoRA work, inspect `supports_lora` and `lora_status` in
 `mlxgen capabilities`, download the adapter explicitly with `mlxgen download`, and use an adapter
-trained for the selected model family. Current exact proof rows cover Qwen Image Edit 2509/2511,
-Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, and ERNIE Image Turbo text-to-image.
+trained for the selected model family. Current exact proof rows cover original Qwen Image Edit,
+Qwen Image Edit 2509/2511, Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, and ERNIE Image
+Turbo text-to-image.
 For example, a FLUX.2-dev LoRA is not accepted for FLUX.2 Klein. See [docs/lora.md](docs/lora.md)
 for the A/B validation method.
 

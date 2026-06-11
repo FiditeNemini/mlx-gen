@@ -461,7 +461,7 @@ def test_unified_router_rejects_lora_for_unsupported_family(capsys):
         mlx_gen._resolve_invocation(
             [
                 "--model",
-                "ernie-image-turbo",
+                "bonsai-image-ternary",
                 "--prompt",
                 "test",
                 "--lora-paths",
@@ -511,11 +511,14 @@ def test_validation_command_lists_profiles(capsys):
     mlx_gen._show_validation(["--list"])
 
     payload = json.loads(capsys.readouterr().out)
-    assert [profile["id"] for profile in payload["profiles"]] == [
+    profile_ids = [profile["id"] for profile in payload["profiles"]]
+    assert profile_ids[:3] == [
         "i2i_edit_5x4_2026_06_05",
         "reframe_outpaint_2026_06_08",
         "flux2_klein_base_starship_2026_06_10",
     ]
+    assert "lora_qwen_edit_q8_ghibli_edit_2026_06_11" in profile_ids
+    assert "lora_wan_a14b_q8_orbit_i2v_2026_06_11" in profile_ids
 
 
 def test_validation_command_reports_reframe_outpaint_profile(capsys):
@@ -2781,6 +2784,76 @@ def test_wan_cli_applies_ti2v_5b_defaults(monkeypatch):
     assert observed["generate"]["guidance"] == 5.0
     assert observed["generate"]["guidance_2"] is None
     assert "低质量" in observed["generate"]["negative_prompt"]
+
+
+def test_wan_cli_forwards_lora_args_to_model_init(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a cinematic wave",
+            "--seed",
+            "123",
+            "--lora-paths",
+            "high.safetensors",
+            "low.safetensors",
+            "--lora-scales",
+            "1.0",
+            "0.8",
+            "--lora-target-roles",
+            "high_noise_transformer",
+            "low_noise_transformer",
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["init"]["lora_paths"] == ["high.safetensors", "low.safetensors"]
+    assert observed["init"]["lora_scales"] == [1.0, 0.8]
+    assert observed["init"]["lora_target_roles"] == ["high_noise_transformer", "low_noise_transformer"]
+
+
+def test_router_forwards_wan_lora_target_roles():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "wan2.2-t2v-a14b",
+            "--prompt",
+            "a cinematic wave",
+            "--lora-paths",
+            "high.safetensors",
+            "low.safetensors",
+            "--lora-target-roles",
+            "high_noise_transformer",
+            "low_noise_transformer",
+        ]
+    )
+
+    assert invocation.target_name == "mlxgen-generate-wan"
+    assert "--lora-target-roles" in invocation.argv
+    assert invocation.argv[-2:] == ["high_noise_transformer", "low_noise_transformer"]
 
 
 def test_wan_cli_explicit_guidance_keeps_guidance_2_diffusers_default(monkeypatch):

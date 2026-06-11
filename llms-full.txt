@@ -15,7 +15,7 @@
 - `docs/upscaling.md`: SeedVR2 image upscaling guide with official 3B/7B source usage, published 3B/7B q8/q4 package handles, shortest-edge and scale-factor sizing, quality controls, and real 5x source/output comparisons.
 - `docs/edit-capabilities.md`: image-edit contact sheets, model/package status summaries, and exact command logs for Qwen Image Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I rows. FIBO Edit is unsupported through unified `mlxgen generate` in the current release.
 - `docs/reframe-outpaint.md`: experimental reframe/outpaint workflows, exact commands, the mixed June 8 profile, the current FLUX.2 Klein base source-model starship proof, and the related validation profile ids.
-- `docs/lora.md`: experimental LoRA capability fields, explicit adapter download, strict scale matching, exact adapter/base-model compatibility, source/no-LoRA/with-LoRA validation, exact q8 proof rows for Qwen, Z-Image, FLUX.2 Klein, and ERNIE Image Turbo, current base-Qwen/original-Qwen experimental limits, Wan video LoRA status, and the current Bonsai fail-closed boundary.
+- `docs/lora.md`: experimental LoRA capability fields, explicit adapter download, strict scale matching, exact adapter/base-model compatibility, source/no-LoRA/with-LoRA validation, exact q8 proof rows for original Qwen Image Edit, Qwen 2509/2511, Qwen 2512, Z-Image, FLUX.2 Klein, ERNIE Image Turbo, and all current Wan q8 video routes, current base-Qwen experimental limits, and the current Bonsai fail-closed boundary.
 - `docs/wan-video.md`: practical Wan2.2 T2V/I2V guidance with `101`-frame, 20 fps M5 Max comparison clips for A14B and TI2V-5B.
 - `docs/examples/spaceship-snow.md`: complete model-backed workflow across T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B.
 - `docs/model-management.md`: explicit `download` and `prepare`, generation from local model files, local MLX-Gen packages, matching Hugging Face handle resolution, and `DownloadRequiredError`.
@@ -157,19 +157,20 @@ hints. Generation does not download LoRAs. Use
 `mlxgen download --model <adapter-repo> --all-files`, then pass a local `.safetensors` path or
 `owner/repo:filename.safetensors`. `mlxgen capabilities` reports `supports_lora`, `lora_status`,
 `lora_target_roles`, and `lora_validation_profile` per route. `mapped-unvalidated` means a mapping
-exists but the exact model/package has not yet passed a visible public-adapter A/B validation.
+exists but the exact model/package has not yet passed a visible accepted-adapter A/B validation.
 `--lora-scales` must have exactly one value per adapter. MLX-Gen rejects known incompatible
 adapter/base-model pairs when cached model-card metadata is available and also checks LoRA matrix
 shapes during application. For example, `lovis93/Flux-2-Multi-Angles-LoRA-v2` targets
 `black-forest-labs/FLUX.2-dev`, while current FLUX.2 support is Klein 4B/9B, so that adapter is not
 accepted for Klein routes. Validate LoRA effects with the same source, prompt, dimensions, seed,
-steps, and guidance with and without the adapter. Current exact public-adapter proof rows include
-Qwen Image Edit 2511 q8, Qwen Image Edit 2509 q8, Qwen Image 2512 q8, Z-Image Turbo q8, FLUX.2
-Klein 9B q8 edit, and ERNIE Image Turbo q8 text-to-image. Base Qwen Image and original Qwen Image
-Edit still remain `mapped-unvalidated`. Wan video LoRA is not supported yet; it is a future
-integration problem around adapter conversion and video-transformer targeting rather than a packed
-runtime blocker. Bonsai remains fail-closed because its packed runtime does not expose the standard
-replaceable linear-module boundary the current LoRA loader requires.
+steps, and guidance with and without the adapter. Current exact proof rows include original Qwen
+Image Edit q8, Qwen Image Edit 2511 q8, Qwen Image Edit 2509 q8, Qwen Image 2512 q8, Z-Image
+Turbo q8, FLUX.2 Klein 9B q8 edit, ERNIE Image Turbo q8 text-to-image, and Wan TI2V-5B q8
+text-to-video. Base Qwen Image still remains `mapped-unvalidated`. Current Wan q8 public
+routes now have exact LoRA proof for TI2V-5B text-to-video, TI2V-5B first-frame image-to-video,
+T2V-A14B text-to-video, and I2V-A14B first-frame image-to-video. Bonsai remains fail-closed
+because its packed runtime does not expose the standard replaceable linear-module boundary the
+current LoRA loader requires.
 
 The Qwen edit checkpoints are distinct. `Qwen/Qwen-Image-Edit` is single-reference edit only
 (`max_images=1`). `Qwen/Qwen-Image-Edit-2509` and `Qwen/Qwen-Image-Edit-2511` expose

@@ -36,6 +36,9 @@ class GeneratedVideo:
         source_height: int | None = None,
         requested_width: int | None = None,
         requested_height: int | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        extra_metadata: dict | None = None,
     ):
         if not frames:
             raise ValueError("GeneratedVideo requires at least one frame.")
@@ -60,6 +63,9 @@ class GeneratedVideo:
         self.source_height = source_height
         self.requested_width = requested_width
         self.requested_height = requested_height
+        self.lora_paths = lora_paths
+        self.lora_scales = lora_scales
+        self.extra_metadata = extra_metadata
 
     @property
     def num_frames(self) -> int:
@@ -92,7 +98,7 @@ class GeneratedVideo:
         return self.frames[0]
 
     def _get_metadata(self) -> dict:
-        return {
+        metadata = {
             "mflux_version": VersionUtil.get_mflux_version(),
             "model": self.model_config.model_name,
             "base_model": str(self.model_config.base_model),
@@ -118,7 +124,12 @@ class GeneratedVideo:
             "image_path": str(self.image_path) if self.image_path else None,
             "prompt": self.prompt,
             "negative_prompt": self.negative_prompt if self.negative_prompt else None,
+            "lora_paths": [str(path) for path in self.lora_paths] if self.lora_paths else None,
+            "lora_scales": [round(scale, 2) for scale in self.lora_scales] if self.lora_scales else None,
         }
+        if self.extra_metadata:
+            metadata.update(self.extra_metadata)
+        return metadata
 
     @staticmethod
     def save_metadata(path: str | Path, metadata: dict) -> None:

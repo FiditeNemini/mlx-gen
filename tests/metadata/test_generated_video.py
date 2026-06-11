@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRAApplicationResult, LoRAFileReport
 from mflux.utils.generated_video import GeneratedVideo
 from mflux.utils.video_health import VideoHealth, VideoHealthError
 from mflux.utils.video_util import VideoUtil
@@ -91,6 +92,54 @@ def test_generated_video_metadata_records_i2v_source_and_requested_dimensions():
     assert metadata["requested_height"] == 288
     assert metadata["source_image_width"] == 320
     assert metadata["source_image_height"] == 240
+
+
+def test_generated_video_records_lora_application_metadata():
+    report = LoRAFileReport(
+        requested_path="wouterverweirder/wan_2_2_5B_woven_fabric_02-lora:wan_2_2_5B_woven_fabric_02.safetensors",
+        resolved_path="/tmp/wan.safetensors",
+        scale=0.9,
+        role="transformer",
+        total_key_count=600,
+        matched_key_count=600,
+        unmatched_key_count=0,
+        applied_target_count=300,
+    )
+    result = LoRAApplicationResult(
+        resolved_paths=["/tmp/wan.safetensors"],
+        resolved_scales=[0.9],
+        reports=(report,),
+    )
+    video = GeneratedVideo(
+        frames=[_solid_frame((255, 0, 0))],
+        fps=12,
+        model_config=ModelConfig.wan2_2_ti2v_5b(),
+        seed=42,
+        prompt="test video prompt",
+        steps=2,
+        guidance=5.0,
+        guidance_2=None,
+        flow_shift=5.0,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=1.23,
+        height=24,
+        width=32,
+        lora_paths=["/tmp/wan.safetensors"],
+        lora_scales=[0.9],
+        extra_metadata={
+            **result.extra_metadata(),
+            "lora_target_roles": ["transformer"],
+        },
+    )
+
+    metadata = video._get_metadata()
+
+    assert metadata["lora_paths"] == ["/tmp/wan.safetensors"]
+    assert metadata["lora_scales"] == [0.9]
+    assert metadata["lora_target_roles"] == ["transformer"]
+    assert metadata["lora_applied_file_count"] == 1
+    assert metadata["lora_applied_target_count"] == 300
 
 
 def test_generated_video_respects_no_replace(tmp_path):

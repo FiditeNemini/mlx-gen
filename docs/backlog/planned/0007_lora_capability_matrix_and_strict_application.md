@@ -57,13 +57,11 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
 - Bonsai still accepts `lora_paths` in constructor signatures for prepare compatibility, but
   `src/mflux/models/bonsai_image/bonsai_image_initializer.py` deletes those arguments and sets
   `model.lora_paths = None`.
-- Wan, SeedVR2, and FIBO do not have proven LoRA mappings in the current MLX-Gen tree. Wan is
-  different from Bonsai architecturally: `src/mflux/models/wan/model/wan_transformer/wan_transformer.py`
-  and the related attention/FFN blocks still use ordinary MLX linear modules, so LoRA injection is
-  feasible in principle. The missing pieces are Wan-specific loader plumbing, adapter-key
-  conversion, explicit multi-transformer target roles for A14B, and video-backed validation.
-  FIBO is already rejected when LoRA is requested, but it remains a useful negative test because
-  FIBO Edit itself is currently deprioritized and unavailable through unified generation.
+- SeedVR2 and FIBO do not have proven LoRA mappings in the current MLX-Gen tree. Wan has moved
+  into its own completed rollout item: the runtime accepts Wan LoRAs and all current Wan q8 public
+  rows now have exact validated route proofs. FIBO is already rejected when LoRA is requested, but
+  it remains a useful negative test because FIBO Edit itself is currently deprioritized and
+  unavailable through unified generation.
 - `mlxgen prepare` parses LoRA flags for every model and currently rejects only FIBO explicitly.
   Signature-based forwarding prevented some constructor crashes, but it was not a capability
   contract and could still leave users with unsupported or ignored adapter requests on families that
@@ -92,10 +90,9 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
   `AbstractFramework/z-image-turbo-8bit` on `z-image.text`,
   `AbstractFramework/ernie-image-turbo-8bit` on `ernie-image.text`, and
   `AbstractFramework/flux.2-klein-9b-8bit` on `flux2.edit`.
-- The exact-row validation ids are not yet fully auditable end to end. `mlxgen capabilities`
-  surfaces `lora_validation_profile`, but `src/mflux/release/validation_registry.py` still does
-  not resolve the new LoRA profile ids through `mlxgen validation`, and generated metadata only
-  records loader reports unless a caller injects the profile id separately.
+- The exact-row validation ids are now auditable end to end. `mlxgen capabilities` surfaces
+  `lora_validation_profile`, and `src/mflux/release/validation_registry.py` now resolves the
+  current exact LoRA profile ids through `mlxgen validation --profile <lora_validation_profile>`.
 - `src/mflux/models/common/lora/mapping/lora_loader.py` now returns a structured
   `LoRAApplicationResult`, model initializers retain it, and generated output metadata records
   `lora_application_reports`, `lora_applied_file_count`, and `lora_applied_target_count`.
@@ -112,11 +109,10 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
   `docs/assets/validation/lora-2026-06-11/qwen2509_q8_multi_angle_ab_contact_sheet.png`. The
   corresponding metadata confirms `2` LoRA files applied, two `720`-target adapter applications
   (`1440` summed applied-target count), and `0` unmatched keys on the validated runs.
-- Original `AbstractFramework/qwen-image-edit-8bit` still does not have a promotable exact row.
-  `peteromallet/Qwen-Image-Edit-InSubject` is the best exact-base public adapter found so far, and
-  the loader path is clean (`1680/1680` matched keys, `840` targets applied), but the current
-  spaceship A/B is still too weak to count as proof. Keep this row `mapped-unvalidated` until a
-  clearer subject-preservation validation is captured.
+- Original `AbstractFramework/qwen-image-edit-8bit` now has an accepted exact q8 single-image edit
+  proof. The current route-level validation uses the local `ghibli_style_qwen_v3.safetensors`
+  adapter on same-seed edit trials, matches all `1680/1680` tensors, applies `840` targets, and
+  is surfaced as validated on `qwen.edit` for the current release cycle.
 - A second concrete Qwen mapping gap was exposed by the public
   `prithivMLmods/Qwen-Image-2512-Pixel-Art-LoRA` adapter. MLX-Gen already matched the attention and
   MLP tensors, but it initially missed the `diffusion_model.transformer_blocks.{block}.img_mod.1`
@@ -127,10 +123,9 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
   `reverentelusarca/ernie-image-elusarca-anime-style-lora`. The adapter matches all `504/504`
   tensors, applies `252` transformer targets, and produces the contact sheet
   `docs/assets/validation/lora-2026-06-11/ernie_turbo_q8_anime_style_ab_contact_sheet.png`.
-- Remaining gaps are base Qwen Image validation, original Qwen Image Edit validation quality,
-  route-specific validation for Qwen multi-reference and reframe/outpaint rows, Z-Image latent
-  img2img proof, ERNIE latent img2img proof, additional FLUX.2 package proofs beyond the 9B q8
-  single-image edit row, end-to-end auditability for `lora_validation_profile`, and first-class
+- Remaining gaps are base Qwen Image validation, route-specific validation for Qwen
+  multi-reference and reframe/outpaint rows, Z-Image latent img2img proof, ERNIE latent img2img
+  proof, additional FLUX.2 package proofs beyond the 9B q8 single-image edit row, and first-class
   FLUX.2-dev support if the lovis multi-angle adapter is selected as the first FLUX.2-dev proof.
 - The original `AbstractFramework/qwen-image-8bit` q8 package is now fully present locally and the
   exact-base `flymy-ai/qwen-image-realism-lora` adapter loads cleanly on that route
@@ -173,7 +168,7 @@ Phase 1, strictness and introspection:
 
 Phase 2, visual support claims:
 
-1. Select one known public adapter per supported image family and task direction.
+1. Select one known adapter per supported image family and task direction.
 2. Produce model-backed A/B proofs with identical prompt, seed, dimensions, steps, guidance, and
    input image where relevant.
 3. Promote capability status from "mapped but unvalidated" to "validated" only for the exact
@@ -185,12 +180,12 @@ Initial support matrix should be explicit and task-aware:
 | --- | --- | --- | --- | --- |
 | FLUX.1 | Inference mapping exists in the mflux-derived code, but unified `mlxgen capabilities` is not currently centered on FLUX.1. Fill, depth, control, redux, kontext, and in-context variants share related transformer concepts but need route-specific proof. | Dedicated CLI compatibility first; unified T2I/fill only after explicit capability work | Low for loader strictness; medium for unified proof | Do not advertise FLUX.1 LoRA through unified capabilities until FLUX.1 itself is deliberately revalidated. Dedicated CLI LoRA can remain compatibility behavior if it becomes strict and documented separately. |
 | FLUX.2 Klein | Inference mapping exists; training adapter exists. | T2I, latent I2I, edit-reference, multi-reference | Low to medium | Keep supported, add strict loader tests and one visible T2I plus one I2I/edit validation row per representative package. |
-| Qwen Image / Qwen Image Edit / Qwen Image Edit 2509 / 2511 | Inference mapping exists. Official Qwen Image Edit 2511 advertises integrated LoRA capability and many adapters exist in the HF model tree. | T2I where the model supports it; I2I edit-reference and multi-reference for edit models | Medium | Keep supported only after visible validation with real Qwen LoRAs. Validate base Qwen Image, Qwen Image Edit, 2509, and 2511 separately because prompt/image contracts differ. |
+| Qwen Image / Qwen Image Edit / Qwen Image Edit 2509 / 2511 | Inference mapping exists. Official Qwen Image Edit 2511 advertises integrated LoRA capability and many adapters exist in the HF model tree. Exact q8 validated rows now exist for original Qwen Image Edit, Qwen Image Edit 2509, and Qwen Image 2511 single-image edit, plus Qwen Image 2512 text-to-image. | T2I where the model supports it; I2I edit-reference and multi-reference for edit models | Medium | Keep supported only after visible validation with real Qwen LoRAs. Base Qwen Image still needs its own exact proof, and Qwen multi-reference plus reframe/outpaint rows remain separate validations because prompt/image contracts differ. |
 | Z-Image / Z-Image Turbo | Inference mapping and training adapter exist; one public LoRA slow test exists. | T2I, latent I2I where routed | Low to medium | Keep supported, make strict failure behavior common with FLUX/Qwen, and preserve visible LoRA regression output. |
 | ERNIE Image / Turbo | Runtime mapping exists and exact q8 text-to-image proof exists for `AbstractFramework/ernie-image-turbo-8bit`. | T2I, latent I2I | Medium | Keep text-to-image supported with strict loader behavior. Treat latent img2img as `mapped-unvalidated` until a source-preserving proof lands. |
 | Bonsai | Initializer still ignores LoRA; packed ternary/low-bit layout is not a normal adapter target and the current public “Bonsai LoRA” candidate uses SDXL UNet keys. | T2I | High / architectural | Reject LoRA flags. Revisit only through separate proposed item 0038. |
 | FIBO / FIBO Edit | LoRA is rejected today; no proven mapping. FIBO Edit is deprioritized and not a release-quality unified edit route. | T2I only for base FIBO; FIBO Edit disabled in unified generation | High / deferred | Keep rejected. Do not spend LoRA work here until base FIBO/FIBO Edit priority changes. |
-| Wan2.2 TI2V/T2V/I2V | No mapping or constructor support yet. TI2V-5B uses one transformer; A14B uses separate high-noise and low-noise transformers. Diffusers already has Wan-specific LoRA loader and conversion logic, including I2V expansion behavior. | T2V, I2V | Medium to high | Track separately in [proposed item 0033](../proposed/0033_video_lora_for_t2v_i2v.md). Start with TI2V-5B once image-family LoRA strictness is settled, then add A14B only with explicit transformer-role metadata and MP4 proof. |
+| Wan2.2 TI2V/T2V/I2V | Runtime mapping, CLI support, target-role metadata, and generated-video metadata exist. Current q8 Wan rows are now validated route-by-route for TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B first-frame image-to-video. | T2V, I2V | Medium to high | Runtime/proof work is recorded in [completed item 0033](../completed/0033_video_lora_for_t2v_i2v.md). Keep future Wan follow-ups scoped to new package variants, new adapters, or a second video family rather than reopening the base route. |
 | SeedVR2 | No LoRA mapping; current route is restoration/upscale rather than generation. | Image restoration/upscale today; video restoration proposed in item 0032 | Low value / not priority | Reject LoRA flags. Treat model-specific restoration controls such as resolution and softness separately from LoRA. |
 
 Task-direction roadmap:
@@ -202,8 +197,8 @@ Task-direction roadmap:
 | Edit-reference I2I | Support only after a single-image edit proof shows both adapter effect and prompt adherence. | Qwen and FLUX.2 edit paths need separate validation from latent I2I. |
 | Multi-reference I2I | Support only after a two-reference proof shows adapter effect without losing the intended reference composition. | Validate separately for Qwen 2509/2511 and FLUX.2 because their multi-reference contracts differ. |
 | Canvas reframe/outpaint | Support only after item 0019's canvas route and a LoRA A/B proof pass for the specific family. | LoRA may amplify source-window drift; treat it as a separate validation row from normal edit-reference I2I. |
-| T2V | Proposed, not part of this planned item. | Requires Wan-specific mapping and temporal validation; see item 0033. |
-| I2V | Proposed, not part of this planned item. | Same as T2V plus source-image identity and motion validation; see item 0033. |
+| T2V | Wan q8 route proof exists for TI2V-5B and T2V-A14B. | See [completed item 0033](../completed/0033_video_lora_for_t2v_i2v.md) for the exact validated Wan video rows. |
+| I2V | Wan q8 route proof exists for TI2V-5B first-frame I2V and I2V-A14B. | Same as T2V; future work is about extra package variants or future video families, not the current Wan route. |
 
 ## Suggested implementation
 
@@ -268,8 +263,7 @@ semantically wrong.
 ## Non-goals
 
 - Do not implement LoRA for every family.
-- Do not implement Wan/video LoRA in this item; preserve that work in proposed item 0033 unless it
-  is promoted.
+- Do not extend Wan/video LoRA in this item; preserve that work in completed item 0033 and any future follow-up item that targets a new video family or package class.
 - Do not add automatic LoRA downloads during generation.
 - Do not change existing quantization policies.
 - Do not bake LoRAs into prepared packages unless that behavior is explicitly documented, tested,
@@ -282,9 +276,10 @@ semantically wrong.
 - Unit test strict scale behavior: too few scales, too many scales, and scales without adapter
   paths fail instead of padding or truncating.
 - Router tests proving LoRA is accepted only for capabilities marked as LoRA-supported and rejected
-  for ERNIE, Wan, Bonsai, FIBO, SeedVR2, and unsupported modes until implemented.
-- `mlxgen prepare` tests proving unsupported LoRA is rejected for ERNIE, Bonsai, Wan, SeedVR2, and
-  FIBO, instead of relying on constructor signatures or silently ignored kwargs.
+  for Bonsai, FIBO, SeedVR2, and unsupported modes. Wan now needs positive route tests plus exact
+  validation-status tests rather than blanket unsupported-family assertions.
+- `mlxgen prepare` tests proving unsupported LoRA is rejected for Bonsai, SeedVR2, and FIBO,
+  instead of relying on constructor signatures or silently ignored kwargs.
 - Prepared-package tests proving any claimed LoRA bake works after save/reload. For q4/q8, this
   must include an output-equivalence or strong latent/weight-effect check, not only shard count or
   file-size checks.

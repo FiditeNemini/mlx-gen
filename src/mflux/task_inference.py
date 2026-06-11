@@ -520,7 +520,13 @@ def _ordinary_i2i_canvas_contract() -> dict:
     }
 
 
-def _lora_capability_kwargs(*, identity: _ModelIdentity, capability_id: str, supports_lora: bool) -> dict:
+def _lora_capability_kwargs(
+    *,
+    identity: _ModelIdentity,
+    capability_id: str,
+    supports_lora: bool,
+    lora_target_roles: tuple[str, ...] = ("transformer",),
+) -> dict:
     if not supports_lora:
         return {
             "supports_lora": False,
@@ -536,7 +542,7 @@ def _lora_capability_kwargs(*, identity: _ModelIdentity, capability_id: str, sup
     return {
         "supports_lora": True,
         "lora_status": status,
-        "lora_target_roles": ("transformer",),
+        "lora_target_roles": lora_target_roles,
         "lora_validation_profile": validation_profile,
     }
 
@@ -774,6 +780,12 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
         )
     declared_task = identity.model_config.transformer_overrides.get("task")
     supports_image_to_video = bool(identity.model_config.transformer_overrides.get("supports_image_to_video", True))
+    supports_lora = True
+    lora_target_roles = (
+        ("high_noise_transformer", "low_noise_transformer")
+        if bool(identity.model_config.transformer_overrides.get("has_transformer_2", False))
+        else ("transformer",)
+    )
     capabilities: list[GenerationCapability] = []
     if declared_task in {TEXT_TO_VIDEO, "text-image-to-video", None}:
         capabilities.append(
@@ -785,6 +797,12 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 supports_frames=True,
                 supports_fps=True,
                 default_for_task=True,
+                **_lora_capability_kwargs(
+                    identity=identity,
+                    capability_id="wan.text-video",
+                    supports_lora=supports_lora,
+                    lora_target_roles=lora_target_roles,
+                ),
             )
         )
     if (declared_task in {IMAGE_TO_VIDEO, "text-image-to-video", None}) and supports_image_to_video:
@@ -799,6 +817,12 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 supports_frames=True,
                 supports_fps=True,
                 default_for_task=True,
+                **_lora_capability_kwargs(
+                    identity=identity,
+                    capability_id="wan.first-frame",
+                    supports_lora=supports_lora,
+                    lora_target_roles=lora_target_roles,
+                ),
             )
         )
     if not capabilities:

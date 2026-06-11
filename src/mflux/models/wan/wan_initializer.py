@@ -6,6 +6,8 @@ import mlx.core as mx
 
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.lora.lora_compatibility import LoRACompatibility
+from mflux.models.common.lora.mapping.lora_loader import LoRAApplicationError, LoRAApplicationResult, LoRALoader
 from mflux.models.common.resolution.path_resolution import PathResolution
 from mflux.models.common.tokenizer import TokenizerLoader
 from mflux.models.common.weights.loading.loaded_weights import LoadedWeights, MetaData
@@ -13,6 +15,7 @@ from mflux.models.common.weights.loading.weight_applier import WeightApplier
 from mflux.models.common.weights.loading.weight_loader import WeightLoader
 from mflux.models.wan.model.wan_transformer import WanTransformer
 from mflux.models.wan.model.wan_vae import Wan2_2_VAE
+from mflux.models.wan.weights.wan_lora_mapping import WanLoRAMapping
 from mflux.models.wan.weights import WanWeightDefinition
 
 
@@ -23,8 +26,16 @@ class WanInitializer:
         model_config: ModelConfig,
         quantize: int | None,
         model_path: str | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        lora_target_roles: list[str] | None = None,
     ) -> None:
         path = model_path if model_path else model_config.model_name
+        LoRACompatibility.validate_for_model_config(
+            model_config=model_config,
+            selected_model=path,
+            lora_paths=lora_paths,
+        )
         weight_definition = WanWeightDefinition.for_config(model_config)
         root_path = PathResolution.resolve(path=path, patterns=weight_definition.get_download_patterns())
         WanInitializer._validate_source_config(root_path, model_config)
@@ -32,6 +43,12 @@ class WanInitializer:
         WanInitializer._init_tokenizers(model, str(root_path), weight_definition)
         WanInitializer._init_models(model, model_config)
         WanInitializer._load_and_apply_weights(model, root_path, quantize, weight_definition)
+        WanInitializer._apply_lora(
+            model,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            lora_target_roles=lora_target_roles,
+        )
 
     @staticmethod
     def _init_config(model, model_config: ModelConfig, root_path: Path, weight_definition: WanWeightDefinition) -> None:
@@ -137,6 +154,228 @@ class WanInitializer:
                 raise mismatch_error
 
         model.bits = bits
+
+    @staticmethod
+    def _apply_lora(
+        model,
+        lora_paths: list[str] | None,
+        lora_scales: list[float] | None,
+        lora_target_roles: list[str] | None,
+    ) -> None:
+        resolved_roles = WanInitializer._resolve_lora_roles(
+            model,
+            lora_paths=lora_paths,
+            lora_target_roles=lora_target_roles,
+        )
+        if not lora_paths:
+            model.lora_application_result = LoRAApplicationResult(resolved_paths=[], resolved_scales=[], reports=())
+            model.lora_application_reports = ()
+            model.lora_paths = []
+            model.lora_scales = []
+            model.lora_target_roles = []
+            return
+
+        if lora_scales is not None and len(lora_scales) != len(lora_paths):
+            raise LoRAApplicationError(
+                f"Number of LoRA scales ({len(lora_scales)}) must match number of LoRA files ({len(lora_paths)})."
+            )
+
+        results: list[LoRAApplicationResult] = []
+        for index, lora_path in enumerate(lora_paths):
+            role = resolved_roles[index]
+            transformer = WanInitializer._transformer_for_role(model, role)
+            result = LoRALoader.load_and_apply_lora_detailed(
+                lora_mapping=WanLoRAMapping.get_mapping(),
+                transformer=transformer,
+                lora_paths=[lora_path],
+                lora_scales=None if lora_scales is None else [lora_scales[index]],
+                role=role,
+                state_dict_transform=WanInitializer._transform_wan_lora_state_dict,
+            )
+            results.append(result)
+
+        model.lora_application_result = LoRAApplicationResult(
+            resolved_paths=[path for result in results for path in result.resolved_paths],
+            resolved_scales=[scale for result in results for scale in result.resolved_scales],
+            reports=tuple(report for result in results for report in result.reports),
+        )
+        model.lora_application_reports = model.lora_application_result.reports
+        model.lora_paths = model.lora_application_result.resolved_paths
+        model.lora_scales = model.lora_application_result.resolved_scales
+        model.lora_target_roles = resolved_roles
+
+    @staticmethod
+    def _resolve_lora_roles(
+        model,
+        *,
+        lora_paths: list[str] | None,
+        lora_target_roles: list[str] | None,
+    ) -> list[str]:
+        if not lora_paths:
+            if lora_target_roles:
+                raise LoRAApplicationError("--lora-target-roles requires --lora-paths.")
+            return []
+
+        if model.transformer_2 is None:
+            if lora_target_roles is None:
+                return ["transformer"] * len(lora_paths)
+            if len(lora_target_roles) != len(lora_paths):
+                raise LoRAApplicationError(
+                    "--lora-target-roles must provide one role per LoRA file for Wan generation."
+                )
+            invalid = [role for role in lora_target_roles if role != "transformer"]
+            if invalid:
+                raise LoRAApplicationError(
+                    "Wan TI2V-5B uses one transformer; valid --lora-target-roles value is only 'transformer'."
+                )
+            return list(lora_target_roles)
+
+        if lora_target_roles is None:
+            raise LoRAApplicationError(
+                "Wan A14B LoRAs require explicit --lora-target-roles so MLX-Gen knows whether each file "
+                "targets the high-noise or low-noise denoiser."
+            )
+        if len(lora_target_roles) != len(lora_paths):
+            raise LoRAApplicationError("--lora-target-roles must provide one role per LoRA file for Wan generation.")
+
+        valid_roles = {"high_noise_transformer", "low_noise_transformer"}
+        invalid = [role for role in lora_target_roles if role not in valid_roles]
+        if invalid:
+            raise LoRAApplicationError(
+                "Wan A14B valid --lora-target-roles values are 'high_noise_transformer' and "
+                "'low_noise_transformer'."
+            )
+        return list(lora_target_roles)
+
+    @staticmethod
+    def _transformer_for_role(model, role: str) -> WanTransformer:
+        if role == "transformer":
+            return model.transformer
+        if role == "high_noise_transformer":
+            return model.transformer
+        if role == "low_noise_transformer":
+            if model.transformer_2 is None:
+                raise LoRAApplicationError("Selected Wan model does not expose a low-noise transformer.")
+            return model.transformer_2
+        raise LoRAApplicationError(f"Unsupported Wan LoRA target role: {role}.")
+
+    @staticmethod
+    def _transform_wan_lora_state_dict(weights: dict[str, mx.array], transformer: WanTransformer) -> dict[str, mx.array]:
+        if not WanInitializer._transformer_uses_image_projections(transformer):
+            return weights
+        if WanInitializer._state_dict_has_image_projection_lora(weights):
+            return weights
+        expanded = dict(weights)
+        WanInitializer._expand_t2v_lora_for_i2v(expanded)
+        return expanded
+
+    @staticmethod
+    def _transformer_uses_image_projections(transformer: WanTransformer) -> bool:
+        if not transformer.blocks:
+            return False
+        return getattr(transformer.blocks[0].attn2, "add_k_proj", None) is not None
+
+    @staticmethod
+    def _state_dict_has_image_projection_lora(weights: dict[str, mx.array]) -> bool:
+        image_markers = ("add_k_proj", "add_v_proj", "k_img", "v_img", "cross_attn_k_img", "cross_attn_v_img")
+        return any(any(marker in key for marker in image_markers) for key in weights)
+
+    @staticmethod
+    def _expand_t2v_lora_for_i2v(weights: dict[str, mx.array]) -> None:
+        reference_pairs = [
+            (
+                "transformer.blocks.",
+                ".attn2.to_k.lora_A.weight",
+                ".attn2.to_k.lora_B.weight",
+                ".attn2.add_k_proj.lora_A.weight",
+                ".attn2.add_k_proj.lora_B.weight",
+                ".attn2.add_v_proj.lora_A.weight",
+                ".attn2.add_v_proj.lora_B.weight",
+            ),
+            (
+                "blocks.",
+                ".attn2.to_k.lora_A.weight",
+                ".attn2.to_k.lora_B.weight",
+                ".attn2.add_k_proj.lora_A.weight",
+                ".attn2.add_k_proj.lora_B.weight",
+                ".attn2.add_v_proj.lora_A.weight",
+                ".attn2.add_v_proj.lora_B.weight",
+            ),
+            (
+                "diffusion_model.blocks.",
+                ".cross_attn.k.lora_A.weight",
+                ".cross_attn.k.lora_B.weight",
+                ".cross_attn.k_img.lora_A.weight",
+                ".cross_attn.k_img.lora_B.weight",
+                ".cross_attn.v_img.lora_A.weight",
+                ".cross_attn.v_img.lora_B.weight",
+            ),
+            (
+                "diffusion_model.blocks.",
+                ".cross_attn.k.lora_down.weight",
+                ".cross_attn.k.lora_up.weight",
+                ".cross_attn.k_img.lora_down.weight",
+                ".cross_attn.k_img.lora_up.weight",
+                ".cross_attn.v_img.lora_down.weight",
+                ".cross_attn.v_img.lora_up.weight",
+            ),
+            (
+                "lora_unet_blocks_",
+                "_cross_attn_k.lora_A.weight",
+                "_cross_attn_k.lora_B.weight",
+                "_cross_attn_k_img.lora_A.weight",
+                "_cross_attn_k_img.lora_B.weight",
+                "_cross_attn_v_img.lora_A.weight",
+                "_cross_attn_v_img.lora_B.weight",
+            ),
+            (
+                "lora_unet_blocks_",
+                "_cross_attn_k.lora_down.weight",
+                "_cross_attn_k.lora_up.weight",
+                "_cross_attn_k_img.lora_down.weight",
+                "_cross_attn_k_img.lora_up.weight",
+                "_cross_attn_v_img.lora_down.weight",
+                "_cross_attn_v_img.lora_up.weight",
+            ),
+        ]
+
+        for prefix, ref_a_suffix, ref_b_suffix, add_k_a_suffix, add_k_b_suffix, add_v_a_suffix, add_v_b_suffix in reference_pairs:
+            WanInitializer._expand_projection_family(
+                weights,
+                prefix=prefix,
+                ref_a_suffix=ref_a_suffix,
+                ref_b_suffix=ref_b_suffix,
+                add_k_a_suffix=add_k_a_suffix,
+                add_k_b_suffix=add_k_b_suffix,
+                add_v_a_suffix=add_v_a_suffix,
+                add_v_b_suffix=add_v_b_suffix,
+            )
+
+    @staticmethod
+    def _expand_projection_family(
+        weights: dict[str, mx.array],
+        *,
+        prefix: str,
+        ref_a_suffix: str,
+        ref_b_suffix: str,
+        add_k_a_suffix: str,
+        add_k_b_suffix: str,
+        add_v_a_suffix: str,
+        add_v_b_suffix: str,
+    ) -> None:
+        prefixes = []
+        for key in list(weights.keys()):
+            if key.startswith(prefix) and key.endswith(ref_a_suffix):
+                prefixes.append(key[: -len(ref_a_suffix)])
+        for key_prefix in prefixes:
+            ref_a = f"{key_prefix}{ref_a_suffix}"
+            ref_b = f"{key_prefix}{ref_b_suffix}"
+            if ref_a not in weights or ref_b not in weights:
+                continue
+            weights.setdefault(f"{key_prefix}{add_k_a_suffix}", mx.zeros_like(weights[ref_a]))
+            weights.setdefault(f"{key_prefix}{add_k_b_suffix}", mx.zeros_like(weights[ref_b]))
+            weights.setdefault(f"{key_prefix}{add_v_a_suffix}", mx.zeros_like(weights[ref_a]))
+            weights.setdefault(f"{key_prefix}{add_v_b_suffix}", mx.zeros_like(weights[ref_b]))
 
     @staticmethod
     def _validate_component_quantization_layout(

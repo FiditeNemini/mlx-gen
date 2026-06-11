@@ -296,12 +296,14 @@ def test_qwen_2512_q8_text_lora_status_is_exact():
     assert latent.lora_validation_profile is None
 
 
-def test_unvalidated_qwen_rows_remain_mapped_unvalidated():
+def test_original_qwen_edit_q8_single_edit_lora_status_is_exact():
     original_edit = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-edit-8bit")
     original_edit_row = next(capability for capability in original_edit.capabilities if capability.id == "qwen.edit")
-    assert original_edit_row.lora_status == "mapped-unvalidated"
-    assert original_edit_row.lora_validation_profile is None
+    assert original_edit_row.lora_status == "validated"
+    assert original_edit_row.lora_validation_profile == "lora_qwen_edit_q8_ghibli_edit_2026_06_11"
 
+
+def test_unvalidated_base_qwen_rows_remain_mapped_unvalidated():
     base_qwen = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-8bit")
     base_text = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.text")
     base_latent = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.latent")
@@ -352,6 +354,8 @@ def test_lora_requests_are_checked_against_route_capabilities():
     qwen = mlxgen.resolve_generation_plan(model="qwen-image-edit-2511", image_count=1, has_lora=True)
     z_image = mlxgen.resolve_generation_plan(model="z-image-turbo", has_lora=True)
     ernie = mlxgen.resolve_generation_plan(model="ernie-image-turbo", has_lora=True)
+    wan_ti2v = mlxgen.resolve_generation_plan(model="wan2.2-ti2v-5b", has_lora=True)
+    wan_a14b = mlxgen.resolve_generation_plan(model="wan2.2-t2v-a14b", has_lora=True)
 
     assert flux2.capability_id == "flux2.edit"
     assert flux2.supports_lora is True
@@ -361,9 +365,58 @@ def test_lora_requests_are_checked_against_route_capabilities():
     assert z_image.supports_lora is True
     assert ernie.capability_id == "ernie-image.text"
     assert ernie.supports_lora is True
+    assert wan_ti2v.capability_id == "wan.text-video"
+    assert wan_ti2v.supports_lora is True
+    assert wan_ti2v.lora_target_roles == ("transformer",)
+    assert wan_a14b.capability_id == "wan.text-video"
+    assert wan_a14b.supports_lora is True
+    assert wan_a14b.lora_target_roles == ("high_noise_transformer", "low_noise_transformer")
 
     with pytest.raises(TaskInferenceError, match="LoRA mapping"):
         mlxgen.resolve_generation_plan(model="bonsai-image-ternary", has_lora=True)
+
+
+def test_wan_i2v_capability_surfaces_lora_support_and_roles():
+    capabilities = mlxgen.get_model_capabilities(model="wan2.2-i2v-a14b")
+
+    first_frame = next(capability for capability in capabilities.capabilities if capability.id == "wan.first-frame")
+
+    assert first_frame.supports_lora is True
+    assert first_frame.lora_status == "mapped-unvalidated"
+    assert first_frame.lora_target_roles == ("high_noise_transformer", "low_noise_transformer")
+
+
+def test_wan_ti2v_q8_text_video_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit")
+
+    text_video = next(capability for capability in capabilities.capabilities if capability.id == "wan.text-video")
+    first_frame = next(capability for capability in capabilities.capabilities if capability.id == "wan.first-frame")
+
+    assert text_video.supports_lora is True
+    assert text_video.lora_status == "validated"
+    assert text_video.lora_validation_profile == "lora_wan_ti2v5b_q8_hstoric_t2v_2026_06_11"
+    assert text_video.lora_target_roles == ("transformer",)
+    assert first_frame.supports_lora is True
+    assert first_frame.lora_status == "validated"
+    assert first_frame.lora_validation_profile == "lora_wan_ti2v5b_q8_crushit_i2v_2026_06_11"
+    assert first_frame.lora_target_roles == ("transformer",)
+
+
+def test_wan_a14b_q8_rows_are_exactly_validated():
+    t2v_capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit")
+    i2v_capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit")
+
+    text_video = next(capability for capability in t2v_capabilities.capabilities if capability.id == "wan.text-video")
+    first_frame = next(capability for capability in i2v_capabilities.capabilities if capability.id == "wan.first-frame")
+
+    assert text_video.supports_lora is True
+    assert text_video.lora_status == "validated"
+    assert text_video.lora_validation_profile == "lora_wan_a14b_q8_followcam_t2v_2026_06_11"
+    assert text_video.lora_target_roles == ("high_noise_transformer", "low_noise_transformer")
+    assert first_frame.supports_lora is True
+    assert first_frame.lora_status == "validated"
+    assert first_frame.lora_validation_profile == "lora_wan_a14b_q8_orbit_i2v_2026_06_11"
+    assert first_frame.lora_target_roles == ("high_noise_transformer", "low_noise_transformer")
 
 
 def test_flux2_dev_handle_is_not_inferred_as_flux1_dev():
@@ -426,6 +479,51 @@ def test_validation_registry_reports_variant_specific_statuses():
     assert {record.step for record in qwen2511_q4.records} == {"B", "C", "E"}
     assert {record.model for record in qwen2511_q4.records} == {"AbstractFramework/qwen-image-edit-2511-4bit"}
     assert next(record for record in qwen2511_q4.records if record.step == "E").status == "PASS"
+
+
+def test_lora_validation_profiles_are_resolvable():
+    cases = [
+        (
+            "AbstractFramework/qwen-image-edit-8bit",
+            "lora_qwen_edit_q8_ghibli_edit_2026_06_11",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "lora_qwen2511_q8_single_edit_multi_angle_2026_06_08",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
+            "AbstractFramework/qwen-image-edit-2509-8bit",
+            "lora_qwen2509_q8_single_edit_multi_angle_2026_06_11",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
+            "AbstractFramework/qwen-image-2512-8bit",
+            "lora_qwen2512_q8_pixel_art_t2i_2026_06_11",
+            MODE_TEXT_ONLY,
+        ),
+        (
+            "AbstractFramework/ernie-image-turbo-8bit",
+            "lora_ernie_turbo_q8_anime_style_t2i_2026_06_11",
+            MODE_TEXT_ONLY,
+        ),
+        (
+            "AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit",
+            "lora_wan_a14b_q8_orbit_i2v_2026_06_11",
+            MODE_FIRST_FRAME_I2V,
+        ),
+    ]
+
+    for model, profile_id, expected_mode in cases:
+        validation = mlxgen.get_model_validation(model, profile_id=profile_id)
+        assert validation.status == "PASS"
+        assert len(validation.records) == 1
+        assert validation.records[0].mode == expected_mode
+        assert validation.records[0].artifact_path is not None
+        assert Path(validation.records[0].artifact_path).exists()
+        for source_image in validation.records[0].source_images:
+            assert Path(source_image).exists()
 
 
 def test_reframe_outpaint_validation_profile_reports_supported_variants():

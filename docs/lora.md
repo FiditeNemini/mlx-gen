@@ -23,12 +23,21 @@ Each capability row includes:
 | `lora_validation_profile` | Validation profile id when the exact route has model-backed proof. |
 
 `mapped-unvalidated` means MLX-Gen has a loader and mapping for the route, but that exact
-model/package and task has not yet passed a visible A/B validation with a public adapter. Treat
+model/package and task has not yet passed a visible A/B validation with an accepted adapter. Treat
 LoRA routes as experimental unless a current A/B contact sheet demonstrates the intended adapter
 effect for your selected model/package.
 
 Generated output metadata now records what actually applied, not only what was requested:
 `lora_application_reports`, `lora_applied_file_count`, and `lora_applied_target_count`.
+
+When a capability row reports `lora_validation_profile`, you can inspect the accepted proof row
+directly:
+
+```sh
+mlxgen validation \
+  --model AbstractFramework/qwen-image-edit-8bit \
+  --profile lora_qwen_edit_q8_ghibli_edit_2026_06_11
+```
 
 ## Current Support Snapshot
 
@@ -36,9 +45,10 @@ The current LoRA surface is route-specific:
 
 | Route family | Current status |
 | --- | --- |
-| `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/z-image-turbo-8bit`, `AbstractFramework/flux.2-klein-9b-8bit` edit, `AbstractFramework/ernie-image-turbo-8bit` text-to-image | Exact validated q8 proof rows exist. |
-| Base Qwen Image, original Qwen Image Edit, Qwen multi-reference or canvas rows, Z-Image latent img2img, ERNIE latent img2img, and the remaining FLUX.2 package rows | `mapped-unvalidated`: the mapping works, but the exact route still lacks a strong public A/B proof. |
-| Wan video, SeedVR2, FIBO | Unsupported today. |
+| `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/z-image-turbo-8bit`, `AbstractFramework/flux.2-klein-9b-8bit` edit, `AbstractFramework/ernie-image-turbo-8bit` text-to-image | Exact validated q8 proof rows exist. |
+| Base Qwen Image, Qwen multi-reference or canvas rows, Z-Image latent img2img, ERNIE latent img2img, and the remaining FLUX.2 package rows | `mapped-unvalidated`: the mapping works, but the exact route still lacks a strong public A/B proof. |
+| `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` text-to-video, `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` first-frame image-to-video, `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` text-to-video, and `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` first-frame image-to-video | Exact validated q8 proof rows exist. |
+| SeedVR2, FIBO | Unsupported today. |
 | Bonsai | Unsupported and low priority. The current packed runtime does not expose the ordinary replaceable linear-module boundary that MLX-Gen's LoRA loader requires. |
 
 ## Download And Reference Adapters
@@ -75,12 +85,17 @@ strength around `0.8` to `1.0`. MLX-Gen currently supports FLUX.2 Klein 4B/9B, n
 `black-forest-labs/FLUX.2-dev`. Passing this adapter to FLUX.2 Klein is rejected because the LoRA
 matrices target a different transformer width.
 
-Wan video LoRA is not supported yet. Unlike Bonsai, Wan is not blocked by a packed execution
-boundary: the current MLX Wan transformers still use ordinary MLX linear attention and FFN layers,
-and local Diffusers already ships `WanLoraLoaderMixin` plus Wan-specific adapter conversion
-helpers. The missing work is Wan-specific adapter-key conversion in MLX-Gen, explicit target-role
-handling for TI2V-5B versus dual-transformer A14B routes, the T2V-to-I2V image-projection
-expansion policy, and MP4 A/B validation.
+Wan video LoRA is now available on the Wan routes that expose transformer LoRA targets. TI2V-5B
+uses one role, `transformer`. Wan A14B uses two explicit roles, `high_noise_transformer` and
+`low_noise_transformer`. MLX-Gen does not guess or silently duplicate roles for dual-transformer
+A14B requests: callers must pass the intended role assignment explicitly with `--lora-target-roles`.
+
+The Wan loader now accepts Diffusers-style Wan adapters, non-Diffusers Wan adapter keys, and
+Musubi/Kohya-style Wan keys. For I2V-capable Wan transformers, MLX-Gen also mirrors Diffusers'
+T2V-to-I2V expansion behavior by synthesizing zero LoRA tensors for missing image-projection
+families when a T2V adapter is loaded on an I2V route. The remaining validation problem is not
+basic loading; it is whether a given adapter produces a strong enough MP4 A/B to promote
+that exact route from `mapped-unvalidated` to `validated`.
 
 The downloaded `fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA` adapter targets
 `Qwen/Qwen-Image-Edit-2511` and uses `<sks>` multi-angle prompt wording. MLX-Gen validates the
@@ -173,6 +188,36 @@ mlxgen generate \
 
 The corrected MLX-Gen mapping now matches all `1,440` tensors in `镜头转换.safetensors` and all
 `2,160` tensors in the stacked Lightning adapter on this route.
+
+`AbstractFramework/qwen-image-edit-8bit` now has an exact single-image edit proof with a
+Ghibli-style Qwen adapter. This row is validated for `qwen.edit` only. The current accepted proof
+uses `ghibli_style_qwen_v3.safetensors` on same-seed edit trials and produces a visible style
+shift while keeping the edit route stable.
+
+![Qwen Image Edit q8 Ghibli-style LoRA A/B](assets/validation/lora-2026-06-11/qwen_edit_q8_ghibli_trials_contact_sheet.png)
+
+Representative command:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-8bit \
+  --image docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png \
+  --prompt "ghibli style. Transform the source into a whimsical hand-painted animated film frame with soft brushwork, warm pastel sky, painterly snow, and gentle storybook lighting. Preserve the same spaceship, snowy canyon, wide framing, and overall layout." \
+  --width 432 \
+  --height 240 \
+  --steps 24 \
+  --guidance 4 \
+  --seed 9951 \
+  --metadata \
+  --replace \
+  --output validation_outputs/qwen_lora_2026_06_11/qwen_edit_q8_ghibli_with_lora.png \
+  --i2i-mode edit \
+  --lora-paths /path/to/ghibli_style_qwen_v3.safetensors \
+  --lora-scales 1.0
+```
+
+The accepted proof matched all `1,680` adapter tensors and applied `840` target layers on the
+route.
 
 `AbstractFramework/qwen-image-2512-8bit` now has an exact text-to-image proof with
 `prithivMLmods/Qwen-Image-2512-Pixel-Art-LoRA`. This row is validated for `qwen.text` only; the
@@ -336,10 +381,121 @@ mlxgen generate \
 The adapter matched all `504` tensors, applied `252` targets, and produced a visibly stronger anime
 render while keeping the same prompt, seed, and subject setup.
 
-Original `AbstractFramework/qwen-image-edit-8bit` and base `AbstractFramework/qwen-image-8bit`
-remain experimental. Exact-base public adapters now load cleanly on both routes, but the current
-visible A/B proofs are not strong enough yet to promote those exact rows from
-`mapped-unvalidated` to `validated`.
+Current Wan q8 public rows now have exact route proofs:
+
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` on `wan.text-video`
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` on `wan.first-frame`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` on `wan.text-video`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` on `wan.first-frame`
+
+![Wan TI2V-5B q8 HSToric LoRA A/B](assets/validation/wan-lora-2026-06-11/ti2v_t2v_hstoric_ab_contact_sheet.jpg)
+![Wan TI2V-5B q8 Crush-It I2V LoRA A/B](assets/validation/wan-lora-2026-06-11/ti2v_i2v_crushit_ab_contact_sheet.jpg)
+![Wan T2V-A14B q8 FollowCam LoRA A/B](assets/validation/wan-lora-2026-06-11/a14b_t2v_followcam_ab_contact_sheet.jpg)
+![Wan I2V-A14B q8 Orbit LoRA A/B](assets/validation/wan-lora-2026-06-11/a14b_i2v_orbit_spaceship_ab_contact_sheet.jpg)
+
+Representative commands:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit \
+  --prompt "HST style HD film, early 1900s, autochrome, analog cinema. A horse-drawn carriage crossing a snowy town square at dusk, pedestrians in wool coats, historical street lamps glowing, gentle cinematic motion." \
+  --width 832 \
+  --height 480 \
+  --frames 17 \
+  --steps 20 \
+  --guidance 4 \
+  --fps 16 \
+  --seed 6301 \
+  --metadata \
+  --output validation_outputs/wan_lora_2026_06_11/ti2v_t2v_hstoric_no_lora_q8.mp4
+
+mlxgen generate \
+  --model AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit \
+  --prompt "HST style HD film, early 1900s, autochrome, analog cinema. A horse-drawn carriage crossing a snowy town square at dusk, pedestrians in wool coats, historical street lamps glowing, gentle cinematic motion." \
+  --width 832 \
+  --height 480 \
+  --frames 17 \
+  --steps 20 \
+  --guidance 4 \
+  --fps 16 \
+  --seed 6301 \
+  --metadata \
+  --output validation_outputs/wan_lora_2026_06_11/ti2v_t2v_hstoric_with_lora_q8.mp4 \
+  --lora-paths /Users/albou/.cache/huggingface/hub/models--AlekseyCalvin--HSToric_Color_Wan2.2_5B_LoRA_BySilverAgePoets/snapshots/fb47fbdfb7fa391ed6d29f1d1b06f78bc815d7c0/HSToric_color_Wan22_5b_LoRA.safetensors \
+  --lora-target-roles transformer \
+  --lora-scales 0.8
+```
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit \
+  --image validation_outputs/wan_lora_2026_06_11/ti2v_i2v_can_source_qwen2512_q8.png \
+  --prompt "crush it. An invisible hydraulic press crushes the centered aluminum soda can flat on the clean studio floor while the camera stays stable, with product-video lighting and realistic reflections." \
+  --width 832 \
+  --height 480 \
+  --frames 41 \
+  --steps 20 \
+  --guidance 4 \
+  --fps 20 \
+  --seed 6603 \
+  --metadata \
+  --replace \
+  --output validation_outputs/wan_lora_2026_06_11/ti2v_i2v_crushit_q8_with_lora.mp4 \
+  --lora-paths /Users/albou/.cache/huggingface/hub/models--ostris--wan22_5b_i2v_crush_it_lora/snapshots/e4b85be20d75c2ca2ee1b901ba2cf49d9416e233/wan22_5b_i2v_crush_it_lora.safetensors \
+  --lora-target-roles transformer \
+  --lora-scales 1
+
+mlxgen generate \
+  --model AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit \
+  --prompt "FollowCam. A continuous wide-angle shot as we follow a rider on horseback galloping through a foggy meadow at dawn. The horse stays centered ahead while mist swirls around its legs, wet grass kicks up behind the hooves, and trees emerge and disappear in the fog." \
+  --width 480 \
+  --height 240 \
+  --frames 41 \
+  --steps 20 \
+  --guidance 4 \
+  --guidance-2 3 \
+  --fps 20 \
+  --seed 6601 \
+  --metadata \
+  --replace \
+  --output validation_outputs/wan_lora_2026_06_11/a14b_t2v_followcam_q8_with_lora.mp4 \
+  --lora-paths '/Users/albou/.cache/huggingface/hub/models--artificialguybr--FollowCam-Redmond-WAN2-T2V-14B/snapshots/20415b092632128b1dd1b52bf46cc9cbac89a72b/[WAN2.2]Followcam_Redmond_high_noise.safetensors' '/Users/albou/.cache/huggingface/hub/models--artificialguybr--FollowCam-Redmond-WAN2-T2V-14B/snapshots/20415b092632128b1dd1b52bf46cc9cbac89a72b/[WAN2.2]Followcam_Redmond_low_noise.safetensors' \
+  --lora-target-roles high_noise_transformer low_noise_transformer \
+  --lora-scales 1 1
+
+mlxgen generate \
+  --model AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit \
+  --image docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png \
+  --prompt "orbit 360 around the landed silver spaceship in the snowy canyon. The camera circles smoothly around the full ship while keeping it centered in frame. Snow cliffs and the icy ground slide in parallax behind it." \
+  --width 480 \
+  --height 240 \
+  --frames 41 \
+  --steps 20 \
+  --guidance 4 \
+  --guidance-2 3 \
+  --fps 20 \
+  --seed 6604 \
+  --metadata \
+  --replace \
+  --output validation_outputs/wan_lora_2026_06_11/a14b_i2v_orbit_spaceship_q8_with_lora.mp4 \
+  --lora-paths /Users/albou/.cache/huggingface/hub/models--ostris--wan22_i2v_14b_orbit_shot_lora/snapshots/7b637fe0079bbf4ac0f977ff2c58971b8835b9c7/wan22_14b_i2v_orbit_high_noise.safetensors /Users/albou/.cache/huggingface/hub/models--ostris--wan22_i2v_14b_orbit_shot_lora/snapshots/7b637fe0079bbf4ac0f977ff2c58971b8835b9c7/wan22_14b_i2v_orbit_low_noise.safetensors \
+  --lora-target-roles high_noise_transformer low_noise_transformer \
+  --lora-scales 1 1
+```
+
+The validated Wan runs used exact base-model adapters, explicit role assignment, and same-seed A/B
+comparisons. The matched adapter counts were:
+
+- TI2V-5B text-to-video: `600/600` matched, `300` layers applied
+- TI2V-5B first-frame image-to-video: `600/600` matched, `300` layers applied
+- T2V-A14B text-to-video: `800/800` matched on both high-noise and low-noise files, `400` layers applied per file
+- I2V-A14B first-frame image-to-video: `800/800` matched on both high-noise and low-noise files, `400` layers applied per file
+
+Combined route matrix: [summary sheet](assets/validation/wan-lora-2026-06-11/wan_video_lora_route_matrix.jpg)
+
+Base `AbstractFramework/qwen-image-8bit` remains experimental. Exact-base adapters now load
+cleanly on both the base Qwen and original Qwen edit routes, but only the original
+`AbstractFramework/qwen-image-edit-8bit` single-image edit row has an accepted exact proof today.
 
 ## A/B Validation Method
 
@@ -381,27 +537,24 @@ show the adapter's intended effect while preserving the requested prompt and sou
 ## Current Experimental Boundaries
 
 - Exact validated rows today are:
+  - `AbstractFramework/qwen-image-edit-8bit` on `qwen.edit`;
   - `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.edit`;
   - `AbstractFramework/qwen-image-edit-2509-8bit` on `qwen.edit`;
   - `AbstractFramework/qwen-image-2512-8bit` on `qwen.text`;
   - `AbstractFramework/z-image-turbo-8bit` on `z-image.text`;
   - `AbstractFramework/flux.2-klein-9b-8bit` on `flux2.edit`;
   - `AbstractFramework/ernie-image-turbo-8bit` on `ernie-image.text`.
-- Adjacent rows remain experimental. That includes Qwen base generation, original Qwen Image Edit,
+- Adjacent rows remain experimental. That includes Qwen base generation,
   Qwen multi-reference, Qwen reframe/outpaint, Z-Image latent img2img, ERNIE latent img2img,
   FLUX.2 multi-reference, and FLUX.2 reframe/outpaint.
-- Original `AbstractFramework/qwen-image-edit-8bit` has a clean exact-base adapter candidate in
-  `peteromallet/Qwen-Image-Edit-InSubject`, and the loader matches all `1,680` adapter tensors on
-  this route with `840` applied targets. The current spaceship A/B is still too weak to promote
-  the row, so it remains experimental until a clearer subject-preservation proof exists.
 - Original `AbstractFramework/qwen-image-8bit` still has no exact validated text row. The public
   `AbstractFramework/qwen-image-8bit` package is now complete locally, and the exact-base
   `flymy-ai/qwen-image-realism-lora` adapter loads cleanly on the route. It still needs a stronger
   visible A/B before the row can be promoted.
-- Bonsai, FIBO, Wan, and SeedVR2 reject LoRA in unified generation. Bonsai stays fail-closed
-  because its packed runtime does not expose the normal replaceable linear-module boundary that the
-  current LoRA loader requires.
-- Video LoRA is tracked separately from image LoRA and is not part of the current unified video
-  routes.
+- Bonsai, FIBO, and SeedVR2 reject LoRA in unified generation. Bonsai stays fail-closed because
+  its packed runtime does not expose the normal replaceable linear-module boundary that the current
+  LoRA loader requires.
+- Wan video LoRA is now part of the unified video routes, and all current Wan q8 public rows have
+  exact route-level proof in the contact sheets above.
 - `mlxgen prepare --lora-paths` is rejected until save/reload behavior is proven for the selected
   family and quantization mode.

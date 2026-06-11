@@ -165,13 +165,17 @@ MLX-Gen fails closed instead of pretending the adapter applied.
 
 ## Does Wan Video Support LoRA?
 
-No. MLX-Gen currently rejects Wan LoRA requests.
+Yes, for the current Wan q8 public routes. Exact validated rows now exist for:
 
-This is not the same kind of blocker as Bonsai. Wan's current MLX transformer path still uses
-ordinary linear attention and FFN layers, so LoRA support is feasible in principle. The missing
-work is Wan-specific adapter conversion, explicit TI2V-5B versus A14B transformer-role handling,
-I2V image-projection expansion behavior, and MP4-based A/B validation. Until that is implemented,
-Wan LoRA stays unsupported.
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` on `wan.text-video`
+- `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` on `wan.first-frame`
+- `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` on `wan.text-video`
+- `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` on `wan.first-frame`
+
+Wan is not blocked the way Bonsai is. The current MLX Wan path still uses normal linear attention
+and FFN layers, so LoRA injection is technically viable. Use `mlxgen capabilities --model <model>`
+and check `lora_status`, `lora_target_roles`, and `lora_validation_profile` before relying on a
+specific Wan LoRA workflow.
 
 ## How Do I Choose Between Latent I2I And Image Edit?
 

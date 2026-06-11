@@ -15,6 +15,7 @@ from mlx import nn
 from mflux.callbacks import ProgressCallback, ProgressEvent
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config.model_config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.wan.latent_creator import WanTimestepPolicy
 from mflux.models.wan.model.wan_transformer import WanBlockHealthContext, WanTransformer
@@ -48,6 +49,9 @@ class Wan2_2_TI2V(nn.Module):
         quantize: int | None = None,
         model_path: str | None = None,
         model_config: ModelConfig | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        lora_target_roles: list[str] | None = None,
     ):
         super().__init__()
         model_config = self._resolve_model_config(model_path=model_path, model_config=model_config)
@@ -56,6 +60,9 @@ class Wan2_2_TI2V(nn.Module):
             quantize=quantize,
             model_path=model_path,
             model_config=model_config,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            lora_target_roles=lora_target_roles,
         )
 
     def generate_video(
@@ -378,6 +385,12 @@ class Wan2_2_TI2V(nn.Module):
             source_height=spatial_metadata.get("source_height"),
             requested_width=spatial_metadata.get("requested_width"),
             requested_height=spatial_metadata.get("requested_height"),
+            lora_paths=getattr(self, "lora_paths", None),
+            lora_scales=getattr(self, "lora_scales", None),
+            extra_metadata={
+                **(LoRALoader.extra_metadata_for_model(self) or {}),
+                "lora_target_roles": getattr(self, "lora_target_roles", None) or None,
+            },
         )
         self._emit_progress(
             progress_callback,
