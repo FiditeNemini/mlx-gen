@@ -1,12 +1,15 @@
 from pathlib import Path
 
 import mlx.core as mx
+import numpy as np
+from PIL import Image
 
 from mflux.models.common.latent_creator.latent_creator import LatentCreator
 from mflux.models.flux2.latent_creator.flux2_latent_creator import Flux2LatentCreator
 from mflux.models.flux2.model.flux2_text_encoder.prompt_encoder import Flux2PromptEncoder
 from mflux.models.flux2.model.flux2_text_encoder.qwen3_text_encoder import Qwen3TextEncoder
 from mflux.models.flux2.model.flux2_vae.vae import Flux2VAE
+from mflux.utils.outpaint_util import OutpaintCanvas
 
 
 class _Flux2KleinEditHelpers:
@@ -86,6 +89,28 @@ class _Flux2KleinEditHelpers:
         return (encoded - bn_mean) / bn_std
 
     @staticmethod
+    def encode_reference_image_to_packed_latents(
+        *,
+        vae: Flux2VAE,
+        tiling_config,
+        image_path: Path | str,
+        height: int,
+        width: int,
+    ) -> mx.array:
+        encoded = LatentCreator.encode_image(
+            vae=vae,
+            image_path=image_path,
+            height=height,
+            width=width,
+            tiling_config=tiling_config,
+        )
+        encoded = _Flux2KleinEditHelpers.ensure_4d_latents(encoded)
+        encoded = _Flux2KleinEditHelpers.crop_to_even_spatial(encoded)
+        encoded = Flux2LatentCreator.patchify_latents(encoded)
+        encoded = _Flux2KleinEditHelpers.bn_normalize_vae_encoded_latents(encoded, vae=vae)
+        return Flux2LatentCreator.pack_latents(encoded)
+
+    @staticmethod
     def prepare_reference_image_conditioning(
         *,
         vae: Flux2VAE,
@@ -127,3 +152,41 @@ class _Flux2KleinEditHelpers:
             )
 
         return image_latents, image_latent_ids
+
+    @staticmethod
+    def prepare_outpaint_edit_mask(
+        *,
+        canvas: OutpaintCanvas,
+        height: int,
+        width: int,
+        batch_size: int = 1,
+        transition_px: int = 24,
+    ) -> mx.array:
+        latent_height = height // 16
+        latent_width = width // 16
+        mask = Image.new("L", (canvas.target_width, canvas.target_height), color=255)
+        inset_left = min(transition_px, max(0, canvas.source_width // 2 - 1))
+        inset_top = min(transition_px, max(0, canvas.source_height // 2 - 1))
+        preserve_left = canvas.paste_left + inset_left
+        preserve_top = canvas.paste_top + inset_top
+        preserve_right = canvas.paste_left + canvas.source_width - inset_left
+        preserve_bottom = canvas.paste_top + canvas.source_height - inset_top
+        if preserve_right <= preserve_left or preserve_bottom <= preserve_top:
+            preserve_left = canvas.paste_left
+            preserve_top = canvas.paste_top
+            preserve_right = canvas.paste_left + canvas.source_width
+            preserve_bottom = canvas.paste_top + canvas.source_height
+        mask.paste(
+            0,
+            (
+                preserve_left,
+                preserve_top,
+                preserve_right,
+                preserve_bottom,
+            ),
+        )
+        mask = mask.resize((latent_width, latent_height), resample=Image.Resampling.BILINEAR)
+        mask_array = mx.array(np.asarray(mask, dtype=np.float32) / 255.0).reshape(1, latent_height * latent_width, 1)
+        if batch_size > 1:
+            mask_array = mx.broadcast_to(mask_array, (batch_size, mask_array.shape[1], mask_array.shape[2]))
+        return mask_array

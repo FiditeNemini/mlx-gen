@@ -51,19 +51,29 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
   - `src/mflux/models/qwen/weights/qwen_lora_mapping.py`
   - `src/mflux/models/z_image/weights/z_image_lora_mapping.py`
 - FLUX.2 and Z-Image also have training adapters.
-- ERNIE and Bonsai accept `lora_paths` in constructor signatures for prepare compatibility, but
-  their initializers delete those arguments and set `model.lora_paths = None`.
-- Wan, SeedVR2, and FIBO do not have proven LoRA mappings in the current MLX-Gen tree. FIBO is
-  already rejected when LoRA is requested, but it remains a useful negative test because FIBO Edit
-  itself is currently deprioritized and unavailable through unified generation.
+- ERNIE now has a real MLX-Gen LoRA path. `src/mflux/models/ernie_image/ernie_image_initializer.py`
+  applies transformer LoRAs through `src/mflux/models/ernie_image/weights/ernie_image_lora_mapping.py`,
+  and `mlxgen capabilities` surfaces ERNIE text/latent routes as LoRA-capable.
+- Bonsai still accepts `lora_paths` in constructor signatures for prepare compatibility, but
+  `src/mflux/models/bonsai_image/bonsai_image_initializer.py` deletes those arguments and sets
+  `model.lora_paths = None`.
+- Wan, SeedVR2, and FIBO do not have proven LoRA mappings in the current MLX-Gen tree. Wan is
+  different from Bonsai architecturally: `src/mflux/models/wan/model/wan_transformer/wan_transformer.py`
+  and the related attention/FFN blocks still use ordinary MLX linear modules, so LoRA injection is
+  feasible in principle. The missing pieces are Wan-specific loader plumbing, adapter-key
+  conversion, explicit multi-transformer target roles for A14B, and video-backed validation.
+  FIBO is already rejected when LoRA is requested, but it remains a useful negative test because
+  FIBO Edit itself is currently deprioritized and unavailable through unified generation.
 - `mlxgen prepare` parses LoRA flags for every model and currently rejects only FIBO explicitly.
-  Signature-based forwarding prevents some constructor crashes, but it is not a capability
-  contract and can still leave users with unsupported or ignored adapter requests on families that
-  accept then discard LoRA kwargs.
+  Signature-based forwarding prevented some constructor crashes, but it was not a capability
+  contract and could still leave users with unsupported or ignored adapter requests on families that
+  accept then discard LoRA kwargs. `mlxgen prepare --lora-paths/--lora-scales` is now rejected
+  until save/reload LoRA bake behavior is explicitly proven for the selected family and
+  quantization mode.
 - `src/mflux/models/common/weights/saving/model_saver.py` bakes and strips LoRA wrappers before
-  save. `src/mflux/models/common/lora/mapping/lora_saver.py` skips the bake when the LoRA delta
-  shape does not match the base weight. That is especially risky for q4/q8 packed linears, where a
-  prepared model can look valid while the requested LoRA was not baked into the saved weights.
+  save. `src/mflux/models/common/lora/mapping/lora_saver.py` now fails on LoRA bake shape mismatch
+  instead of silently skipping the delta. That keeps direct save/export calls aligned with ADR 0002
+  while prepared-package LoRA baking remains gated.
 - `docs/lora.md`, `docs/api.md`, and `docs/troubleshooting.md` document strict runtime LoRA
   behavior and the source/no-LoRA/with-LoRA validation method.
 - `fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA` now applies to
@@ -71,10 +81,63 @@ LoRA capabilities and community LoRA effects as part of the 2511 upgrade.
   Qwen LoRA mapping accepts the Diffusers `transformer.transformer_blocks.*` key family and Qwen
   modulation-layer adapter keys. The first contact sheet is
   `docs/assets/validation/lora-2026-06-08/qwen2511-q8-multi-angle-lora-ab-contact-sheet.png`.
-- Remaining gaps are structured application reports in generated metadata, strict
-  `mlxgen prepare --lora-paths` bake/export policy, first real A/B contact sheets for compatible
-  public adapters, and first-class FLUX.2-dev support if the lovis multi-angle adapter is selected
-  as the first FLUX.2 LoRA proof.
+- `mlxgen capabilities` already surfaces `supports_lora`, `lora_status`, `lora_target_roles`, and
+  `lora_validation_profile` on Qwen and FLUX.2 edit routes, including single-image edit,
+  multi-reference, reframe, and outpaint-capable single-image edit rows where applicable.
+- The current surfacing still stops at `mapped-unvalidated` plus `lora_validation_profile=null`,
+  even for the first checked Qwen Image Edit 2511 q8 single-image edit proof. That gap is now
+  closed for the first exact rows: `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.edit`,
+  `AbstractFramework/qwen-image-edit-2509-8bit` on `qwen.edit`,
+  `AbstractFramework/qwen-image-2512-8bit` on `qwen.text`,
+  `AbstractFramework/z-image-turbo-8bit` on `z-image.text`,
+  `AbstractFramework/ernie-image-turbo-8bit` on `ernie-image.text`, and
+  `AbstractFramework/flux.2-klein-9b-8bit` on `flux2.edit`.
+- The exact-row validation ids are not yet fully auditable end to end. `mlxgen capabilities`
+  surfaces `lora_validation_profile`, but `src/mflux/release/validation_registry.py` still does
+  not resolve the new LoRA profile ids through `mlxgen validation`, and generated metadata only
+  records loader reports unless a caller injects the profile id separately.
+- `src/mflux/models/common/lora/mapping/lora_loader.py` now returns a structured
+  `LoRAApplicationResult`, model initializers retain it, and generated output metadata records
+  `lora_application_reports`, `lora_applied_file_count`, and `lora_applied_target_count`.
+- A concrete Qwen Image Edit 2509 parity bug was fixed in
+  `src/mflux/models/qwen/weights/qwen_lora_mapping.py`: the 2509 adapter family uses local
+  modulation keys such as `transformer_blocks.{block}.img_mod.1.lora_A.default.weight` and
+  `transformer_blocks.{block}.txt_mod.1.lora_B.default.weight`, while MLX-Gen previously only
+  matched the 2511-style `transformer.transformer_blocks...` family. The corrected mapping now
+  matches the full `1440/1440` tensors of `dx8152/Qwen-Edit-2509-Multiple-angles`.
+- The first 2509 stacked validation only became credible after matching the public Lightning
+  workflow profile as well: `8` steps and `guidance 1`. Earlier `guidance 4` runs looked broken
+  even after the mapping fix and should not be treated as valid evidence for the 2509 route.
+- The current 2509 q8 single-image edit proof is
+  `docs/assets/validation/lora-2026-06-11/qwen2509_q8_multi_angle_ab_contact_sheet.png`. The
+  corresponding metadata confirms `2` LoRA files applied, two `720`-target adapter applications
+  (`1440` summed applied-target count), and `0` unmatched keys on the validated runs.
+- Original `AbstractFramework/qwen-image-edit-8bit` still does not have a promotable exact row.
+  `peteromallet/Qwen-Image-Edit-InSubject` is the best exact-base public adapter found so far, and
+  the loader path is clean (`1680/1680` matched keys, `840` targets applied), but the current
+  spaceship A/B is still too weak to count as proof. Keep this row `mapped-unvalidated` until a
+  clearer subject-preservation validation is captured.
+- A second concrete Qwen mapping gap was exposed by the public
+  `prithivMLmods/Qwen-Image-2512-Pixel-Art-LoRA` adapter. MLX-Gen already matched the attention and
+  MLP tensors, but it initially missed the `diffusion_model.transformer_blocks.{block}.img_mod.1`
+  and `txt_mod.1` modulation-key family. The corrected Qwen mapping now matches the full
+  `1680/1680` tensors on `AbstractFramework/qwen-image-2512-8bit`, and that exact `qwen.text` row
+  is now validated.
+- ERNIE now has an exact public-route q8 proof with
+  `reverentelusarca/ernie-image-elusarca-anime-style-lora`. The adapter matches all `504/504`
+  tensors, applies `252` transformer targets, and produces the contact sheet
+  `docs/assets/validation/lora-2026-06-11/ernie_turbo_q8_anime_style_ab_contact_sheet.png`.
+- Remaining gaps are base Qwen Image validation, original Qwen Image Edit validation quality,
+  route-specific validation for Qwen multi-reference and reframe/outpaint rows, Z-Image latent
+  img2img proof, ERNIE latent img2img proof, additional FLUX.2 package proofs beyond the 9B q8
+  single-image edit row, end-to-end auditability for `lora_validation_profile`, and first-class
+  FLUX.2-dev support if the lovis multi-angle adapter is selected as the first FLUX.2-dev proof.
+- The original `AbstractFramework/qwen-image-8bit` q8 package is now fully present locally and the
+  exact-base `flymy-ai/qwen-image-realism-lora` adapter loads cleanly on that route
+  (`480/480` matched keys, `240` targets applied). The remaining gap is validation quality rather
+  than adapter compatibility: the current realism A/B has a clearly visible effect, but it also
+  pulls framing and composition enough that the row should stay `mapped-unvalidated` until a better
+  exact-base adapter or a stronger adherence-oriented profile is proven.
 
 ## Problem
 
@@ -124,10 +187,10 @@ Initial support matrix should be explicit and task-aware:
 | FLUX.2 Klein | Inference mapping exists; training adapter exists. | T2I, latent I2I, edit-reference, multi-reference | Low to medium | Keep supported, add strict loader tests and one visible T2I plus one I2I/edit validation row per representative package. |
 | Qwen Image / Qwen Image Edit / Qwen Image Edit 2509 / 2511 | Inference mapping exists. Official Qwen Image Edit 2511 advertises integrated LoRA capability and many adapters exist in the HF model tree. | T2I where the model supports it; I2I edit-reference and multi-reference for edit models | Medium | Keep supported only after visible validation with real Qwen LoRAs. Validate base Qwen Image, Qwen Image Edit, 2509, and 2511 separately because prompt/image contracts differ. |
 | Z-Image / Z-Image Turbo | Inference mapping and training adapter exist; one public LoRA slow test exists. | T2I, latent I2I where routed | Low to medium | Keep supported, make strict failure behavior common with FLUX/Qwen, and preserve visible LoRA regression output. |
-| ERNIE Image / Turbo | Constructors accept `lora_paths` for compatibility but initializer ignores them. | T2I, latent I2I | Medium to high | Reject LoRA flags before model load until a real ERNIE mapping and a public adapter proof exist. Mapping may be feasible, but no current code applies it. |
-| Bonsai | Initializer ignores LoRA; packed ternary/low-bit layout is not a normal adapter target. | T2I | High / not priority | Reject LoRA flags. Revisit only if Bonsai publishes adapter semantics that match the packed MLX runtime. |
+| ERNIE Image / Turbo | Runtime mapping exists and exact q8 text-to-image proof exists for `AbstractFramework/ernie-image-turbo-8bit`. | T2I, latent I2I | Medium | Keep text-to-image supported with strict loader behavior. Treat latent img2img as `mapped-unvalidated` until a source-preserving proof lands. |
+| Bonsai | Initializer still ignores LoRA; packed ternary/low-bit layout is not a normal adapter target and the current public “Bonsai LoRA” candidate uses SDXL UNet keys. | T2I | High / architectural | Reject LoRA flags. Revisit only through separate proposed item 0038. |
 | FIBO / FIBO Edit | LoRA is rejected today; no proven mapping. FIBO Edit is deprioritized and not a release-quality unified edit route. | T2I only for base FIBO; FIBO Edit disabled in unified generation | High / deferred | Keep rejected. Do not spend LoRA work here until base FIBO/FIBO Edit priority changes. |
-| Wan2.2 TI2V/T2V/I2V | No mapping or constructor support. A14B has separate high-noise and low-noise transformers. | T2V, I2V | High | Track separately in [proposed item 0033](../proposed/0033_video_lora_for_t2v_i2v.md). Start with Wan only after item 0015 and video integrity work are stable. |
+| Wan2.2 TI2V/T2V/I2V | No mapping or constructor support yet. TI2V-5B uses one transformer; A14B uses separate high-noise and low-noise transformers. Diffusers already has Wan-specific LoRA loader and conversion logic, including I2V expansion behavior. | T2V, I2V | Medium to high | Track separately in [proposed item 0033](../proposed/0033_video_lora_for_t2v_i2v.md). Start with TI2V-5B once image-family LoRA strictness is settled, then add A14B only with explicit transformer-role metadata and MP4 proof. |
 | SeedVR2 | No LoRA mapping; current route is restoration/upscale rather than generation. | Image restoration/upscale today; video restoration proposed in item 0032 | Low value / not priority | Reject LoRA flags. Treat model-specific restoration controls such as resolution and softness separately from LoRA. |
 
 Task-direction roadmap:
@@ -194,6 +257,8 @@ semantically wrong.
 - Strict scale-count validation and a clear error for scales without adapter paths.
 - Generated metadata that records which adapters were actually applied, their scales, and how many
   targets matched.
+- Promotion policy follow-up for validated rows: exact public validation profiles should only be
+  promoted when the proving adapter set reports `unmatched_key_count == 0` on the validated run.
 - Prepared-package policy for LoRA: either tested bake/export for the selected family and
   quantization mode, or early rejection before loading/saving.
 - Documentation cleanup for inherited/model-local READMEs that currently make broader LoRA claims
@@ -264,14 +329,17 @@ Recommended first visual proof set:
       are provided without paths.
 - [x] Reject LoRA flags for unsupported families before generation starts.
 - [x] Add cached model-card base-model preflight for known incompatible adapters.
-- [ ] Reject or prove `mlxgen prepare --lora-paths` for unsupported families and q4/q8 packed
+- [x] Reject or prove `mlxgen prepare --lora-paths` for unsupported families and q4/q8 packed
       packages; no skipped-bake prepared package may be saved as if LoRA was applied.
 - [x] Make loader-level missing, unreadable, corrupt, zero-match, and shape-invalid cases fail
       closed.
-- [ ] Return and persist a structured LoRA application report.
+- [x] Return and persist a structured LoRA application report.
+- [x] Promote exact proven route/package rows from `mapped-unvalidated` to `validated`, starting
+      with the Qwen Image Edit 2511 q8 single-image edit row only if its capabilities metadata can
+      name that proof without accidentally promoting multi-reference or other package classes.
 - [x] Add focused tests for strict LoRA application.
 - [x] Add first model-backed A/B contact sheet for Qwen Image Edit 2511 q8.
-- [ ] Add first model-backed A/B contact sheets for Z-Image Turbo and FLUX.2 Klein before marking
+- [x] Add first model-backed A/B contact sheets for Z-Image Turbo and FLUX.2 Klein before marking
       those exact modes validated. The downloaded lovis93 multi-angle adapter targets FLUX.2-dev,
       so it remains tracked separately from FLUX.2 Klein.
 - [x] Update docs and capability metadata for the current mapped-unvalidated contract.

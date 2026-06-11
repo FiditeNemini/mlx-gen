@@ -56,6 +56,7 @@ class ImageUtil:
         concept_heatmap: ConceptHeatmap | None = None,
         negative_prompt: str | None = None,
         init_metadata: dict | None = None,
+        extra_metadata: dict | None = None,
     ) -> GeneratedImage:
         TensorHealth.ensure_finite(decoded_latents, name="decoded_image", phase="image-conversion")
         normalized = ImageUtil._denormalize(decoded_latents)
@@ -92,6 +93,7 @@ class ImageUtil:
             requested_height=config.requested_height,
             source_image_width=config.source_image_width,
             source_image_height=config.source_image_height,
+            extra_metadata=extra_metadata,
         )
 
     @staticmethod

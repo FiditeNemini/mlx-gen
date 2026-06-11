@@ -422,9 +422,9 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Canvas outpaint request: CSS-style top,right,bottom,left padding such as "
-            "'0,25%%,0,25%%'. Supported edit models generate the expanded view and MLX-Gen "
-            "uses an adaptive source blend when the generated source window still matches "
-            "the original image."
+            "'0,25%%,0,25%%'. Qwen Image Edit variants use generative canvas expansion with "
+            "adaptive source restoration. FLUX.2 strict outpaint requires a base Klein model "
+            "and uses source-locked denoising instead of generative reframe."
         ),
     )
     return parser

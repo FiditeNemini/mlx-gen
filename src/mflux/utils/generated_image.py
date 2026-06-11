@@ -285,6 +285,9 @@ class GeneratedImage:
                 "model",
                 "lora_paths",
                 "lora_scales",
+                "lora_application_reports",
+                "lora_applied_file_count",
+                "lora_applied_target_count",
                 "quantize",
             ]
             for field in fields_to_carry:

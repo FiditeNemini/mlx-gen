@@ -7,6 +7,7 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.flux2.latent_creator.flux2_latent_creator import Flux2LatentCreator
 from mflux.models.flux2.variants import Flux2KleinEdit
+from mflux.models.flux2.variants.edit.flux2_klein_outpaint import Flux2KleinOutpaint
 from mflux.utils.dimension_resolver import CANVAS_POLICY_EXACT_RESIZE
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.outpaint_util import OutpaintCanvas, OutpaintUtil
@@ -50,24 +51,43 @@ def main():
     model_name = args.model or "flux2-klein-4b"
     model_config = ModelConfig.from_name(model_name=model_name, base_model=args.base_model)
 
+    is_base_model = _is_flux2_base_model(model_config)
     if args.guidance is None:
-        args.guidance = 1.0
+        args.guidance = 4.0 if args.outpaint_padding is not None and is_base_model else 1.0
     model_name_lower = model_config.model_name.lower()
     base_model_lower = (model_config.base_model or "").lower()
     is_flux2 = any(identifier in model_name_lower or identifier in base_model_lower for identifier in ("flux.2", "flux2"))
-    if (args.reframe_padding is not None or args.outpaint_padding is not None) and (
-        "klein-base" in model_name_lower or "klein-base" in base_model_lower
-    ):
-        parser.error("--reframe-padding and --outpaint-padding require a validated non-base FLUX.2 Klein model.")
+    if args.reframe_padding is not None and is_base_model:
+        parser.error("--reframe-padding requires a validated non-base FLUX.2 Klein model.")
+    if args.outpaint_padding is not None and not is_base_model:
+        parser.error(
+            "--outpaint-padding requires a FLUX.2 Klein base model because strict outpaint "
+            "needs source-locked denoising. Use a base model such as "
+            "black-forest-labs/FLUX.2-klein-base-9B or "
+            "AbstractFramework/flux.2-klein-base-9b-8bit."
+        )
     if args.guidance != 1.0 and not is_flux2:
         parser.error("--guidance is only supported for FLUX.2 models. Use --guidance 1.0.")
+    if args.guidance != 1.0 and not is_base_model and args.outpaint_padding is None:
+        parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
 
-    model = Flux2KleinEdit(
-        model_config=model_config,
-        quantize=args.quantize,
-        model_path=args.model_path,
-        lora_paths=args.lora_paths,
-        lora_scales=args.lora_scales,
+    uses_strict_outpaint = args.outpaint_padding is not None and is_base_model
+    model = (
+        Flux2KleinOutpaint(
+            model_config=model_config,
+            quantize=args.quantize,
+            model_path=args.model_path,
+            lora_paths=args.lora_paths,
+            lora_scales=args.lora_scales,
+        )
+        if uses_strict_outpaint
+        else Flux2KleinEdit(
+            model_config=model_config,
+            quantize=args.quantize,
+            model_path=args.model_path,
+            lora_paths=args.lora_paths,
+            lora_scales=args.lora_scales,
+        )
     )
 
     memory_saver = CallbackManager.register_callbacks(
@@ -89,21 +109,33 @@ def main():
 
             try:
                 for seed in args.seed:
-                    image = model.generate_image(
-                        seed=seed,
-                        prompt=PromptUtil.read_prompt(args),
-                        width=args.width,
-                        height=args.height,
-                        guidance=args.guidance,
-                        image_paths=image_paths,
-                        num_inference_steps=args.steps,
-                        scheduler="flow_match_euler_discrete",
-                        canvas_policy=args.canvas_policy,
-                    )
+                    if uses_strict_outpaint:
+                        image = model.generate_image(
+                            seed=seed,
+                            prompt=PromptUtil.read_prompt(args),
+                            canvas=outpaint_canvas,
+                            guidance=args.guidance,
+                            num_inference_steps=args.steps,
+                            scheduler="flow_match_euler_discrete",
+                        )
+                    else:
+                        image = model.generate_image(
+                            seed=seed,
+                            prompt=PromptUtil.read_prompt(args),
+                            width=args.width,
+                            height=args.height,
+                            guidance=args.guidance,
+                            image_paths=image_paths,
+                            num_inference_steps=args.steps,
+                            scheduler="flow_match_euler_discrete",
+                            canvas_policy=args.canvas_policy,
+                        )
                     if outpaint_canvas is not None:
                         image.image = OutpaintUtil.composite_source_region(
                             generated_image=image.image,
                             canvas=outpaint_canvas,
+                            feather_px=None,
+                            restore_threshold=-1.0 if uses_strict_outpaint else 12.0,
                         )
                         image.image_path = source_image_paths[0]
                         image.image_paths = source_image_paths
@@ -111,6 +143,11 @@ def main():
                             generated_image=image,
                             canvas=outpaint_canvas,
                             padding_value=args.outpaint_padding,
+                            preservation=(
+                                "latent-locked-transition-band-no-postblend"
+                                if uses_strict_outpaint
+                                else "adaptive-content-aware-source-blend"
+                            ),
                         )
                     if reframe_canvas is not None:
                         image.image_path = source_image_paths[0]
@@ -186,6 +223,12 @@ def _option_was_provided(argv: list[str], option_name: str) -> bool:
         if token == option_name or token.startswith(f"{option_name}="):
             return True
     return False
+
+
+def _is_flux2_base_model(model_config: ModelConfig) -> bool:
+    model_name_lower = model_config.model_name.lower()
+    base_model_lower = (model_config.base_model or "").lower()
+    return "klein-base" in model_name_lower or "klein-base" in base_model_lower
 
 
 if __name__ == "__main__":

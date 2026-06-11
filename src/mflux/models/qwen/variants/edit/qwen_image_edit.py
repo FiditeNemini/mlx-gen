@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.vae.vae_util import VAEUtil
 from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.qwen.latent_creator.qwen_latent_creator import QwenLatentCreator
@@ -108,14 +109,12 @@ class QwenImageEdit(nn.Module):
         )
 
         # 3. Generate image conditioning latents
-        static_image_latents, qwen_image_ids, cond_image_grid, _ = (
-            QwenEditUtil.create_image_conditioning_latents(
-                vae=self.vae,
-                width=None,
-                height=None,
-                image_paths=image_paths,
-                tiling_config=self.tiling_config,
-            )
+        static_image_latents, qwen_image_ids, cond_image_grid, _ = QwenEditUtil.create_image_conditioning_latents(
+            vae=self.vae,
+            width=None,
+            height=None,
+            image_paths=image_paths,
+            tiling_config=self.tiling_config,
         )
 
         # 4. Create callback context and call before_loop
@@ -183,6 +182,7 @@ class QwenImageEdit(nn.Module):
             image_paths=image_paths,
             generation_time=time_steps.format_dict["elapsed"],
             negative_prompt=negative_prompt,
+            extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
 
     def _encode_prompts_with_images(

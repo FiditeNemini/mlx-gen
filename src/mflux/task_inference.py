@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from mflux.lora_validation_registry import get_lora_validation_status
 from mflux.models.common.config import ModelConfig
 from mflux.utils.dimension_resolver import CANVAS_POLICY_EXACT_RESIZE, CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import ModelConfigError
@@ -285,9 +286,7 @@ def resolve_generation_plan(
         if capability.public_task == public_task and capability.allows_image_count(image_count)
     ]
     if requested_mode != I2I_MODE_AUTO:
-        candidates = [
-            capability for capability in candidates if _mode_matches_request(capability.mode, requested_mode)
-        ]
+        candidates = [capability for capability in candidates if _mode_matches_request(capability.mode, requested_mode)]
 
     if has_image_strength:
         candidates = [capability for capability in candidates if capability.supports_image_strength]
@@ -300,13 +299,14 @@ def resolve_generation_plan(
     if has_outpaint:
         candidates = [capability for capability in candidates if capability.supports_outpaint]
         if not candidates:
-            raise TaskInferenceError("--outpaint-padding is only supported for image-to-image modes with outpaint support.")
+            raise TaskInferenceError(
+                "--outpaint-padding is only supported for image-to-image modes with outpaint support."
+            )
     if has_reframe:
         candidates = [capability for capability in candidates if capability.supports_reframe]
         if not candidates:
             raise TaskInferenceError(
-                "--reframe-padding is only supported for image-to-image edit models "
-                "with generative reframe support."
+                "--reframe-padding is only supported for image-to-image edit models with generative reframe support."
             )
     if has_lora:
         candidates = [capability for capability in candidates if capability.supports_lora]
@@ -479,15 +479,20 @@ def _capabilities_for(identity: _ModelIdentity) -> ModelCapabilities:
         )
     if family == "ernie-image":
         return _image_latent_capabilities(
+            identity=identity,
             family=family,
             label="ERNIE Image Turbo",
             model_name=identity.model_name,
             handler_id="ernie-image.generate",
             supports_guidance=True,
+            supports_lora=True,
         )
     if family == "z-image":
-        handler_id = "z-image-turbo.generate" if _is_z_image_turbo(identity.aliases, identity.model_key) else "z-image.generate"
+        handler_id = (
+            "z-image-turbo.generate" if _is_z_image_turbo(identity.aliases, identity.model_key) else "z-image.generate"
+        )
         return _image_latent_capabilities(
+            identity=identity,
             family=family,
             label="Z-Image",
             model_name=identity.model_name,
@@ -515,8 +520,30 @@ def _ordinary_i2i_canvas_contract() -> dict:
     }
 
 
+def _lora_capability_kwargs(*, identity: _ModelIdentity, capability_id: str, supports_lora: bool) -> dict:
+    if not supports_lora:
+        return {
+            "supports_lora": False,
+            "lora_status": "unsupported",
+            "lora_target_roles": (),
+            "lora_validation_profile": None,
+        }
+    status, validation_profile = get_lora_validation_status(
+        model=identity.model_name,
+        model_config=identity.model_config,
+        capability_id=capability_id,
+    )
+    return {
+        "supports_lora": True,
+        "lora_status": status,
+        "lora_target_roles": ("transformer",),
+        "lora_validation_profile": validation_profile,
+    }
+
+
 def _image_latent_capabilities(
     *,
+    identity: _ModelIdentity,
     family: str,
     label: str,
     model_name: str | None,
@@ -537,9 +564,9 @@ def _image_latent_capabilities(
                 mode=MODE_TEXT_ONLY,
                 handler_id=handler_id,
                 default_for_task=True,
-                supports_lora=supports_lora,
-                lora_status="mapped-unvalidated" if supports_lora else "unsupported",
-                lora_target_roles=("transformer",) if supports_lora else (),
+                **_lora_capability_kwargs(
+                    identity=identity, capability_id=f"{family}.text", supports_lora=supports_lora
+                ),
             ),
             GenerationCapability(
                 id=f"{family}.latent",
@@ -550,9 +577,9 @@ def _image_latent_capabilities(
                 max_images=1,
                 supports_image_strength=True,
                 default_for_task=True,
-                supports_lora=supports_lora,
-                lora_status="mapped-unvalidated" if supports_lora else "unsupported",
-                lora_target_roles=("transformer",) if supports_lora else (),
+                **_lora_capability_kwargs(
+                    identity=identity, capability_id=f"{family}.latent", supports_lora=supports_lora
+                ),
                 **i2i_canvas,
             ),
         ),
@@ -572,12 +599,30 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="qwen.edit",
                 min_images=1,
                 max_images=1,
-                supports_outpaint=True,
-                supports_reframe=True,
                 default_for_task=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="qwen.edit", supports_lora=True),
+                **i2i_canvas,
+            ),
+            GenerationCapability(
+                id="qwen.reframe",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=1,
+                max_images=1,
+                supports_reframe=True,
+                **_lora_capability_kwargs(identity=identity, capability_id="qwen.reframe", supports_lora=True),
+                **i2i_canvas,
+            ),
+            GenerationCapability(
+                id="qwen.outpaint",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=1,
+                max_images=1,
+                supports_outpaint=True,
+                **_lora_capability_kwargs(identity=identity, capability_id="qwen.outpaint", supports_lora=True),
                 **i2i_canvas,
             ),
         )
@@ -591,9 +636,9 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                     min_images=2,
                     max_images=None,
                     default_for_task=True,
-                    supports_lora=True,
-                    lora_status="mapped-unvalidated",
-                    lora_target_roles=("transformer",),
+                    **_lora_capability_kwargs(
+                        identity=identity, capability_id="qwen.multi-reference", supports_lora=True
+                    ),
                     **i2i_canvas,
                 ),
             )
@@ -605,9 +650,7 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 mode=MODE_TEXT_ONLY,
                 handler_id="qwen.generate",
                 default_for_task=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="qwen.text", supports_lora=True),
             ),
             GenerationCapability(
                 id="qwen.latent",
@@ -617,9 +660,7 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=1,
                 max_images=1,
                 supports_image_strength=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="qwen.latent", supports_lora=True),
                 **i2i_canvas,
             ),
         )
@@ -634,7 +675,7 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
 
 def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     i2i_canvas = _ordinary_i2i_canvas_contract()
-    supports_canvas_expansion = not _is_flux2_klein_base(identity.aliases, identity.model_key)
+    is_base_model = _is_flux2_klein_base(identity.aliases, identity.model_key)
     return ModelCapabilities(
         schema_version=CAPABILITIES_SCHEMA_VERSION,
         family=identity.family,
@@ -647,9 +688,7 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 mode=MODE_TEXT_ONLY,
                 handler_id="flux2.generate",
                 default_for_task=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="flux2.text", supports_lora=True),
             ),
             GenerationCapability(
                 id="flux2.latent",
@@ -659,9 +698,7 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=1,
                 max_images=1,
                 supports_image_strength=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="flux2.latent", supports_lora=True),
                 **i2i_canvas,
             ),
             GenerationCapability(
@@ -671,12 +708,24 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="flux2.edit",
                 min_images=1,
                 max_images=1,
-                supports_outpaint=supports_canvas_expansion,
-                supports_reframe=supports_canvas_expansion,
                 default_for_task=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="flux2.edit", supports_lora=True),
+                **i2i_canvas,
+            ),
+            GenerationCapability(
+                id="flux2.outpaint" if is_base_model else "flux2.reframe",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="flux2.edit",
+                min_images=1,
+                max_images=1,
+                supports_outpaint=is_base_model,
+                supports_reframe=not is_base_model,
+                **_lora_capability_kwargs(
+                    identity=identity,
+                    capability_id="flux2.outpaint" if is_base_model else "flux2.reframe",
+                    supports_lora=True,
+                ),
                 **i2i_canvas,
             ),
             GenerationCapability(
@@ -687,9 +736,7 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 min_images=2,
                 max_images=None,
                 default_for_task=True,
-                supports_lora=True,
-                lora_status="mapped-unvalidated",
-                lora_target_roles=("transformer",),
+                **_lora_capability_kwargs(identity=identity, capability_id="flux2.multi-reference", supports_lora=True),
                 **i2i_canvas,
             ),
         ),
@@ -856,12 +903,14 @@ def _raise_no_capability(
 ) -> None:
     label = model_capabilities.label
     if not model_capabilities.capabilities:
-        raise TaskInferenceError(
-            f"{label} does not expose unified generation capabilities through mlxgen generate."
-        )
-    if public_task in VIDEO_TASKS and not any(cap.public_task in VIDEO_TASKS for cap in model_capabilities.capabilities):
+        raise TaskInferenceError(f"{label} does not expose unified generation capabilities through mlxgen generate.")
+    if public_task in VIDEO_TASKS and not any(
+        cap.public_task in VIDEO_TASKS for cap in model_capabilities.capabilities
+    ):
         raise TaskInferenceError(f"{label} supports image generation tasks, not {public_task}.")
-    if public_task in PUBLIC_IMAGE_TASKS and not any(cap.public_task in PUBLIC_IMAGE_TASKS for cap in model_capabilities.capabilities):
+    if public_task in PUBLIC_IMAGE_TASKS and not any(
+        cap.public_task in PUBLIC_IMAGE_TASKS for cap in model_capabilities.capabilities
+    ):
         raise TaskInferenceError(f"{label} supports video generation tasks, not {public_task}.")
     if public_task == IMAGE_TO_IMAGE and not any(
         cap.public_task == IMAGE_TO_IMAGE for cap in model_capabilities.capabilities
@@ -917,13 +966,16 @@ def _has_alias(aliases: set[str], *needles: str) -> bool:
 
 
 def _is_qwen(aliases: set[str], model_key: str) -> bool:
-    return _has_alias(
-        aliases,
-        "qwen-image",
-        "qwen-image-edit",
-        "qwen-image-edit-2509",
-        "qwen-image-edit-2511",
-    ) or "qwen" in model_key
+    return (
+        _has_alias(
+            aliases,
+            "qwen-image",
+            "qwen-image-edit",
+            "qwen-image-edit-2509",
+            "qwen-image-edit-2511",
+        )
+        or "qwen" in model_key
+    )
 
 
 def _is_qwen_edit(aliases: set[str], model_key: str) -> bool:

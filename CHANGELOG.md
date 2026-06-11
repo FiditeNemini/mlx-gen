@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.18.15] - 2026-06-11
 
 ### Added
 
@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scale matching, adapter/base-model compatibility, and source/no-LoRA/with-LoRA validation.
 - **Qwen Image Edit 2511 LoRA proof**: add a Qwen 2511 q8 multiple-angle LoRA A/B contact sheet
   and command log using `fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA`.
+- **Qwen 2509, Qwen 2512, Z-Image Turbo, and ERNIE LoRA proofs**: add exact q8 proof rows,
+  contact sheets, and public command examples for `AbstractFramework/qwen-image-edit-2509-8bit`,
+  `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/z-image-turbo-8bit`, and
+  `AbstractFramework/ernie-image-turbo-8bit`.
+- **ERNIE Image Turbo LoRA support**: add public-route LoRA loading, capability surfacing, strict
+  metadata reporting, and an exact q8 anime-style A/B proof for
+  `AbstractFramework/ernie-image-turbo-8bit`.
 - **Wan practical video examples**: add a dedicated Wan video guide with `101`-frame, 20 fps M5 Max
   comparison clips for TI2V-5B at `832x480` and `1280x704` plus A14B T2V at `480x240`.
 - **Wan TI2V-5B parity backlog**: add a planned item for source-model TI2V-5B math and behavior
@@ -29,9 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Experimental feature wording**: mark LoRA and reframe/outpaint documentation as experimental
   while preserving the existing fail-closed adapter and capability contracts.
+- **LoRA support snapshot**: document the exact validated q8 rows, keep base Qwen Image and
+  original Qwen Image Edit experimental, keep Wan video unsupported, and explicitly deprioritize
+  Bonsai packed-runtime LoRA work.
 - **Wan guidance**: document that A14B at `480x240` or `240x480`, `101` frames, 20 fps, and
   `20-25` steps is the preferred practical M5 Max profile for the recorded starship prompt, and
   document `--flow-shift 3` for new 480p-class TI2V-5B checks.
+- **Wan video LoRA planning**: refine backlog and docs to distinguish the single-transformer
+  TI2V-5B path from dual-transformer A14B routes, and record named public proof candidates for
+  future Wan LoRA validation.
 
 ### Fixed
 
@@ -41,9 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Qwen Image Edit 2511 LoRA mapping**: accept the Diffusers `transformer.transformer_blocks.*`
   `lora_A`/`lora_B` adapter key format, including Qwen modulation layers, so compatible Qwen 2511
   LoRAs apply instead of being rejected as zero-match adapters.
+- **Qwen 2509 and Qwen 2512 LoRA mappings**: accept the public Diffusers modulation-key variants
+  used by current Qwen 2509 edit and Qwen 2512 text adapters, allowing exact matched-key
+  application on the validated q8 routes.
 - **FLUX.2-dev LoRA routing**: `black-forest-labs/FLUX.2-dev` is not inferred as a supported
   FLUX.2 Klein route, and FLUX.2-dev adapters such as
   `lovis93/Flux-2-Multi-Angles-LoRA-v2` are rejected for FLUX.2 Klein models.
+- **Bonsai LoRA fail-closed boundary**: Bonsai capability surfacing and planning now stay explicit
+  about LoRA being unsupported on the packed ternary runtime instead of implying that ordinary
+  adapter injection should work there.
 
 ## [0.18.14] - 2026-06-08
 

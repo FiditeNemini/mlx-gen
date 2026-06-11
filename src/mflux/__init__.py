@@ -6,6 +6,7 @@ if "TOKENIZERS_PARALLELISM" not in os.environ:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from mflux.release.validation_registry import (
+    FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
     I2I_EDIT_5X4_PROFILE_ID,
     REFRAME_OUTPAINT_PROFILE_ID,
     ModelValidation,
@@ -31,6 +32,7 @@ from mflux.task_inference import (
 
 __all__ = [
     "GenerationCapability",
+    "FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID",
     "GenerationPlan",
     "I2I_EDIT_5X4_PROFILE_ID",
     "ModelValidation",

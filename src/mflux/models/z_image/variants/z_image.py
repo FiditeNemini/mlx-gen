@@ -7,6 +7,7 @@ from PIL import Image
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import Img2Img, LatentCreator
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.vae.vae_util import VAEUtil
 from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.z_image.latent_creator import ZImageLatentCreator
@@ -152,6 +153,7 @@ class ZImage(nn.Module):
             image_strength=config.image_strength,
             generation_time=config.time_steps.format_dict["elapsed"],
             negative_prompt=negative_prompt,
+            extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
 
     def _encode_prompts(

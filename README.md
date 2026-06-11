@@ -53,7 +53,10 @@ The main capabilities are:
 - explicit `download` and `prepare` workflows for local MLX-Gen model packages;
 - JSON model capability inspection before starting a heavy run;
 - experimental LoRA routing and strict adapter application checks, with model-card compatibility
-  preflight when cached adapter metadata is available;
+  preflight when cached adapter metadata is available and exact q8 proof rows for Qwen Image Edit
+  2509/2511, Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, and ERNIE Image Turbo
+  text-to-image; base Qwen Image and original Qwen Image Edit remain experimental, Wan video LoRA
+  is not supported yet, and Bonsai LoRA stays fail-closed;
 - shared progress events for applications embedding MLX-Gen.
 
 Use `mlxgen capabilities --model ...` before long image-edit runs. Capability output describes the
@@ -138,7 +141,8 @@ mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit
 
 LoRA support is experimental. For LoRA work, inspect `supports_lora` and `lora_status` in
 `mlxgen capabilities`, download the adapter explicitly with `mlxgen download`, and use an adapter
-trained for the selected model family.
+trained for the selected model family. Current exact proof rows cover Qwen Image Edit 2509/2511,
+Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, and ERNIE Image Turbo text-to-image.
 For example, a FLUX.2-dev LoRA is not accepted for FLUX.2 Klein. See [docs/lora.md](docs/lora.md)
 for the A/B validation method.
 
@@ -175,6 +179,8 @@ included assets.
 For current image-edit contact sheets, command logs, and model/package status across Qwen Image
 Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I models, see
 [docs/edit-capabilities.md](docs/edit-capabilities.md).
+For a plain-language guide to latent img2img, instruction edit, multi-reference composition,
+generative reframe, and outpaint, see [docs/image-edit-modes.md](docs/image-edit-modes.md).
 
 ## Published Models
 
@@ -291,12 +297,13 @@ progress callbacks make long runs observable.
 ## Documentation
 
 - [Getting started](docs/getting-started.md): installation, first runs, SeedVR2 upscaling, and Wan video.
-- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, experimental generative reframe, experimental canvas outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
+- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, experimental generative reframe, backend-specific outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
+- [Image edit modes](docs/image-edit-modes.md): what latent img2img, edit-reference, multi-reference, generative reframe, and outpaint mean in practice, with examples.
 - [Wan video](docs/wan-video.md): practical Wan2.2 T2V/I2V sizing and 5-second M5 Max comparison clips.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
 - [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, quality controls, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.
-- [Reframe and outpaint](docs/reframe-outpaint.md): experimental `--reframe-padding` and `--outpaint-padding` routes with source/q8/q4 proof sheets.
+- [Reframe and outpaint](docs/reframe-outpaint.md): experimental `--reframe-padding` and `--outpaint-padding` routes with the mixed June 8 profile plus the current FLUX.2 Klein base source-model proof.
 - [Model management](docs/model-management.md): download, prepare, and run from local model files.
 - [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
 - [Python integration](docs/python-integration.md): embedding, progress callbacks, and AbstractVision/AbstractCore notes.

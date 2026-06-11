@@ -21,11 +21,14 @@ _STATUS_RANK = {
 
 I2I_EDIT_5X4_PROFILE_ID = "i2i_edit_5x4_2026_06_05"
 REFRAME_OUTPAINT_PROFILE_ID = "reframe_outpaint_2026_06_08"
+FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID = "flux2_klein_base_starship_2026_06_10"
 
 CANONICAL_SOURCE = "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png"
 QWEN2511_PARITY_DIR = "docs/assets/validation/qwen-edit-2511-parity-2026-06-06"
 REFRAME_OUTPAINT_DIR = "docs/assets/validation/reframe-outpaint-2026-06-08"
 REFRAME_OUTPAINT_SOURCE = f"{REFRAME_OUTPAINT_DIR}/source-b-cropped-starship.png"
+FLUX2_KLEIN_BASE_STARSHIP_DIR = "docs/assets/validation/flux2-klein-base-starship-2026-06-10"
+FLUX2_KLEIN_BASE_STARSHIP_SOURCE = REFRAME_OUTPAINT_SOURCE
 
 
 @dataclass(frozen=True)
@@ -136,7 +139,7 @@ _MATRIX_DIR = "docs/assets/validation/i2i-edit-5x4-2026-06-05"
 
 
 def list_validation_profiles() -> tuple[ValidationProfile, ...]:
-    return (_i2i_edit_profile(), _reframe_outpaint_profile())
+    return (_i2i_edit_profile(), _reframe_outpaint_profile(), _flux2_klein_base_starship_profile())
 
 
 def get_validation_profile(profile_id: str = I2I_EDIT_5X4_PROFILE_ID) -> ValidationProfile:
@@ -202,11 +205,27 @@ def _reframe_outpaint_profile() -> ValidationProfile:
         title="Reframe And Outpaint Spaceship Validation",
         canonical_source=REFRAME_OUTPAINT_SOURCE,
         description=(
-            "Manual visual QA for single-image edit-reference reframe and canvas-guided outpaint. "
-            "The profile covers upstream source models plus q8 and q4 MLX-Gen packages for Qwen "
-            "Image Edit, Qwen Image Edit 2509/2511, and FLUX.2 Klein 4B/9B."
+            "Manual visual QA for single-image edit-reference reframe and canvas expansion workflows. "
+            "Qwen Image Edit rows remain current for reframe and outpaint. Distilled FLUX.2 Klein 4B/9B "
+            "reframe rows remain current, but their 2026-06-08 outpaint artifacts are retained as stale "
+            "historical evidence because current strict FLUX.2 outpaint now requires a base Klein model."
         ),
         records=tuple(_reframe_outpaint_records()),
+    )
+
+
+def _flux2_klein_base_starship_profile() -> ValidationProfile:
+    return ValidationProfile(
+        id=FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
+        title="FLUX.2 Klein Base Starship Source Validation",
+        canonical_source=FLUX2_KLEIN_BASE_STARSHIP_SOURCE,
+        description=(
+            "Manual visual QA for the base FLUX.2 Klein source-model starship profile. This profile covers "
+            "latent img2img, edit-reference, multi-reference, and strict outpaint on the same cropped "
+            "starship source. Published evidence here is source-model only; prepared base q8/q4 packages "
+            "share the route surface through capabilities, but their starship contact sheets are still pending."
+        ),
+        records=tuple(_flux2_klein_base_starship_records()),
     )
 
 
@@ -289,6 +308,41 @@ FLUX_OUTPAINT_PROMPT = (
     "complete the missing nose, rounded hull, short tail, twin round rear engines, snow field, and "
     "ice cliffs in the newly added space. The entire ship must fit inside the final wide frame. No "
     "duplicated spacecraft, no repeated mountains, no text, no border."
+)
+
+BASE_STARSHIP_LATENT_PROMPT = (
+    "Transform this exact close-up starship crop into a clearly darker polar night scene with a "
+    "visible teal aurora over the peaks. Preserve the exact crop, camera angle, fuselage shape, "
+    "engines, snow field, and ice cliffs. Make the sky distinctly navy, deepen the snow shadows, "
+    "and add obvious cyan aurora reflections across the silver metal. No damage, no extra ships, "
+    "no text."
+)
+
+BASE_STARSHIP_DAMAGE_PROMPT = (
+    "Edit this same close-up starship into a hard-landed damaged version. Preserve the exact crop, "
+    "camera angle, fuselage shape, cockpit, engine positions, snow field, and ice cliffs. Add "
+    "scraped metal, bent panels, soot near the intakes, a thin smoke plume, disturbed snow, and a "
+    "shallow impact groove. Keep the ship sharp and coherent. No extra ships, no blur, no text."
+)
+
+BASE_STARSHIP_SKETCH_PROMPT = (
+    "Turn this same close-up starship scene into a clean graphite pencil sketch. Preserve the exact "
+    "crop, camera angle, fuselage shape, cockpit, engines, snow field, and ice cliffs. Use white "
+    "paper, precise line art, subtle shading, no color fill, no blur, no text."
+)
+
+BASE_STARSHIP_MULTIREF_9B_PROMPT = (
+    "Use the first image as the structural line-art reference and the second image as the lighting "
+    "and material reference. Produce one coherent close-up of the same starship scene: graphite "
+    "line art with cool aurora metallic reflections and darker polar-night shading, the same crop, "
+    "same fuselage and engines, same snow field and ice cliffs, no extra ships, no text."
+)
+
+BASE_STARSHIP_MULTIREF_4B_PROMPT = (
+    "Use the first image as the structural graphite sketch reference and the second image as the "
+    "metallic material and lighting reference. Produce one coherent close-up of the same starship "
+    "scene. Preserve the exact crop including the nose, cockpit edge, front engine, snow field, "
+    "and ice cliffs. Keep clean graphite lines with subtle metallic shading. No extra ships, no text."
 )
 
 
@@ -464,6 +518,7 @@ def _reframe_outpaint_records() -> list[ValidationRecord]:
         variants,
     ) in specs:
         for package_variant, model, reframe_output, outpaint_output in variants:
+            is_distilled_flux = "FLUX.2 Klein" in family and "base" not in model.lower()
             records.append(
                 _reframe_outpaint_record(
                     model=model,
@@ -488,11 +543,68 @@ def _reframe_outpaint_records() -> list[ValidationRecord]:
                     artifact_file=outpaint_output,
                     prompt=outpaint_prompt,
                     reviewer_notes=(
-                        f"PASS at padding {outpaint_padding}, seed {outpaint_seed}, {steps} steps, guidance {guidance}. "
-                        "This is a generative canvas expansion, not a native masked fill/inpaint run."
+                        (
+                            f"STALE historical artifact at padding {outpaint_padding}, seed {outpaint_seed}, {steps} steps, guidance {guidance}. "
+                            "This distilled FLUX.2 canvas expansion visibly preserved a source box and is no longer exposed as current strict outpaint support."
+                        )
+                        if is_distilled_flux
+                        else (
+                            f"PASS at padding {outpaint_padding}, seed {outpaint_seed}, {steps} steps, guidance {guidance}. "
+                            "This is a generative canvas expansion, not a native masked fill/inpaint run."
+                        )
                     ),
+                    status=STATUS_STALE if is_distilled_flux else STATUS_PASS,
                 )
             )
+    return records
+
+
+def _flux2_klein_base_starship_records() -> list[ValidationRecord]:
+    records: list[ValidationRecord] = []
+    records.extend(
+        _flux2_klein_base_model_records(
+            family="FLUX.2 Klein Base 9B",
+            model="black-forest-labs/FLUX.2-klein-base-9B",
+            slug="base9b_source",
+            latent_prompt=BASE_STARSHIP_LATENT_PROMPT,
+            multiref_prompt=BASE_STARSHIP_MULTIREF_9B_PROMPT,
+            multiref_source_images=(
+                f"{FLUX2_KLEIN_BASE_STARSHIP_DIR}/base9b_source_d_sketch.png",
+                f"{FLUX2_KLEIN_BASE_STARSHIP_DIR}/base9b_source_b_latent_dusk.png",
+            ),
+            multiref_status=STATUS_PASS,
+            multiref_notes=(
+                "PASS at 20 steps, guidance 1.5, seed 8614. Combines the sketch structure and aurora "
+                "lighting reference into one coherent close-up."
+            ),
+            outpaint_notes=(
+                "PASS at padding 5%,80%,5%,60%, 20 steps, guidance 4, seed 8612. The source crop stays "
+                "visually stable without a pasted source rectangle."
+            ),
+        )
+    )
+    records.extend(
+        _flux2_klein_base_model_records(
+            family="FLUX.2 Klein Base 4B",
+            model="black-forest-labs/FLUX.2-klein-base-4B",
+            slug="base4b_source",
+            latent_prompt=BASE_STARSHIP_LATENT_PROMPT,
+            multiref_prompt=BASE_STARSHIP_MULTIREF_4B_PROMPT,
+            multiref_source_images=(
+                f"{FLUX2_KLEIN_BASE_STARSHIP_DIR}/base4b_source_d_sketch.png",
+                FLUX2_KLEIN_BASE_STARSHIP_SOURCE,
+            ),
+            multiref_status=STATUS_PARTIAL,
+            multiref_notes=(
+                "PARTIAL at 20 steps, guidance 2.0, seed 8614. The composition is coherent, but it drifts "
+                "toward the nose/front-engine crop more than requested."
+            ),
+            outpaint_notes=(
+                "PASS at padding 5%,80%,5%,60%, 20 steps, guidance 4, seed 8612. Extends to a full-ship "
+                "wide frame without a visible pasted source rectangle."
+            ),
+        )
+    )
     return records
 
 
@@ -506,6 +618,7 @@ def _reframe_outpaint_record(
     artifact_file: str,
     prompt: str,
     reviewer_notes: str,
+    status: str = STATUS_PASS,
 ) -> ValidationRecord:
     return ValidationRecord(
         profile_id=REFRAME_OUTPAINT_PROFILE_ID,
@@ -516,12 +629,119 @@ def _reframe_outpaint_record(
         step_label=step_label,
         public_task="image-to-image",
         mode="edit-reference",
-        status=STATUS_PASS,
+        status=status,
         artifact_path=f"{REFRAME_OUTPAINT_DIR}/{artifact_file}",
         source_images=(REFRAME_OUTPAINT_SOURCE,),
         prompt=prompt,
         reviewer_notes=reviewer_notes,
         evidence_date="2026-06-08",
+    )
+
+
+def _flux2_klein_base_model_records(
+    *,
+    family: str,
+    model: str,
+    slug: str,
+    latent_prompt: str,
+    multiref_prompt: str,
+    multiref_source_images: tuple[str, ...],
+    multiref_status: str,
+    multiref_notes: str,
+    outpaint_notes: str,
+) -> list[ValidationRecord]:
+    return [
+        _flux2_klein_base_record(
+            model=model,
+            family=family,
+            step="B",
+            step_label="latent aurora restyle",
+            mode="latent-img2img",
+            status=STATUS_PASS,
+            artifact_file=f"{slug}_b_latent_dusk.png",
+            source_images=(FLUX2_KLEIN_BASE_STARSHIP_SOURCE,),
+            prompt=latent_prompt,
+            reviewer_notes="PASS at 20 steps, guidance 3.0, seed 8611. Preserves the crop while producing a clearly darker aurora/night restyle.",
+        ),
+        _flux2_klein_base_record(
+            model=model,
+            family=family,
+            step="C",
+            step_label="damage edit",
+            mode="edit-reference",
+            status=STATUS_PASS,
+            artifact_file=f"{slug}_c_damage.png",
+            source_images=(FLUX2_KLEIN_BASE_STARSHIP_SOURCE,),
+            prompt=BASE_STARSHIP_DAMAGE_PROMPT,
+            reviewer_notes="PASS at 20 steps, guidance 1.5, seed 8612. Adds coherent damage while holding the single-ship scene together.",
+        ),
+        _flux2_klein_base_record(
+            model=model,
+            family=family,
+            step="D",
+            step_label="graphite sketch edit",
+            mode="edit-reference",
+            status=STATUS_PASS,
+            artifact_file=f"{slug}_d_sketch.png",
+            source_images=(FLUX2_KLEIN_BASE_STARSHIP_SOURCE,),
+            prompt=BASE_STARSHIP_SKETCH_PROMPT,
+            reviewer_notes="PASS at 20 steps, guidance 1.5, seed 8613. Produces stable line art close to the source geometry.",
+        ),
+        _flux2_klein_base_record(
+            model=model,
+            family=family,
+            step="E",
+            step_label="multi-reference composition",
+            mode="multi-reference",
+            status=multiref_status,
+            artifact_file=f"{slug}_e_multiref.png",
+            source_images=multiref_source_images,
+            prompt=multiref_prompt,
+            reviewer_notes=multiref_notes,
+        ),
+        _flux2_klein_base_record(
+            model=model,
+            family=family,
+            step="F",
+            step_label="strict outpaint",
+            mode="edit-reference",
+            status=STATUS_PASS,
+            artifact_file=f"{slug}_f_outpaint.png",
+            source_images=(FLUX2_KLEIN_BASE_STARSHIP_SOURCE,),
+            prompt=QWEN_OUTPAINT_PROMPT,
+            reviewer_notes=outpaint_notes,
+        ),
+    ]
+
+
+def _flux2_klein_base_record(
+    *,
+    model: str,
+    family: str,
+    step: str,
+    step_label: str,
+    mode: str,
+    status: str,
+    artifact_file: str,
+    source_images: tuple[str, ...],
+    prompt: str,
+    reviewer_notes: str,
+) -> ValidationRecord:
+    return ValidationRecord(
+        profile_id=FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
+        model=model,
+        family=family,
+        package_variant="source",
+        step=step,
+        step_label=step_label,
+        public_task="image-to-image",
+        mode=mode,
+        status=status,
+        artifact_path=f"{FLUX2_KLEIN_BASE_STARSHIP_DIR}/{artifact_file}",
+        source_images=source_images,
+        prompt=prompt,
+        reviewer_notes=reviewer_notes,
+        evidence_date="2026-06-10",
     )
 
 

@@ -3,6 +3,8 @@ from pathlib import Path
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import DownloadRequiredError, is_huggingface_repo_id
+from mflux.models.common.lora.lora_compatibility import LoRACompatibility
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.tokenizer import TokenizerLoader
 from mflux.models.common.weights.loading.loaded_weights import LoadedWeights
 from mflux.models.common.weights.loading.weight_applier import WeightApplier
@@ -10,6 +12,7 @@ from mflux.models.common.weights.loading.weight_loader import WeightLoader
 from mflux.models.ernie_image.model.ernie_image_transformer import ErnieImageTransformer2DModel
 from mflux.models.ernie_image.model.ernie_image_vae import ErnieImageVAE
 from mflux.models.ernie_image.model.mistral3_text_encoder import Mistral3CausalLM, Mistral3TextEncoder
+from mflux.models.ernie_image.weights.ernie_image_lora_mapping import ErnieImageLoRAMapping
 from mflux.models.ernie_image.weights.ernie_image_weight_definition import (
     ErnieImagePromptEnhancerWeightDefinition,
     ErnieImageWeightDefinition,
@@ -26,16 +29,19 @@ class ErnieImageInitializer:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
     ) -> None:
-        del lora_paths, lora_scales
         path = model_path if model_path else model_config.model_name
+        LoRACompatibility.validate_for_model_config(
+            model_config=model_config,
+            selected_model=path,
+            lora_paths=lora_paths,
+        )
         ErnieImageInitializer._init_config(model, model_config)
         model.model_path = path
         weights = ErnieImageInitializer._load_weights(path)
         ErnieImageInitializer._init_tokenizers(model, path)
         ErnieImageInitializer._init_models(model)
         ErnieImageInitializer._apply_weights(model, weights, quantize)
-        model.lora_paths = None
-        model.lora_scales = None
+        ErnieImageInitializer._apply_lora(model, lora_paths, lora_scales)
 
     @staticmethod
     def _init_config(model, model_config: ModelConfig) -> None:
@@ -76,6 +82,19 @@ class ErnieImageInitializer:
                 "text_encoder": model.text_encoder,
             },
         )
+
+    @staticmethod
+    def _apply_lora(model, lora_paths: list[str] | None, lora_scales: list[float] | None) -> None:
+        result = LoRALoader.load_and_apply_lora_detailed(
+            lora_mapping=ErnieImageLoRAMapping.get_mapping(),
+            transformer=model.transformer,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+        )
+        model.lora_application_result = result
+        model.lora_application_reports = result.reports
+        model.lora_paths = result.resolved_paths
+        model.lora_scales = result.resolved_scales
 
     @staticmethod
     def init_prompt_enhancer(model) -> None:

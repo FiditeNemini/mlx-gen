@@ -25,6 +25,46 @@ class PatternMatch:
     transform: Callable[[mx.array], mx.array] | None = None
 
 
+@dataclass(frozen=True)
+class LoRAFileReport:
+    requested_path: str
+    resolved_path: str
+    scale: float
+    role: str | None
+    total_key_count: int
+    matched_key_count: int
+    unmatched_key_count: int
+    applied_target_count: int
+
+    def to_dict(self) -> dict:
+        return {
+            "requested_path": self.requested_path,
+            "resolved_path": self.resolved_path,
+            "scale": round(self.scale, 4),
+            "role": self.role,
+            "total_key_count": self.total_key_count,
+            "matched_key_count": self.matched_key_count,
+            "unmatched_key_count": self.unmatched_key_count,
+            "applied_target_count": self.applied_target_count,
+        }
+
+
+@dataclass(frozen=True)
+class LoRAApplicationResult:
+    resolved_paths: list[str]
+    resolved_scales: list[float]
+    reports: tuple[LoRAFileReport, ...]
+
+    def extra_metadata(self) -> dict:
+        if not self.reports:
+            return {}
+        return {
+            "lora_application_reports": [report.to_dict() for report in self.reports],
+            "lora_applied_file_count": len(self.reports),
+            "lora_applied_target_count": sum(report.applied_target_count for report in self.reports),
+        }
+
+
 class LoRALoader:
     @staticmethod
     def load_and_apply_lora(
@@ -34,11 +74,28 @@ class LoRALoader:
         lora_scales: list[float] | None = None,
         role: str | None = None,
     ) -> tuple[list[str], list[float]]:
+        result = LoRALoader.load_and_apply_lora_detailed(
+            lora_mapping=lora_mapping,
+            transformer=transformer,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            role=role,
+        )
+        return result.resolved_paths, result.resolved_scales
+
+    @staticmethod
+    def load_and_apply_lora_detailed(
+        lora_mapping: list[LoRATarget],
+        transformer: nn.Module,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        role: str | None = None,
+    ) -> LoRAApplicationResult:
         resolved_paths = LoraResolution.resolve_paths(lora_paths)
         if not resolved_paths:
             if lora_scales:
                 raise LoRAApplicationError("--lora-scales requires --lora-paths.")
-            return resolved_paths, []
+            return LoRAApplicationResult(resolved_paths=[], resolved_scales=[], reports=())
 
         resolved_scales = LoraResolution.resolve_scales(lora_scales, len(resolved_paths))
         if len(resolved_scales) != len(resolved_paths):
@@ -48,31 +105,55 @@ class LoRALoader:
 
         print(f"📦 Loading {len(resolved_paths)} LoRA file(s)...")
 
-        for lora_file, scale in zip(resolved_paths, resolved_scales):
-            LoRALoader._apply_single_lora(transformer, lora_file, scale, lora_mapping, role=role)
+        reports: list[LoRAFileReport] = []
+        requested_paths = lora_paths or resolved_paths
+        for requested_path, resolved_path, scale in zip(requested_paths, resolved_paths, resolved_scales):
+            reports.append(
+                LoRALoader._apply_single_lora(
+                    transformer,
+                    requested_path=requested_path,
+                    resolved_path=resolved_path,
+                    scale=scale,
+                    lora_mapping=lora_mapping,
+                    role=role,
+                )
+            )
 
         print("✅ All LoRA weights applied successfully")
 
-        return resolved_paths, resolved_scales
+        return LoRAApplicationResult(
+            resolved_paths=resolved_paths,
+            resolved_scales=resolved_scales,
+            reports=tuple(reports),
+        )
+
+    @staticmethod
+    def extra_metadata_for_model(model) -> dict | None:
+        result = getattr(model, "lora_application_result", None)
+        if result is None:
+            return None
+        metadata = result.extra_metadata()
+        return metadata or None
 
     @staticmethod
     def _apply_single_lora(
         transformer: nn.Module,
-        lora_file: str,
+        requested_path: str,
+        resolved_path: str,
         scale: float,
         lora_mapping: list[LoRATarget],
         *,
         role: str | None,
-    ) -> None:
-        if not Path(lora_file).exists():
-            raise LoRAApplicationError(f"LoRA file not found: {lora_file}")
+    ) -> LoRAFileReport:
+        if not Path(resolved_path).exists():
+            raise LoRAApplicationError(f"LoRA file not found: {resolved_path}")
 
-        print(f"🔧 Applying LoRA: {Path(lora_file).name} (scale={scale})")
+        print(f"🔧 Applying LoRA: {Path(resolved_path).name} (scale={scale})")
 
         try:
-            weights = dict(mx.load(lora_file, return_metadata=True)[0].items())
+            weights = dict(mx.load(resolved_path, return_metadata=True)[0].items())
         except (FileNotFoundError, ValueError, RuntimeError) as e:
-            raise LoRAApplicationError(f"Failed to load LoRA file {lora_file}: {e}") from e
+            raise LoRAApplicationError(f"Failed to load LoRA file {resolved_path}: {e}") from e
 
         pattern_mappings = LoRALoader._build_pattern_mappings(lora_mapping)
 
@@ -84,10 +165,10 @@ class LoRALoader:
         unmatched_keys = set(weights.keys()) - matched_keys
 
         if not matched_keys:
-            raise LoRAApplicationError(f"LoRA file {lora_file} did not match any known adapter keys.")
+            raise LoRAApplicationError(f"LoRA file {resolved_path} did not match any known adapter keys.")
         if applied_count <= 0:
             raise LoRAApplicationError(
-                f"LoRA file {lora_file} matched {len(matched_keys)} keys but did not apply to any model layer."
+                f"LoRA file {resolved_path} matched {len(matched_keys)} keys but did not apply to any model layer."
             )
 
         print(f"   ✅ Applied to {applied_count} layers ({len(matched_keys)}/{total_keys} keys matched)")
@@ -98,6 +179,17 @@ class LoRALoader:
                 print(f"      - {key}")
             if len(unmatched_keys) > 5:
                 print(f"      ... and {len(unmatched_keys) - 5} more")
+
+        return LoRAFileReport(
+            requested_path=requested_path,
+            resolved_path=resolved_path,
+            scale=scale,
+            role=role,
+            total_key_count=total_keys,
+            matched_key_count=len(matched_keys),
+            unmatched_key_count=len(unmatched_keys),
+            applied_target_count=applied_count,
+        )
 
     @staticmethod
     def _build_pattern_mappings(targets: list[LoRATarget]) -> list[PatternMatch]:

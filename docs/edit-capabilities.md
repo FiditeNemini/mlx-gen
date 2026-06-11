@@ -3,19 +3,20 @@
 This page summarizes the current image-to-image edit contact sheets, command logs, and
 model/package status for MLX-Gen. It separates these related concepts:
 
-- `latent-img2img`: the source image initializes latent denoising and `--image-strength` controls
-  how far the output may drift.
-- `edit-reference`: the source image remains active as an edit/reference condition and the prompt
-  describes an instruction such as style change, object state, or scene change.
-- `multi-reference`: two or more images are supplied as references for a composition.
-- `generative reframe`: experimental route where one source image is edited into a larger view with
-  `--reframe-padding`.
-  This can extend background or infer missing object boundaries, but it is not pixel-preserving
-  canvas outpaint.
-- `canvas outpaint`: experimental route where one source image is placed on a larger canvas with
-  `--outpaint-padding`.
-  MLX-Gen generates the expanded view, then applies an adaptive source blend only when it will not
-  create visible ghosting.
+- `latent-img2img`: whole-image variation or restyle from one source image. `--image-strength`
+  controls how far the output may drift.
+- `edit-reference`: instruction editing from one source image, usually with stronger composition
+  hold than latent img2img.
+- `multi-reference`: two or more images are supplied as references for one composition.
+- `generative reframe`: experimental larger-view generation with `--reframe-padding`. This is a
+  zoom-out style edit, not source-preserving outpaint.
+- `canvas outpaint`: experimental canvas extension with `--outpaint-padding`. Qwen Image Edit
+  variants still use generative canvas expansion plus adaptive source restoration. FLUX.2 Klein
+  base variants now use source-locked denoising and a narrow latent transition band instead of
+  post-generation source pasting.
+
+If you need a plain-language guide to choosing between these modes, see
+[Image Edit Modes](image-edit-modes.md).
 
 Use `mlxgen capabilities --model <model>` to inspect route support before a run. Use the contact
 sheets and status tables below when you need visual release evidence for exact source handles or
@@ -28,6 +29,7 @@ MLX-Gen optimized packages.
 | `PASS` | The row generated and the output visually satisfied the requested edit for this profile. |
 | `PARTIAL` | The row generated and is usable for some work, but one requested constraint was weak. |
 | `FAIL` | The row generated or routed, but the output did not satisfy the requested edit. |
+| `STALE` | Historical evidence only. The row exists for review, but it is not the current contract. |
 
 The canonical validation source image is
 [`docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png`](assets/examples/spaceship-snow/01_t2i_spaceship_snow.png).
@@ -49,7 +51,7 @@ The canonical validation source image is
 These rows used a `768x432`, 30-step, guidance `4` profile with
 `--scheduler flow_match_euler_discrete`.
 
-## Qwen 2509 And FLUX.2 Matrix
+## Qwen 2509 And Distilled FLUX.2 Matrix
 
 The 5x4 edit validation profile tests the same spaceship source across:
 
@@ -60,18 +62,22 @@ The 5x4 edit validation profile tests the same spaceship source across:
 
 | Family | Exact handles/packages | Modes validated | Result summary | Contact sheet |
 | --- | --- | --- | --- | --- |
-| FLUX.2 Klein 4B | `black-forest-labs/FLUX.2-klein-4B`, `AbstractFramework/flux.2-klein-4b-8bit`, `AbstractFramework/flux.2-klein-4b-4bit` | `latent-img2img`, `edit-reference`, `multi-reference` | source, q8, and q4 passed B/C/D/E | [matrix](assets/validation/i2i-edit-5x4-2026-06-05/flux2-klein-4b-variant-matrix.jpg) |
-| FLUX.2 Klein 9B | `black-forest-labs/FLUX.2-klein-9B`, `AbstractFramework/flux.2-klein-9b-8bit`, `AbstractFramework/flux.2-klein-9b-4bit` | `latent-img2img`, `edit-reference`, `multi-reference` | source, q8, and q4 passed B/C/D/E | [matrix](assets/validation/i2i-edit-5x4-2026-06-05/flux2-klein-9b-variant-matrix.jpg) |
+| FLUX.2 Klein 4B distilled | `black-forest-labs/FLUX.2-klein-4B`, `AbstractFramework/flux.2-klein-4b-8bit`, `AbstractFramework/flux.2-klein-4b-4bit` | `latent-img2img`, `edit-reference`, `multi-reference` | source, q8, and q4 passed B/C/D/E | [matrix](assets/validation/i2i-edit-5x4-2026-06-05/flux2-klein-4b-variant-matrix.jpg) |
+| FLUX.2 Klein 9B distilled | `black-forest-labs/FLUX.2-klein-9B`, `AbstractFramework/flux.2-klein-9b-8bit`, `AbstractFramework/flux.2-klein-9b-4bit` | `latent-img2img`, `edit-reference`, `multi-reference` | source, q8, and q4 passed B/C/D/E | [matrix](assets/validation/i2i-edit-5x4-2026-06-05/flux2-klein-9b-variant-matrix.jpg) |
 | Qwen Image Edit 2509 | `Qwen/Qwen-Image-Edit-2509`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-2509-4bit` | `edit-reference`, `multi-reference` | source and q8 passed B/C/D/E; q4 passed B/C/D and was partial on E | [matrix](assets/validation/i2i-edit-5x4-2026-06-05/qwen-image-edit-2509-variant-matrix.jpg) |
 | Qwen Image Edit 2511 | `Qwen/Qwen-Image-Edit-2511`, `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2511-4bit` | `edit-reference`, `multi-reference` | source, q8, and q4 passed the 2026-06-06 pencil/crash/composition profile | [matrix](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-source-q8-q4-parity.jpg) |
 | FIBO Edit | `briaai/Fibo-Edit` | Not supported through unified `mlxgen generate` | no public image-edit support in the current release; capability discovery fails closed | N/A |
 
+Base FLUX.2 Klein source models now have a separate starship proof set because their current
+canvas-expansion contract is different: strict outpaint is base-only, and base models do not expose
+reframe.
+
 ## Reframe And Outpaint
 
-`--reframe-padding` and `--outpaint-padding` are experimental single-image edit-reference routes
-for the Qwen Image Edit family and FLUX.2 Klein 4B/9B. Reframe asks the model to generate a wider
-view. Outpaint first builds an expanded conditioning canvas and then applies adaptive source
-blending when the generated source window still matches the original image.
+`--reframe-padding` and `--outpaint-padding` are experimental single-image edit-reference routes.
+Reframe is a generative zoom-out workflow. Outpaint now splits by backend: Qwen Image Edit still
+uses generative canvas expansion plus adaptive source restoration, while FLUX.2 strict outpaint is
+limited to base Klein models and uses source-locked denoising with an interior transition band.
 
 ![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
 
@@ -80,16 +86,23 @@ blending when the generated source window still matches the original image.
 | Qwen Image Edit | `Qwen/Qwen-Image-Edit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-edit-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-reframe-outpaint-matrix.jpg) |
 | Qwen Image Edit 2509 | `Qwen/Qwen-Image-Edit-2509`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-2509-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-2509-reframe-outpaint-matrix.jpg) |
 | Qwen Image Edit 2511 | `Qwen/Qwen-Image-Edit-2511`, `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2511-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-2511-reframe-outpaint-matrix.jpg) |
-| FLUX.2 Klein 4B | `black-forest-labs/FLUX.2-klein-4B`, `AbstractFramework/flux.2-klein-4b-8bit`, `AbstractFramework/flux.2-klein-4b-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-4b-reframe-outpaint-matrix.jpg) |
-| FLUX.2 Klein 9B | `black-forest-labs/FLUX.2-klein-9B`, `AbstractFramework/flux.2-klein-9b-8bit`, `AbstractFramework/flux.2-klein-9b-4bit` | source/q8/q4 `PASS` | source/q8/q4 `PASS` | [matrix](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-9b-reframe-outpaint-matrix.jpg) |
+| FLUX.2 Klein 4B | `black-forest-labs/FLUX.2-klein-4B`, `AbstractFramework/flux.2-klein-4b-8bit`, `AbstractFramework/flux.2-klein-4b-4bit` | source/q8/q4 `PASS` | historical rows `STALE` | [matrix](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-4b-reframe-outpaint-matrix.jpg) |
+| FLUX.2 Klein 9B | `black-forest-labs/FLUX.2-klein-9B`, `AbstractFramework/flux.2-klein-9b-8bit`, `AbstractFramework/flux.2-klein-9b-4bit` | source/q8/q4 `PASS` | historical rows `STALE` | [matrix](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-9b-reframe-outpaint-matrix.jpg) |
+| FLUX.2 Klein Base 9B | `black-forest-labs/FLUX.2-klein-base-9B`, `AbstractFramework/flux.2-klein-base-9b-8bit`, `AbstractFramework/flux.2-klein-base-9b-4bit` | not exposed | source `PASS`; prepared package proof pending | [edit matrix](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-edit-matrix.jpg), [seams](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-outpaint-seams.jpg) |
+| FLUX.2 Klein Base 4B | `black-forest-labs/FLUX.2-klein-base-4B`, `AbstractFramework/flux.2-klein-base-4b-8bit`, `AbstractFramework/flux.2-klein-base-4b-4bit` | not exposed | source `PASS`; multi-reference row `PARTIAL`; prepared package proof pending | [edit matrix](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-edit-matrix.jpg), [seams](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-outpaint-seams.jpg) |
+
+Current strict FLUX.2 outpaint requires `black-forest-labs/FLUX.2-klein-base-*`. Prepared base
+Klein q8/q4 packages expose the same route surface through `mlxgen capabilities`, but their
+starship contact-sheet proof is still pending. Base Klein reframe is intentionally rejected.
 
 Use the dedicated [Reframe and Outpaint](reframe-outpaint.md) guide for copy/pasteable examples,
-canvas/mask assets, the validation manifest, and exact commands. The validation profile id is
-`reframe_outpaint_2026_06_08`.
+canvas/mask assets, the validation manifests, and exact commands. The mixed June 8 profile id is
+`reframe_outpaint_2026_06_08`; the current FLUX.2 Klein base source-model profile id is
+`flux2_klein_base_starship_2026_06_10`.
 
-These workflows are generative image expansion routes, not native masked fill/inpaint pipelines.
-Use them when a plausible wider view is acceptable and review the output visually. Use a future
-native fill/inpaint route when exact pixel-locked source preservation is required.
+These workflows are not native masked fill/inpaint pipelines. Reframe remains openly generative.
+Strict FLUX.2 base outpaint aims to keep the source crop stable, but still relies on latent-space
+editing rather than direct pixel masking.
 
 ### FLUX.2 Klein 4B
 
@@ -106,6 +119,22 @@ columns cover the same standardized sequence as Klein 4B so the two model sizes 
 directly.
 
 ![FLUX.2 Klein 9B edit matrix](assets/validation/i2i-edit-5x4-2026-06-05/flux2-klein-9b-variant-matrix.jpg)
+
+### FLUX.2 Klein Base 4B And 9B Source Proof
+
+The current base-model proof uses the cropped starship source across source-model base `4B/9B`
+only. It validates latent img2img, single-image edit-reference, multi-reference, and strict
+outpaint on the same starship case. Source-model text-to-image smoke is published separately.
+
+![FLUX.2 Klein base 4B and 9B source edit matrix](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-edit-matrix.jpg)
+
+The dedicated seam-review sheet zooms the source-window boundaries for the strict outpaint rows:
+
+![FLUX.2 Klein base 4B and 9B strict outpaint seam review](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-outpaint-seams.jpg)
+
+Source-model text-to-image smoke:
+
+![FLUX.2 Klein base 4B and 9B source text-to-image smoke](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-t2i-panel.jpg)
 
 ### Qwen Image Edit 2509
 
@@ -163,4 +192,5 @@ The full command logs are published with the proof assets:
 - [Qwen Image Edit 2511 parity command log](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-command-log.md)
 - [5x4 FLUX.2 and Qwen Image Edit 2509 command log](assets/validation/i2i-edit-5x4-2026-06-05/edit-capability-command-log.md)
 - [reframe and outpaint command log](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-command-log.md)
+- [FLUX.2 Klein base starship command log](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-command-log.md)
 - [latent I2I command log](assets/validation/i2i-edit-5x4-2026-06-05/latent-i2i-command-log.md)

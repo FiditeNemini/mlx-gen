@@ -47,6 +47,19 @@ No. It is optional acceleration for explicit Hugging Face downloads and prepare 
 
 No. MLX-Gen packages use the MLX/mflux saved-weight layout and MLX quantization tensors. They are intended for MLX-Gen and compatible mflux code, not direct Diffusers or Transformers `from_pretrained()` loading.
 
+## Can I Use The Official BFL FLUX.2 FP8 Or NVFP4 Repos Directly?
+
+Not today.
+
+Current MLX-Gen `generate` and `prepare` flows support the standard FLUX.2 source repositories and
+MLX-Gen model packages. The official `black-forest-labs/FLUX.2-klein-base-*-fp8` and
+`black-forest-labs/FLUX.2-klein-base-*-nvfp4` repositories are not direct MLX-Gen inputs in the
+current release.
+
+Those repositories use a different transformer packaging format from MLX-Gen model packages, and
+the current MLX-Gen loader does not treat them as ready-to-run local models. Use the BF16 source
+repository or an MLX-Gen package today.
+
 ## Why Can q8 Show The Same Physical Peak As BF16?
 
 Because the visible peak metric may be measuring a different thing than the persistent model
@@ -136,11 +149,35 @@ allow more transformation, while lower positive values stay closer to the encode
 
 ERNIE q8/q4 MLX-Gen packages do not bundle Prompt Enhancer files; use the full source snapshot path or the Hugging Face repo after `mlxgen download --all-files` when you need `--use-prompt-enhancer`.
 
+ERNIE LoRA support is experimental and route-specific. `AbstractFramework/ernie-image-turbo-8bit`
+now has an exact validated text-to-image LoRA row; ERNIE latent img2img remains
+`mapped-unvalidated`. Use `mlxgen capabilities --model AbstractFramework/ernie-image-turbo-8bit`
+to inspect the current status before relying on a specific adapter workflow.
+
+## Does Bonsai Image Support LoRA?
+
+No. MLX-Gen currently rejects Bonsai LoRA requests.
+
+The practical blocker is architectural, not just missing validation. Bonsai runs through a packed
+ternary/low-bit transformer path, while MLX-Gen's LoRA loader applies adapters by replacing normal
+linear modules. That replacement boundary does not exist in the current packed Bonsai runtime, so
+MLX-Gen fails closed instead of pretending the adapter applied.
+
+## Does Wan Video Support LoRA?
+
+No. MLX-Gen currently rejects Wan LoRA requests.
+
+This is not the same kind of blocker as Bonsai. Wan's current MLX transformer path still uses
+ordinary linear attention and FFN layers, so LoRA support is feasible in principle. The missing
+work is Wan-specific adapter conversion, explicit TI2V-5B versus A14B transformer-role handling,
+I2V image-projection expansion behavior, and MP4-based A/B validation. Until that is implemented,
+Wan LoRA stays unsupported.
+
 ## How Do I Choose Between Latent I2I And Image Edit?
 
 MLX-Gen keeps one public `image-to-image` task and exposes different internal modes through model
 capabilities. Use `mlxgen capabilities --model <model>` to inspect the selected model before a long
-run.
+run. For a mode-by-mode guide with examples, see [Image Edit Modes](image-edit-modes.md).
 
 Use latent img2img when you want a whole-image variation or broad restyle from one source image:
 make the lighting more cinematic, change the mood, loosely restyle the whole scene, or preserve the
@@ -415,17 +452,17 @@ mlxgen generate \
   --output outpaint.png
 ```
 
-For current FLUX.2 Klein 4B/9B and Qwen Image Edit variants, MLX-Gen builds an expanded canvas and
-runs the edit model on that canvas. After generation, it compares the generated source window with
-the original source. If they are close, it applies a content-aware source blend; if the model
-reconstructed or moved the scene, it keeps the generated canvas to avoid ghosting. The current proof
-is in [Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint) and
-[Reframe and Outpaint](reframe-outpaint.md).
+Outpaint is backend-specific. Qwen Image Edit variants still use expanded-canvas generation plus
+adaptive source restoration. Current FLUX.2 Klein strict outpaint is base-only and uses
+source-locked denoising with a narrow latent transition band instead of post-generation source
+pasting. The current proof is in [Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint)
+and [Reframe and Outpaint](reframe-outpaint.md).
 
 This is not a native fill/inpaint backend with an explicit diffusion mask, and it is not an exact
 pixel-lock guarantee. Latent I2I models, Z-Image, ERNIE, FIBO, base Qwen Image, Qwen Image 2512,
-FLUX.2 Klein Base, Wan, SeedVR2, and unsupported edit models reject `--outpaint-padding` before
-loading weights.
+distilled FLUX.2 Klein, Wan, SeedVR2, and unsupported edit models reject `--outpaint-padding`
+before loading weights. Prepared base FLUX.2 Klein q8/q4 packages also need separate visual proof
+before they should be treated as release-validated outpaint packages.
 
 For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
 to the first source image. That prevents accidental stretching, but it does not expand the original

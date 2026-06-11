@@ -1,5 +1,3 @@
-import inspect
-
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.download_policy import allow_downloads
@@ -63,11 +61,12 @@ def main():
             "quantize": args.quantize,
             "model_config": ModelConfig.from_name(args.model, base_model=args.base_model),
         }
-        if model_class in {FIBO, FIBOEdit} and (args.lora_paths or args.lora_scales):
-            parser.error("FIBO does not support LoRA weights in MLX-Gen yet.")
-        if "lora_paths" in inspect.signature(model_class).parameters:
-            model_kwargs["lora_paths"] = args.lora_paths
-            model_kwargs["lora_scales"] = args.lora_scales
+        if args.lora_paths or args.lora_scales:
+            parser.error(
+                "mlxgen prepare --lora-paths/--lora-scales is gated until MLX-Gen proves deterministic "
+                "save/reload LoRA bake behavior for the selected family and quantization mode. "
+                "Use LoRA at runtime through mlxgen generate for now."
+            )
         model = model_class(**model_kwargs)
         model.save_model(args.path)
 

@@ -80,6 +80,12 @@ supports FLUX.2 Klein 4B/9B, so that adapter is rejected for Klein routes. The n
 `--lora-scales` values must match the number of `--lora-paths` values exactly. See
 [LoRA](lora.md) for the source/no-LoRA/with-LoRA validation method.
 
+Wan video routes currently reject LoRA. This is a missing integration, not a packed-runtime
+blocker: the current MLX Wan transformer still uses ordinary linear attention and FFN layers, but
+MLX-Gen does not yet implement Wan-specific adapter conversion, TI2V-5B versus A14B target-role
+resolution, or I2V image-projection expansion. Bonsai remains a separate fail-closed case because
+its packed ternary runtime does not expose standard replaceable linear-module targets.
+
 Most image and video backends accept a negative prompt. In the unified CLI,
 `--negative-prompt` and `--negative` are aliases. Python callers pass the same value as
 `negative_prompt=...` on the model-specific generation method.
@@ -102,13 +108,16 @@ the current Qwen 2511 edit proof rows.
 <model>` to see which modes a selected model exposes, and use `--i2i-mode` when you need to force a
 specific path.
 
+For a plain-language guide to what each mode is good at, see
+[Image Edit Modes](image-edit-modes.md).
+
 | Goal | Internal mode | Inputs | Selection rule | Uses `--image-strength`? |
 | --- | --- | --- | --- | --- |
 | Whole-image variation or restyle from a source image | `latent-img2img` | exactly one image | pass `--image-strength` or `--i2i-mode latent` on a model that supports latent I2I | Yes |
 | Instruction edit, object/layout change, or composition-preserving style edit | `edit-reference` | one image | default for FLUX.2 and dedicated edit checkpoints when one image is supplied without `--image-strength`; or pass `--i2i-mode edit` | No |
 | Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
 | Experimental generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
-| Experimental canvas-guided outpaint with adaptive source blend | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
+| Experimental backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
 
 Use latent img2img when you want a whole-image variation driven by source-image noise injection:
 restyle the whole scene, change the mood, or make a loose variation. Higher `--image-strength`
@@ -202,36 +211,36 @@ This is a generative edit workflow. It may redraw source content, and the prompt
 where the model places or reconstructs the subject. Use it for zoom-out, background extension, or
 revealing plausible missing object boundaries.
 
-Canvas-guided outpaint is experimental. Use `--outpaint-padding` when you want MLX-Gen to build an
-expanded canvas and guide an edit model to fill the larger view:
+Backend-specific outpaint is experimental. Use `--outpaint-padding` when you want MLX-Gen to build
+an expanded canvas and guide an edit model to fill the larger view:
 
 ```sh
 mlxgen generate \
-  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --model black-forest-labs/FLUX.2-klein-base-9B \
   --image input.png \
-  --outpaint-padding "5%,35%,5%,35%" \
+  --outpaint-padding "5%,80%,5%,60%" \
   --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing background and subject outside the original frame." \
-  --negative "text, border, frame, hard seam, duplicate subject" \
-  --steps 24 \
+  --steps 20 \
   --guidance 4 \
   --seed 42 \
   --output outpaint.png
 ```
 
-For current FLUX.2 Klein 4B/9B and Qwen Image Edit variants, this route creates a larger temporary
-canvas, initializes the new area with edge-extended source context, and runs the edit model on the
-expanded canvas. After generation, MLX-Gen compares the generated source window with the original
-source. If they are close, it applies a content-aware source blend; if the model has reconstructed
-or moved the scene, it skips the blend to avoid ghosted fragments. Source, q8, and q4 rows for
-FLUX.2 Klein 4B/9B plus Qwen Image Edit, 2509, and 2511 are documented in
-[Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint) and
+Outpaint is backend-specific. Qwen Image Edit variants create a larger temporary canvas, initialize
+the new area with edge-extended source context, and apply adaptive source restoration only when the
+generated source window remains close enough to the original source. Current FLUX.2 Klein strict
+outpaint is different: it is base-only, uses source-locked denoising with a narrow latent
+transition band, and does not paste the original crop back over the result. Published source-model
+proof for FLUX.2 Klein base `4B/9B` is documented in
+[Image Edit Capabilities](edit-capabilities.md#flux2-klein-base-4b-and-9b-source-proof) and
 [Reframe and Outpaint](reframe-outpaint.md).
 
 This is not the same as a native fill/inpaint pipeline that receives an explicit diffusion mask.
 It is not an exact pixel-lock guarantee. MLX-Gen still keeps lower-level FLUX.1 Fill support
 separate from the current unified edit-reference canvas route. Z-Image, ERNIE, FIBO, base Qwen
-Image, Qwen Image 2512, FLUX.2 Klein Base, latent I2I routes, video routes, and SeedVR2 reject
-`--outpaint-padding` before loading weights.
+Image, Qwen Image 2512, distilled FLUX.2 Klein, latent I2I routes, video routes, and SeedVR2
+reject `--outpaint-padding` before loading weights. Base FLUX.2 Klein source models now pass a
+published starship proof set; prepared base q8/q4 package proof is still pending.
 
 ### Negative Prompts
 
@@ -284,7 +293,9 @@ mlxgen generate \
 ```
 
 Bonsai is text-to-image only in MLX-Gen. Image input, negative prompts, and `--quantize` are
-rejected before model execution.
+rejected before model execution. Bonsai LoRA is also rejected today: the packed ternary runtime does
+not expose the ordinary replaceable linear-module boundary that MLX-Gen's current LoRA loader
+requires.
 
 ERNIE Image Turbo routes through the same command surface:
 
@@ -323,6 +334,11 @@ output needs more polished stylization. Use Qwen Image Edit for single-image ins
 source layout matters, and use FLUX.2 when the workflow needs validated multi-reference composition.
 
 ERNIE's optional Prompt Enhancer is available with `--use-prompt-enhancer` when the full source snapshot is present. The default `mlxgen download --model baidu/ERNIE-Image-Turbo` command downloads only generation components; run `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before using Prompt Enhancer. ERNIE q8/q4 MLX-Gen packages created by `mlxgen prepare` do not include Prompt Enhancer files.
+
+ERNIE LoRA support is experimental and route-specific. The public q8 text-to-image route
+`AbstractFramework/ernie-image-turbo-8bit` now has an exact validated anime-style LoRA proof;
+ERNIE latent img2img still remains `mapped-unvalidated`. Check `mlxgen capabilities --model ...`
+before relying on a specific ERNIE LoRA workflow.
 
 Wan2.2 routes through the same command surface for video generation. TI2V-5B is the smaller text-to-video and first-frame image-to-video path:
 

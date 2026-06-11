@@ -49,10 +49,10 @@ package size is the published AbstractFramework repository total.
 
 | Source model | Public task / mode | Source size | Published packages | Package sizes | Quantization status |
 | --- | --- | ---: | --- | ---: | --- |
-| FLUX.2 Klein 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-4b-4bit`<br>`flux.2-klein-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Source/q8/q4 passed the 2026-06-08 reframe/outpaint profile. |
-| FLUX.2 Klein 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-9b-4bit`<br>`flux.2-klein-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Source/q8/q4 passed the 2026-06-08 reframe/outpaint profile. |
-| FLUX.2 Klein Base 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-base-4b-4bit`<br>`flux.2-klein-base-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Not part of the 2026-06-08 reframe/outpaint profile. |
-| FLUX.2 Klein Base 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-base-9b-4bit`<br>`flux.2-klein-base-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Not part of the 2026-06-08 reframe/outpaint profile. |
+| FLUX.2 Klein 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-4b-4bit`<br>`flux.2-klein-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Distilled source/q8/q4 passed the June 5 edit-capability profile and the June 8 reframe profile; their June 8 outpaint rows are now stale historical evidence only. |
+| FLUX.2 Klein 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-9b-4bit`<br>`flux.2-klein-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Distilled source/q8/q4 passed the June 5 edit-capability profile and the June 8 reframe profile; their June 8 outpaint rows are stale historical evidence only. |
+| FLUX.2 Klein Base 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-base-4b-4bit`<br>`flux.2-klein-base-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Current published proof covers the source model on the June 10 starship profile; prepared base q8/q4 package proof is still pending. |
+| FLUX.2 Klein Base 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-base-9b-4bit`<br>`flux.2-klein-base-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Current published proof covers the source model on the June 10 starship profile; prepared base q8/q4 package proof is still pending. |
 | Qwen Image | T2I | 53.7 GiB | `qwen-image-4bit`<br>`qwen-image-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
 | Qwen Image 2512 | T2I | 53.7 GiB | `qwen-image-2512-4bit`<br>`qwen-image-2512-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
 | ERNIE Image Turbo | T2I, latent I2I | 29.5 GiB | `ernie-image-turbo-8bit`<br>`ernie-image-turbo-4bit` | 11.5 GiB<br>11.5 GiB | The public `-8bit` package is q8. The public `-4bit` repository currently has q8 metadata and the same size as `-8bit`; do not treat it as a valid q4 memory package until it is republished. |
@@ -91,8 +91,8 @@ panels where local benchmark runs have produced them.
 ## Reframe And Outpaint Package Validation
 
 The 2026-06-08 reframe/outpaint profile validates source, q8, and q4 rows for Qwen Image Edit,
-Qwen Image Edit 2509/2511, and FLUX.2 Klein 4B/9B. The profile uses one cropped source image and
-two single-image edit-reference operations: `--reframe-padding` and `--outpaint-padding`.
+Qwen Image Edit 2509/2511, and distilled FLUX.2 Klein 4B/9B. For FLUX, treat the outpaint rows in
+that profile as stale historical evidence only; current strict FLUX outpaint is base-only.
 
 ![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
 
@@ -106,6 +106,14 @@ mlxgen validation \
 
 The exact commands and per-family contact sheets are listed in
 [Reframe and Outpaint](reframe-outpaint.md).
+
+Current base-model FLUX proof is published separately as source-model evidence only:
+
+- [FLUX.2 Klein base 4B/9B edit matrix](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-edit-matrix.jpg)
+- [FLUX.2 Klein base 4B/9B strict-outpaint seam review](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-outpaint-seams.jpg)
+
+Prepared base q8/q4 packages expose the same route surface through `mlxgen capabilities`, but they
+are not yet part of a published starship contact-sheet proof set.
 
 ## Qwen q4
 

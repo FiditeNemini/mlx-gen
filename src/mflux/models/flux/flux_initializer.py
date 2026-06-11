@@ -213,9 +213,13 @@ class FluxInitializer:
 
     @staticmethod
     def _apply_lora(model, lora_paths: list[str] | None, lora_scales: list[float] | None) -> None:
-        model.lora_paths, model.lora_scales = LoRALoader.load_and_apply_lora(
+        result = LoRALoader.load_and_apply_lora_detailed(
             lora_mapping=FluxLoRAMapping.get_mapping(),
             transformer=model.transformer,
             lora_paths=lora_paths,
             lora_scales=lora_scales,
         )
+        model.lora_application_result = result
+        model.lora_application_reports = result.reports
+        model.lora_paths = result.resolved_paths
+        model.lora_scales = result.resolved_scales

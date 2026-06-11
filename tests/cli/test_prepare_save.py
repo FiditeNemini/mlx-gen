@@ -43,22 +43,16 @@ def test_prepare_wan_does_not_pass_lora_kwargs_to_non_lora_model(tmp_path, monke
     }
 
 
-def test_prepare_still_passes_lora_kwargs_to_lora_model(tmp_path, monkeypatch):
-    observed = {}
+def test_prepare_rejects_lora_bake_until_save_reload_is_proven(tmp_path, monkeypatch, capsys):
     lora_path = tmp_path / "lora-a.safetensors"
     lora_path.write_bytes(b"")
 
     class FakeQwen:
-        def __init__(self, *, quantize, model_config, lora_paths=None, lora_scales=None):
-            observed["init"] = {
-                "quantize": quantize,
-                "model_config": model_config.model_name,
-                "lora_paths": lora_paths,
-                "lora_scales": lora_scales,
-            }
+        def __init__(self, *, quantize, model_config):
+            raise AssertionError("prepare should fail before instantiating the model")
 
         def save_model(self, path):
-            observed["path"] = path
+            raise AssertionError("prepare should fail before save_model")
 
     monkeypatch.setattr(save, "QwenImage", FakeQwen)
 
@@ -78,17 +72,10 @@ def test_prepare_still_passes_lora_kwargs_to_lora_model(tmp_path, monkeypatch):
             "0.5",
         ],
     ):
-        save.main()
+        with pytest.raises(SystemExit):
+            save.main()
 
-    assert observed == {
-        "init": {
-            "quantize": 8,
-            "model_config": "Qwen/Qwen-Image",
-            "lora_paths": [str(lora_path)],
-            "lora_scales": [0.5],
-        },
-        "path": str(tmp_path / "qwen-q8"),
-    }
+    assert "save/reload LoRA bake behavior" in capsys.readouterr().err
 
 
 def test_prepare_rejects_fibo_lora(tmp_path, capsys):
@@ -112,7 +99,7 @@ def test_prepare_rejects_fibo_lora(tmp_path, capsys):
         with pytest.raises(SystemExit):
             save.main()
 
-    assert "FIBO does not support LoRA" in capsys.readouterr().err
+    assert "save/reload LoRA bake behavior" in capsys.readouterr().err
 
 
 def test_prepare_fibo_edit_uses_edit_model_class(tmp_path, monkeypatch):

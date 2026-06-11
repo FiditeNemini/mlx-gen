@@ -160,7 +160,7 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
     with pytest.raises(TaskInferenceError, match="mask-path is only supported"):
         mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_mask=True)
 
-    flux2_outpaint = mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_outpaint=True)
+    flux2_outpaint = mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_outpaint=True)
     qwen_outpaint = mlxgen.resolve_generation_plan(
         model="qwen-image-edit-2511",
         image_count=1,
@@ -176,16 +176,16 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
         image_count=1,
         has_outpaint=True,
     )
-    assert flux2_outpaint.capability_id == "flux2.edit"
-    assert qwen_outpaint.capability_id == "qwen.edit"
-    assert qwen_base_outpaint.capability_id == "qwen.edit"
-    assert qwen_2509_outpaint.capability_id == "qwen.edit"
+    assert flux2_outpaint.capability_id == "flux2.outpaint"
+    assert qwen_outpaint.capability_id == "qwen.outpaint"
+    assert qwen_base_outpaint.capability_id == "qwen.outpaint"
+    assert qwen_2509_outpaint.capability_id == "qwen.outpaint"
 
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
         mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_outpaint=True)
 
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_outpaint=True)
+        mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_outpaint=True)
 
 
 def test_reframe_option_is_limited_to_validated_edit_capabilities():
@@ -195,13 +195,13 @@ def test_reframe_option_is_limited_to_validated_edit_capabilities():
     qwen_2509 = mlxgen.resolve_generation_plan(model="qwen-image-edit-2509", image_count=1, has_reframe=True)
 
     assert flux2.mode == MODE_EDIT_REFERENCE
-    assert flux2.capability_id == "flux2.edit"
+    assert flux2.capability_id == "flux2.reframe"
     assert qwen.mode == MODE_EDIT_REFERENCE
-    assert qwen.capability_id == "qwen.edit"
+    assert qwen.capability_id == "qwen.reframe"
     assert qwen_base.mode == MODE_EDIT_REFERENCE
-    assert qwen_base.capability_id == "qwen.edit"
+    assert qwen_base.capability_id == "qwen.reframe"
     assert qwen_2509.mode == MODE_EDIT_REFERENCE
-    assert qwen_2509.capability_id == "qwen.edit"
+    assert qwen_2509.capability_id == "qwen.reframe"
 
     with pytest.raises(TaskInferenceError, match="reframe-padding is only supported"):
         mlxgen.resolve_generation_plan(model="qwen-image", image_count=1, has_reframe=True)
@@ -235,18 +235,123 @@ def test_model_capabilities_are_publicly_inspectable():
     assert latent.canvas_policies == (CANVAS_POLICY_SOURCE_ASPECT, CANVAS_POLICY_EXACT_RESIZE)
     assert latent.primary_image_index == 0
     assert latent.dimension_multiple == 16
-    edit = next(capability for capability in capabilities.capabilities if capability.mode == MODE_EDIT_REFERENCE)
-    assert edit.supports_reframe is True
-    assert edit.supports_outpaint is True
+    edit = next(capability for capability in capabilities.capabilities if capability.id == "flux2.edit")
+    reframe = next(capability for capability in capabilities.capabilities if capability.id == "flux2.reframe")
+    assert edit.supports_outpaint is False
+    assert edit.supports_reframe is False
     assert edit.supports_lora is True
     assert edit.lora_status == "mapped-unvalidated"
     assert edit.lora_target_roles == ("transformer",)
+    assert reframe.supports_reframe is True
+    assert reframe.lora_status == "mapped-unvalidated"
+
+    base_capabilities = mlxgen.get_model_capabilities(model="flux2-klein-base-4b")
+    base_edit = next(capability for capability in base_capabilities.capabilities if capability.id == "flux2.edit")
+    base_outpaint = next(
+        capability for capability in base_capabilities.capabilities if capability.id == "flux2.outpaint"
+    )
+    assert base_edit.supports_reframe is False
+    assert base_edit.supports_outpaint is False
+    assert base_outpaint.supports_reframe is False
+    assert base_outpaint.supports_outpaint is True
+
+
+def test_qwen_2511_q8_single_edit_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-edit-2511-8bit")
+
+    edit = next(capability for capability in capabilities.capabilities if capability.id == "qwen.edit")
+    reframe = next(capability for capability in capabilities.capabilities if capability.id == "qwen.reframe")
+    outpaint = next(capability for capability in capabilities.capabilities if capability.id == "qwen.outpaint")
+    multi = next(capability for capability in capabilities.capabilities if capability.id == "qwen.multi-reference")
+
+    assert edit.lora_status == "validated"
+    assert edit.lora_validation_profile == "lora_qwen2511_q8_single_edit_multi_angle_2026_06_08"
+    assert reframe.lora_status == "mapped-unvalidated"
+    assert outpaint.lora_status == "mapped-unvalidated"
+    assert multi.lora_status == "mapped-unvalidated"
+
+
+def test_qwen_2509_q8_single_edit_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-edit-2509-8bit")
+
+    edit = next(capability for capability in capabilities.capabilities if capability.id == "qwen.edit")
+    reframe = next(capability for capability in capabilities.capabilities if capability.id == "qwen.reframe")
+    multi = next(capability for capability in capabilities.capabilities if capability.id == "qwen.multi-reference")
+
+    assert edit.lora_status == "validated"
+    assert edit.lora_validation_profile == "lora_qwen2509_q8_single_edit_multi_angle_2026_06_11"
+    assert reframe.lora_status == "mapped-unvalidated"
+    assert multi.lora_status == "mapped-unvalidated"
+
+
+def test_qwen_2512_q8_text_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-2512-8bit")
+
+    text = next(capability for capability in capabilities.capabilities if capability.id == "qwen.text")
+    latent = next(capability for capability in capabilities.capabilities if capability.id == "qwen.latent")
+
+    assert text.lora_status == "validated"
+    assert text.lora_validation_profile == "lora_qwen2512_q8_pixel_art_t2i_2026_06_11"
+    assert latent.lora_status == "mapped-unvalidated"
+    assert latent.lora_validation_profile is None
+
+
+def test_unvalidated_qwen_rows_remain_mapped_unvalidated():
+    original_edit = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-edit-8bit")
+    original_edit_row = next(capability for capability in original_edit.capabilities if capability.id == "qwen.edit")
+    assert original_edit_row.lora_status == "mapped-unvalidated"
+    assert original_edit_row.lora_validation_profile is None
+
+    base_qwen = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-8bit")
+    base_text = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.text")
+    base_latent = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.latent")
+    assert base_text.lora_status == "mapped-unvalidated"
+    assert base_text.lora_validation_profile is None
+    assert base_latent.lora_status == "mapped-unvalidated"
+    assert base_latent.lora_validation_profile is None
+
+
+def test_zimage_q8_text_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/z-image-turbo-8bit")
+
+    text = next(capability for capability in capabilities.capabilities if capability.id == "z-image.text")
+    latent = next(capability for capability in capabilities.capabilities if capability.id == "z-image.latent")
+
+    assert text.lora_status == "validated"
+    assert text.lora_validation_profile == "lora_zimage_q8_technically_color_t2i_2026_06_11"
+    assert latent.lora_status == "mapped-unvalidated"
+
+
+def test_flux2_klein9b_q8_edit_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/flux.2-klein-9b-8bit")
+
+    edit = next(capability for capability in capabilities.capabilities if capability.id == "flux2.edit")
+    multi = next(capability for capability in capabilities.capabilities if capability.id == "flux2.multi-reference")
+
+    assert edit.lora_status == "validated"
+    assert edit.lora_validation_profile == "lora_flux2_klein9b_q8_consistency_edit_2026_06_11"
+    assert multi.lora_status == "mapped-unvalidated"
+
+
+def test_ernie_turbo_q8_text_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/ernie-image-turbo-8bit")
+
+    text = next(capability for capability in capabilities.capabilities if capability.id == "ernie-image.text")
+    latent = next(capability for capability in capabilities.capabilities if capability.id == "ernie-image.latent")
+
+    assert text.supports_lora is True
+    assert text.lora_status == "validated"
+    assert text.lora_validation_profile == "lora_ernie_turbo_q8_anime_style_t2i_2026_06_11"
+    assert latent.supports_lora is True
+    assert latent.lora_status == "mapped-unvalidated"
+    assert latent.lora_validation_profile is None
 
 
 def test_lora_requests_are_checked_against_route_capabilities():
     flux2 = mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_lora=True)
     qwen = mlxgen.resolve_generation_plan(model="qwen-image-edit-2511", image_count=1, has_lora=True)
     z_image = mlxgen.resolve_generation_plan(model="z-image-turbo", has_lora=True)
+    ernie = mlxgen.resolve_generation_plan(model="ernie-image-turbo", has_lora=True)
 
     assert flux2.capability_id == "flux2.edit"
     assert flux2.supports_lora is True
@@ -254,9 +359,8 @@ def test_lora_requests_are_checked_against_route_capabilities():
     assert qwen.supports_lora is True
     assert z_image.capability_id == "z-image.text"
     assert z_image.supports_lora is True
-
-    with pytest.raises(TaskInferenceError, match="LoRA mapping"):
-        mlxgen.resolve_generation_plan(model="ernie-image-turbo", has_lora=True)
+    assert ernie.capability_id == "ernie-image.text"
+    assert ernie.supports_lora is True
 
     with pytest.raises(TaskInferenceError, match="LoRA mapping"):
         mlxgen.resolve_generation_plan(model="bonsai-image-ternary", has_lora=True)
@@ -334,6 +438,16 @@ def test_reframe_outpaint_validation_profile_reports_supported_variants():
         assert Path(record.artifact_path).exists()
         assert record.source_images == (profile.canonical_source,)
         assert Path(record.source_images[0]).exists()
+        model_name = record.model.lower()
+        if record.step == "OP" and "flux.2-klein-" in model_name and "base" not in model_name:
+            with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
+                mlxgen.resolve_generation_plan(
+                    model=record.model,
+                    image_count=1,
+                    has_reframe=False,
+                    has_outpaint=True,
+                )
+            continue
         plan = mlxgen.resolve_generation_plan(
             model=record.model,
             image_count=1,
@@ -354,10 +468,53 @@ def test_reframe_outpaint_validation_profile_reports_supported_variants():
         "black-forest-labs/FLUX.2-klein-9B",
         profile_id=mlxgen.REFRAME_OUTPAINT_PROFILE_ID,
     )
-    assert flux9_source.status == "PASS"
+    assert flux9_source.status == "STALE"
     assert next(record for record in flux9_source.records if record.step == "RF").artifact_path.endswith(
         "flux2_9b_source_reframe_b_wide_anchors.png"
     )
+
+
+def test_flux2_klein_base_starship_profile_reports_source_model_statuses():
+    profile = mlxgen.get_validation_profile(mlxgen.FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID)
+    assert (
+        profile.canonical_source == "docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png"
+    )
+    assert len(profile.records) == 10
+    for record in profile.records:
+        assert Path(record.artifact_path).exists()
+        for source_image in record.source_images:
+            assert Path(source_image).exists()
+        if record.step == "F":
+            plan = mlxgen.resolve_generation_plan(
+                model=record.model,
+                image_count=1,
+                has_outpaint=True,
+            )
+        elif record.step == "E":
+            plan = mlxgen.resolve_generation_plan(model=record.model, image_count=2)
+        elif record.step == "B":
+            plan = mlxgen.resolve_generation_plan(
+                model=record.model,
+                image_count=1,
+                has_image_strength=True,
+            )
+        else:
+            plan = mlxgen.resolve_generation_plan(model=record.model, image_count=1)
+        assert plan.mode == record.mode
+
+    base9b = mlxgen.get_model_validation(
+        "black-forest-labs/FLUX.2-klein-base-9B",
+        profile_id=mlxgen.FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
+    )
+    assert base9b.status == "PASS"
+    assert {record.step for record in base9b.records} == {"B", "C", "D", "E", "F"}
+
+    base4b = mlxgen.get_model_validation(
+        "black-forest-labs/FLUX.2-klein-base-4B",
+        profile_id=mlxgen.FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
+    )
+    assert base4b.status == "PARTIAL"
+    assert next(record for record in base4b.records if record.step == "E").status == "PARTIAL"
 
 
 def test_multi_reference_validation_records_list_reference_inputs():

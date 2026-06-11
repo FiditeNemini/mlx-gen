@@ -52,6 +52,23 @@ def test_lora_loader_applies_compatible_target(tmp_path):
     assert scales == [0.9]
     assert isinstance(transformer.target, LoRALinear)
 
+    transformer = _TinyTransformer()
+    result = LoRALoader.load_and_apply_lora_detailed(
+        lora_mapping=_mapping(),
+        transformer=transformer,
+        lora_paths=[str(lora_path)],
+        lora_scales=[0.9],
+        role="transformer",
+    )
+
+    assert result.resolved_paths == [str(lora_path)]
+    assert result.resolved_scales == [0.9]
+    assert len(result.reports) == 1
+    assert result.reports[0].matched_key_count == 2
+    assert result.reports[0].unmatched_key_count == 0
+    assert result.reports[0].applied_target_count == 1
+    assert result.extra_metadata()["lora_applied_target_count"] == 1
+
 
 @pytest.mark.fast
 def test_lora_loader_rejects_zero_match_adapter(tmp_path):

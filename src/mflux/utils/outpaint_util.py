@@ -112,7 +112,13 @@ class OutpaintUtil:
         return composited
 
     @staticmethod
-    def attach_metadata(*, generated_image, canvas: OutpaintCanvas, padding_value: str) -> None:
+    def attach_metadata(
+        *,
+        generated_image,
+        canvas: OutpaintCanvas,
+        padding_value: str,
+        preservation: str = "adaptive-content-aware-source-blend",
+    ) -> None:
         generated_image.source_image_width = canvas.source_width
         generated_image.source_image_height = canvas.source_height
         extra_metadata = dict(getattr(generated_image, "extra_metadata", None) or {})
@@ -125,7 +131,7 @@ class OutpaintUtil:
                 "outpaint_target_height": canvas.target_height,
                 "outpaint_source_paste_left": canvas.paste_left,
                 "outpaint_source_paste_top": canvas.paste_top,
-                "outpaint_preservation": "adaptive-content-aware-source-blend",
+                "outpaint_preservation": preservation,
                 "outpaint_source_restore_applied": getattr(
                     output_image,
                     "outpaint_preservation_applied",

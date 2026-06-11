@@ -89,6 +89,20 @@ def test_qwen_2511_lora_is_rejected_for_qwen_2509(monkeypatch):
         )
 
 
+def test_ernie_image_lora_is_accepted_for_ernie_turbo(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(lambda repo_id: ("baidu/ERNIE-Image",)),
+    )
+
+    LoRACompatibility.validate_for_model_config(
+        model_config=ModelConfig.ernie_image_turbo(),
+        selected_model="AbstractFramework/ernie-image-turbo-8bit",
+        lora_paths=["reverentelusarca/ernie-image-elusarca-anime-style-lora:ernie-anime-v1.safetensors"],
+    )
+
+
 def test_local_lora_without_card_metadata_is_left_to_loader_shape_checks(tmp_path):
     lora_path = tmp_path / "adapter.safetensors"
     lora_path.touch()

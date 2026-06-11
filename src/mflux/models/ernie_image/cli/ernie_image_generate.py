@@ -1,5 +1,6 @@
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.config import ModelConfig
 from mflux.models.ernie_image.latent_creator import ErnieImageLatentCreator
 from mflux.models.ernie_image.variants import ErnieImageTurbo
@@ -13,6 +14,7 @@ def main():
     parser.add_model_arguments(require_model_arg=False)
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_image_to_image_arguments(required=False)
+    parser.add_lora_arguments()
     parser.add_argument(
         "--use-prompt-enhancer",
         "--use-pe",
@@ -54,6 +56,8 @@ def main():
         model_config=model_config,
         quantize=args.quantize,
         model_path=args.model_path,
+        lora_paths=args.lora_paths,
+        lora_scales=args.lora_scales,
     )
 
     memory_saver = CallbackManager.register_callbacks(
@@ -85,6 +89,9 @@ def main():
                 pe_top_p=args.prompt_enhancer_top_p,
                 pe_max_new_tokens=args.prompt_enhancer_max_new_tokens,
                 canvas_policy=args.canvas_policy,
+                lora_paths=model.lora_paths,
+                lora_scales=model.lora_scales,
+                extra_metadata=LoRALoader.extra_metadata_for_model(model),
             )
             image.save(path=args.output.format(seed=seed), export_json_metadata=args.metadata, overwrite=args.replace)
     except (StopImageGenerationException, PromptFileReadError) as exc:

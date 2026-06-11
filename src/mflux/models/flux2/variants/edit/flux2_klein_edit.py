@@ -5,6 +5,7 @@ from mlx import nn
 
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.flux2.flux2_initializer import Flux2Initializer
 from mflux.models.flux2.model.flux2_text_encoder.qwen3_text_encoder import Qwen3TextEncoder
 from mflux.models.flux2.model.flux2_transformer.transformer import Flux2Transformer
@@ -55,7 +56,9 @@ class Flux2KleinEdit(nn.Module):
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
         if image_strength is not None:
-            raise ValueError("image_strength is only supported for latent image-to-image mode, not edit-reference mode.")
+            raise ValueError(
+                "image_strength is only supported for latent image-to-image mode, not edit-reference mode."
+            )
 
         # For metadata + dimension inference purposes, pick a primary reference image (if any).
         primary_image_path = None
@@ -149,6 +152,7 @@ class Flux2KleinEdit(nn.Module):
             image_paths=image_paths,
             image_path=config.image_path,
             generation_time=config.time_steps.format_dict["elapsed"],
+            extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
 
     def _encode_prompt_pair(

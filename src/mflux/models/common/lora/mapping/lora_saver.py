@@ -5,6 +5,10 @@ from mflux.models.common.lora.layer.fused_linear_lora_layer import FusedLoRALine
 from mflux.models.common.lora.layer.linear_lora_layer import LoRALinear
 
 
+class LoRABakeError(ValueError):
+    pass
+
+
 class LoRASaver:
     @staticmethod
     def bake_and_strip_lora(module: nn.Module) -> nn.Module:
@@ -73,10 +77,13 @@ class LoRASaver:
         delta = lora_layer.scale * delta
 
         if weight.shape != delta.shape:
-            print(f"⚠️  Skipping LoRA bake due to shape mismatch: weight {weight.shape} vs delta {delta.shape}")
-            return
+            raise LoRABakeError(
+                "LoRA bake shape mismatch: "
+                f"weight {weight.shape} vs delta {delta.shape}. "
+                "Refusing to save a prepared model that would silently skip the adapter."
+            )
 
         try:
             base_linear.weight = weight + delta.astype(weight.dtype)
         except Exception as e:  # noqa: BLE001
-            print(f"⚠️  Failed to bake LoRA into base layer: {e}")
+            raise LoRABakeError(f"Failed to bake LoRA into base layer: {e}") from e

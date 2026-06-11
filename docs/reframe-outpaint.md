@@ -4,36 +4,37 @@ MLX-Gen exposes two experimental single-image canvas expansion workflows through
 
 - `--reframe-padding` asks an edit model to generate a wider view from the source image. The model
   can redraw the source while changing the crop, viewpoint, or visible subject boundary.
-- `--outpaint-padding` builds an expanded conditioning canvas, runs a supported edit model on that
-  canvas, and blends the original source back only when the generated source window still matches
-  closely enough.
+- `--outpaint-padding` expands one source image into a larger canvas and then uses the selected
+  edit backend to fill only the added border area as faithfully as that backend allows.
 
 Both options use CSS-style padding in `top,right,bottom,left` order. Percentages are relative to
 the source image size. For example, `5%,80%,5%,60%` adds a small top/bottom border, more space to
 the right, and a large extension to the left.
 
-These routes are generative edit workflows. They are not native masked fill/inpaint pipelines and
-do not guarantee exact pixel locking. Use them when a plausible wider view is acceptable and review
-the output visually. A future native fill/inpaint route should be used when only the new border
-area may change.
+`--reframe-padding` is always a generative edit workflow. `--outpaint-padding` is backend-specific:
+Qwen Image Edit still uses generative canvas expansion with adaptive source restoration, while
+FLUX.2 Klein now routes strict outpaint only through base Klein models with source-locked denoising
+and a narrow transition band inside the source crop. Neither route is a native masked fill/inpaint
+pipeline, so review the output visually.
 
 ## Supported Models
 
-The current experimental validation profile is `reframe_outpaint_2026_06_08`. It uses one cropped
-starship source image and checks source, q8, and q4 packages for each supported family:
+The published experimental validation profile is `reframe_outpaint_2026_06_08`. It uses one
+cropped starship source image. Treat the distilled FLUX.2 outpaint rows in that profile as
+historical artifacts only; they are no longer the current FLUX.2 outpaint contract. Current
+source-model FLUX.2 Klein base proof is published separately as
+`flux2_klein_base_starship_2026_06_10`.
 
-| Family | Source model | q8 package | q4 package | Status |
-| --- | --- | --- | --- | --- |
-| Qwen Image Edit | `Qwen/Qwen-Image-Edit` | `AbstractFramework/qwen-image-edit-8bit` | `AbstractFramework/qwen-image-edit-4bit` | experimental reframe and outpaint pass |
-| Qwen Image Edit 2509 | `Qwen/Qwen-Image-Edit-2509` | `AbstractFramework/qwen-image-edit-2509-8bit` | `AbstractFramework/qwen-image-edit-2509-4bit` | experimental reframe and outpaint pass |
-| Qwen Image Edit 2511 | `Qwen/Qwen-Image-Edit-2511` | `AbstractFramework/qwen-image-edit-2511-8bit` | `AbstractFramework/qwen-image-edit-2511-4bit` | experimental reframe and outpaint pass |
-| FLUX.2 Klein 4B | `black-forest-labs/FLUX.2-klein-4B` | `AbstractFramework/flux.2-klein-4b-8bit` | `AbstractFramework/flux.2-klein-4b-4bit` | experimental reframe and outpaint pass |
-| FLUX.2 Klein 9B | `black-forest-labs/FLUX.2-klein-9B` | `AbstractFramework/flux.2-klein-9b-8bit` | `AbstractFramework/flux.2-klein-9b-4bit` | experimental reframe and outpaint pass |
+| Family | Reframe | Outpaint | Notes |
+| --- | --- | --- | --- |
+| Qwen Image Edit / 2509 / 2511 | current | current | Published `reframe_outpaint_2026_06_08` profile remains representative. |
+| FLUX.2 Klein 4B / 9B distilled | current | historical only | Reframe remains supported. Historical outpaint rows are stale and are no longer exposed as strict outpaint. |
+| FLUX.2 Klein Base 4B / 9B | not exposed | current | Strict FLUX.2 outpaint now requires a base Klein model. Source-model contact sheets are published; prepared base q8/q4 proof is still pending. |
 
-These options are intentionally not exposed for base Qwen Image, Qwen Image 2512, FLUX.2 Klein
-Base, ERNIE Image Turbo, Z-Image, FIBO, Bonsai, Wan, or SeedVR2. Those families are text
-generation, latent I2I, video, or upscale/restoration routes, or do not yet have a validated
-edit-reference canvas-expansion profile.
+These options are intentionally not exposed for base Qwen Image, Qwen Image 2512, ERNIE Image
+Turbo, Z-Image, FIBO, Bonsai, Wan, or SeedVR2. Those families are text generation, latent I2I,
+video, upscale/restoration routes, or do not yet have a validated edit-reference canvas-expansion
+profile.
 
 Check support before running:
 
@@ -41,12 +42,20 @@ Check support before running:
 mlxgen capabilities --model AbstractFramework/qwen-image-edit-2511-8bit
 ```
 
-Inspect the validation records for a package:
+Inspect the June 8 mixed-profile validation records for a package:
 
 ```sh
 mlxgen validation \
   --profile reframe_outpaint_2026_06_08 \
   --model AbstractFramework/qwen-image-edit-2511-8bit
+```
+
+Inspect the current base-source starship validation records:
+
+```sh
+mlxgen validation \
+  --profile flux2_klein_base_starship_2026_06_10 \
+  --model black-forest-labs/FLUX.2-klein-base-9B
 ```
 
 ## Reframe Example
@@ -67,24 +76,24 @@ mlxgen generate \
 
 ## Outpaint Example
 
-Use outpaint when you want MLX-Gen to construct a larger canvas before the edit model runs:
+Use outpaint when you want MLX-Gen to expand one source image while keeping the original crop as
+stable as the backend allows:
 
 ```sh
 mlxgen generate \
-  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --model black-forest-labs/FLUX.2-klein-base-9B \
   --image input.png \
   --outpaint-padding "5%,80%,5%,60%" \
   --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing subject and background outside the original frame." \
-  --negative "text, border, frame, hard seam, duplicate subject" \
   --steps 20 \
   --guidance 4 \
   --seed 42 \
   --output outpaint.png
 ```
 
-After generation, MLX-Gen compares the source window in the generated image with the original
-source. If the generated source window is close, MLX-Gen blends source detail back in. If the model
-has reconstructed or moved the scene, MLX-Gen keeps the generated image to avoid ghosted fragments.
+For Qwen Image Edit variants, MLX-Gen may still apply adaptive source restoration after generation.
+For current FLUX.2 Klein base outpaint, MLX-Gen relies on source-locked denoising with an interior
+transition band instead of pasting the original crop back over the final image.
 
 ## Validation Assets
 
@@ -100,7 +109,7 @@ In the mask image, black marks the original source window and white marks the ge
 
 ![Wide outpaint source mask](assets/validation/reframe-outpaint-2026-06-08/source-b-outpaint-mask-wide.png)
 
-The summary sheet shows every supported source/q8/q4 row:
+The summary sheet shows the historical 2026-06-08 source/q8/q4 rows:
 
 ![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
 
@@ -109,10 +118,18 @@ Per-family contact sheets:
 - [Qwen Image Edit](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-reframe-outpaint-matrix.jpg)
 - [Qwen Image Edit 2509](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-2509-reframe-outpaint-matrix.jpg)
 - [Qwen Image Edit 2511](assets/validation/reframe-outpaint-2026-06-08/qwen-image-edit-2511-reframe-outpaint-matrix.jpg)
-- [FLUX.2 Klein 4B](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-4b-reframe-outpaint-matrix.jpg)
-- [FLUX.2 Klein 9B](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-9b-reframe-outpaint-matrix.jpg)
+- [FLUX.2 Klein 4B](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-4b-reframe-outpaint-matrix.jpg) - historical distilled reframe/outpaint matrix
+- [FLUX.2 Klein 9B](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-9b-reframe-outpaint-matrix.jpg) - historical distilled reframe/outpaint matrix
+
+Current source-model FLUX.2 Klein base proof:
+
+- [Base 4B/9B edit and strict-outpaint matrix](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-edit-matrix.jpg)
+- [Base 4B/9B strict-outpaint seam review](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-outpaint-seams.jpg)
+- [Base 4B/9B text-to-image smoke panel](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-t2i-panel.jpg)
 
 The exact commands and validation manifest are published with the assets:
 
 - [Command log](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-command-log.md)
 - [Validation manifest](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-validation-manifest.json)
+- [Base starship command log](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-command-log.md)
+- [Base starship validation manifest](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-validation-manifest.json)

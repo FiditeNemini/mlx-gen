@@ -113,6 +113,9 @@ Use `mlxgen capabilities --model <model>` to check whether a model supports late
 edit/reference image-to-image, or multi-reference image-to-image. `--image-strength` is for latent
 img2img variation only; edit/reference models do not use it.
 
+If you are choosing between latent restyle, instruction edit, multi-reference composition,
+generative reframe, and outpaint, see [Image Edit Modes](image-edit-modes.md).
+
 LoRA support is experimental. Use the same capabilities command before LoRA runs. LoRA adapters
 must match the selected model family, and a visible source/no-LoRA/with-LoRA comparison is required
 before treating an adapter as validated. See [LoRA](lora.md) for the current contract.
@@ -149,25 +152,25 @@ supported edit model to fill the larger view:
 
 ```sh
 mlxgen generate \
-  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --model black-forest-labs/FLUX.2-klein-base-9B \
   --image input.png \
-  --outpaint-padding "5%,35%,5%,35%" \
+  --outpaint-padding "5%,80%,5%,60%" \
   --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing subject and background outside the original frame." \
-  --negative "text, border, frame, hard seam, duplicate subject" \
-  --steps 24 \
+  --steps 20 \
   --guidance 4 \
   --seed 42 \
   --output outpaint.png
 ```
 
-For current FLUX.2 Klein 4B/9B and Qwen Image Edit variants, this route uses an edge-extended
-conditioning canvas and an adaptive source blend. If the generated source window still matches the
-original source, MLX-Gen blends source detail back in; if the model has reconstructed the scene, it
-skips the blend to avoid ghosted fragments. This is not a native fill/inpaint pipeline with an
-explicit diffusion mask, and it is not an exact pixel-lock guarantee.
+Outpaint is backend-specific. Qwen Image Edit variants still use an edge-extended conditioning
+canvas plus adaptive source restoration. Current FLUX.2 Klein strict outpaint is base-only and
+uses source-locked denoising with a narrow latent transition band instead of pasting the original
+crop back over the result. This is not a native fill/inpaint pipeline with an explicit diffusion
+mask, and it is not an exact pixel-lock guarantee.
 
 Current experimental reframe and outpaint proof assets are published in
-[Image Edit Capabilities](edit-capabilities.md) and [Reframe and Outpaint](reframe-outpaint.md).
+[Image Edit Capabilities](edit-capabilities.md) and [Reframe and Outpaint](reframe-outpaint.md),
+including the 2026-06-10 FLUX.2 Klein base source-model starship proof.
 
 For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image

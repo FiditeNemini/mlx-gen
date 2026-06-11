@@ -47,7 +47,7 @@ def test_backend_edit_help_renders_canvas_expansion_options(module_name, argv0, 
     assert "source blend" in help_output
 
 
-def test_flux2_edit_backend_rejects_base_canvas_expansion_before_model_load(tmp_path, monkeypatch, capsys):
+def test_flux2_edit_backend_rejects_distilled_outpaint_before_model_load(tmp_path, monkeypatch, capsys):
     from mflux.models.flux2.cli import flux2_edit_generate
 
     source = tmp_path / "source.png"
@@ -58,7 +58,7 @@ def test_flux2_edit_backend_rejects_base_canvas_expansion_before_model_load(tmp_
         [
             "mflux-generate-flux2-edit",
             "--model",
-            "flux2-klein-base-4b",
+            "flux2-klein-4b",
             "--image-paths",
             str(source),
             "--outpaint-padding",
@@ -71,7 +71,7 @@ def test_flux2_edit_backend_rejects_base_canvas_expansion_before_model_load(tmp_
     with pytest.raises(SystemExit):
         flux2_edit_generate.main()
 
-    assert "validated non-base FLUX.2 Klein model" in capsys.readouterr().err
+    assert "requires a FLUX.2 Klein base model" in capsys.readouterr().err
 
 
 def test_qwen_base_single_image_requires_latent_strength(capsys):
@@ -424,9 +424,12 @@ def test_capabilities_command_reports_model_modes(capsys):
     assert payload["family"] == "flux2"
     modes = {capability["mode"] for capability in payload["capabilities"]}
     assert {"text-only", "latent-img2img", "edit-reference", "multi-reference"}.issubset(modes)
-    edit = next(capability for capability in payload["capabilities"] if capability["mode"] == "edit-reference")
+    edit = next(capability for capability in payload["capabilities"] if capability["id"] == "flux2.edit")
+    reframe = next(capability for capability in payload["capabilities"] if capability["id"] == "flux2.reframe")
     assert edit["supports_lora"] is True
     assert edit["lora_status"] == "mapped-unvalidated"
+    assert edit["supports_reframe"] is False
+    assert reframe["supports_reframe"] is True
 
 
 def test_capabilities_command_accepts_base_model_for_local_paths(capsys):
@@ -511,6 +514,7 @@ def test_validation_command_lists_profiles(capsys):
     assert [profile["id"] for profile in payload["profiles"]] == [
         "i2i_edit_5x4_2026_06_05",
         "reframe_outpaint_2026_06_08",
+        "flux2_klein_base_starship_2026_06_10",
     ]
 
 
@@ -595,15 +599,15 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
             observed["save"] = kwargs
             self.image.save(kwargs["path"])
 
-    class FakeFlux2Edit:
+    class FakeFlux2Outpaint:
         def __init__(self, **kwargs):
             observed["init"] = kwargs
 
         def generate_image(self, **kwargs):
             observed["generate"] = kwargs
-            return FakeImage(Image.open(kwargs["image_paths"][0]).convert("RGB"))
+            return FakeImage(Image.open(kwargs["canvas"].canvas_path).convert("RGB"))
 
-    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinEdit", FakeFlux2Edit)
+    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinOutpaint", FakeFlux2Outpaint)
     monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
     monkeypatch.setattr(
         sys,
@@ -611,7 +615,7 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
         [
             "mflux-generate-flux2-edit",
             "--model",
-            "flux2-klein-4b",
+            "flux2-klein-base-4b",
             "--image-paths",
             str(source),
             "--outpaint-padding",
@@ -625,10 +629,9 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
 
     flux2_edit_generate.main()
 
-    assert observed["generate"]["width"] == 32
-    assert observed["generate"]["height"] == 16
-    assert observed["generate"]["canvas_policy"] == "exact-resize"
-    assert Path(observed["generate"]["image_paths"][0]).name == "outpaint_canvas.png"
+    assert observed["generate"]["canvas"].target_width == 32
+    assert observed["generate"]["canvas"].target_height == 16
+    assert Path(observed["generate"]["canvas"].canvas_path).name == "outpaint_canvas.png"
     generated = Image.open(output).convert("RGB")
     source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
     output_interior = generated.crop((5, 3, 15, 9))
@@ -707,7 +710,7 @@ def test_flux2_edit_backend_canvas_options_reject_explicit_size(monkeypatch, tmp
         [
             "mflux-generate-flux2-edit",
             "--model",
-            "flux2-klein-4b",
+            "flux2-klein-base-4b",
             "--image-paths",
             str(source),
             "--outpaint-padding",
@@ -947,7 +950,7 @@ def test_outpaint_padding_routes_flux2_edit():
     invocation = mlx_gen._resolve_invocation(
         [
             "--model",
-            "AbstractFramework/flux.2-klein-4b-8bit",
+            "AbstractFramework/flux.2-klein-base-9b-8bit",
             "--image",
             "input.png",
             "--outpaint-padding",
@@ -961,7 +964,7 @@ def test_outpaint_padding_routes_flux2_edit():
     assert invocation.argv == [
         "mflux-generate-flux2-edit",
         "--model",
-        "AbstractFramework/flux.2-klein-4b-8bit",
+        "AbstractFramework/flux.2-klein-base-9b-8bit",
         "--image-paths",
         "input.png",
         "--prompt",
@@ -1027,7 +1030,7 @@ def test_outpaint_padding_rejects_conflicting_canvas_options(capsys):
         mlx_gen._resolve_invocation(
             [
                 "--model",
-                "flux2-klein-4b",
+                "flux2-klein-base-4b",
                 "--image",
                 "input.png",
                 "--outpaint-padding",
@@ -1123,6 +1126,21 @@ def test_reframe_outpaint_validation_profile_records_route_to_supported_backends
     }
     for record in profile.records:
         option = "--reframe-padding" if record.step == "RF" else "--outpaint-padding"
+        if record.step == "OP" and record.family in {"FLUX.2 Klein 4B", "FLUX.2 Klein 9B"}:
+            with pytest.raises(SystemExit):
+                mlx_gen._resolve_invocation(
+                    [
+                        "--model",
+                        record.model,
+                        "--image",
+                        str(source),
+                        option,
+                        "0,25%,0,25%",
+                        "--prompt",
+                        "expand the image",
+                    ]
+                )
+            continue
         invocation = mlx_gen._resolve_invocation(
             [
                 "--model",
@@ -1161,8 +1179,28 @@ def test_reframe_padding_is_rejected_for_latent_only_models(tmp_path, capsys):
     assert "reframe-padding is only supported" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("option", ["--reframe-padding", "--outpaint-padding"])
-def test_flux2_klein_base_rejects_unvalidated_canvas_expansion(option, tmp_path, capsys):
+def test_flux2_klein_base_accepts_outpaint(tmp_path):
+    source = tmp_path / "source.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "flux2-klein-base-4b",
+            "--image",
+            str(source),
+            "--outpaint-padding",
+            "0,25%,0,25%",
+            "--prompt",
+            "extend the room",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert "--outpaint-padding" in invocation.argv
+
+
+def test_flux2_klein_base_rejects_reframe(tmp_path, capsys):
     source = tmp_path / "source.png"
     Image.new("RGB", (128, 64), color="white").save(source)
 
@@ -1173,14 +1211,14 @@ def test_flux2_klein_base_rejects_unvalidated_canvas_expansion(option, tmp_path,
                 "flux2-klein-base-4b",
                 "--image",
                 str(source),
-                option,
+                "--reframe-padding",
                 "0,25%,0,25%",
                 "--prompt",
                 "zoom out",
             ]
         )
 
-    assert f"{option.lstrip('-')} is only supported" in capsys.readouterr().err
+    assert "reframe-padding is only supported" in capsys.readouterr().err
 
 
 def test_reframe_padding_rejects_conflicting_canvas_options(tmp_path, capsys):

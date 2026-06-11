@@ -80,7 +80,7 @@ class CompletionGenerator:
                 "--image-outpaint-padding",
                 dest="outpaint_padding",
                 default=None,
-                help="CSS-style top,right,bottom,left padding for canvas-guided outpaint.",
+                help="CSS-style top,right,bottom,left padding for strict or canvas-guided outpaint.",
             )
             parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
             parser.add_output_arguments()
@@ -175,7 +175,7 @@ class CompletionGenerator:
                 "--image-outpaint-padding",
                 dest="outpaint_padding",
                 default=None,
-                help="CSS-style top,right,bottom,left padding for canvas-guided outpaint.",
+                help="CSS-style top,right,bottom,left padding for strict or canvas-guided outpaint.",
             )
             parser.add_output_arguments()
 

@@ -6,6 +6,7 @@ from mlx import nn
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import LatentCreator
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.flux2.flux2_initializer import Flux2Initializer
 from mflux.models.flux2.latent_creator.flux2_latent_creator import Flux2LatentCreator
@@ -134,6 +135,7 @@ class Flux2Klein(nn.Module):
             image_path=config.image_path,
             image_strength=config.image_strength,
             generation_time=config.time_steps.format_dict["elapsed"],
+            extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
 
     def _encode_prompt_pair(

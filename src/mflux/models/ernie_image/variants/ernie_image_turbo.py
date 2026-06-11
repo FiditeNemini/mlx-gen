@@ -8,6 +8,7 @@ from PIL import Image
 from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import LatentCreator
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.ernie_image.ernie_image_initializer import ErnieImageInitializer
 from mflux.models.ernie_image.latent_creator import ErnieImageLatentCreator
@@ -64,6 +65,9 @@ class ErnieImageTurbo(nn.Module):
         pe_top_p: float = 0.95,
         pe_max_new_tokens: int | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        extra_metadata: dict | None = None,
     ) -> Image.Image:
         del scheduler
         if image_path is None:
@@ -148,10 +152,13 @@ class ErnieImageTurbo(nn.Module):
             seed=seed,
             prompt=prompt,
             quantization=self.bits,
+            lora_paths=self.lora_paths if lora_paths is None else lora_paths,
+            lora_scales=self.lora_scales if lora_scales is None else lora_scales,
             image_path=config.image_path,
             image_strength=config.image_strength,
             generation_time=config.time_steps.format_dict["elapsed"],
             negative_prompt=negative_prompt,
+            extra_metadata=extra_metadata or LoRALoader.extra_metadata_for_model(self),
         )
 
     def save_model(self, base_path: str) -> None:
