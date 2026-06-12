@@ -13,7 +13,7 @@ outside chat history.
 | --- | ---: |
 | Planned | 13 |
 | Proposed | 9 |
-| Completed | 18 |
+| Completed | 19 |
 | Deprecated | 0 |
 | Recurrent | 1 |
 
@@ -33,34 +33,35 @@ outside chat history.
    structured controls, the local Diffusers checkout includes Qwen control and control-inpaint
    pipelines, and public control weights now exist. This is the strongest missing feature inside
    an already-supported family.
-3. Keep proposed
+3. Finish
+   [Wan prompt adherence parity validation](planned/0015_wan_prompt_adherence_parity_validation.md)
+   before treating T2V/I2V prompt or motion behavior as quality-proven; explicitly match official
+   Wan negative prompts and A14B guidance pairs in Diffusers-vs-MLX runs.
+4. Keep proposed
    [LightX2V Wan distilled-model loader support](proposed/0041_lightx2v_wan_distilled_model_loader_support.md)
    scoped as the next Wan acceleration follow-up, not the current one. Completed
    [item 0040](completed/0040_lightx2v_wan_4step_acceleration_profiles.md) now provides the exact
    LightX2V Lightning 4-step A14B fast path on the current runtime, so 0041 should only advance if
    native distilled checkpoints still offer clearer user value than the explicit LoRA recipe.
-4. Finish
+5. Finish
    [Wan2.2 TI2V-5B math and behavior parity](planned/0035_wan_ti2v5b_math_and_behavior_parity.md)
    only after the remaining image LoRA proofs under item 0007 are settled. The official Wan source
    and local Diffusers parity audit found no tensor mismatch in the existing TI2V-5B fixtures, but
    it did expose a missing public flow-shift override. New 480p-class TI2V-5B checks should pass
    `--flow-shift 3` before drawing model-quality conclusions from the `832x480` starship profile.
-5. Finish the residual
+6. Finish the residual
    [first-class I2I modes and outpaint/reframe UX](planned/0019_first_class_i2i_modes_and_outpaint_reframe.md)
    work only where it adds new capability beyond the shipped FLUX.2/Qwen path. FLUX.2 Klein 4B/9B
    plus Qwen Image Edit original, 2509, and 2511 now have source/q8/q4 model-backed proof for
    experimental `--reframe-padding` and canvas-guided `--outpaint-padding`. Keep native fill/inpaint
    outpaint separate until a fill/mask backend is deliberately revalidated. Evaluate Z-Image and
    ERNIE only if their latent I2I behavior can preserve source identity on a dedicated profile.
-6. Preserve proposed
+7. Preserve proposed
    [SeedVR2 video restoration/upscaling](proposed/0032_seedvr2_video_restoration_upscaling.md) as
    a near-term follow-up rather than a distant idea. Official SeedVR2 source models are published
    as video-to-video restoration models, and MLX-Gen already has the underlying model family plus
    image-only upscale support. The missing work is temporal inference, MP4 handling, and a
    video-backed smoke.
-7. Run [Wan prompt adherence parity validation](planned/0015_wan_prompt_adherence_parity_validation.md)
-   before treating T2V/I2V prompt or motion behavior as quality-proven; explicitly match official
-   Wan negative prompts and A14B guidance pairs in Diffusers-vs-MLX runs.
 8. Keep proposed
    [Wan VACE video editing and control](proposed/0039_wan_vace_video_editing_and_control.md) in
    view once current Wan parity work settles. Upstream Wan already has video-to-video and VACE
@@ -171,6 +172,7 @@ outside chat history.
 | 0031 | [SeedVR2 official ByteDance checkpoint support](completed/0031_seedvr2_official_bytedance_checkpoint_support.md) | Upscale, SeedVR2, official checkpoints | 2026-06-07 | Added direct official `ByteDance-Seed/SeedVR2-3B` and `ByteDance-Seed/SeedVR2-7B` `.pth` loading, switched SeedVR2 aliases to official sources, added q8/q4 `mlxgen prepare` support, generated reusable package cards, and validated source/q8/q4 5x upscale profiles. |
 | 0033 | [Video LoRA support for T2V and I2V](completed/0033_video_lora_for_t2v_i2v.md) | Video, LoRA, Wan2.2 | 2026-06-11 | Added Wan-specific LoRA mapping and explicit role routing, then validated all current Wan q8 public rows with model-backed A/B artifacts: TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B first-frame image-to-video. |
 | 0040 | [LightX2V Wan 4-step acceleration profiles](completed/0040_lightx2v_wan_4step_acceleration_profiles.md) | Video, Wan, LightX2V, fast-path validation | 2026-06-12 | Validated the explicit LightX2V Lightning 4-step A14B fast path on q8 T2V and I2V with same-seed no-LoRA vs paired-LoRA A/B contact sheets, route-level validation profiles, and documented exact commands using `steps=4`, `flow_shift=5.0`, `guidance=1.0`, and `guidance_2=1.0`. |
+| 0042 | [GitHub Actions Node 24 migration](completed/0042_github_actions_node24_migration.md) | CI, release automation, GitHub Actions | 2026-06-12 | Migrated the workflows to `checkout@v5`, `setup-python@v6`, `upload-artifact@v6`, and `download-artifact@v7`, validated the release rehearsal under the new action runtime, and documented the remaining unrelated PR lint failure as residual repo drift rather than a Node 24 blocker. |
 | 0037 | [ERNIE Image Turbo LoRA runtime support](completed/0037_ernie_image_turbo_lora_runtime_support.md) | ERNIE, LoRA, routing, validation | 2026-06-11 | Added ERNIE transformer LoRA mapping, public-route LoRA support, exact q8 text-to-image validation with an anime-style adapter, and kept latent img2img plus Bonsai packed-runtime work explicitly separate. |
 
 ## Deprecated ledger
@@ -255,6 +257,12 @@ No deprecated backlog items yet.
   work into planned item 0008, added Wan VACE as proposed item 0039, split LightX2V fast-video
   work into planned item 0040 for LoRA-based 4-step A14B acceleration and proposed item 0041 for
   native distilled-model loader support.
+- Added 2026-06-12 post-0.18.17 hygiene: the release succeeded, LightX2V/Wan proof assets and
+  public LoRA docs were refreshed, and planned item 0042 now tracks the GitHub Actions Node 20
+  deprecation warning observed in release run `27440684820` before the Node 24 default switch.
+- Completed 2026-06-12 GitHub Actions Node 24 migration: PR `#4` upgraded the affected actions,
+  release rehearsal `27443742691` passed without the earlier Node 20 deprecation warnings, and PR
+  CI run `27443720109` exposed only pre-existing repository lint drift unrelated to the migration.
 - Completed 2026-05-27 Bonsai ternary 2-bit support: `mlxgen generate` can run
   `prism-ml/bonsai-image-ternary-4B-mlx-2bit` directly, binary 1-bit now fails with an explicit
   unsupported-runtime message, and a local validation panel compares Bonsai ternary with FLUX.2

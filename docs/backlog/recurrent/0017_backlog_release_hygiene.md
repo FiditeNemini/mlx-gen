@@ -63,3 +63,10 @@ The backlog is useful only when planned work names what remains rather than what
   application, strict scale counts, unsupported-family rejection, metadata provenance, and
   `mlxgen prepare --lora-paths` q4/q8 bake/export risk. Proposed item 0033 remains unpromoted and
   now requires Wan target-role metadata plus MP4 A/B validation before implementation.
+- 2026-06-12: Post-0.18.17 hygiene recounted backlog state, confirmed global IDs remain unique,
+  refreshed the recommendation order around the shipped Wan/LightX2V work, kept residual LoRA
+  proof coverage as follow-up rather than the immediate top task, and added planned item 0042 for
+  the GitHub Actions Node 20 deprecation warning surfaced by release run `27440684820`.
+- 2026-06-12: Follow-up hygiene for PR `#4` moved item 0042 to completed after the branch release
+  rehearsal (`27443742691`) passed under the upgraded action versions and the only remaining PR CI
+  failure was a pre-existing `ruff` baseline issue outside the workflow migration scope.
