@@ -1,7 +1,7 @@
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser
-from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.ernie_image.latent_creator import ErnieImageLatentCreator
 from mflux.models.ernie_image.variants import ErnieImageTurbo
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException

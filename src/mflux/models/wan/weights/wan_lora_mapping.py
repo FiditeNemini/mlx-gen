@@ -93,11 +93,8 @@ class WanLoRAMapping(LoRAMapping):
     ) -> list[str]:
         patterns = []
         for prefix in WanLoRAMapping._DIFFUSERS_PREFIXES:
-            for suffix in suffixes:
-                patterns.append(f"{prefix}{diffusers_base}.{suffix}")
+            patterns.extend(f"{prefix}{diffusers_base}.{suffix}" for suffix in suffixes)
         for prefix in WanLoRAMapping._ORIGINAL_PREFIXES:
-            for suffix in suffixes:
-                patterns.append(f"{prefix}{original_base}.{suffix}")
-        for suffix in suffixes:
-            patterns.append(f"lora_unet_{musubi_base}.{suffix}")
+            patterns.extend(f"{prefix}{original_base}.{suffix}" for suffix in suffixes)
+        patterns.extend(f"lora_unet_{musubi_base}.{suffix}" for suffix in suffixes)
         return patterns

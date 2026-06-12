@@ -25,7 +25,7 @@ class ErnieImageLoRAMapping(LoRAMapping):
             "mlp.up_proj",
             "mlp.linear_fc2",
         ):
-            targets.append(ErnieImageLoRAMapping._target(f"layers.{{block}}.{module_path}"))
+            targets.extend([ErnieImageLoRAMapping._target(f"layers.{{block}}.{module_path}")])
         return targets
 
     @staticmethod

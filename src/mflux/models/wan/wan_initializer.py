@@ -15,8 +15,8 @@ from mflux.models.common.weights.loading.weight_applier import WeightApplier
 from mflux.models.common.weights.loading.weight_loader import WeightLoader
 from mflux.models.wan.model.wan_transformer import WanTransformer
 from mflux.models.wan.model.wan_vae import Wan2_2_VAE
-from mflux.models.wan.weights.wan_lora_mapping import WanLoRAMapping
 from mflux.models.wan.weights import WanWeightDefinition
+from mflux.models.wan.weights.wan_lora_mapping import WanLoRAMapping
 
 
 class WanInitializer:
@@ -368,10 +368,7 @@ class WanInitializer:
         add_v_a_suffix: str,
         add_v_b_suffix: str,
     ) -> None:
-        prefixes = []
-        for key in list(weights.keys()):
-            if key.startswith(prefix) and key.endswith(ref_a_suffix):
-                prefixes.append(key[: -len(ref_a_suffix)])
+        prefixes = [key[: -len(ref_a_suffix)] for key in list(weights.keys()) if key.startswith(prefix) and key.endswith(ref_a_suffix)]
         for key_prefix in prefixes:
             ref_a = f"{key_prefix}{ref_a_suffix}"
             ref_b = f"{key_prefix}{ref_b_suffix}"
