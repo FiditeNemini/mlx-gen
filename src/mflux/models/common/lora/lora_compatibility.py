@@ -27,23 +27,27 @@ class LoRACompatibility:
 
         selected_label = selected_model or model_config.model_name
         for lora_path in lora_paths:
+            path_adapter_class = LoRACompatibility._model_class(lora_path)
+            if path_adapter_class is not None:
+                LoRACompatibility._validate_adapter_classes(
+                    selected_class=selected_class,
+                    selected_label=selected_label,
+                    repo_label=lora_path,
+                    adapter_base_models=(lora_path,),
+                    adapter_classes=(path_adapter_class,),
+                )
+                continue
             repo_id = LoRACompatibility._repo_id_from_path(lora_path)
             if repo_id is None:
                 continue
-            for adapter_base_model in LoRACompatibility._cached_base_models(repo_id):
-                adapter_class = LoRACompatibility._model_class(adapter_base_model)
-                if adapter_class is None or selected_class is None or adapter_class == selected_class:
-                    continue
-                if adapter_class == "flux2-dev":
-                    raise LoRAApplicationError(
-                        f"LoRA {repo_id} targets {adapter_base_model}, but {selected_label} resolves to "
-                        "FLUX.2 Klein. MLX-Gen does not currently support FLUX.2-dev; use a LoRA trained "
-                        "for FLUX.2 Klein or add first-class FLUX.2-dev support."
-                    )
-                raise LoRAApplicationError(
-                    f"LoRA {repo_id} targets {adapter_base_model}, which is not compatible with "
-                    f"selected model {selected_label}."
-                )
+            adapter_base_models = LoRACompatibility._cached_base_models(repo_id)
+            LoRACompatibility._validate_adapter_classes(
+                selected_class=selected_class,
+                selected_label=selected_label,
+                repo_label=repo_id,
+                adapter_base_models=adapter_base_models,
+                adapter_classes=tuple(LoRACompatibility._model_class(model) for model in adapter_base_models),
+            )
 
     @staticmethod
     def _repo_id_from_path(path: str) -> str | None:
@@ -56,6 +60,43 @@ class LoRACompatibility:
         if path.count("/") == 1:
             return path
         return None
+
+    @staticmethod
+    def _validate_adapter_classes(
+        *,
+        selected_class: str | None,
+        selected_label: str,
+        repo_label: str,
+        adapter_base_models: tuple[str, ...],
+        adapter_classes: tuple[str | None, ...],
+    ) -> None:
+        if selected_class is None or not adapter_base_models:
+            return
+
+        known_pairs = [(base_model, adapter_class) for base_model, adapter_class in zip(adapter_base_models, adapter_classes) if adapter_class is not None]
+        if not known_pairs:
+            return
+
+        if any(adapter_class == selected_class for _base_model, adapter_class in known_pairs):
+            return
+
+        first_base_model, first_adapter_class = known_pairs[0]
+        if first_adapter_class == "flux2-dev":
+            raise LoRAApplicationError(
+                f"LoRA {repo_label} targets {first_base_model}, but {selected_label} resolves to "
+                "FLUX.2 Klein. MLX-Gen does not currently support FLUX.2-dev; use a LoRA trained "
+                "for FLUX.2 Klein or add first-class FLUX.2-dev support."
+            )
+        if len(known_pairs) == 1:
+            raise LoRAApplicationError(
+                f"LoRA {repo_label} targets {first_base_model}, which is not compatible with "
+                f"selected model {selected_label}."
+            )
+        described_models = ", ".join(base_model for base_model, _adapter_class in known_pairs)
+        raise LoRAApplicationError(
+            f"LoRA {repo_label} declares compatible base models [{described_models}], none of which match "
+            f"selected model {selected_label}."
+        )
 
     @staticmethod
     def _cached_base_models(repo_id: str) -> tuple[str, ...]:

@@ -146,6 +146,51 @@ def test_wan_ti2v_lora_is_rejected_for_a14b(monkeypatch):
         )
 
 
+def test_wan_lightning_i2v_subpath_is_accepted_for_i2v_even_when_repo_lists_multiple_base_models(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(
+            lambda repo_id: (
+                "Wan-AI/Wan2.2-T2V-A14B",
+                "Wan-AI/Wan2.2-I2V-A14B",
+                "Wan-AI/Wan2.2-TI2V-5B",
+            )
+        ),
+    )
+
+    LoRACompatibility.validate_for_model_config(
+        model_config=ModelConfig.from_name("AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit"),
+        selected_model="AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit",
+        lora_paths=[
+            "lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors"
+        ],
+    )
+
+
+def test_wan_lightning_t2v_subpath_is_rejected_for_i2v_even_when_repo_lists_i2v_too(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(
+            lambda repo_id: (
+                "Wan-AI/Wan2.2-T2V-A14B",
+                "Wan-AI/Wan2.2-I2V-A14B",
+                "Wan-AI/Wan2.2-TI2V-5B",
+            )
+        ),
+    )
+
+    with pytest.raises(LoRAApplicationError, match="Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1"):
+        LoRACompatibility.validate_for_model_config(
+            model_config=ModelConfig.from_name("AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit"),
+            selected_model="AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit",
+            lora_paths=[
+                "lightx2v/Wan2.2-Lightning:Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/high_noise_model.safetensors"
+            ],
+        )
+
+
 def test_local_lora_without_card_metadata_is_left_to_loader_shape_checks(tmp_path):
     lora_path = tmp_path / "adapter.safetensors"
     lora_path.touch()

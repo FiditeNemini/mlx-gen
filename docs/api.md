@@ -87,8 +87,10 @@ I2V-A14B first-frame image-to-video. A14B requests still require explicit
 `high_noise_transformer` / `low_noise_transformer` role assignment when you pass separate adapter
 files. For the current A14B fast path, download `lightx2v/Wan2.2-Lightning` with
 `mlxgen download --model lightx2v/Wan2.2-Lightning --all-files`, then use the paired T2V or I2V
-files shown in [LoRA](lora.md). Bonsai remains a separate fail-closed case because its packed ternary runtime does not
-expose standard replaceable linear-module targets.
+files shown in [LoRA](lora.md). After download, you can reference those paired files either with
+the public `repo:subdir/file.safetensors` form or with absolute local file paths. For A14B, each
+file must be its own `--lora-paths` argument. Bonsai remains a separate fail-closed case because
+its packed ternary runtime does not expose standard replaceable linear-module targets.
 
 Most image and video backends accept a negative prompt. In the unified CLI,
 `--negative-prompt` and `--negative` are aliases. Python callers pass the same value as

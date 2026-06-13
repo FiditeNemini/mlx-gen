@@ -247,6 +247,7 @@ class LoraResolution:
                     target_name = filename
 
                 target_path = cache_path / target_name
+                target_path.parent.mkdir(parents=True, exist_ok=True)
                 if not target_path.exists():
                     try:
                         target_path.symlink_to(file)

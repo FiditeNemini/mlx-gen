@@ -150,6 +150,25 @@ class TestLoraResolutionHuggingFace:
 
         assert result == str(lora_file)
 
+    @pytest.mark.fast
+    @patch("mflux.models.common.resolution.lora_resolution.snapshot_download")
+    def test_collection_with_nested_filename_creates_cache_subdirectories(self, mock_download, tmp_path, monkeypatch):
+        nested_file = tmp_path / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1" / "high_noise_model.safetensors"
+        nested_file.parent.mkdir(parents=True)
+        nested_file.touch()
+
+        mock_download.return_value = str(tmp_path)
+        cache_dir = tmp_path / "cache"
+        monkeypatch.setattr("mflux.models.common.resolution.lora_resolution.MFLUX_LORA_CACHE_DIR", cache_dir)
+
+        result = LoraResolution.resolve(
+            path="lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors"
+        )
+
+        expected = cache_dir / "Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1" / "high_noise_model.safetensors"
+        assert result == str(expected)
+        assert expected.exists()
+
 
 class TestLoraResolutionError:
     @pytest.mark.fast

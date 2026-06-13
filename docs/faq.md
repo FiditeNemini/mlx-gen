@@ -183,7 +183,9 @@ mlxgen download --model lightx2v/Wan2.2-Lightning --all-files
 
 Then use the paired T2V or I2V files from that repository as
 `lightx2v/Wan2.2-Lightning:<subdir>/<file>.safetensors`; the copy-paste commands are in
-[LoRA](lora.md).
+[LoRA](lora.md). You can also point directly at absolute local `.safetensors` files after
+downloading them. For Wan A14B, pass each file as its own `--lora-paths` argument rather than one
+quoted combined string.
 
 ## How Do I Choose Between Latent I2I And Image Edit?
 

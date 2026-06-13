@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.18] - 2026-06-13
+
+### Changed
+
+- **Wan LightX2V public adapter syntax**: document the supported A14B adapter forms more clearly,
+  including the stable `repo:subdir/file.safetensors` syntax, equivalent absolute local file
+  paths after download, and the requirement to pass paired A14B adapter files as separate
+  `--lora-paths` arguments.
+
+### Fixed
+
+- **Wan mixed-base LoRA compatibility checks**: accept the official `lightx2v/Wan2.2-Lightning`
+  I2V and T2V subpath references on the matching A14B routes instead of rejecting them when the
+  adapter repository declares several compatible Wan base models.
+- **Nested LoRA file resolution**: resolve Hugging Face adapter references with subdirectories such
+  as `owner/repo:subdir/file.safetensors` correctly in the local LoRA cache, so the documented
+  LightX2V Wan commands work as written.
+
 ## [0.18.17] - 2026-06-12
 
 ### Added

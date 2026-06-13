@@ -444,6 +444,14 @@ Download the paired LightX2V Lightning files once:
 mlxgen download --model lightx2v/Wan2.2-Lightning --all-files
 ```
 
+After download, you can reference the paired files in either of these ways:
+
+- public repository form: `lightx2v/Wan2.2-Lightning:<subdir>/<file>.safetensors`
+- absolute local file path: `/absolute/path/to/<file>.safetensors`
+
+For A14B, pass each adapter file as its own `--lora-paths` argument. Do not combine the two files
+into one quoted string.
+
 ```sh
 mlxgen generate \
   --model AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit \
@@ -461,7 +469,9 @@ mlxgen generate \
   --metadata \
   --replace \
   --output validation_outputs/lightx2v_wan_4step_2026_06_12/a14b_t2v_4step_lightning_q8.mp4 \
-  --lora-paths lightx2v/Wan2.2-Lightning:Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/high_noise_model.safetensors lightx2v/Wan2.2-Lightning:Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/low_noise_model.safetensors \
+  --lora-paths \
+    lightx2v/Wan2.2-Lightning:Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/high_noise_model.safetensors \
+    lightx2v/Wan2.2-Lightning:Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1/low_noise_model.safetensors \
   --lora-target-roles high_noise_transformer low_noise_transformer \
   --lora-scales 1 1
 
@@ -482,10 +492,42 @@ mlxgen generate \
   --metadata \
   --replace \
   --output validation_outputs/lightx2v_wan_4step_2026_06_12/a14b_i2v_4step_lightning_q8.mp4 \
-  --lora-paths lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors \
+  --lora-paths \
+    lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors \
+    lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors \
   --lora-target-roles high_noise_transformer low_noise_transformer \
   --lora-scales 1 1
 ```
+
+If you already manage adapter files locally, the same I2V command also works with absolute paths:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit \
+  --image docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png \
+  --prompt "Starting from the input image, the silver spaceship powers up and lifts off from the frozen ground. Blue engines brighten, snow blasts outward, vapor rolls under the hull, and the camera holds the same wide icy canyon framing while the ship rises smoothly." \
+  --negative "oversaturated colors, overexposed, static shot, blurry details, subtitles, text, watermark, painting, illustration, ugly, deformed, broken anatomy, extra limbs, cluttered background, frozen frame, low quality, jpeg artifacts" \
+  --width 480 \
+  --height 240 \
+  --frames 41 \
+  --steps 4 \
+  --guidance 1 \
+  --guidance-2 1 \
+  --flow-shift 5 \
+  --fps 20 \
+  --seed 8402 \
+  --metadata \
+  --replace \
+  --output validation_outputs/lightx2v_wan_4step_2026_06_12/a14b_i2v_4step_lightning_q8.mp4 \
+  --lora-paths \
+    /absolute/path/to/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors \
+    /absolute/path/to/Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors \
+  --lora-target-roles high_noise_transformer low_noise_transformer \
+  --lora-scales 1 1
+```
+
+Wan image-to-video preserves the source image aspect ratio and rounds to a supported video size, so
+the final width and height can differ slightly from the requested values.
 
 Treat Lightning as an explicit fast recipe, not as a universal quality replacement for the
 original Wan profile. The measured result is that it produces coherent local videos much faster.
