@@ -73,3 +73,6 @@ The backlog is useful only when planned work names what remains rather than what
 - 2026-06-13: Release `0.18.18` exposed one remaining Node 20 warning from
   `softprops/action-gh-release@v2`, so item 0042 was reopened, moved back to `planned/`, and
   narrowed to a final GitHub Release publication cleanup pass.
+- 2026-06-14: PR `#6` completed the remaining Node 24 cleanup by replacing
+  `softprops/action-gh-release@v2` with a GitHub CLI step, then restored item 0042 to
+  `completed/` after PR checks and branch release rehearsal `27464789730` passed.
