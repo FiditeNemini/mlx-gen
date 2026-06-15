@@ -1,6 +1,7 @@
 import mlx.core as mx
 from PIL import Image
 
+from mflux.models.qwen.latent_creator.qwen_latent_creator import QwenLatentCreator
 from mflux.models.qwen.variants.edit import qwen_edit_util as qwen_edit_util_module
 from mflux.models.qwen.variants.edit.qwen_edit_util import QwenEditUtil
 
@@ -72,3 +73,46 @@ def test_image_conditioning_latents_use_per_reference_vae_size(tmp_path, monkeyp
     assert cond_image_grid == [(1, 46, 90), (1, 64, 64)]
     assert image_ids.shape == (1, 46 * 90 + 64 * 64, 3)
     assert num_images == 2
+
+
+def test_create_inpaint_mask_latents_packs_binary_mask(tmp_path):
+    mask_path = tmp_path / "mask.png"
+    mask_image = Image.new("L", (32, 32), 0)
+    for x in range(16, 32):
+        for y in range(32):
+            mask_image.putpixel((x, y), 255)
+    mask_image.save(mask_path)
+
+    packed_mask = QwenEditUtil.create_inpaint_mask_latents(str(mask_path), height=32, width=32)
+    unpacked_mask = QwenLatentCreator.unpack_latents(packed_mask, height=32, width=32)
+
+    assert packed_mask.shape == (1, 4, 64)
+    assert unpacked_mask.shape == (1, 16, 4, 4)
+    assert float(mx.min(unpacked_mask[:, :, :, :2]).item()) == 0.0
+    assert float(mx.max(unpacked_mask[:, :, :, :2]).item()) == 0.0
+    assert float(mx.min(unpacked_mask[:, :, :, 2:]).item()) == 1.0
+    assert float(mx.max(unpacked_mask[:, :, :, 2:]).item()) == 1.0
+
+
+def test_blend_inpaint_latents_preserves_unmasked_region():
+    latents = mx.ones((1, 4, 64), dtype=mx.float32) * 9
+    image_latents = mx.zeros((1, 4, 64), dtype=mx.float32)
+    noise = mx.ones((1, 4, 64), dtype=mx.float32) * 2
+    mask_latents = mx.concatenate(
+        [
+            mx.zeros((1, 2, 64), dtype=mx.float32),
+            mx.ones((1, 2, 64), dtype=mx.float32),
+        ],
+        axis=1,
+    )
+
+    blended = QwenEditUtil.blend_inpaint_latents(
+        latents=latents,
+        image_latents=image_latents,
+        initial_noise=noise,
+        mask_latents=mask_latents,
+        sigma=0.5,
+    )
+
+    assert bool(mx.allclose(blended[:, :2], mx.ones((1, 2, 64), dtype=mx.float32)).item())
+    assert bool(mx.allclose(blended[:, 2:], mx.ones((1, 2, 64), dtype=mx.float32) * 9).item())

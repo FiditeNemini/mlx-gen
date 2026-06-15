@@ -45,7 +45,7 @@ The current LoRA surface is route-specific:
 
 | Route family | Current status |
 | --- | --- |
-| `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/z-image-turbo-8bit`, `AbstractFramework/flux.2-klein-9b-8bit` edit, `AbstractFramework/ernie-image-turbo-8bit` text-to-image | Exact validated q8 proof rows exist. |
+| `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/z-image-turbo-8bit`, `AbstractFramework/flux.2-klein-9b-8bit` edit, `AbstractFramework/ernie-image-turbo-8bit` text-to-image | Exact validated q8 proof rows exist. `AbstractFramework/qwen-image-edit-2511-8bit` currently has accepted proof rows on both `qwen.edit` and `qwen.inpaint`. |
 | Base Qwen Image, Qwen multi-reference or canvas rows, Z-Image latent img2img, ERNIE latent img2img, and the remaining FLUX.2 package rows | `mapped-unvalidated`: the mapping works, but the exact route still lacks a strong public A/B proof. |
 | `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` text-to-video, `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` first-frame image-to-video, `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` text-to-video, and `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` first-frame image-to-video | Exact validated q8 proof rows exist. |
 | SeedVR2, FIBO | Unsupported today. |
@@ -320,6 +320,54 @@ mlxgen generate \
   --lora-paths lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors \
   --lora-scales 1
 ```
+
+The same adapter is also the current recommended fast path for masked edit / inpaint on
+`AbstractFramework/qwen-image-edit-2511-8bit`. The accepted proof keeps the unmasked scene stable
+while changing only the masked region in two different conditions.
+
+![Qwen Image Edit 2511 q8 masked edit Lightning proof](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_contact_sheet.png)
+
+The proof uses one engine-enhancement mask and one crash-repair mask. In practical terms, Lightning
+makes a `4`-step masked edit workflow usable on the validated q8 route, which is why it is the
+recommended public path when you want fast Qwen inpaint runs.
+
+To show that the mask is actually doing the localization work, MLX-Gen also publishes a same-canvas
+control sheet with the Lightning adapter in both result columns. Those runs use the same
+`768x432` source image, prompt, seed, and adapter. The only difference is `--mask-path`. Without
+`--mask-path`, the edit recomposes the full image; with `--mask-path`, the edit stays local.
+
+![Qwen Image Edit 2511 q8 masked edit control](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_mask_control_contact_sheet.png)
+
+Download the same adapter repo:
+
+```sh
+mlxgen download --model lightx2v/Qwen-Image-Edit-2511-Lightning --all-files
+```
+
+Masked edit example:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --image docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png \
+  --mask-path mask.png \
+  --prompt "Keep the same silver spaceship, icy canyon, and sunrise lighting. Only inside the masked engine area, intensify both blue engines into brighter plasma thrusters, add dense blue glow and snow vapor around the thrusters, and preserve the rest of the image unchanged." \
+  --negative "blurry, low quality, distorted, deformed, extra ship parts, changed camera angle, changed background, text, watermark" \
+  --width 768 \
+  --height 432 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 4201 \
+  --output qwen2511edit_inpaint_lightning.png \
+  --lora-paths lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors \
+  --lora-scales 1
+```
+
+White mask pixels are repainted and black pixels are preserved. The exact validated command log and
+timings for the two proof conditions are published here:
+
+- [masked edit command log](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_command_log.md)
+- [masked edit timings on M5 Max](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_stats_m5max.json)
 
 `AbstractFramework/z-image-turbo-8bit` now has an exact text-to-image proof with
 `renderartist/Technically-Color-Z-Image-Turbo`. This row is validated for `z-image.text` only; the

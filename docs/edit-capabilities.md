@@ -51,6 +51,43 @@ The canonical validation source image is
 These rows used a `768x432`, 30-step, guidance `4` profile with
 `--scheduler flow_match_euler_discrete`.
 
+## Qwen Masked Edit / Inpaint
+
+MLX-Gen now exposes masked edit on the Qwen edit route through `--mask-path`. The current exact
+accepted proof row is:
+
+- `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.inpaint`
+
+This first public proof is intentionally narrow. It validates the q8 route only, uses one source
+image plus one mask at a time, and keeps the rest of the Qwen structured-control backlog separate
+until those rows have their own visible proof.
+
+![Qwen Image Edit 2511 q8 masked edit Lightning proof](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_contact_sheet.png)
+
+| Model | Package | Capabilities validated | Result |
+| --- | --- | --- | --- |
+| `AbstractFramework/qwen-image-edit-2511-8bit` | q8 optimized variant | masked edit / inpaint with `--mask-path` | `PASS` |
+
+The proof uses the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning` adapter as the recommended
+fast public path for `4`-step masked edits. The published contact sheet compares the practical
+regular `20`-step q8 path against the `4`-step Lightning path on two conditions:
+
+- engine enhancement inside a small localized mask;
+- crash repair inside a larger hull/cockpit mask.
+
+MLX-Gen also publishes a same-canvas control sheet using the Lightning adapter in both result
+columns. Those rows use the same `768x432` source image, the same prompt, the same seed, and the
+same Lightning adapter. The only difference is `--mask-path`. Without `--mask-path`, the model is
+free to recompose the whole scene, so framing drift is expected. With `--mask-path`, the edit
+stays local:
+
+![Qwen Image Edit 2511 q8 masked edit control](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_mask_control_contact_sheet.png)
+
+Exact commands and timings:
+
+- [masked edit command log](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_command_log.md)
+- [masked edit timings on M5 Max](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_stats_m5max.json)
+
 ## Qwen 2509 And Distilled FLUX.2 Matrix
 
 The 5x4 edit validation profile tests the same spaceship source across:
@@ -190,6 +227,7 @@ The full command logs are published with the proof assets:
 
 - [regular Qwen Image Edit command log](assets/validation/i2i-edit-5x4-2026-06-05/qwen-image-edit-command-log.md)
 - [Qwen Image Edit 2511 parity command log](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-command-log.md)
+- [Qwen Image Edit 2511 masked edit command log](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_command_log.md)
 - [5x4 FLUX.2 and Qwen Image Edit 2509 command log](assets/validation/i2i-edit-5x4-2026-06-05/edit-capability-command-log.md)
 - [reframe and outpaint command log](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-command-log.md)
 - [FLUX.2 Klein base starship command log](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-command-log.md)

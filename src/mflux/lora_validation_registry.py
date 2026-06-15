@@ -9,6 +9,7 @@ LORA_STATUS_MAPPED_UNVALIDATED = "mapped-unvalidated"
 LORA_STATUS_VALIDATED = "validated"
 
 QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID = "lora_qwen2511_q8_single_edit_multi_angle_2026_06_08"
+QWEN2511_Q8_INPAINT_LIGHTNING_PROFILE_ID = "lora_qwen2511_q8_inpaint_lightning_2026_06_15"
 QWEN2509_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID = "lora_qwen2509_q8_single_edit_multi_angle_2026_06_11"
 QWEN_EDIT_Q8_GHIBLI_PROFILE_ID = "lora_qwen_edit_q8_ghibli_edit_2026_06_11"
 QWEN2512_Q8_PIXEL_ART_PROFILE_ID = "lora_qwen2512_q8_pixel_art_t2i_2026_06_11"
@@ -35,6 +36,11 @@ _RECORDS: tuple[LoRAValidationRecord, ...] = (
         model="AbstractFramework/qwen-image-edit-2511-8bit",
         capability_id="qwen.edit",
         validation_profile=QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
+    ),
+    LoRAValidationRecord(
+        model="AbstractFramework/qwen-image-edit-2511-8bit",
+        capability_id="qwen.inpaint",
+        validation_profile=QWEN2511_Q8_INPAINT_LIGHTNING_PROFILE_ID,
     ),
     LoRAValidationRecord(
         model="AbstractFramework/qwen-image-edit-2509-8bit",

@@ -12,27 +12,28 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 13 |
-| Proposed | 9 |
+| Proposed | 10 |
 | Completed | 19 |
 | Deprecated | 0 |
 | Recurrent | 1 |
 
 ## Next recommended work
 
-1. Implement the
+1. Continue
+   [Qwen edit parity expansion](planned/0008_qwen_edit_parity_expansion.md) from the new masked
+   edit baseline. The first narrow public slice is now in place: `--mask-path` routes to
+   `qwen.inpaint`, `AbstractFramework/qwen-image-edit-2511-8bit` has an accepted masked-edit q8
+   proof row using the dedicated Lightning adapter, and the no-mask control now proves that the
+   mask is what keeps the edit local. The next concrete missing piece is structured control /
+   ControlNet-style Qwen editing.
+2. Implement the
    [LoRA capability matrix and strict application](planned/0007_lora_capability_matrix_and_strict_application.md)
    item to completion. The fail-closed contract is now in place, exact validated rows exist for
-   original Qwen Image Edit q8 single-image edit, Qwen 2511 q8 single-image edit, Qwen 2509 q8
-   single-image edit, Qwen Image 2512 q8 text-to-image, Z-Image Turbo q8 text-to-image, ERNIE
-   Image Turbo q8 text-to-image, and FLUX.2 Klein 9B q8 single-image edit, but base Qwen Image
-   and the remaining route directions still need model-backed accepted-adapter proofs before the
-   item can be considered done.
-2. Start
-   [Qwen edit parity expansion](planned/0008_qwen_edit_parity_expansion.md) as the next concrete
-   image-edit feature pass. Official `Qwen-Image-Edit-2509` documentation advertises native
-   structured controls, the local Diffusers checkout includes Qwen control and control-inpaint
-   pipelines, and public control weights now exist. This is the strongest missing feature inside
-   an already-supported family.
+   original Qwen Image Edit q8 single-image edit, Qwen 2511 q8 single-image edit and masked edit,
+   Qwen 2509 q8 single-image edit, Qwen Image 2512 q8 text-to-image, Z-Image Turbo q8
+   text-to-image, ERNIE Image Turbo q8 text-to-image, and FLUX.2 Klein 9B q8 single-image edit,
+   but base Qwen Image and the remaining route directions still need model-backed accepted-adapter
+   proofs before the item can be considered done.
 3. Finish
    [Wan prompt adherence parity validation](planned/0015_wan_prompt_adherence_parity_validation.md)
    before treating T2V/I2V prompt or motion behavior as quality-proven; explicitly match official
@@ -66,7 +67,8 @@ outside chat history.
    [Wan VACE video editing and control](proposed/0039_wan_vace_video_editing_and_control.md) in
    view once current Wan parity work settles. Upstream Wan already has video-to-video and VACE
    editing/control pipelines, and this is a better medium-term extension than jumping to a second
-   unrelated video family too early.
+   unrelated video family too early. Keep `Wan2.2-Animate-14B` and `Wan2.2-S2V-14B` as adjacent
+   Wan-family watch points, not as silent scope creep inside 0039.
 9. Keep the
    [FLUX.2-dev multi-angle LoRA support](planned/0034_flux2_dev_multi_angle_lora_support.md)
    item parked until 0007 is materially complete. The lovis multi-angle adapter still targets
@@ -118,6 +120,11 @@ outside chat history.
    [proposed item 0038](proposed/0038_bonsai_packed_lora_runtime_support.md). The current packed
    runtime does not expose replaceable linear targets for standard LoRA injection, and the first
    public “Bonsai LoRA” candidate inspected used unrelated SDXL UNet keys.
+21. Keep proposed
+   [Z-Image native inpaint](proposed/0043_zimage_native_inpaint.md) in view as the clearest
+   next image-route opportunity after Qwen control/inpaint. Official Diffusers docs and local
+   upstream code already expose a native Z-Image inpaint pipeline, while MLX-Gen currently stops
+   at text generation plus latent img2img.
 
 ## Planned ledger
 
@@ -144,12 +151,13 @@ outside chat history.
 | 0004 | [Bonsai binary 1-bit runtime support](proposed/0004_bonsai_binary_1bit_runtime_support.md) | T2I, low-bit runtime | Promote after ternary works and MLX 1-bit packed affine runtime support is proven or accepted by ADR. |
 | 0006 | [Wan I2V prompt motion validation](proposed/0006_wan_i2v_prompt_motion_validation.md) | Video, I2V quality | Promote only if planned item 0015 shows an I2V-specific motion or prompt-adherence gap that needs a separate fix. |
 | 0009 | [Video second-family selection](proposed/0009_video_second_family_selection.md) | Video model roadmap | Promote after Wan stabilization leaves room for the next video backend. |
-| 0010 | [LTX-2.3 conditioning and LoRA spike](proposed/0010_ltx2_conditioning_lora_spike.md) | Video, LTX, LoRA | Promote if LTX-2.3 becomes the selected second video family or a local spike proves feasibility. |
+| 0010 | [LTX family conditioning and LoRA spike](proposed/0010_ltx2_conditioning_lora_spike.md) | Video, LTX, LoRA | Promote if the LTX family becomes the selected second video family or a local spike proves feasibility. |
 | 0011 | [Next-generation image/edit watchlist](proposed/0011_next_generation_image_edit_watchlist.md) | Image/edit roadmap | Promote when a watched model becomes locally cacheable, licensed, and useful enough for implementation. |
 | 0032 | [SeedVR2 video restoration and upscaling](proposed/0032_seedvr2_video_restoration_upscaling.md) | Video restoration, upscale, SeedVR2 | Promote after the official temporal inference contract is audited and one small MP4 smoke profile is feasible. |
 | 0038 | [Bonsai packed-runtime LoRA support](proposed/0038_bonsai_packed_lora_runtime_support.md) | Bonsai, LoRA, packed runtime architecture | Promote only if MLX-Gen adopts an unpacked Bonsai LoRA route, a packed-kernel LoRA path, or a real public Bonsai-compatible adapter family. |
 | 0039 | [Wan VACE video editing and control](proposed/0039_wan_vace_video_editing_and_control.md) | Video editing, Wan, VACE | Promote after current Wan parity work settles and one official Wan VACE or Wan video-to-video route is selected for bounded smoke validation. |
 | 0041 | [LightX2V Wan distilled-model loader support](proposed/0041_lightx2v_wan_distilled_model_loader_support.md) | Video, Wan, LightX2V, native distilled checkpoints | Promote after completed item 0040 and one exact distilled A14B file set is audited deeply enough to size the scheduler-plus-loader delta. |
+| 0043 | [Z-Image native inpaint](proposed/0043_zimage_native_inpaint.md) | Image edit, Z-Image, mask-based inpaint | Promote after one exact Z-Image inpaint route, mask contract, and proof profile are selected from the official upstream surface. |
 
 ## Completed ledger
 
@@ -257,6 +265,11 @@ No deprecated backlog items yet.
   work into planned item 0008, added Wan VACE as proposed item 0039, split LightX2V fast-video
   work into planned item 0040 for LoRA-based 4-step A14B acceleration and proposed item 0041 for
   native distilled-model loader support.
+- Added 2026-06-15 opportunity refresh: updated the video-roadmap proposals to track the current
+  LTX family rather than only older LTX-2.3 framing, refreshed the image-edit watchlist with
+  Step1X-Edit, JoyAI, OmniGen2, and current HiDream/FLUX Kontext reality, tightened Wan VACE to
+  stay VACE-scoped despite newer Wan Animate/S2V releases, and added proposed item 0043 for
+  native Z-Image inpaint.
 - Added 2026-06-12 post-0.18.17 hygiene: the release succeeded, LightX2V/Wan proof assets and
   public LoRA docs were refreshed, and planned item 0042 now tracks the GitHub Actions Node 20
   deprecation warning observed in release run `27440684820` before the Node 24 default switch.

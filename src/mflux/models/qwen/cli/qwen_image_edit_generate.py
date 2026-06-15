@@ -25,6 +25,14 @@ def main():
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_argument("--image-paths", type=Path, nargs="+", required=True, help="Local paths to one or more init images. For single image editing, provide one path. For multiple image editing, provide multiple paths.")  # fmt: off
     parser.add_argument(
+        "--mask-path",
+        "--masked-image-path",
+        dest="mask_path",
+        type=Path,
+        default=None,
+        help="Optional mask image path for localized Qwen edits. White pixels are repainted and black pixels are preserved.",
+    )
+    parser.add_argument(
         "--reframe-padding",
         default=None,
         help=(
@@ -110,12 +118,13 @@ def main():
                         negative_prompt=_read_negative_prompt(args),
                         width=args.width,
                         height=args.height,
-                        guidance=args.guidance,
-                        image_path=source_image_paths[0],  # Use original source for metadata
-                        image_paths=image_paths,
-                        num_inference_steps=args.steps,
-                        scheduler=args.scheduler,
-                        canvas_policy=args.canvas_policy,
+                    guidance=args.guidance,
+                    image_path=source_image_paths[0],  # Use original source for metadata
+                    image_paths=image_paths,
+                    mask_path=args.mask_path,
+                    num_inference_steps=args.steps,
+                    scheduler=args.scheduler,
+                    canvas_policy=args.canvas_policy,
                     )
                     if outpaint_canvas is not None:
                         image.image = OutpaintUtil.composite_source_region(
@@ -174,6 +183,11 @@ def _resolve_image_paths(
 
 
 def _validate_canvas_args(*, parser: CommandLineParser, args, source_image_paths: list[str]) -> None:
+    if args.mask_path is not None:
+        if len(source_image_paths) != 1:
+            parser.error("--mask-path requires exactly one --image-paths value.")
+        if args.outpaint_padding is not None or args.reframe_padding is not None:
+            parser.error("--mask-path cannot be combined with --reframe-padding or --outpaint-padding.")
     if args.outpaint_padding is None and args.reframe_padding is None:
         return
     if args.outpaint_padding is not None and args.reframe_padding is not None:

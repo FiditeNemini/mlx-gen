@@ -6,6 +6,7 @@ from mflux.lora_validation_registry import (
     ERNIE_TURBO_Q8_ANIME_STYLE_PROFILE_ID,
     FLUX2_KLEIN9B_Q8_CONSISTENCY_EDIT_PROFILE_ID,
     QWEN2509_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
+    QWEN2511_Q8_INPAINT_LIGHTNING_PROFILE_ID,
     QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
     QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
     QWEN_EDIT_Q8_GHIBLI_PROFILE_ID,
@@ -48,6 +49,7 @@ FLUX2_KLEIN_BASE_STARSHIP_SOURCE = REFRAME_OUTPAINT_SOURCE
 LORA_VALIDATION_DIR = "docs/assets/validation/lora-2026-06-11"
 WAN_LORA_VALIDATION_DIR = "docs/assets/validation/wan-lora-2026-06-11"
 LIGHTX2V_WAN_4STEP_VALIDATION_DIR = "docs/assets/validation/lightx2v-wan-4step-2026-06-12"
+QWEN_INPAINT_VALIDATION_DIR = "docs/assets/validation/qwen-inpaint-2026-06-15"
 
 
 @dataclass(frozen=True)
@@ -296,6 +298,36 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
             title="Qwen Image Edit 2511 q8 Multi-Angle LoRA Validation",
             canonical_source=CANONICAL_SOURCE,
             description="Exact single-image edit LoRA proof for Qwen Image Edit 2511 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2511_Q8_INPAINT_LIGHTNING_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-2511-8bit",
+                family="Qwen Image Edit 2511",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{QWEN_INPAINT_VALIDATION_DIR}/qwen2511_q8_inpaint_lightning_contact_sheet.png",
+                source_images=(
+                    "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+                    "docs/assets/examples/spaceship-snow/03_i2i_crash_snow.png",
+                ),
+                prompt=(
+                    "Two-condition masked edit proof. Condition A: intensify the masked engines into brighter "
+                    "blue plasma thrusters while preserving the rest of the image. Condition B: repair the "
+                    "masked hull and cockpit while preserving the damaged snow scene outside the mask."
+                ),
+                reviewer_notes=(
+                    "PASS on the 2026-06-15 same-seed masked-edit proof. The accepted q8 row uses "
+                    "Qwen Image Edit 2511 with --mask-path and the LightX2V 4-step Lightning adapter. "
+                    "The public proof publishes two conditions: localized engine enhancement and localized "
+                    "crash repair, each against the regular 20-step q8 edit path."
+                ),
+                evidence_date="2026-06-15",
+            ),
+            title="Qwen Image Edit 2511 q8 Masked Edit Lightning Validation",
+            canonical_source="docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+            description="Exact masked-edit LoRA proof for Qwen Image Edit 2511 q8.",
         ),
         _single_record_profile(
             _lora_record(

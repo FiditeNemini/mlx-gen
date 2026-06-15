@@ -20,6 +20,10 @@ SeedVR2 paper describes one-step video restoration. MLX-Gen 0.18.13 added direct
 checkpoint loading and reusable q8/q4 package preparation, but only for single-image restoration
 and upscaling.
 
+Update 2026-06-15: the published `ByteDance-Seed/SeedVR2-3B` route type is explicitly
+`Video-to-Video`, so MLX-Gen's current image-only upscale path should now be treated as a useful
+subset rather than an approximate match for the official model purpose.
+
 Sources checked:
 
 - ByteDance-Seed SeedVR collection: https://huggingface.co/collections/ByteDance-Seed/seedvr

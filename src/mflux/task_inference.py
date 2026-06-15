@@ -610,6 +610,17 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 **i2i_canvas,
             ),
             GenerationCapability(
+                id="qwen.inpaint",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id="qwen.edit",
+                min_images=1,
+                max_images=1,
+                supports_mask=True,
+                **_lora_capability_kwargs(identity=identity, capability_id="qwen.inpaint", supports_lora=True),
+                **i2i_canvas,
+            ),
+            GenerationCapability(
                 id="qwen.reframe",
                 public_task=IMAGE_TO_IMAGE,
                 mode=MODE_EDIT_REFERENCE,

@@ -306,6 +306,89 @@ def test_qwen_edit_backend_canvas_options_reject_explicit_size(monkeypatch, tmp_
     assert "computes --width and --height" in capsys.readouterr().err
 
 
+def test_qwen_edit_backend_forwards_mask_path(monkeypatch, tmp_path):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    source = tmp_path / "source.png"
+    mask = tmp_path / "mask.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    Image.new("L", (12, 8), color=255).save(mask)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self):
+            self.image = Image.new("RGB", (12, 8), color=(0, 255, 0))
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeQwenEdit:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_edit_generate, "QwenImageEdit", FakeQwenEdit)
+    monkeypatch.setattr(qwen_image_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit-2511",
+            "--image-paths",
+            str(source),
+            "--mask-path",
+            str(mask),
+            "--prompt",
+            "repair the cockpit",
+            "--output",
+            str(output),
+        ],
+    )
+
+    qwen_image_edit_generate.main()
+
+    assert observed["generate"]["mask_path"] == mask
+    assert observed["generate"]["image_paths"] == [str(source)]
+
+
+def test_qwen_edit_backend_rejects_mask_with_outpaint(monkeypatch, tmp_path, capsys):
+    from mflux.models.qwen.cli import qwen_image_edit_generate
+
+    source = tmp_path / "source.png"
+    mask = tmp_path / "mask.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    Image.new("L", (12, 8), color=255).save(mask)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen-edit",
+            "--model",
+            "qwen-image-edit-2511",
+            "--image-paths",
+            str(source),
+            "--mask-path",
+            str(mask),
+            "--outpaint-padding",
+            "2,4,2,4",
+            "--prompt",
+            "repair the cockpit",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        qwen_image_edit_generate.main()
+
+    assert "cannot be combined" in capsys.readouterr().err
+
+
 def test_qwen_base_multiple_images_requires_edit_model(capsys):
     with pytest.raises(SystemExit):
         mlx_gen._resolve_invocation(
@@ -519,6 +602,7 @@ def test_validation_command_lists_profiles(capsys):
         "flux2_klein_base_starship_2026_06_10",
     ]
     assert "lora_qwen_edit_q8_ghibli_edit_2026_06_11" in profile_ids
+    assert "lora_qwen2511_q8_inpaint_lightning_2026_06_15" in profile_ids
     assert "lora_wan_a14b_q8_lightx2v_4step_i2v_2026_06_12" in profile_ids
     assert "lora_wan_a14b_q8_lightx2v_4step_t2v_2026_06_12" in profile_ids
 
@@ -945,6 +1029,57 @@ def test_mask_path_is_rejected_for_flux2_edit_mode(capsys):
                 "mask.png",
                 "--prompt",
                 "make it cinematic",
+            ]
+        )
+
+    assert "mask-path is only supported" in capsys.readouterr().err
+
+
+def test_mask_path_routes_qwen_edit_inpaint():
+    for model in [
+        "AbstractFramework/qwen-image-edit-8bit",
+        "AbstractFramework/qwen-image-edit-2509-8bit",
+        "AbstractFramework/qwen-image-edit-2511-8bit",
+    ]:
+        invocation = mlx_gen._resolve_invocation(
+            [
+                "--model",
+                model,
+                "--image",
+                "input.png",
+                "--mask-path",
+                "mask.png",
+                "--prompt",
+                "repair the hull",
+            ]
+        )
+
+        assert invocation.target_name == "mflux-generate-qwen-edit"
+        assert invocation.argv == [
+            "mflux-generate-qwen-edit",
+            "--model",
+            model,
+            "--image-paths",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--prompt",
+            "repair the hull",
+        ]
+
+
+def test_mask_path_is_rejected_for_qwen_base_route(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-2512-8bit",
+                "--image",
+                "input.png",
+                "--mask-path",
+                "mask.png",
+                "--prompt",
+                "repair the hull",
             ]
         )
 

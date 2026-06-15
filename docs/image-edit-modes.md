@@ -2,7 +2,7 @@
 
 MLX-Gen exposes one public `image-to-image` task, but different models support different edit
 behaviors. Use this guide when you need to choose between latent restyling, instruction editing,
-multi-reference composition, generative reframe, and outpaint.
+masked edit/inpaint, multi-reference composition, generative reframe, and outpaint.
 
 For the current model-by-model proof assets, use [Image Edit Capabilities](edit-capabilities.md).
 That page answers "which exact model or package passed visual QA?" This page answers "what kind of
@@ -14,6 +14,7 @@ edit should I expect from each mode?"
 | --- | --- | --- |
 | Change the overall mood, style, or lighting of one source image | `latent-img2img` | The whole image is reinterpreted from the source latent. Good for variation and restyle; weaker for precise object edits. |
 | Follow an instruction while keeping the scene layout recognizable | `edit-reference` | The source image stays active as a reference. Better composition hold than latent img2img. |
+| Change only one local area and keep the rest of the frame stable | masked edit / inpaint | Use an edit-capable route with `--mask-path`. White mask pixels are repainted; black pixels are preserved. |
 | Use one image for structure and another for style, material, or lighting | `multi-reference` | The first image anchors geometry; later images contribute additional references. |
 | Reveal more of the scene around the source image | `generative reframe` | The model generates a wider view. It may redraw parts of the source image while composing the larger scene. |
 | Extend the canvas beyond the crop while trying to keep the source region stable | `outpaint` | The model fills new space around the source image. This is the closest MLX-Gen route to source-preserving extension, but it is still generative. |
@@ -87,6 +88,49 @@ mlxgen generate \
 
 Expected result: the scene structure should hold more tightly than latent img2img, while the prompt
 changes appearance or object state.
+
+## Masked Edit / Inpaint
+
+Use masked edit when the change should stay local: brighten a light source, repair one damaged
+region, replace one object area, or redraw part of a subject while keeping the rest of the frame
+stable.
+
+This mode is best for:
+
+- local repairs and replacements;
+- changing one object part without recomposing the whole frame;
+- preserving the original framing and background outside the edited area.
+
+This mode is weaker for:
+
+- global restyles;
+- wide composition changes;
+- multi-reference compositions.
+
+The public contract is simple:
+
+- pass one source image with `--image`;
+- pass one mask with `--mask-path`;
+- white mask pixels are repainted;
+- black mask pixels are preserved.
+
+If you omit `--mask-path` and keep the same prompt and seed, an edit-capable route is still free
+to recompose the frame. The mask is what turns that global edit behavior into a localized edit.
+
+Current exact public proof exists for `AbstractFramework/qwen-image-edit-2511-8bit` with the
+Lightning adapter fast path. See [Image Edit Capabilities](edit-capabilities.md) for the accepted
+contact sheet and command log.
+
+Example:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --image input.png \
+  --mask-path mask.png \
+  --prompt "Repair the damaged hull inside the mask and keep the rest of the scene unchanged." \
+  --output repaired.png
+```
 
 ## Multi-Reference
 

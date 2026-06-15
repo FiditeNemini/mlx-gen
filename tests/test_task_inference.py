@@ -160,6 +160,25 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
     with pytest.raises(TaskInferenceError, match="mask-path is only supported"):
         mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_mask=True)
 
+    qwen_inpaint = mlxgen.resolve_generation_plan(
+        model="qwen-image-edit-2511",
+        image_count=1,
+        has_mask=True,
+    )
+    qwen_base_inpaint = mlxgen.resolve_generation_plan(
+        model="qwen-image-edit",
+        image_count=1,
+        has_mask=True,
+    )
+    qwen_2509_inpaint = mlxgen.resolve_generation_plan(
+        model="qwen-image-edit-2509",
+        image_count=1,
+        has_mask=True,
+    )
+    assert qwen_inpaint.capability_id == "qwen.inpaint"
+    assert qwen_base_inpaint.capability_id == "qwen.inpaint"
+    assert qwen_2509_inpaint.capability_id == "qwen.inpaint"
+
     flux2_outpaint = mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_outpaint=True)
     qwen_outpaint = mlxgen.resolve_generation_plan(
         model="qwen-image-edit-2511",
@@ -260,12 +279,16 @@ def test_qwen_2511_q8_single_edit_lora_status_is_exact():
     capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-edit-2511-8bit")
 
     edit = next(capability for capability in capabilities.capabilities if capability.id == "qwen.edit")
+    inpaint = next(capability for capability in capabilities.capabilities if capability.id == "qwen.inpaint")
     reframe = next(capability for capability in capabilities.capabilities if capability.id == "qwen.reframe")
     outpaint = next(capability for capability in capabilities.capabilities if capability.id == "qwen.outpaint")
     multi = next(capability for capability in capabilities.capabilities if capability.id == "qwen.multi-reference")
 
     assert edit.lora_status == "validated"
     assert edit.lora_validation_profile == "lora_qwen2511_q8_single_edit_multi_angle_2026_06_08"
+    assert inpaint.supports_mask is True
+    assert inpaint.lora_status == "validated"
+    assert inpaint.lora_validation_profile == "lora_qwen2511_q8_inpaint_lightning_2026_06_15"
     assert reframe.lora_status == "mapped-unvalidated"
     assert outpaint.lora_status == "mapped-unvalidated"
     assert multi.lora_status == "mapped-unvalidated"
@@ -491,6 +514,11 @@ def test_lora_validation_profiles_are_resolvable():
         (
             "AbstractFramework/qwen-image-edit-2511-8bit",
             "lora_qwen2511_q8_single_edit_multi_angle_2026_06_08",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "lora_qwen2511_q8_inpaint_lightning_2026_06_15",
             MODE_EDIT_REFERENCE,
         ),
         (

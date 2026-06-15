@@ -130,6 +130,7 @@ For a plain-language guide to what each mode is good at, see
 | --- | --- | --- | --- | --- |
 | Whole-image variation or restyle from a source image | `latent-img2img` | exactly one image | pass `--image-strength` or `--i2i-mode latent` on a model that supports latent I2I | Yes |
 | Instruction edit, object/layout change, or composition-preserving style edit | `edit-reference` | one image | default for FLUX.2 and dedicated edit checkpoints when one image is supplied without `--image-strength`; or pass `--i2i-mode edit` | No |
+| Localized masked edit / inpaint | `edit-reference` with mask support | one image + one mask | pass `--mask-path` on a model whose capability has `supports_mask=true` | No |
 | Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
 | Experimental generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
 | Experimental backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
@@ -143,6 +144,14 @@ Use edit/reference I2I when the prompt is an instruction: remove an object, chan
 turn a scene into a pencil sketch while preserving layout, reposition or reshape a subject, or keep
 the composition stable. Edit/reference and multi-reference routes use the image(s) as conditioning
 or references, so `--image-strength` is rejected before loading weights.
+
+When a capability row reports `supports_mask=true`, the same edit/reference route also accepts
+`--mask-path` for localized masked edit or inpaint. White mask pixels are repainted and black mask
+pixels are preserved. The current exact public proof row is
+`AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.inpaint`; see
+[Image Edit Capabilities](edit-capabilities.md) and [LoRA](lora.md) for the published masked-edit
+contact sheet and the recommended Lightning fast path. Without `--mask-path`, the same route still
+behaves like a global edit and may recompose framing.
 
 In `auto` mode, the selected model's default capability wins. FLUX.2 routes one image to
 `edit-reference`, supports latent I2I when `--image-strength` is supplied, and supports

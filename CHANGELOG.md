@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Qwen masked edit / inpaint proof**: add first-class `--mask-path` support on the Qwen edit
+  route, plus a validated `AbstractFramework/qwen-image-edit-2511-8bit` q8 masked-edit proof row
+  with a two-condition contact sheet, command log, and M5 Max timings for the regular `20`-step
+  path versus the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning` `4`-step path.
+- **Qwen masked edit control sheet**: add a same-prompt same-seed no-mask-versus-mask Lightning
+  control sheet, showing that the dedicated mask is what keeps the Qwen 2511 q8 edit localized.
+
+### Changed
+
+- **Qwen image-edit docs**: document masked edit / inpaint in the image-edit guide, the capability
+  matrix, the API reference, the FAQ, and the LoRA guide, and surface the dedicated Qwen 2511
+  Lightning adapter as the recommended fast public path for masked edits on the validated q8 row.
+
 ## [0.18.18] - 2026-06-13
 
 ### Changed

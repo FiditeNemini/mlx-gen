@@ -1044,6 +1044,7 @@ def mflux_qwen_edit_parser() -> CommandLineParser:
     parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_argument("--image-paths", type=Path, nargs="+", required=True, help="Local paths to init images")
+    parser.add_argument("--mask-path", "--masked-image-path", dest="mask_path", type=Path, default=None)
     parser.add_output_arguments()
     return parser
 
@@ -1119,6 +1120,14 @@ def test_qwen_edit_args(mflux_qwen_edit_parser, mflux_qwen_edit_minimal_argv):
         assert args.model == "qwen-image-edit-2511"
         assert args.model_path is None
         assert args.steps == 40
+
+    with patch("sys.argv", mflux_qwen_edit_minimal_argv + ["--mask-path", "mask.png"]):
+        args = mflux_qwen_edit_parser.parse_args()
+        assert args.mask_path == Path("mask.png")
+
+    with patch("sys.argv", mflux_qwen_edit_minimal_argv + ["--masked-image-path", "mask.png"]):
+        args = mflux_qwen_edit_parser.parse_args()
+        assert args.mask_path == Path("mask.png")
 
 
 # ============================================================================

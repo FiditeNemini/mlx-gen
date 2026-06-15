@@ -43,7 +43,8 @@ The main capabilities are:
 - text-to-image generation with Qwen Image, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image,
   FIBO, and their optimized quantized variants where available;
 - image-to-image modes, including latent img2img, instruction/reference edits, multi-reference
-  edits, and experimental reframe/outpaint workflows where the selected model supports them;
+  edits, masked edit/inpaint where the selected model supports `--mask-path`, and experimental
+  reframe/outpaint workflows where the selected model supports them;
 - Wan2.2 text-to-video and image-to-video, including TI2V-5B BF16/q8 packages plus A14B
   T2V/I2V BF16 and mixed q8/BF16 packages; Wan I2V resolves output size from the source
   image aspect ratio so inputs are not stretched into a mismatched canvas;
@@ -57,8 +58,9 @@ The main capabilities are:
   original/2509/2511, Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, ERNIE Image Turbo
   text-to-image, and all current Wan q8 video routes; the LoRA guide now includes the documented
   `720p` Wan q8-vs-BF16 LightX2V keyframe comparison, readable `41`-frame M5 Max progress
-  matrices, same-seed no-LoRA-versus-Lightning A/B sheets, a `240p`-versus-`480p` T2V sweep, and
-  time/RSS tables for T2V and I2V; base Qwen Image remains experimental, and Bonsai LoRA stays
+  matrices, same-seed no-LoRA-versus-Lightning A/B sheets, a `240p`-versus-`480p` T2V sweep,
+  time/RSS tables for T2V and I2V, and a Qwen Image Edit 2511 q8 masked-edit proof using the
+  dedicated Lightning adapter; base Qwen Image remains experimental, and Bonsai LoRA stays
   fail-closed;
 - shared progress events for applications embedding MLX-Gen.
 
@@ -188,7 +190,7 @@ included assets.
 For current image-edit contact sheets, command logs, and model/package status across Qwen Image
 Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I models, see
 [docs/edit-capabilities.md](docs/edit-capabilities.md).
-For a plain-language guide to latent img2img, instruction edit, multi-reference composition,
+For a plain-language guide to latent img2img, instruction edit, masked edit/inpaint, multi-reference composition,
 generative reframe, and outpaint, see [docs/image-edit-modes.md](docs/image-edit-modes.md).
 
 ## Published Models

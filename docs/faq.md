@@ -242,6 +242,36 @@ For Qwen edit models, use the exact version you intend. `qwen-image-edit` is the
 single-reference edit checkpoint. Use `qwen-image-edit-2509` or `qwen-image-edit-2511` when you
 need a Qwen edit model that can route multi-reference requests.
 
+## How Do I Do Masked Edit Or Inpaint?
+
+Use a model whose capability row reports `supports_mask=true`, then pass one input image plus
+`--mask-path`. White mask pixels are repainted and black mask pixels are preserved.
+
+Without `--mask-path`, the same edit route can still recompose the whole frame. The mask is what
+keeps the change local.
+
+The current exact public proof row is `AbstractFramework/qwen-image-edit-2511-8bit`. The
+recommended fast public path uses the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning`
+adapter:
+
+```sh
+mlxgen download --model lightx2v/Qwen-Image-Edit-2511-Lightning --all-files
+
+mlxgen generate \
+  --model AbstractFramework/qwen-image-edit-2511-8bit \
+  --image input.png \
+  --mask-path mask.png \
+  --prompt "Repair the damaged hull inside the mask and keep the rest of the scene unchanged." \
+  --steps 4 \
+  --guidance 1 \
+  --output repaired.png \
+  --lora-paths lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors \
+  --lora-scales 1
+```
+
+For the accepted contact sheet, timings, and full example commands, see
+[Image Edit Capabilities](edit-capabilities.md) and [LoRA](lora.md).
+
 ## Which Qwen Image Edit Model Should I Use?
 
 Use the exact Qwen edit handle for the capability you need:

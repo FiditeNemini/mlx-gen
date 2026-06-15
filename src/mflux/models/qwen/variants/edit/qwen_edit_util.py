@@ -1,4 +1,6 @@
 import mlx.core as mx
+import numpy as np
+from PIL import Image
 
 from mflux.models.common.latent_creator.latent_creator import LatentCreator
 from mflux.models.common.vae.tiling_config import TilingConfig
@@ -55,6 +57,45 @@ class QwenEditUtil:
 
         num_images = len(image_paths)
         return image_latents, image_ids, all_image_grids, num_images
+
+    @staticmethod
+    def create_inpaint_mask_latents(
+        mask_path: str,
+        *,
+        height: int,
+        width: int,
+        num_channels_latents: int = 16,
+    ) -> mx.array:
+        latent_width = width // 8
+        latent_height = height // 8
+        with Image.open(mask_path) as image:
+            mask_image = image.convert("L").resize((latent_width, latent_height), Image.Resampling.NEAREST)
+        mask_values = np.array(mask_image, dtype=np.float32) / 255.0
+        mask = mx.array(mask_values)[None, None, :, :]
+        mask = mx.where(mask < 0.5, mx.zeros_like(mask), mx.ones_like(mask))
+        mask = mx.repeat(mask, repeats=num_channels_latents, axis=1)
+        return QwenLatentCreator.pack_latents(
+            latents=mask,
+            height=height,
+            width=width,
+            num_channels_latents=num_channels_latents,
+        )
+
+    @staticmethod
+    def blend_inpaint_latents(
+        *,
+        latents: mx.array,
+        image_latents: mx.array,
+        initial_noise: mx.array,
+        mask_latents: mx.array,
+        sigma: mx.array | float,
+    ) -> mx.array:
+        init_latents = LatentCreator.add_noise_by_interpolation(
+            clean=image_latents,
+            noise=initial_noise,
+            sigma=sigma,
+        )
+        return (1 - mask_latents) * init_latents + mask_latents * latents
 
     @staticmethod
     def _conditioning_vae_size(image_path: str, width: int | None = None, height: int | None = None) -> tuple[int, int]:

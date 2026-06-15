@@ -14,21 +14,26 @@
 
 ## Context
 
-The May 2026 open image landscape is moving quickly. MLX-Gen should keep shipping Qwen, FLUX.2,
+The June 2026 open image landscape is moving quickly. MLX-Gen should keep shipping Qwen, FLUX.2,
 Z-Image, ERNIE, and Bonsai support, but it also needs a watchlist for models that could change the
 best local Apple Silicon strategy.
 
-Two candidates stand out:
+The strongest external watch candidates right now are:
 
 - HiDream-O1-Image, because it is MIT-licensed, supports text-to-image, editing, and
   subject-driven personalization, and uses a pixel-level unified transformer rather than the usual
   separate VAE/text-encoder stack.
-- Qwen-Image-2.0, because the May 2026 technical report describes a unified generation and editing
-  model with high-fidelity generation and precise editing. Public weights and load paths still need
-  verification before it becomes implementation work.
+- Step1X-Edit-v1p2, because it is Apache 2.0, openly published, and pushes hard on reasoning-heavy
+  image editing inside a Diffusers-friendly public surface.
+- JoyAI-Image-Edit, because it is Apache 2.0, ships a dedicated Diffusers repo, and targets the
+  same direct edit space that AbstractVision cares about.
+- OmniGen2, because it is Apache 2.0, Diffusers-ready, and tries to unify text-to-image, editing,
+  and in-context multimodal generation behind one public model family.
 
-Z-Image-Edit and Z-Image-Omni-Base are also worth tracking: the Z-Image model card describes edit
-and omni variants, but marks them as not yet released at the time checked.
+Qwen-Image-2.0 remains worth tracking because the technical report describes a stronger unified
+generation/editing path, but it still needs public weights and loading code before it becomes
+implementation work. Z-Image-Edit and Z-Image-Omni-Base also remain worth tracking: the Z-Image
+docs still describe them as not yet released.
 
 ## Current code reality
 
@@ -36,8 +41,10 @@ and omni variants, but marks them as not yet released at the time checked.
   Turbo, Bonsai ternary, and FIBO family routing.
 - Local Diffusers includes `hidream_image`, `glm_image`, `flux`, `flux2`, `qwenimage`, and
   `z_image` pipelines.
-- `ModelConfig` does not include HiDream-O1, Qwen-Image-2.0, GLM-Image, FLUX.1 Kontext, or
-  Z-Image-Edit/Omni as first-class MLX-Gen targets.
+- `ModelConfig` does not include HiDream-O1, Qwen-Image-2.0, GLM-Image, Step1X-Edit, JoyAI,
+  OmniGen2, or Z-Image-Edit/Omni as first-class MLX-Gen targets.
+- MLX-Gen already has explicit FLUX.1 Kontext code and config surfaces, so Kontext is no longer a
+  missing-implementation watch item. It is now mainly a product-positioning and license question.
 - HiDream-O1 likely needs an MLX-VLM/pixel-space design review rather than a small weight-mapping
   addition.
 
@@ -59,9 +66,12 @@ Maintain a watchlist table and promote only after concrete evidence appears:
 | Candidate | Current evidence | Proposed status |
 | --- | --- | --- |
 | HiDream-O1-Image / Dev | MIT, 8-9B class, text-to-image, editing, subject-driven personalization, native 2048px claims, Transformers loading, local Diffusers pipeline. | Research after Qwen parity and ERNIE non-turbo validation. |
+| Step1X-Edit-v1p2 | Apache 2.0, public Diffusers usage, explicit image-edit focus, reasoning-heavy edit framing. | Watch; likely worth a focused upstream smoke before any MLX port work. |
+| JoyAI-Image-Edit / Diffusers | Apache 2.0, dedicated edit family, public Diffusers repo, relevant to direct instruction editing. | Watch; compare against Qwen 2511 and Step1X before promoting. |
+| OmniGen2 | Apache 2.0, Any-to-Any positioning, public Diffusers route, strong in-context multimodal claim. | Watch; only promote if MLX-Gen decides the multimodal/edit opportunity is worth a new runtime shape. |
 | Qwen-Image-2.0 | May 2026 technical report describes unified generation/editing and stronger VAE research. | Watch until public weights and Diffusers/Transformers loading paths are verified. |
 | Z-Image-Edit / Z-Image-Omni-Base | Z-Image card describes editing/omni variants but says they are to be released. | Watch; likely high value once weights ship because Z-Image is already in MLX-Gen. |
-| FLUX.1 Kontext | Strong open-weight image editing, Diffusers support, but non-commercial license and overlaps Qwen Edit. | Deprioritize for native MLX-Gen; consider only if user explicitly needs it. |
+| FLUX.1 Kontext | Already present locally in MLX-Gen, but gated/non-commercial and partly overlaps Qwen edit goals. | Keep as a positioning/licensing watch item, not a missing-core-model item. |
 | GLM-Image | MIT and local Diffusers pipeline, but custom GLM/VLM stack. | Lower priority than ERNIE/Qwen/HiDream unless text-rendering evidence beats them locally. |
 
 ## Why it might matter
@@ -105,6 +115,11 @@ existing Qwen/FLUX-style backend.
 
 - Local Diffusers checkout pipelines under `diffusers/src/diffusers/pipelines/`
 - HiDream-O1-Image-Dev model card: https://huggingface.co/HiDream-ai/HiDream-O1-Image-Dev
+- HiDream-O1-Image model card: https://huggingface.co/HiDream-ai/HiDream-O1-Image
+- Step1X-Edit-v1p2 model card: https://huggingface.co/stepfun-ai/Step1X-Edit-v1p2
+- JoyAI-Image-Edit-Diffusers model card: https://huggingface.co/jdopensource/JoyAI-Image-Edit-Diffusers
+- JoyAI-Image-Edit base model: https://huggingface.co/jdopensource/JoyAI-Image-Edit
+- OmniGen2 model card: https://huggingface.co/OmniGen2/OmniGen2
 - Qwen-Image-2.0 technical report: https://arxiv.org/abs/2605.10730
 - Z-Image-Turbo model card and model zoo: https://huggingface.co/Tongyi-MAI/Z-Image-Turbo
 - FLUX.1 Kontext announcement: https://bfl.ai/blog/flux-1-kontext-dev

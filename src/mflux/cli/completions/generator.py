@@ -166,6 +166,14 @@ class CompletionGenerator:
             parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
             parser.add_argument("--image-paths", type=Path, nargs="+", required=True, help="Local paths to init images")
             parser.add_argument(
+                "--mask-path",
+                "--masked-image-path",
+                dest="mask_path",
+                type=Path,
+                default=None,
+                help="Optional mask image path for localized Qwen edits.",
+            )
+            parser.add_argument(
                 "--reframe-padding",
                 default=None,
                 help="CSS-style top,right,bottom,left padding for generative reframe.",

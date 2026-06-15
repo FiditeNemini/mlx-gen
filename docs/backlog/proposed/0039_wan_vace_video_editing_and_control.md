@@ -27,6 +27,11 @@ and official Hugging Face weights exist for Wan VACE. This is strategically impo
 extends a family MLX-Gen already supports rather than introducing a completely different video
 architecture.
 
+Update 2026-06-15: the official Wan family now also includes `Wan2.2-Animate-14B` and
+`Wan2.2-S2V-14B`. That reinforces Wan as a growing video platform, but this item should stay
+strictly scoped to VACE, video-to-video, masking, and control surfaces closest to the current
+MLX-Gen Wan routes.
+
 ## Current code reality
 
 - MLX-Gen currently exposes Wan text-to-video and first-frame image-to-video routes only.
@@ -96,6 +101,7 @@ family just to get video editing primitives.
 - Do not silently repurpose current Wan I2V/T2V flags for video-to-video or masked editing.
 - Do not broaden into audio-video, full animation pipelines, or a new general video provider
   abstraction from this proposal alone.
+- Do not silently absorb `Wan2.2-Animate-14B` or `Wan2.2-S2V-14B` into this item.
 
 ## Guidance for future agents
 
@@ -109,3 +115,5 @@ support in docs or capabilities.
 - Diffusers Wan docs: https://github.com/huggingface/diffusers/blob/main/docs/source/en/api/pipelines/wan.md
 - Wan VACE official weights: https://huggingface.co/Wan-AI/Wan2.1-VACE-14B
 - Ali-ViLab VACE collection: https://huggingface.co/collections/ali-vilab/vace
+- Wan2.2-Animate-14B: https://huggingface.co/Wan-AI/Wan2.2-Animate-14B
+- Wan2.2-S2V-14B: https://huggingface.co/Wan-AI/Wan2.2-S2V-14B

@@ -35,6 +35,25 @@ advertises native ControlNet conditions such as depth, edge maps, keypoints, and
 public control weights now exist for current Qwen families. That makes structured Qwen control a
 concrete missing capability inside an already-supported family rather than a speculative idea.
 
+Update 2026-06-15: the official Diffusers Qwen docs now expose the missing surface clearly enough
+that this is no longer just a parity curiosity. `QwenImageControlNetPipeline`,
+`QwenImageEditPlusPipeline`, `QwenImageInpaintPipeline`, and `QwenImageEditInpaintPipeline` are
+documented as first-class public routes.
+
+Update 2026-06-15: the first narrow public slice is now implemented. MLX-Gen exposes masked edit
+on the Qwen edit route through `--mask-path`, `mlxgen capabilities` now surfaces a distinct
+`qwen.inpaint` capability row, and `AbstractFramework/qwen-image-edit-2511-8bit` has an accepted
+same-seed q8 proof row using the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning` adapter. The
+published contact sheet covers two masked-edit conditions: localized engine enhancement and
+localized crash repair. Structured control remains the next major missing piece.
+
+Update 2026-06-15 (control follow-up): the masked-edit proof now also includes a no-mask control
+using the same prompts, seeds, and Lightning adapter. Those control runs recompose the full scene,
+which is the evidence that `--mask-path` is doing real localization work instead of the model only
+following the instruction globally. The published control sheet now states the important invariant
+explicitly: same `768x432` source image, same prompt, same seed, same Lightning adapter, and only
+`--mask-path` changed.
+
 ## Current code reality
 
 - MLX-Gen has Qwen text-to-image and image-edit variants under `src/mflux/models/qwen/`.
@@ -59,8 +78,9 @@ concrete missing capability inside an already-supported family rather than a spe
   - `alibaba-pai/Qwen-Image-2512-Fun-Controlnet-Union`
 - MLX-Gen docs and model cards already emphasize Qwen mixed q4/q8 because full q4 quality was not
   good enough.
-- MLX-Gen does not currently expose first-class Qwen mask inputs, control images, control types,
-  or Qwen ControlNet package resolution through `mlxgen generate`.
+- MLX-Gen now exposes first-class Qwen mask inputs on the edit route through `--mask-path`, but it
+  still does not expose Qwen control images, control types, or Qwen ControlNet package resolution
+  through `mlxgen generate`.
 - There is legacy mask/control plumbing in the inherited FLUX.1 command surface, but it is not
   wired into current unified Qwen routing.
 
@@ -173,10 +193,10 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 ## Progress checklist
 
 - [ ] Write the Qwen feature matrix against local Diffusers pipelines.
-- [ ] Decide the first public Qwen control target and its proof weights.
-- [ ] Implement strict route selection and capability surfacing for that target.
-- [ ] Validate source and q8 rows with visible contact sheets.
-- [ ] Decide whether masked edit/inpaint should be the second Qwen expansion or stay separate.
+- [x] Decide the first public Qwen control target and its proof weights.
+- [x] Implement strict route selection and capability surfacing for that target.
+- [x] Validate the first q8 masked-edit proof row with visible contact sheets and a no-mask control.
+- [x] Decide whether masked edit/inpaint should be the second Qwen expansion or stay separate.
 
 ## Guidance for the implementing agent
 
@@ -192,6 +212,8 @@ vocabulary.
 - Local Diffusers checkout Qwen pipelines under `diffusers/src/diffusers/pipelines/qwenimage/`
 - Qwen-Image-Edit-2509 model card: https://huggingface.co/Qwen/Qwen-Image-Edit-2509
 - Qwen-Image-Edit-2511 model card: https://huggingface.co/Qwen/Qwen-Image-Edit-2511
+- Diffusers Qwen docs: https://huggingface.co/docs/diffusers/api/pipelines/qwenimage
+- Diffusers modular quickstart: https://huggingface.co/docs/diffusers/modular_diffusers/quickstart
 - InstantX Qwen control weights: https://huggingface.co/InstantX/Qwen-Image-ControlNet-Union
 - InstantX Qwen inpainting ControlNet: https://huggingface.co/InstantX/Qwen-Image-ControlNet-Inpainting
 - Alibaba PAI Qwen 2512 union ControlNet: https://huggingface.co/alibaba-pai/Qwen-Image-2512-Fun-Controlnet-Union

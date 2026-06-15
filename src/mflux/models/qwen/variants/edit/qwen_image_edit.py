@@ -66,6 +66,7 @@ class QwenImageEdit(nn.Module):
         width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
         image_path: Path | str | None = None,
+        mask_path: Path | str | None = None,
         scheduler: str = "flow_match_euler_discrete",
         negative_prompt: str | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
@@ -95,6 +96,7 @@ class QwenImageEdit(nn.Module):
             width=config.width,
             height=config.height,
         )
+        initial_noise = latents
 
         # 2. Encode the prompt
         do_true_cfg = self._should_use_true_cfg(guidance=config.guidance, negative_prompt=negative_prompt)
@@ -109,13 +111,22 @@ class QwenImageEdit(nn.Module):
         )
 
         # 3. Generate image conditioning latents
+        conditioning_width = config.width if mask_path is not None else None
+        conditioning_height = config.height if mask_path is not None else None
         static_image_latents, qwen_image_ids, cond_image_grid, _ = QwenEditUtil.create_image_conditioning_latents(
             vae=self.vae,
-            width=None,
-            height=None,
+            width=conditioning_width,
+            height=conditioning_height,
             image_paths=image_paths,
             tiling_config=self.tiling_config,
         )
+        mask_latents = None
+        if mask_path is not None:
+            mask_latents = QwenEditUtil.create_inpaint_mask_latents(
+                mask_path=str(mask_path),
+                height=config.height,
+                width=config.width,
+            ).astype(static_image_latents.dtype)
 
         # 4. Create callback context and call before_loop
         ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config, task="image-to-image")
@@ -153,6 +164,15 @@ class QwenImageEdit(nn.Module):
 
                 # 7.t Take one denoise step
                 latents = config.scheduler.step(noise=guided_noise, timestep=t, latents=latents)
+                if mask_latents is not None:
+                    sigma = config.scheduler.sigmas[t + 1] if t < len(timesteps) - 1 else 0.0
+                    latents = QwenEditUtil.blend_inpaint_latents(
+                        latents=latents,
+                        image_latents=static_image_latents,
+                        initial_noise=initial_noise,
+                        mask_latents=mask_latents,
+                        sigma=sigma,
+                    )
 
                 # 8.t Call subscribers in-loop
                 ctx.in_loop(t, latents, time_steps=time_steps)
@@ -180,6 +200,7 @@ class QwenImageEdit(nn.Module):
             lora_scales=self.lora_scales,
             image_path=config.image_path,
             image_paths=image_paths,
+            masked_image_path=mask_path,
             generation_time=time_steps.format_dict["elapsed"],
             negative_prompt=negative_prompt,
             extra_metadata=LoRALoader.extra_metadata_for_model(self),

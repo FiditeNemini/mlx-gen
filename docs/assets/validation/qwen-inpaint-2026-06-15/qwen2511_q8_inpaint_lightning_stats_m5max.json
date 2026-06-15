@@ -1,0 +1,69 @@
+{
+  "hardware": "Apple Silicon M5 Max",
+  "engine_boost_q8_20step": {
+    "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+    "source": "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+    "mask": "validation_outputs/qwen_inpaint_2026_06_15/masks/source01_engine_mask.png",
+    "steps": 20,
+    "guidance": 4.0,
+    "seed": 4201,
+    "elapsed_seconds": 155.53,
+    "max_rss_bytes": 30914920448,
+    "output": "validation_outputs/qwen_inpaint_2026_06_15/generated/source01_engine_base20_q8.png"
+  },
+  "engine_boost_q8_lightning_4step": {
+    "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+    "source": "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+    "mask": "validation_outputs/qwen_inpaint_2026_06_15/masks/source01_engine_mask.png",
+    "lora": "lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "steps": 4,
+    "guidance": 1.0,
+    "seed": 4201,
+    "elapsed_seconds": 12.38,
+    "max_rss_bytes": 31757352960,
+    "output": "validation_outputs/qwen_inpaint_2026_06_15/generated/source01_engine_lightning_q8.png"
+  },
+  "engine_boost_q8_lightning_4step_no_mask": {
+    "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+    "source": "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+    "steps": 4,
+    "guidance": 1.0,
+    "seed": 4201,
+    "elapsed_seconds": 27.88,
+    "max_rss_bytes": 31755010048,
+    "output": "validation_outputs/qwen_inpaint_2026_06_15/generated/source01_engine_lightning_nomask_q8.png"
+  },
+  "crash_repair_q8_20step": {
+    "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+    "source": "docs/assets/examples/spaceship-snow/03_i2i_crash_snow.png",
+    "mask": "validation_outputs/qwen_inpaint_2026_06_15/masks/source03_repair_mask.png",
+    "steps": 20,
+    "guidance": 4.0,
+    "seed": 4301,
+    "elapsed_seconds": 123.95,
+    "max_rss_bytes": 30916018176,
+    "output": "validation_outputs/qwen_inpaint_2026_06_15/generated/source03_repair_base20_q8.png"
+  },
+  "crash_repair_q8_lightning_4step": {
+    "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+    "source": "docs/assets/examples/spaceship-snow/03_i2i_crash_snow.png",
+    "mask": "validation_outputs/qwen_inpaint_2026_06_15/masks/source03_repair_mask.png",
+    "lora": "lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    "steps": 4,
+    "guidance": 1.0,
+    "seed": 4301,
+    "elapsed_seconds": 12.43,
+    "max_rss_bytes": 31753355264,
+    "output": "validation_outputs/qwen_inpaint_2026_06_15/generated/source03_repair_lightning_q8.png"
+  },
+  "crash_repair_q8_lightning_4step_no_mask": {
+    "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+    "source": "docs/assets/examples/spaceship-snow/03_i2i_crash_snow.png",
+    "steps": 4,
+    "guidance": 1.0,
+    "seed": 4301,
+    "elapsed_seconds": 27.75,
+    "max_rss_bytes": 31762317312,
+    "output": "validation_outputs/qwen_inpaint_2026_06_15/generated/source03_repair_lightning_nomask_q8.png"
+  }
+}

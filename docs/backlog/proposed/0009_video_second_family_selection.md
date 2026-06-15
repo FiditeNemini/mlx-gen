@@ -52,7 +52,7 @@ Create a short selection report before starting a second large video port. Compa
 
 | Candidate | Why it is interesting | Concern |
 | --- | --- | --- |
-| LTX-2.3 | Broad T2V/I2V/V2V/audio-video feature set, distilled checkpoints, latent upscalers, IC/HDR LoRA pipelines. | 22B model family, custom license, audio-video complexity. |
+| LTX family (`LTX-Video`, `LTX-2`, `LTX-2.3`) | Strong upstream momentum, practical I2V today, plus broader audio-video, distilled, upscaler, and LoRA surfaces. | Custom license, large checkpoints, and a bigger audio-video contract than MLX-Gen currently exposes. |
 | HunyuanVideo 1.5 | 8.3B, T2V/I2V, Diffusers-supported, current video ecosystem interest, LoRA accelerator ecosystem. | Custom Tencent license and another major architecture. |
 | CogVideoX-2B | Apache 2.0, smaller and older, local Diffusers stack available. | Lower current strategic value than Wan/LTX/Hunyuan. |
 | Mochi 1 Preview | Apache 2.0, strong open T2V history, Diffusers pipeline exists. | Older T2V-only target with less AbstractVision differentiation. |
@@ -88,7 +88,7 @@ into audio/video abstractions or memory behavior that the current Wan work has n
 
 ## Non-goals
 
-- This proposal does not authorize starting LTX-2.3 or HunyuanVideo before Wan is stable.
+- This proposal does not authorize starting the LTX family or HunyuanVideo before Wan is stable.
 - This proposal does not duplicate Wan motion-parity work in items 0002 and 0006.
 - This proposal does not own Wan VACE or Wan-family video editing/control; track that separately.
 - Wan2.2 A14B T2V/I2V moved out of this proposal into planned item 0012 on 2026-05-30.
@@ -105,6 +105,8 @@ CLI/API, progress events, quantization plan, and validation clips.
 - `src/mflux/models/wan/`
 - Local Diffusers checkout video pipelines under `diffusers/src/diffusers/pipelines/`
 - Wan2.2 TI2V 5B model card: https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers
+- LTX-Video model card: https://huggingface.co/Lightricks/LTX-Video
+- LTX-2 model card: https://huggingface.co/Lightricks/LTX-2
 - LTX-2.3 model card: https://huggingface.co/Lightricks/LTX-2.3
 - HunyuanVideo-1.5 model card: https://huggingface.co/tencent/HunyuanVideo-1.5
 - Mochi 1 Preview model card: https://huggingface.co/genmo/mochi-1-preview
