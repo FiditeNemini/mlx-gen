@@ -29,7 +29,11 @@ PUBLIC_TASKS = {*PUBLIC_IMAGE_TASKS, *PUBLIC_VIDEO_TASKS}
 IMAGE_TASKS = {*PUBLIC_IMAGE_TASKS, EDIT}
 VIDEO_TASKS = PUBLIC_VIDEO_TASKS
 VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
-CAPABILITIES_SCHEMA_VERSION = 2
+CAPABILITIES_SCHEMA_VERSION = 3
+QWEN_CONTROL_UNION_MODEL = (
+    "InstantX/Qwen-Image-ControlNet-Union:"
+    "diffusion_pytorch_model.safetensors"
+)
 
 I2I_MODE_AUTO = "auto"
 MODE_TEXT_ONLY = "text-only"
@@ -69,9 +73,12 @@ class GenerationCapability:
     max_images: int | None = 0
     supports_image_strength: bool = False
     supports_mask: bool = False
+    supports_control_image: bool = False
+    supports_control_mask: bool = False
     supports_outpaint: bool = False
     supports_reframe: bool = False
     supports_lora: bool = False
+    control_model: str | None = None
     lora_status: str = "unsupported"
     lora_target_roles: tuple[str, ...] = ()
     lora_validation_profile: str | None = None
@@ -99,9 +106,12 @@ class GenerationCapability:
             "max_images": self.max_images,
             "supports_image_strength": self.supports_image_strength,
             "supports_mask": self.supports_mask,
+            "supports_control_image": self.supports_control_image,
+            "supports_control_mask": self.supports_control_mask,
             "supports_outpaint": self.supports_outpaint,
             "supports_reframe": self.supports_reframe,
             "supports_lora": self.supports_lora,
+            "control_model": self.control_model,
             "lora_status": self.lora_status,
             "lora_target_roles": list(self.lora_target_roles),
             "lora_validation_profile": self.lora_validation_profile,
@@ -149,6 +159,7 @@ class GenerationPlan:
     primary_image_index: int | None = None
     dimension_multiple: int | None = None
     supports_lora: bool = False
+    control_model: str | None = None
     lora_status: str = "unsupported"
     lora_target_roles: tuple[str, ...] = ()
     lora_validation_profile: str | None = None
@@ -173,6 +184,7 @@ class GenerationPlan:
             "primary_image_index": self.primary_image_index,
             "dimension_multiple": self.dimension_multiple,
             "supports_lora": self.supports_lora,
+            "control_model": self.control_model,
             "lora_status": self.lora_status,
             "lora_target_roles": list(self.lora_target_roles),
             "lora_validation_profile": self.lora_validation_profile,
@@ -236,6 +248,7 @@ def resolve_generation_plan(
     i2i_mode: str | None = I2I_MODE_AUTO,
     has_image_strength: bool = False,
     has_mask: bool = False,
+    has_control_image: bool = False,
     has_outpaint: bool = False,
     has_reframe: bool = False,
     has_lora: bool = False,
@@ -246,6 +259,11 @@ def resolve_generation_plan(
         raise TaskInferenceError("--image-strength requires --image or --image-path.")
     if has_mask and image_count == 0:
         raise TaskInferenceError("--mask-path requires --image or --image-path.")
+    if has_control_image and image_count > 0:
+        raise TaskInferenceError(
+            "--controlnet-image-path currently targets text-to-image structured control and cannot be combined "
+            "with --image or --image-path."
+        )
     if has_outpaint and image_count == 0:
         raise TaskInferenceError("--outpaint-padding requires --image or --image-path.")
     if has_reframe and image_count == 0:
@@ -296,6 +314,12 @@ def resolve_generation_plan(
         candidates = [capability for capability in candidates if capability.supports_mask]
         if not candidates:
             raise TaskInferenceError("--mask-path is only supported for image-to-image modes with mask support.")
+    if has_control_image:
+        candidates = [capability for capability in candidates if capability.supports_control_image]
+        if not candidates:
+            raise TaskInferenceError(
+                "--controlnet-image-path is only supported for structured-control modes with control image support."
+            )
     if has_outpaint:
         candidates = [capability for capability in candidates if capability.supports_outpaint]
         if not candidates:
@@ -345,6 +369,7 @@ def resolve_generation_plan(
         primary_image_index=capability.primary_image_index,
         dimension_multiple=capability.dimension_multiple,
         supports_lora=capability.supports_lora,
+        control_model=capability.control_model,
         lora_status=capability.lora_status,
         lora_target_roles=capability.lora_target_roles,
         lora_validation_profile=capability.lora_validation_profile,
@@ -361,6 +386,7 @@ def resolve_task(
     i2i_mode: str | None = I2I_MODE_AUTO,
     has_image_strength: bool = False,
     has_mask: bool = False,
+    has_control_image: bool = False,
     has_outpaint: bool = False,
     has_reframe: bool = False,
     has_lora: bool = False,
@@ -374,6 +400,7 @@ def resolve_task(
         i2i_mode=i2i_mode,
         has_image_strength=has_image_strength,
         has_mask=has_mask,
+        has_control_image=has_control_image,
         has_outpaint=has_outpaint,
         has_reframe=has_reframe,
         has_lora=has_lora,
@@ -399,6 +426,7 @@ def infer_task(
     i2i_mode: str | None = I2I_MODE_AUTO,
     has_image_strength: bool = False,
     has_mask: bool = False,
+    has_control_image: bool = False,
     has_outpaint: bool = False,
     has_reframe: bool = False,
     has_lora: bool = False,
@@ -412,6 +440,7 @@ def infer_task(
         i2i_mode=i2i_mode,
         has_image_strength=has_image_strength,
         has_mask=has_mask,
+        has_control_image=has_control_image,
         has_outpaint=has_outpaint,
         has_reframe=has_reframe,
         has_lora=has_lora,
@@ -668,6 +697,25 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="qwen.generate",
                 default_for_task=True,
                 **_lora_capability_kwargs(identity=identity, capability_id="qwen.text", supports_lora=True),
+            ),
+            *(
+                (
+                    GenerationCapability(
+                        id="qwen.control",
+                        public_task=TEXT_TO_IMAGE,
+                        mode=MODE_TEXT_ONLY,
+                        handler_id="qwen.generate",
+                        supports_control_image=True,
+                        control_model=QWEN_CONTROL_UNION_MODEL,
+                        **_lora_capability_kwargs(
+                            identity=identity,
+                            capability_id="qwen.control",
+                            supports_lora=True,
+                        ),
+                    ),
+                )
+                if _supports_qwen_base_control(identity)
+                else ()
             ),
             GenerationCapability(
                 id="qwen.latent",
@@ -1046,6 +1094,16 @@ def _is_qwen_edit_plus(aliases: set[str], model_key: str) -> bool:
 def _is_qwen_edit_2511(aliases: set[str], model_key: str) -> bool:
     return _has_alias(aliases, "qwen-image-edit-2511", "qwen-edit-2511") or any(
         token in model_key for token in ("qwen-image-edit-2511", "qwen-edit-2511")
+    )
+
+
+def _supports_qwen_base_control(identity: _ModelIdentity) -> bool:
+    if _is_qwen_edit(identity.aliases, identity.model_key):
+        return False
+    return (
+        identity.model_name == "AbstractFramework/qwen-image-8bit"
+        or "qwen-image-8bit" in identity.model_key
+        or "abstractframework/qwen-image-8bit" in identity.model_key
     )
 
 

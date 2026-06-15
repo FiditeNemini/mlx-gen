@@ -55,6 +55,12 @@ Python through `get_model_capabilities(...)` and `resolve_generation_plan(...)`.
 repositories or local paths whose name does not identify the architecture, construct the
 `ModelConfig` with the same base-model hint that you would pass to the CLI.
 
+Qwen structured control is exposed through the same contract. When a capability row reports
+`supports_control_image=true`, the route accepts `--controlnet-image-path` as a structured guide.
+The current exact public proof row is `AbstractFramework/qwen-image-8bit` on `qwen.control`. That
+row also reports the exact sidecar through `control_model`, and the unified `mlxgen generate`
+router injects that sidecar automatically.
+
 LoRA support is experimental and route-specific. Capability rows include `supports_lora`, `lora_status`,
 `lora_target_roles`, and `lora_validation_profile`. `mapped-unvalidated` means the route has a
 mapping and strict loader path, but the exact model/package has not yet passed a visible A/B
@@ -134,6 +140,44 @@ For a plain-language guide to what each mode is good at, see
 | Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
 | Experimental generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
 | Experimental backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
+
+### Structured Control Images
+
+Structured control is adjacent to image editing, but it is not an image-to-image route. It is a
+text-to-image route guided by a control image. The control image is supplied with
+`--controlnet-image-path`, and the selected capability must report `supports_control_image=true`.
+
+Current exact public proof exists for:
+
+- `AbstractFramework/qwen-image-8bit` on `qwen.control`
+- sidecar injected by the unified router:
+  `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
+
+Important workflow boundary:
+
+- `--image` means source-image generation or editing;
+- `--controlnet-image-path` means structured text-to-image control.
+
+The current public route does not allow both together. If you need the accepted proof artifacts for
+this slice, see [Image Edit Capabilities](edit-capabilities.md) and [LoRA](lora.md).
+
+Example:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-8bit \
+  --prompt "Aesthetics art, traditional asian pagoda, elaborate golden accents, sky blue and white color palette, swirling cloud pattern, digital illustration, east asian architecture, ornamental rooftop, intricate detailing on building, cultural representation." \
+  --negative "blurry, low quality, distorted, deformed, text, watermark, ugly" \
+  --width 576 \
+  --height 864 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 5802 \
+  --controlnet-image-path canny.png \
+  --lora-paths lightx2v/Qwen-Image-Lightning:Qwen-Image-Lightning-4steps-V2.0-bf16.safetensors \
+  --lora-scales 1 \
+  --output controlled.png
+```
 
 Use latent img2img when you want a whole-image variation driven by source-image noise injection:
 restyle the whole scene, change the mood, or make a loose variation. Higher `--image-strength`

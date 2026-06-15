@@ -21,11 +21,12 @@ outside chat history.
 
 1. Continue
    [Qwen edit parity expansion](planned/0008_qwen_edit_parity_expansion.md) from the new masked
-   edit baseline. The first narrow public slice is now in place: `--mask-path` routes to
-   `qwen.inpaint`, `AbstractFramework/qwen-image-edit-2511-8bit` has an accepted masked-edit q8
-   proof row using the dedicated Lightning adapter, and the no-mask control now proves that the
-   mask is what keeps the edit local. The next concrete missing piece is structured control /
-   ControlNet-style Qwen editing.
+   edit and structured-control baselines. The first narrow public slices are now in place:
+   `--mask-path` routes to `qwen.inpaint` on the validated
+   `AbstractFramework/qwen-image-edit-2511-8bit` q8 row, and `--controlnet-image-path` routes to
+   `qwen.control` on the validated `AbstractFramework/qwen-image-8bit` q8 row with the exact
+   InstantX union sidecar. The next concrete missing pieces are control-inpaint and the next
+   bounded Qwen edit-plus / structured-control expansion after those exact slices.
 2. Implement the
    [LoRA capability matrix and strict application](planned/0007_lora_capability_matrix_and_strict_application.md)
    item to completion. The fail-closed contract is now in place, exact validated rows exist for

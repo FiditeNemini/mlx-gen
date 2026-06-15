@@ -241,7 +241,7 @@ def test_reframe_option_is_limited_to_validated_edit_capabilities():
 def test_model_capabilities_are_publicly_inspectable():
     capabilities = mlxgen.get_model_capabilities(model="flux2-klein-4b")
 
-    assert capabilities.schema_version == 2
+    assert capabilities.schema_version == 3
     assert capabilities.family == "flux2"
     assert {capability.mode for capability in capabilities.capabilities} >= {
         MODE_TEXT_ONLY,
@@ -317,6 +317,33 @@ def test_qwen_2512_q8_text_lora_status_is_exact():
     assert text.lora_validation_profile == "lora_qwen2512_q8_pixel_art_t2i_2026_06_11"
     assert latent.lora_status == "mapped-unvalidated"
     assert latent.lora_validation_profile is None
+
+
+def test_qwen_base_structured_control_routes_to_dedicated_capability():
+    base_capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-8bit")
+    control = next(capability for capability in base_capabilities.capabilities if capability.id == "qwen.control")
+    source_capabilities = mlxgen.get_model_capabilities(model="Qwen/Qwen-Image")
+    qwen_2512_capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-2512-8bit")
+
+    qwen_control = mlxgen.resolve_generation_plan(
+        model="AbstractFramework/qwen-image-8bit",
+        has_control_image=True,
+    )
+
+    assert control.supports_control_image is True
+    assert control.control_model == "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
+    assert control.lora_status == "validated"
+    assert control.lora_validation_profile == "lora_qwen_q8_control_lightning_2026_06_15"
+    assert qwen_control.public_task == "text-to-image"
+    assert qwen_control.capability_id == "qwen.control"
+    assert qwen_control.control_model is not None
+    assert mlxgen.resolve_task(model="AbstractFramework/qwen-image-8bit", has_control_image=True).capability_id == "qwen.control"
+    assert mlxgen.infer_task(model="AbstractFramework/qwen-image-8bit", has_control_image=True) == "text-to-image"
+    assert all(capability.id != "qwen.control" for capability in source_capabilities.capabilities)
+    assert all(capability.id != "qwen.control" for capability in qwen_2512_capabilities.capabilities)
+
+    with pytest.raises(TaskInferenceError, match="controlnet-image-path is only supported"):
+        mlxgen.resolve_generation_plan(model="qwen-image-edit-2511", has_control_image=True)
 
 
 def test_original_qwen_edit_q8_single_edit_lora_status_is_exact():

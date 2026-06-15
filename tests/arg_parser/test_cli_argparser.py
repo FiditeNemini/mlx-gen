@@ -84,6 +84,7 @@ def base_metadata_dict() -> dict:
         "image": None,
         "image_strength": None,
         "controlnet_image": None,
+        "controlnet_model": None,
         "controlnet_strength": None,
         "controlnet_save_canny": False,
     }
@@ -638,6 +639,7 @@ def test_controlnet_args(mflux_generate_controlnet_parser, mflux_generate_contro
     metadata_file = temp_dir / "cnet_args.json"
     with metadata_file.open("wt") as m:
         base_metadata_dict["controlnet_image_path"] = test_path
+        base_metadata_dict["controlnet_model"] = "repo/controlnet:model.safetensors"
         base_metadata_dict["controlnet_strength"] = 0.48
         json.dump(base_metadata_dict, m, indent=4)
 
@@ -645,6 +647,7 @@ def test_controlnet_args(mflux_generate_controlnet_parser, mflux_generate_contro
     with patch('sys.argv', mflux_generate_controlnet_minimal_argv + ['--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
         args = mflux_generate_controlnet_parser.parse_args()
         assert args.controlnet_image_path == test_path
+        assert args.controlnet_model == "repo/controlnet:model.safetensors"
         assert args.controlnet_strength == pytest.approx(0.48)
         assert args.controlnet_save_canny is False
 
@@ -652,6 +655,8 @@ def test_controlnet_args(mflux_generate_controlnet_parser, mflux_generate_contro
     override_cnet = [
         "--controlnet-image-path",
         "/some/lora/2.safetensors",
+        "--controlnet-model",
+        "repo/override:model.safetensors",
         "--controlnet-strength",
         "0.85",
         "--controlnet-save-canny",
@@ -659,6 +664,7 @@ def test_controlnet_args(mflux_generate_controlnet_parser, mflux_generate_contro
     with patch('sys.argv', mflux_generate_controlnet_minimal_argv + override_cnet + ['--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
         args = mflux_generate_controlnet_parser.parse_args()
         assert args.controlnet_image_path == "/some/lora/2.safetensors"
+        assert args.controlnet_model == "repo/override:model.safetensors"
         assert args.controlnet_strength == pytest.approx(0.85)
         assert args.controlnet_save_canny is True
 

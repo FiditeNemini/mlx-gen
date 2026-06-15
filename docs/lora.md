@@ -45,8 +45,8 @@ The current LoRA surface is route-specific:
 
 | Route family | Current status |
 | --- | --- |
-| `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/z-image-turbo-8bit`, `AbstractFramework/flux.2-klein-9b-8bit` edit, `AbstractFramework/ernie-image-turbo-8bit` text-to-image | Exact validated q8 proof rows exist. `AbstractFramework/qwen-image-edit-2511-8bit` currently has accepted proof rows on both `qwen.edit` and `qwen.inpaint`. |
-| Base Qwen Image, Qwen multi-reference or canvas rows, Z-Image latent img2img, ERNIE latent img2img, and the remaining FLUX.2 package rows | `mapped-unvalidated`: the mapping works, but the exact route still lacks a strong public A/B proof. |
+| `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2509-8bit`, `AbstractFramework/qwen-image-edit-8bit`, `AbstractFramework/qwen-image-2512-8bit`, `AbstractFramework/qwen-image-8bit` on `qwen.control`, `AbstractFramework/z-image-turbo-8bit`, `AbstractFramework/flux.2-klein-9b-8bit` edit, `AbstractFramework/ernie-image-turbo-8bit` text-to-image | Exact validated q8 proof rows exist. `AbstractFramework/qwen-image-edit-2511-8bit` currently has accepted proof rows on both `qwen.edit` and `qwen.inpaint`. `AbstractFramework/qwen-image-8bit` currently has an accepted proof row on `qwen.control` only. |
+| Base Qwen Image text generation, Qwen multi-reference or canvas rows, Z-Image latent img2img, ERNIE latent img2img, and the remaining FLUX.2 package rows | `mapped-unvalidated`: the mapping works, but the exact route still lacks a strong public A/B proof. |
 | `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` text-to-video, `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` first-frame image-to-video, `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` text-to-video, and `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` first-frame image-to-video | Exact validated q8 proof rows exist. |
 | SeedVR2, FIBO | Unsupported today. |
 | Bonsai | Unsupported and low priority. The current packed runtime does not expose the ordinary replaceable linear-module boundary that MLX-Gen's LoRA loader requires. |
@@ -320,6 +320,53 @@ mlxgen generate \
   --lora-paths lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors \
   --lora-scales 1
 ```
+
+The base `AbstractFramework/qwen-image-8bit` q8 package also has an exact validated structured-control
+row when you pair the InstantX union ControlNet sidecar with the shared Qwen Lightning adapter.
+This is the current recommended fast public path for Qwen structured control in `4` steps.
+
+![Qwen Image q8 structured control Lightning proof](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_contact_sheet.png)
+
+Download the two exact repositories:
+
+```sh
+hf download InstantX/Qwen-Image-ControlNet-Union \
+  diffusion_pytorch_model.safetensors \
+  config.json \
+  conds/canny.png \
+  conds/pose.png \
+  README.md
+
+mlxgen download --model lightx2v/Qwen-Image-Lightning --all-files
+```
+
+Structured-control example:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/qwen-image-8bit \
+  --prompt "Aesthetics art, traditional asian pagoda, elaborate golden accents, sky blue and white color palette, swirling cloud pattern, digital illustration, east asian architecture, ornamental rooftop, intricate detailing on building, cultural representation." \
+  --negative "blurry, low quality, distorted, deformed, text, watermark, ugly" \
+  --width 576 \
+  --height 864 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 5802 \
+  --controlnet-image-path canny.png \
+  --lora-paths lightx2v/Qwen-Image-Lightning:Qwen-Image-Lightning-4steps-V2.0-bf16.safetensors \
+  --lora-scales 1 \
+  --output qwen_controlled.png
+```
+
+This exact route is `qwen.control`, not base `qwen.text`, and it is a structured text-to-image
+workflow rather than a source-image edit. The accepted proof compares same-prompt, same-seed
+Lightning runs with and without the control image and shows the control image materially changing
+layout.
+
+Published proof artifacts:
+
+- [structured-control command log](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_command_log.md)
+- [structured-control timings on M5 Max](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_stats_m5max.json)
 
 The same adapter is also the current recommended fast path for masked edit / inpaint on
 `AbstractFramework/qwen-image-edit-2511-8bit`. The accepted proof keeps the unmasked scene stable

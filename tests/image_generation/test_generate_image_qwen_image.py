@@ -1,11 +1,23 @@
 import pytest
 
 from mflux.models.common.config import ModelConfig
+from mflux.models.qwen.qwen_initializer import QwenImageInitializer
 from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
 from tests.image_generation.helpers.image_generation_test_helper import ImageGeneratorTestHelper
 
 
 class TestImageGeneratorQwenImage:
+    def test_controlnet_model_spec_requires_exact_file_reference(self):
+        repo_id, file_pattern = QwenImageInitializer._parse_controlnet_model_spec(
+            "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
+        )
+
+        assert repo_id == "InstantX/Qwen-Image-ControlNet-Union"
+        assert file_pattern == "diffusion_pytorch_model.safetensors"
+
+        with pytest.raises(ValueError, match="exact Hugging Face reference"):
+            QwenImageInitializer._parse_controlnet_model_spec("InstantX/Qwen-Image-ControlNet-Union")
+
     @pytest.mark.slow
     def test_qwen_image_generation_text_to_image(self):
         ImageGeneratorTestHelper.assert_matches_reference_image(

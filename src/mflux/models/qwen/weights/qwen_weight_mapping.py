@@ -191,6 +191,32 @@ class QwenWeightMapping(WeightMapping):
         ]
 
     @staticmethod
+    def get_controlnet_transformer_mapping() -> List[WeightTarget]:
+        shared_targets = [
+            target
+            for target in QwenWeightMapping.get_transformer_mapping()
+            if not target.to_pattern.startswith("norm_out.") and not target.to_pattern.startswith("proj_out.")
+        ]
+        return shared_targets + [
+            WeightTarget(
+                to_pattern="controlnet_x_embedder.weight",
+                from_pattern=["controlnet_x_embedder.weight"],
+            ),
+            WeightTarget(
+                to_pattern="controlnet_x_embedder.bias",
+                from_pattern=["controlnet_x_embedder.bias"],
+            ),
+            WeightTarget(
+                to_pattern="controlnet_blocks.{block}.weight",
+                from_pattern=["controlnet_blocks.{block}.weight"],
+            ),
+            WeightTarget(
+                to_pattern="controlnet_blocks.{block}.bias",
+                from_pattern=["controlnet_blocks.{block}.bias"],
+            ),
+        ]
+
+    @staticmethod
     def get_vae_mapping() -> List[WeightTarget]:
         return [
             WeightTarget(

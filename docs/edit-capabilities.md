@@ -7,6 +7,8 @@ model/package status for MLX-Gen. It separates these related concepts:
   controls how far the output may drift.
 - `edit-reference`: instruction editing from one source image, usually with stronger composition
   hold than latent img2img.
+- `structured control`: text-to-image generation guided by a control image. This is separate from
+  source-image edit/inpaint.
 - `multi-reference`: two or more images are supplied as references for one composition.
 - `generative reframe`: experimental larger-view generation with `--reframe-padding`. This is a
   zoom-out style edit, not source-preserving outpaint.
@@ -87,6 +89,38 @@ Exact commands and timings:
 
 - [masked edit command log](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_command_log.md)
 - [masked edit timings on M5 Max](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_stats_m5max.json)
+
+## Qwen Structured Control
+
+MLX-Gen now exposes one exact Qwen structured-control route through
+`--controlnet-image-path`. The current accepted public row is:
+
+- `AbstractFramework/qwen-image-8bit` on `qwen.control`
+- exact sidecar: `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
+
+This slice is intentionally narrow. It is a text-to-image route with one control image, not a
+source-image edit route, and it does not yet claim control-inpaint or edit-route ControlNet.
+
+![Qwen Image q8 structured control proof](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_contact_sheet.png)
+
+| Model | Package | Capabilities validated | Result |
+| --- | --- | --- | --- |
+| `AbstractFramework/qwen-image-8bit` | q8 optimized variant | structured control with `--controlnet-image-path` | `PASS` |
+
+The accepted proof uses the dedicated `lightx2v/Qwen-Image-Lightning` adapter as the fast `4`-step
+path and compares same-prompt, same-seed no-control versus controlled runs on two conditions:
+
+- canny-guided pagoda layout;
+- pose-guided portrait layout.
+
+In both rows, the control image materially changes layout while the no-control baseline stays on
+the same prompt, seed, and Lightning adapter. That is the proof that the control image is doing
+real work rather than only the prompt carrying the scene.
+
+Exact commands and timings:
+
+- [structured-control command log](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_command_log.md)
+- [structured-control timings on M5 Max](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_stats_m5max.json)
 
 ## Qwen 2509 And Distilled FLUX.2 Matrix
 

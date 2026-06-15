@@ -12,9 +12,11 @@ from mflux.models.qwen.model.qwen_text_encoder.qwen_text_encoder import QwenText
 from mflux.models.qwen.model.qwen_text_encoder.qwen_vision_language_encoder import QwenVisionLanguageEncoder
 from mflux.models.qwen.model.qwen_text_encoder.qwen_vision_transformer import VisionTransformer
 from mflux.models.qwen.model.qwen_transformer.qwen_transformer import QwenTransformer
+from mflux.models.qwen.model.qwen_transformer.qwen_transformer_controlnet import QwenTransformerControlNet
 from mflux.models.qwen.model.qwen_vae.qwen_vae import QwenVAE
 from mflux.models.qwen.tokenizer.qwen_vision_language_processor import QwenVisionLanguageProcessor
 from mflux.models.qwen.tokenizer.qwen_vision_language_tokenizer import QwenVisionLanguageTokenizer
+from mflux.models.qwen.weights.qwen_controlnet_weight_definition import QwenControlnetWeightDefinition
 from mflux.models.qwen.weights.qwen_lora_mapping import QwenLoRAMapping
 from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
 
@@ -74,6 +76,46 @@ class QwenImageInitializer:
             use_picture_prefix=False,
         )
         model.qwen_vl_encoder = QwenVisionLanguageEncoder(encoder=model.text_encoder.encoder)
+
+    @staticmethod
+    def init_controlnet(
+        model,
+        *,
+        controlnet_model: str,
+        model_config: ModelConfig,
+        quantize: int | None,
+        model_path: str | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+    ) -> None:
+        QwenImageInitializer.init(
+            model=model,
+            model_config=model_config,
+            quantize=quantize,
+            model_path=model_path,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+        )
+        controlnet_component = QwenControlnetWeightDefinition.get_controlnet_component()
+        repo_id, file_pattern = QwenImageInitializer._parse_controlnet_model_spec(controlnet_model)
+        controlnet_weights = WeightLoader.load_single(
+            component=controlnet_component,
+            repo_id=repo_id,
+            file_pattern=file_pattern,
+        )
+        model.controlnet_model = controlnet_model
+        model.transformer_controlnet = QwenTransformerControlNet(
+            controlnet_input_dim=QwenImageInitializer._controlnet_input_dim(controlnet_weights),
+            num_layers=controlnet_weights.num_transformer_blocks(component_name="transformer_controlnet"),
+            axes_dims_rope=model.model_config.transformer_overrides.get("axes_dims_rope"),
+        )
+        WeightApplier.apply_and_quantize_single(
+            weights=controlnet_weights,
+            model=model.transformer_controlnet,
+            component=controlnet_component,
+            quantize_arg=None,
+            quantization_predicate=QwenWeightDefinition.quantization_predicate,
+        )
 
     @staticmethod
     def _init_config(model, model_config: ModelConfig) -> None:
@@ -184,3 +226,25 @@ class QwenImageInitializer:
         model.lora_application_reports = result.reports
         model.lora_paths = result.resolved_paths
         model.lora_scales = result.resolved_scales
+
+    @staticmethod
+    def _parse_controlnet_model_spec(controlnet_model: str) -> tuple[str, str]:
+        repo_id, separator, file_pattern = controlnet_model.partition(":")
+        if not separator or not repo_id or not file_pattern:
+            raise ValueError(
+                "--controlnet-model must be an exact Hugging Face reference in the form "
+                "'repo-id:path/to/file.safetensors'."
+            )
+        if not file_pattern.endswith(".safetensors"):
+            raise ValueError("--controlnet-model must point to an exact .safetensors file.")
+        return repo_id, file_pattern
+
+    @staticmethod
+    def _controlnet_input_dim(controlnet_weights: LoadedWeights) -> int:
+        weight = QwenImageInitializer._get_nested_value(
+            controlnet_weights.components,
+            "transformer_controlnet.controlnet_x_embedder.weight",
+        )
+        if weight is None or len(weight.shape) != 2:
+            return 64
+        return int(weight.shape[1])

@@ -32,3 +32,26 @@ def test_info_util_includes_original_generation_section():
     assert "Steps: 1 (Original: 9)" in output
     assert "Quantization: 8-bit" in output
     assert "a.safetensors" in output
+
+
+def test_info_util_includes_controlnet_model_when_present():
+    metadata = {
+        "exif": {
+            "prompt": "test prompt",
+            "model": "AbstractFramework/qwen-image-8bit",
+            "width": 576,
+            "height": 864,
+            "seed": 5802,
+            "steps": 4,
+            "guidance": 1.0,
+            "controlnet_image_path": "/tmp/canny.png",
+            "controlnet_model": "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors",
+            "controlnet_strength": 0.9,
+        }
+    }
+
+    output = InfoUtil.format_metadata(metadata)
+
+    assert "ControlNet Image: canny.png" in output
+    assert "ControlNet Model: InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors" in output
+    assert "ControlNet Strength: 0.9" in output

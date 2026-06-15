@@ -1,0 +1,35 @@
+{
+  "machine": "Apple M5 Max",
+  "model": "AbstractFramework/qwen-image-8bit",
+  "control_model": "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors",
+  "lora": "lightx2v/Qwen-Image-Lightning:Qwen-Image-Lightning-4steps-V2.0-bf16.safetensors",
+  "settings": {
+    "steps": 4,
+    "guidance": 1,
+    "controlnet_strength": 0.9
+  },
+  "examples": [
+    {
+      "id": "canny_pagoda",
+      "control_image": "InstantX/Qwen-Image-ControlNet-Union:conds/canny.png",
+      "seed": 5802,
+      "width": 576,
+      "height": 864,
+      "no_control_wall_time_s": 16.27,
+      "no_control_max_rss_bytes": 30763139072,
+      "control_wall_time_s": 18.49,
+      "control_max_rss_bytes": 34020786176
+    },
+    {
+      "id": "pose_portrait",
+      "control_image": "InstantX/Qwen-Image-ControlNet-Union:conds/pose.png",
+      "seed": 5803,
+      "width": 608,
+      "height": 768,
+      "no_control_wall_time_s": 15.47,
+      "no_control_max_rss_bytes": 30768660480,
+      "control_wall_time_s": 16.44,
+      "control_max_rss_bytes": 34256322560
+    }
+  ]
+}

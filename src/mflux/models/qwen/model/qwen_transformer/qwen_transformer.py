@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import mlx.core as mx
 import numpy as np
 from mlx import nn
@@ -48,6 +50,7 @@ class QwenTransformer(nn.Module):
         encoder_hidden_states_mask: mx.array,
         qwen_image_ids: mx.array | None = None,
         cond_image_grid: tuple[int, int, int] | list[tuple[int, int, int]] | None = None,
+        controlnet_block_samples: list[mx.array] | None = None,
     ) -> mx.array:
         hidden_states = self.img_in(hidden_states)
         batch_size = hidden_states.shape[0]
@@ -80,6 +83,12 @@ class QwenTransformer(nn.Module):
                 text_embeddings=text_embeddings,
                 image_rotary_embeddings=image_rotary_embeddings,
                 modulate_index=modulate_index,
+            )
+            hidden_states = QwenTransformer._apply_controlnet_residual(
+                hidden_states=hidden_states,
+                block_index=idx,
+                total_block_count=len(self.transformer_blocks),
+                controlnet_block_samples=controlnet_block_samples,
             )
         if self.zero_cond_t:
             text_embeddings = mx.split(text_embeddings, 2, axis=0)[0]
@@ -181,3 +190,17 @@ class QwenTransformer(nn.Module):
     def _shape_length(shape: tuple[int, int, int]) -> int:
         frames, height, width = shape
         return frames * height * width
+
+    @staticmethod
+    def _apply_controlnet_residual(
+        *,
+        hidden_states: mx.array,
+        block_index: int,
+        total_block_count: int,
+        controlnet_block_samples: list[mx.array] | None,
+    ) -> mx.array:
+        if not controlnet_block_samples:
+            return hidden_states
+        interval = max(1, math.ceil(total_block_count / len(controlnet_block_samples)))
+        control_index = min(block_index // interval, len(controlnet_block_samples) - 1)
+        return hidden_states + controlnet_block_samples[control_index]

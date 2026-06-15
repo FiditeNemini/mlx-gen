@@ -10,6 +10,7 @@ from mflux.lora_validation_registry import (
     QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
     QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
     QWEN_EDIT_Q8_GHIBLI_PROFILE_ID,
+    QWEN_Q8_CONTROL_LIGHTNING_PROFILE_ID,
     WAN_A14B_Q8_FOLLOWCAM_T2V_PROFILE_ID,
     WAN_A14B_Q8_LIGHTX2V_4STEP_I2V_PROFILE_ID,
     WAN_A14B_Q8_LIGHTX2V_4STEP_T2V_PROFILE_ID,
@@ -50,6 +51,7 @@ LORA_VALIDATION_DIR = "docs/assets/validation/lora-2026-06-11"
 WAN_LORA_VALIDATION_DIR = "docs/assets/validation/wan-lora-2026-06-11"
 LIGHTX2V_WAN_4STEP_VALIDATION_DIR = "docs/assets/validation/lightx2v-wan-4step-2026-06-12"
 QWEN_INPAINT_VALIDATION_DIR = "docs/assets/validation/qwen-inpaint-2026-06-15"
+QWEN_CONTROL_VALIDATION_DIR = "docs/assets/validation/qwen-control-2026-06-15"
 
 
 @dataclass(frozen=True)
@@ -281,6 +283,37 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
             title="Qwen Image Edit q8 Ghibli-style LoRA Validation",
             canonical_source=CANONICAL_SOURCE,
             description="Accepted single-image edit LoRA proof for the original Qwen Image Edit q8 route.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN_Q8_CONTROL_LIGHTNING_PROFILE_ID,
+                model="AbstractFramework/qwen-image-8bit",
+                family="Qwen Image",
+                package_variant="q8 prepared",
+                public_task="text-to-image",
+                mode="text-only",
+                artifact_path=f"{QWEN_CONTROL_VALIDATION_DIR}/qwen_q8_control_lightning_contact_sheet.png",
+                source_images=(
+                    "InstantX/Qwen-Image-ControlNet-Union:conds/canny.png",
+                    "InstantX/Qwen-Image-ControlNet-Union:conds/pose.png",
+                ),
+                prompt=(
+                    "Two-condition structured-control proof. Condition A uses the InstantX canny control "
+                    "image with the pagoda illustration prompt. Condition B uses the InstantX pose control "
+                    "image with the seated portrait prompt. Each row keeps the same prompt, seed, and "
+                    "LightX2V 4-step Lightning adapter between the no-control and control columns."
+                ),
+                reviewer_notes=(
+                    "PASS on the 2026-06-15 base q8 structured-control proof. The accepted row uses "
+                    "InstantX/Qwen-Image-ControlNet-Union with lightx2v/Qwen-Image-Lightning V2.0 in 4 "
+                    "steps. In both the canny pagoda and pose portrait rows, the control image materially "
+                    "changes layout while the no-control baseline stays on the same prompt/seed/LoRA."
+                ),
+                evidence_date="2026-06-15",
+            ),
+            title="Qwen Image q8 Structured Control Lightning Validation",
+            canonical_source="InstantX/Qwen-Image-ControlNet-Union:conds/canny.png",
+            description="Exact structured-control LoRA proof for the base Qwen Image q8 route.",
         ),
         _single_record_profile(
             _lora_record(

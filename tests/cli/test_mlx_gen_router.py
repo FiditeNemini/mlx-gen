@@ -1086,6 +1086,170 @@ def test_mask_path_is_rejected_for_qwen_base_route(capsys):
     assert "mask-path is only supported" in capsys.readouterr().err
 
 
+def test_controlnet_image_routes_base_qwen_structured_control():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--controlnet-image-path",
+            "control.png",
+            "--controlnet-strength",
+            "0.85",
+            "--prompt",
+            "a tiger cub portrait",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen"
+    assert invocation.argv == [
+        "mflux-generate-qwen",
+        "--model",
+        "AbstractFramework/qwen-image-8bit",
+        "--controlnet-model",
+        "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors",
+        "--controlnet-image-path",
+        "control.png",
+        "--controlnet-strength",
+        "0.85",
+        "--prompt",
+        "a tiger cub portrait",
+    ]
+
+
+def test_controlnet_image_rejects_conflicting_exact_sidecar(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-8bit",
+                "--controlnet-image-path",
+                "control.png",
+                "--controlnet-model",
+                "other/repo:model.safetensors",
+                "--prompt",
+                "a tiger cub portrait",
+            ]
+        )
+
+    assert "conflicts with the exact structured-control row selected by mlxgen generate" in capsys.readouterr().err
+
+
+def test_controlnet_image_is_rejected_for_qwen_edit_route(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-edit-2511-8bit",
+                "--controlnet-image-path",
+                "control.png",
+                "--prompt",
+                "repair the hull",
+            ]
+        )
+
+    assert "controlnet-image-path is only supported" in capsys.readouterr().err
+
+
+def test_controlnet_image_is_rejected_for_unvalidated_source_qwen_route(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "Qwen/Qwen-Image",
+                "--controlnet-image-path",
+                "control.png",
+                "--prompt",
+                "a tiger cub portrait",
+            ]
+        )
+
+    assert "controlnet-image-path is only supported" in capsys.readouterr().err
+
+
+def test_controlnet_model_requires_control_image(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-8bit",
+                "--controlnet-model",
+                "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors",
+                "--prompt",
+                "a tiger cub portrait",
+            ]
+        )
+
+    assert "controlnet-model requires --controlnet-image-path" in capsys.readouterr().err
+
+
+def test_controlnet_strength_requires_control_image(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-2512-8bit",
+                "--controlnet-strength",
+                "0.85",
+                "--prompt",
+                "a tiger cub portrait",
+            ]
+        )
+
+    assert "controlnet-strength requires --controlnet-image-path" in capsys.readouterr().err
+
+
+def test_qwen_backend_controlnet_model_requires_control_image(monkeypatch, capsys):
+    from mflux.models.qwen.cli import qwen_image_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen",
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--controlnet-model",
+            "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors",
+            "--prompt",
+            "a tiger cub portrait",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        qwen_image_generate.main()
+
+    assert "controlnet-model requires --controlnet-image-path" in capsys.readouterr().err
+
+
+def test_qwen_backend_rejects_unvalidated_control_model_identity(monkeypatch, capsys):
+    from mflux.models.qwen.cli import qwen_image_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen",
+            "--model",
+            "AbstractFramework/qwen-image-2512-8bit",
+            "--controlnet-image-path",
+            "control.png",
+            "--controlnet-model",
+            "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors",
+            "--prompt",
+            "a tiger cub portrait",
+            "--output",
+            "out.png",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        qwen_image_generate.main()
+
+    assert "controlnet-image-path is only supported" in capsys.readouterr().err
+
+
 def test_outpaint_padding_routes_flux2_edit():
     invocation = mlx_gen._resolve_invocation(
         [

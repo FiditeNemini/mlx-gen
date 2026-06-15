@@ -32,6 +32,7 @@ class _Route:
     image_argument: str | None
     requires_image: bool
     model_override: str | None = None
+    control_model: str | None = None
 
 
 def main() -> None:
@@ -70,6 +71,16 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     normalized_argv = [route.target_name]
     if forwarded_model is not None:
         normalized_argv.extend(["--model", forwarded_model])
+    if route.control_model is not None:
+        explicit_control_model = _option_value(forwarded, "--controlnet-model")
+        if explicit_control_model is not None and explicit_control_model != route.control_model:
+            _parser().error(
+                "--controlnet-model conflicts with the exact structured-control row selected by mlxgen generate. "
+                "Use the documented control route, or call the backend command directly if you need a different "
+                "ControlNet package."
+            )
+        if explicit_control_model is None:
+            normalized_argv.extend(["--controlnet-model", route.control_model])
     if args.base_model is not None and _route_accepts_base_model(route):
         normalized_argv.extend(["--base-model", args.base_model])
     if route.image_argument is not None and images:
@@ -124,12 +135,17 @@ def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     if args.outpaint_padding is None:
         args.outpaint_padding = metadata.get("outpaint_padding") or metadata.get("image_outpaint_padding")
     args.has_mask = _has_mask_option(argv, metadata)
+    args.has_control_image = _has_controlnet_image_option(argv, metadata)
     args.has_outpaint = args.outpaint_padding is not None or _has_outpaint_option(argv, metadata)
     args.has_reframe = args.reframe_padding is not None
     args.has_lora = _has_lora_option(argv, metadata)
     args.lora_paths = _lora_paths_from_options(argv, metadata)
     if args.has_lora and _has_lora_scales_without_paths(argv, metadata):
         parser.error("--lora-scales requires --lora-paths.")
+    if _option_was_provided(argv, "--controlnet-model") and not args.has_control_image:
+        parser.error("--controlnet-model requires --controlnet-image-path.")
+    if _option_was_provided(argv, "--controlnet-strength") and not args.has_control_image:
+        parser.error("--controlnet-strength requires --controlnet-image-path.")
     if args.has_reframe and args.has_outpaint:
         parser.error("--reframe-padding and --outpaint-padding are different workflows and cannot be used together.")
     if args.model is None:
@@ -239,6 +255,10 @@ def _has_outpaint_option(argv: list[str], metadata: dict) -> bool:
         or metadata.get("outpaint_padding") is not None
         or metadata.get("image_outpaint_padding") is not None
     )
+
+
+def _has_controlnet_image_option(argv: list[str], metadata: dict) -> bool:
+    return _option_was_provided(argv, "--controlnet-image-path") or metadata.get("controlnet_image_path") is not None
 
 
 def _has_lora_option(argv: list[str], metadata: dict) -> bool:
@@ -741,7 +761,12 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
     plan = _resolve_generation_plan(args, image_count=image_count, model_config=model_config)
     _validate_lora_compatibility(args=args, model_config=model_config)
     _validate_family_override(args, model_config=model_config, plan=plan)
-    return _route_for_plan(plan.handler_id, has_image=has_images, model_override=plan.model_override)
+    return _route_for_plan(
+        plan.handler_id,
+        has_image=has_images,
+        model_override=plan.model_override,
+        control_model=plan.control_model,
+    )
 
 
 def _validate_lora_compatibility(args: argparse.Namespace, model_config: ModelConfig | None) -> None:
@@ -773,6 +798,7 @@ def _resolve_generation_plan(
             i2i_mode=args.i2i_mode,
             has_image_strength=args.has_image_strength,
             has_mask=args.has_mask,
+            has_control_image=args.has_control_image,
             has_outpaint=args.has_outpaint,
             has_reframe=args.has_reframe,
             has_lora=args.has_lora,
@@ -817,9 +843,15 @@ def _validate_family_override(
     )
 
 
-def _route_for_plan(handler_id: str, *, has_image: bool, model_override: str | None) -> _Route:
+def _route_for_plan(
+    handler_id: str,
+    *,
+    has_image: bool,
+    model_override: str | None,
+    control_model: str | None,
+) -> _Route:
     if handler_id == "qwen.generate":
-        return _qwen_route()
+        return _qwen_route(control_model=control_model)
     if handler_id == "qwen.edit":
         return _qwen_edit_route(model_override=model_override)
     if handler_id == "flux2.generate":
@@ -919,10 +951,10 @@ def _is_seedvr2(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("seedvr2") for alias in aliases) or "seedvr2" in model_key
 
 
-def _qwen_route() -> _Route:
+def _qwen_route(control_model: str | None = None) -> _Route:
     from mflux.models.qwen.cli.qwen_image_generate import main as target_main
 
-    return _Route("mflux-generate-qwen", target_main, "--image-path", requires_image=False)
+    return _Route("mflux-generate-qwen", target_main, "--image-path", requires_image=False, control_model=control_model)
 
 
 def _qwen_edit_route(model_override: str | None = None) -> _Route:

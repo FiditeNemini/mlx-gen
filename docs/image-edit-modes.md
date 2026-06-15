@@ -1,8 +1,10 @@
 # Image Edit Modes
 
 MLX-Gen exposes one public `image-to-image` task, but different models support different edit
-behaviors. Use this guide when you need to choose between latent restyling, instruction editing,
-masked edit/inpaint, multi-reference composition, generative reframe, and outpaint.
+behaviors. It also exposes a small number of adjacent structured-control routes that use a control
+image instead of a source image. Use this guide when you need to choose between latent restyling,
+instruction editing, masked edit/inpaint, structured control, multi-reference composition,
+generative reframe, and outpaint.
 
 For the current model-by-model proof assets, use [Image Edit Capabilities](edit-capabilities.md).
 That page answers "which exact model or package passed visual QA?" This page answers "what kind of
@@ -15,6 +17,7 @@ edit should I expect from each mode?"
 | Change the overall mood, style, or lighting of one source image | `latent-img2img` | The whole image is reinterpreted from the source latent. Good for variation and restyle; weaker for precise object edits. |
 | Follow an instruction while keeping the scene layout recognizable | `edit-reference` | The source image stays active as a reference. Better composition hold than latent img2img. |
 | Change only one local area and keep the rest of the frame stable | masked edit / inpaint | Use an edit-capable route with `--mask-path`. White mask pixels are repainted; black pixels are preserved. |
+| Use an edge map or pose guide to fix the layout while generating from text | structured control | Use a route that advertises `supports_control_image=true` and pass `--controlnet-image-path`. This is not the same as source-image edit. |
 | Use one image for structure and another for style, material, or lighting | `multi-reference` | The first image anchors geometry; later images contribute additional references. |
 | Reveal more of the scene around the source image | `generative reframe` | The model generates a wider view. It may redraw parts of the source image while composing the larger scene. |
 | Extend the canvas beyond the crop while trying to keep the source region stable | `outpaint` | The model fills new space around the source image. This is the closest MLX-Gen route to source-preserving extension, but it is still generative. |
@@ -132,6 +135,54 @@ mlxgen generate \
   --output repaired.png
 ```
 
+## Structured Control
+
+Use structured control when you want the prompt to decide appearance but a control image to decide
+layout. Typical control images are edges, sketches, pose/keypoint maps, or other explicit
+structure guides.
+
+This mode is best for:
+
+- fixing composition with a canny or sketch guide;
+- following a pose map for character layout;
+- keeping the prompt flexible while anchoring geometry.
+
+This mode is weaker for:
+
+- source-image edits that should preserve an existing frame;
+- local masked repairs;
+- multi-reference edit composition.
+
+The important workflow distinction is:
+
+- `--image` means source-image generation or editing;
+- `--controlnet-image-path` means structured text-to-image control.
+
+Do not treat `--controlnet-image-path` as another name for `--image`. The current exact public
+proof row is `AbstractFramework/qwen-image-8bit` on `qwen.control`, and the route uses the exact
+InstantX union ControlNet sidecar that `mlxgen generate` injects automatically for that row. See
+[Image Edit Capabilities](edit-capabilities.md) for the accepted contact sheet and command log.
+
+Example:
+
+```sh
+mlxgen download --model lightx2v/Qwen-Image-Lightning --all-files
+
+mlxgen generate \
+  --model AbstractFramework/qwen-image-8bit \
+  --prompt "Aesthetics art, traditional asian pagoda, elaborate golden accents, sky blue and white color palette, swirling cloud pattern, digital illustration, east asian architecture, ornamental rooftop, intricate detailing on building, cultural representation." \
+  --negative "blurry, low quality, distorted, deformed, text, watermark, ugly" \
+  --width 576 \
+  --height 864 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 5802 \
+  --controlnet-image-path canny.png \
+  --lora-paths lightx2v/Qwen-Image-Lightning:Qwen-Image-Lightning-4steps-V2.0-bf16.safetensors \
+  --lora-scales 1 \
+  --output controlled.png
+```
+
 ## Multi-Reference
 
 Use `multi-reference` when you want one image to provide structure and another image to provide a
@@ -242,6 +293,7 @@ not a literal source-paste guarantee.
 
 - Use `latent-img2img` for whole-image mood and style variation.
 - Use `edit-reference` for instructions that should keep the scene layout recognizable.
+- Use structured control when the prompt should define appearance but a control image should define layout.
 - Use `multi-reference` when one image is not enough to describe the target.
 - Use `reframe` when you want a wider composition and accept generative recomposition.
 - Use `outpaint` when you want extension around the crop and source stability matters.

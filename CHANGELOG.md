@@ -15,12 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path versus the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning` `4`-step path.
 - **Qwen masked edit control sheet**: add a same-prompt same-seed no-mask-versus-mask Lightning
   control sheet, showing that the dedicated mask is what keeps the Qwen 2511 q8 edit localized.
+- **Qwen structured control proof**: add the first exact public `--controlnet-image-path` route on
+  `AbstractFramework/qwen-image-8bit`, with the exact InstantX union ControlNet sidecar, a
+  dedicated `qwen.control` capability row, a same-seed no-control-versus-control contact sheet,
+  command log, and M5 Max timings using `lightx2v/Qwen-Image-Lightning` as the recommended `4`-step
+  path.
 
 ### Changed
 
 - **Qwen image-edit docs**: document masked edit / inpaint in the image-edit guide, the capability
   matrix, the API reference, the FAQ, and the LoRA guide, and surface the dedicated Qwen 2511
   Lightning adapter as the recommended fast public path for masked edits on the validated q8 row.
+- **Qwen structured-control docs**: document the exact `qwen.control` route, make the
+  `--image` versus `--controlnet-image-path` workflow boundary explicit, and publish the accepted
+  base Qwen q8 structured-control proof in the capability guide, API reference, FAQ, and LoRA
+  guide.
 
 ## [0.18.18] - 2026-06-13
 

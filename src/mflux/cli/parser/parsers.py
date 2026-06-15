@@ -243,6 +243,7 @@ class CommandLineParser(argparse.ArgumentParser):
         self.supports_controlnet = True
         self.add_argument("--controlnet-image-path", type=str, required=require_image, help="Local path of the image to use as input for controlnet.")
         self.add_argument("--controlnet-strength", type=float, default=ui_defaults.CONTROLNET_STRENGTH, help=f"Controls how strongly the control image influences the output image. A value of 0.0 means no influence. (Default is {ui_defaults.CONTROLNET_STRENGTH})")
+        self.add_argument("--controlnet-model", type=str, default=None, help="Exact ControlNet model spec. Use repo:file.safetensors for structured-control routes that require a sidecar ControlNet package.")
         if mode == 'canny':
             self.add_argument("--controlnet-save-canny", action="store_true", help="If set, save the Canny edge detection reference input image.")
 
@@ -378,6 +379,8 @@ class CommandLineParser(argparse.ArgumentParser):
             if self.supports_controlnet:
                 if namespace.controlnet_image_path is None:
                     namespace.controlnet_image_path = prior_gen_metadata.get("controlnet_image_path", None)
+                if namespace.controlnet_model is None:
+                    namespace.controlnet_model = prior_gen_metadata.get("controlnet_model", None)
                 if namespace.controlnet_strength == self.get_default("controlnet_strength") and (cnet_strength_from_metadata := prior_gen_metadata.get("controlnet_strength", None)):
                     namespace.controlnet_strength = cnet_strength_from_metadata
                 if namespace.controlnet_save_canny == self.get_default("controlnet_save_canny") and (cnet_canny_from_metadata := prior_gen_metadata.get("controlnet_save_canny", None)):

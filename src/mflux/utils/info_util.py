@@ -123,6 +123,8 @@ class InfoUtil:
         if controlnet_path := exif.get("controlnet_image_path"):
             lines.append("")
             lines.append(f"ControlNet Image: {Path(controlnet_path).name}")
+            if controlnet_model := exif.get("controlnet_model"):
+                lines.append(f"ControlNet Model: {controlnet_model}")
             if controlnet_strength := exif.get("controlnet_strength"):
                 lines.append(f"ControlNet Strength: {controlnet_strength}")
 

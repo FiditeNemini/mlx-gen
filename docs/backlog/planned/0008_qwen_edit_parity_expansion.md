@@ -40,19 +40,29 @@ that this is no longer just a parity curiosity. `QwenImageControlNetPipeline`,
 `QwenImageEditPlusPipeline`, `QwenImageInpaintPipeline`, and `QwenImageEditInpaintPipeline` are
 documented as first-class public routes.
 
-Update 2026-06-15: the first narrow public slice is now implemented. MLX-Gen exposes masked edit
-on the Qwen edit route through `--mask-path`, `mlxgen capabilities` now surfaces a distinct
-`qwen.inpaint` capability row, and `AbstractFramework/qwen-image-edit-2511-8bit` has an accepted
-same-seed q8 proof row using the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning` adapter. The
-published contact sheet covers two masked-edit conditions: localized engine enhancement and
-localized crash repair. Structured control remains the next major missing piece.
+Update 2026-06-15: the first narrow public masked-edit slice is now implemented. MLX-Gen exposes
+masked edit on the Qwen edit route through `--mask-path`, `mlxgen capabilities` now surfaces a
+distinct `qwen.inpaint` capability row, and `AbstractFramework/qwen-image-edit-2511-8bit` has an
+accepted same-seed q8 proof row using the dedicated
+`lightx2v/Qwen-Image-Edit-2511-Lightning` adapter. The published contact sheet covers two
+masked-edit conditions: localized engine enhancement and localized crash repair.
 
-Update 2026-06-15 (control follow-up): the masked-edit proof now also includes a no-mask control
-using the same prompts, seeds, and Lightning adapter. Those control runs recompose the full scene,
-which is the evidence that `--mask-path` is doing real localization work instead of the model only
-following the instruction globally. The published control sheet now states the important invariant
-explicitly: same `768x432` source image, same prompt, same seed, same Lightning adapter, and only
-`--mask-path` changed.
+Update 2026-06-15 (mask control follow-up): the masked-edit proof now also includes a no-mask
+control using the same prompts, seeds, and Lightning adapter. Those control runs recompose the
+full scene, which is the evidence that `--mask-path` is doing real localization work instead of
+the model only following the instruction globally. The published control sheet now states the
+important invariant explicitly: same `768x432` source image, same prompt, same seed, same
+Lightning adapter, and only `--mask-path` changed.
+
+Update 2026-06-15 (structured control): the first narrow public structured-control slice is now
+implemented and proven. `mlxgen generate` accepts `--controlnet-image-path` on the exact
+`AbstractFramework/qwen-image-8bit` public row, routes that request to `qwen.control`, and
+injects the exact sidecar `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`.
+The accepted q8 proof uses the dedicated `lightx2v/Qwen-Image-Lightning` adapter on two same-seed
+A/B rows: canny-guided pagoda and pose-guided portrait. The no-control columns keep the same
+prompt, seed, and Lightning adapter; only the control image changes. The structured-control slice
+is intentionally narrow: base q8 prepared package only, one control image, no edit-route control,
+and no control-inpaint yet.
 
 ## Current code reality
 
@@ -78,9 +88,14 @@ explicitly: same `768x432` source image, same prompt, same seed, same Lightning 
   - `alibaba-pai/Qwen-Image-2512-Fun-Controlnet-Union`
 - MLX-Gen docs and model cards already emphasize Qwen mixed q4/q8 because full q4 quality was not
   good enough.
-- MLX-Gen now exposes first-class Qwen mask inputs on the edit route through `--mask-path`, but it
-  still does not expose Qwen control images, control types, or Qwen ControlNet package resolution
-  through `mlxgen generate`.
+- MLX-Gen now exposes first-class Qwen mask inputs on the edit route through `--mask-path`.
+- MLX-Gen now also exposes one exact structured-control route through `mlxgen generate`:
+  `AbstractFramework/qwen-image-8bit` on `qwen.control` with `--controlnet-image-path`.
+- The structured-control route is fail-closed at the public contract layer: the unified router
+  injects the exact `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
+  sidecar, and conflicting `--controlnet-model` values are rejected.
+- Non-validated base-Qwen rows do not advertise `qwen.control`; the accepted public control slice
+  is the prepared q8 route only.
 - There is legacy mask/control plumbing in the inherited FLUX.1 command surface, but it is not
   wired into current unified Qwen routing.
 
@@ -91,10 +106,11 @@ surface is richer. The highest-value missing pieces are not random new models; t
 Qwen edit modes that users naturally expect once they can edit images:
 
 - inpainting and masked edit;
-- edit-plus / multi-image behavior;
+- structured control on the exact prepared q8 base route;
+- control-inpaint and edit-plus / multi-image behavior;
 - layered composition;
-- structured control and ControlNet-inpaint with depth, edge, pose, sketch, and related
-  condition maps;
+- broader structured control and ControlNet-inpaint with depth, edge, pose, sketch, and related
+  condition maps after the first exact slice;
 - LoRA validation for 2511 workflows.
 
 ## What we want to do
@@ -104,8 +120,8 @@ Make Qwen parity the next serious image-edit expansion after current LoRA truthf
 1. Create a Qwen feature matrix comparing MLX-Gen to the local Diffusers Qwen pipelines.
 2. Add tests that lock current Qwen route decisions: text-to-image, img2img, single-image edit,
    multi-image edit, and explicit task override.
-3. Port one adjacent feature family at a time, starting with masked edit or structured control on
-   the Qwen route that has the cleanest public weights and strongest visible effect.
+3. Port one adjacent feature family at a time, starting with the Qwen route that has the cleanest
+   public weights and strongest visible effect.
 4. Keep Qwen-Image-Edit-2509 and Qwen-Image-Edit-2511 as the practical edit baselines for new
    Qwen control work, and use Qwen Image 2512 only where the public control weights clearly target
    that generation route.
@@ -142,8 +158,8 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
    - masked edit/inpaint;
    - structured control;
    - structured control + inpaint.
-2. Start with the local Diffusers control or inpaint path that has the smallest new surface area
-   and the clearest public weights.
+2. Keep the first public structured-control slice narrow: one exact prepared q8 base row, one
+   exact public sidecar package, one control image, and no edit/control mixing.
 3. Reuse the existing Qwen transformer, tokenizer, scheduler, and LoRA strictness patterns before
    adding new abstractions.
 4. Extend unified `mlxgen generate` only after the underlying Qwen route is proven. Capability
@@ -165,6 +181,8 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
   verified.
 - Do not let Qwen-specific naming leak into the generic `mlxgen` contract unless the same concept
   is useful across families.
+- Do not broaden the current public structured-control claim beyond the exact validated q8 row
+  until another route has its own accepted proof artifacts.
 
 ## Dependencies and related tasks
 
@@ -178,7 +196,8 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 ## Expected outcomes
 
 - A clear Qwen feature matrix with implemented vs unsupported rows.
-- At least one validated structured-control or masked-edit Qwen route with public proof artifacts.
+- At least one validated masked-edit Qwen route with public proof artifacts.
+- At least one validated structured-control Qwen route with public proof artifacts.
 - Capability output and docs that tell AbstractVision exactly when Qwen can expose control/mask
   inputs.
 
@@ -196,7 +215,8 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 - [x] Decide the first public Qwen control target and its proof weights.
 - [x] Implement strict route selection and capability surfacing for that target.
 - [x] Validate the first q8 masked-edit proof row with visible contact sheets and a no-mask control.
-- [x] Decide whether masked edit/inpaint should be the second Qwen expansion or stay separate.
+- [x] Validate the first q8 structured-control proof row with visible same-seed no-control vs control contact sheets.
+- [ ] Decide the next narrow Qwen parity slice after masked edit and structured control: control-inpaint, edit-plus, or another exact route.
 
 ## Guidance for the implementing agent
 

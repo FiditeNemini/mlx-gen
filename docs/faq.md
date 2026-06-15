@@ -272,6 +272,37 @@ mlxgen generate \
 For the accepted contact sheet, timings, and full example commands, see
 [Image Edit Capabilities](edit-capabilities.md) and [LoRA](lora.md).
 
+## How Do I Use Qwen Structured Control?
+
+Use a capability row that reports `supports_control_image=true`, then pass one control image with
+`--controlnet-image-path`. This is a structured text-to-image route, not a source-image edit
+route, so do not combine it with `--image`.
+
+The current exact public proof row is `AbstractFramework/qwen-image-8bit` on `qwen.control`. The
+recommended fast public path uses the dedicated `lightx2v/Qwen-Image-Lightning` adapter:
+
+```sh
+mlxgen download --model lightx2v/Qwen-Image-Lightning --all-files
+
+mlxgen generate \
+  --model AbstractFramework/qwen-image-8bit \
+  --prompt "Aesthetics art, traditional asian pagoda, elaborate golden accents, sky blue and white color palette, swirling cloud pattern, digital illustration, east asian architecture, ornamental rooftop, intricate detailing on building, cultural representation." \
+  --negative "blurry, low quality, distorted, deformed, text, watermark, ugly" \
+  --width 576 \
+  --height 864 \
+  --steps 4 \
+  --guidance 1 \
+  --seed 5802 \
+  --controlnet-image-path canny.png \
+  --lora-paths lightx2v/Qwen-Image-Lightning:Qwen-Image-Lightning-4steps-V2.0-bf16.safetensors \
+  --lora-scales 1 \
+  --output controlled.png
+```
+
+The exact sidecar is injected automatically for that validated row. For the accepted contact sheet,
+timings, and full example commands, see [Image Edit Capabilities](edit-capabilities.md) and
+[LoRA](lora.md).
+
 ## Which Qwen Image Edit Model Should I Use?
 
 Use the exact Qwen edit handle for the capability you need:
