@@ -64,6 +64,11 @@ prompt, seed, and Lightning adapter; only the control image changes. The structu
 is intentionally narrow: base q8 prepared package only, one control image, no edit-route control,
 and no control-inpaint yet.
 
+Update 2026-06-15 (next slice): the strongest next bounded expansion is now control-inpaint on the
+base Qwen lane with `InstantX/Qwen-Image-ControlNet-Inpainting`. That route combines the two
+public Qwen surfaces MLX-Gen just validated separately: localization and structure. It is a better
+next slice than broadening to multiple edit-plus or control families at once.
+
 ## Current code reality
 
 - MLX-Gen has Qwen text-to-image and image-edit variants under `src/mflux/models/qwen/`.
@@ -216,7 +221,7 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 - [x] Implement strict route selection and capability surfacing for that target.
 - [x] Validate the first q8 masked-edit proof row with visible contact sheets and a no-mask control.
 - [x] Validate the first q8 structured-control proof row with visible same-seed no-control vs control contact sheets.
-- [ ] Decide the next narrow Qwen parity slice after masked edit and structured control: control-inpaint, edit-plus, or another exact route.
+- [x] Decide the next narrow Qwen parity slice after masked edit and structured control: base-Qwen control-inpaint with the exact InstantX inpainting sidecar.
 
 ## Guidance for the implementing agent
 

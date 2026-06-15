@@ -1,9 +1,9 @@
-# Proposed: Z-Image native inpaint
+# Planned: Z-Image native inpaint
 
 ## Metadata
 
 - Created: 2026-06-15
-- Status: Proposed
+- Status: Planned
 - Completed: N/A
 
 ## ADR status
@@ -64,13 +64,14 @@ product shape. It improves edit precision without introducing a whole new image 
 
 ## Promotion criteria
 
-Promote to `planned/` only when:
+This item is promoted because:
 
-- one exact Z-Image model handle or prepared package is selected as the first proof target;
-- the mask contract is clear enough for `mlxgen generate` and AbstractVision to expose without
-  guessing;
-- upstream Diffusers behavior is inspected closely enough to avoid latent-img2img shortcuts;
-- at least one small local smoke profile is feasible on the target Apple Silicon machine.
+- `Tongyi-MAI/Z-Image-Turbo` is already a supported family in MLX-Gen and the official Diffusers
+  docs expose a dedicated native inpaint route;
+- the missing work is a bounded route expansion inside an existing family rather than a new
+  architecture port;
+- the public contract is straightforward: source image, mask image, prompt, negative prompt, and
+  fail-closed route selection.
 
 ## Validation ideas
 
