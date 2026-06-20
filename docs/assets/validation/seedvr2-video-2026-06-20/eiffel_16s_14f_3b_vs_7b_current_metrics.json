@@ -1,0 +1,68 @@
+{
+  "source": {
+    "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+    "start_seconds": 16.0,
+    "frames": 14,
+    "fps": 29.97002997002997,
+    "width": 320,
+    "height": 240,
+    "audio_present": true
+  },
+  "metrics_method": {
+    "comparison_space": "Restored clips are downscaled back to the original source resolution before scoring.",
+    "metrics": {
+      "sharpness": "Mean absolute horizontal/vertical luminance gradient.",
+      "contrast": "Luminance standard deviation.",
+      "drift_mae": "Mean absolute luma difference between source and downscaled restore.",
+      "temporal_delta": "Mean absolute luma delta between adjacent frames.",
+      "temporal_ratio": "restore_temporal_delta / source_temporal_delta",
+      "heuristic_score": "Clip-local heuristic score for ranking candidates on the same source clip only."
+    }
+  },
+  "candidates": [
+    {
+      "label": "3b_current_14f",
+      "video_path": "validation_outputs/seedvr2_video_2026_06_20/eiffel_16s_14f_3b_1x_current.mp4",
+      "model": "ByteDance-Seed/SeedVR2-3B",
+      "generation_time_seconds": 6.41,
+      "restored_width": 320,
+      "restored_height": 240,
+      "source_resolution_metrics": {
+        "source_sharpness": 0.019971,
+        "restored_sharpness": 0.038862,
+        "sharpness_gain": 1.9459,
+        "source_contrast": 0.281976,
+        "restored_contrast": 0.312626,
+        "contrast_gain": 1.1087,
+        "source_temporal_delta": 0.023474,
+        "restored_temporal_delta": 0.041719,
+        "temporal_ratio": 1.7773,
+        "drift_mae": 0.078679,
+        "heuristic_score": 50.5
+      },
+      "heuristic_read": "aggressive drift or flicker risk"
+    },
+    {
+      "label": "7b_current_14f",
+      "video_path": "validation_outputs/seedvr2_video_2026_06_20/eiffel_16s_14f_7b_1x_current.mp4",
+      "model": "ByteDance-Seed/SeedVR2-7B",
+      "generation_time_seconds": 6.79,
+      "restored_width": 320,
+      "restored_height": 240,
+      "source_resolution_metrics": {
+        "source_sharpness": 0.019971,
+        "restored_sharpness": 0.034683,
+        "sharpness_gain": 1.7367,
+        "source_contrast": 0.281976,
+        "restored_contrast": 0.299435,
+        "contrast_gain": 1.0619,
+        "source_temporal_delta": 0.023474,
+        "restored_temporal_delta": 0.028499,
+        "temporal_ratio": 1.2141,
+        "drift_mae": 0.065077,
+        "heuristic_score": 58.86
+      },
+      "heuristic_read": "balanced restore candidate"
+    }
+  ]
+}

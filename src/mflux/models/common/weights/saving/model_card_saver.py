@@ -355,7 +355,7 @@ class ModelCardSaver:
                     "",
                     f"- q{bits} for quantizable SeedVR2 transformer linears and VAE attention linears.",
                     "- BF16 for convolutions, normalization layers, and other non-quantizable parameters.",
-                    "- The static SeedVR2 positive embedding is provided by the MLX-Gen runtime.",
+                    "- MLX-Gen supplies the static SeedVR2 positive embedding at runtime when the prepared checkpoint does not bundle it.",
                     "",
                     f"See the [MLX-Gen quantization docs]({ModelCardSaver.QUANTIZATION_DOC_URL}) "
                     "for compatibility notes and measured behavior.",

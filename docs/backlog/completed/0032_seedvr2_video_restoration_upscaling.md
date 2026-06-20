@@ -16,6 +16,12 @@
 
 Completed as a full-video SeedVR2 restore v1 under `mlxgen upscale`.
 
+Update 2026-06-20: after the June 20 SeedVR2 math and host-safety corrections, the accepted
+current-code validation surface now includes both the bounded Eiffel source-size proof set and a
+rerun full `97s` Eiffel source-size proof on the exact current route under
+`docs/assets/validation/seedvr2-video-2026-06-20/`. The checked full-route proof uses the default
+safe streaming profile for `3B` and an explicit chunk-5 streaming profile for `7B`.
+
 MLX-Gen now supports:
 
 - `--video-path` on the existing SeedVR2 upscale route;
@@ -34,6 +40,8 @@ Current explicit limitation:
 
 - output is a silent MP4 even when the source clip contains audio; this is tracked separately in
   proposed item [0046](../proposed/0046_seedvr2_video_audio_copythrough.md).
+- the host-safe public CLI profile is source-size-oriented and keeps enlarged video output behind
+  explicit unsafe override.
 
 ## Related backlog items
 
@@ -67,7 +75,9 @@ Sources checked:
 - `mlxgen upscale` and `mflux-upscale-seedvr2` route to
   `src/mflux/models/seedvr2/cli/seedvr2_upscale.py`.
 - `SeedVR2.generate_image(...)` still handles the original image-only path.
-- `SeedVR2.generate_video(...)` still handles the bounded direct path and returns `GeneratedVideo`.
+- `SeedVR2.generate_video(...)` still exists as a bounded internal path and returns
+  `GeneratedVideo`, but the public CLI safe profile routes video restore through
+  `SeedVR2.restore_video_to_path(...)`.
 - `SeedVR2.restore_video_to_path(...)` now handles longer clips through sequential temporal
   chunks, overlap blending, and streamed MP4 output.
 - `src/mflux/utils/video_util.py` now provides source inspection, bounded clip decode, frame-window
@@ -112,7 +122,8 @@ video-support claim.
   - cleans up partial output files on failure.
 - SeedVR2 CLI now warns explicitly when a source video had audio and the restored output is silent.
 - Video restore rejects `--vae-tiling`; the public low-memory path for long clips is
-  `--low-ram --mlx-cache-limit-gb 8` plus temporal chunking.
+  `--low-ram --mlx-cache-limit-gb 8` plus temporal chunking, with enlarged video output kept
+  behind explicit unsafe override.
 - Public docs now cover image and full-video restore together and include model-backed video
   commands plus proof artifacts.
 
@@ -166,7 +177,7 @@ uv run pytest \
 make test-fast
 ```
 
-- Official 3B full-video public proof:
+- Official 3B full-video public proof on the exact current route:
 
 ```sh
 uv run mlxgen upscale \
@@ -175,16 +186,12 @@ uv run mlxgen upscale \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
-  --temporal-chunk-size 49 \
-  --temporal-chunk-overlap 16 \
-  --low-ram \
-  --mlx-cache-limit-gb 8 \
   --metadata \
-  --output validation_outputs/seedvr2_video_2026_06_19/eiffel_full_source3b_restore1x_lowram.mp4 \
+  --output validation_outputs/seedvr2_video_2026_06_20/eiffel_full_source3b_restore1x_current.mp4 \
   --replace
 ```
 
-- Official 7B full-video public proof:
+- Official 7B full-video public proof on the exact current route:
 
 ```sh
 uv run mlxgen upscale \
@@ -193,30 +200,29 @@ uv run mlxgen upscale \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
-  --temporal-chunk-size 49 \
-  --temporal-chunk-overlap 16 \
-  --low-ram \
-  --mlx-cache-limit-gb 8 \
+  --temporal-chunk-size 5 \
+  --temporal-chunk-overlap 1 \
+  --force-unsafe-video-memory \
   --metadata \
-  --output validation_outputs/seedvr2_video_2026_06_19/eiffel_full_source7b_restore1x_lowram.mp4 \
+  --output validation_outputs/seedvr2_video_2026_06_20/eiffel_full_source7b_restore1x_current.mp4 \
   --replace
 ```
 
 Published proof assets:
 
-- `docs/assets/validation/seedvr2-video-2026-06-19/eiffel_full_restore_3b_1x.mp4`
-- `docs/assets/validation/seedvr2-video-2026-06-19/eiffel_full_restore_7b_1x.mp4`
-- `docs/assets/validation/seedvr2-video-2026-06-19/eiffel_full_3b_7b_1x_contact_sheet.jpg`
-- `docs/assets/validation/seedvr2-video-2026-06-19/eiffel_full_3b_7b_1x_metrics.json`
-- `docs/assets/validation/seedvr2-video-2026-06-19/seedvr2_video_restore_full_command_log.md`
-- `docs/assets/validation/seedvr2-video-2026-06-19/seedvr2_video_restore_full_stats_m5max.json`
+- `docs/assets/validation/seedvr2-video-2026-06-20/eiffel_full_source3b_restore1x_current.mp4`
+- `docs/assets/validation/seedvr2-video-2026-06-20/eiffel_full_source7b_restore1x_current.mp4`
+- `docs/assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_contact_sheet.jpg`
+- `docs/assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_metrics.json`
+- `docs/assets/validation/seedvr2-video-2026-06-20/seedvr2_video_restore_full_command_log.md`
+- `docs/assets/validation/seedvr2-video-2026-06-20/seedvr2_video_restore_full_stats_m5max.json`
 
 Observed timings on `M5 Max`:
 
-- official `ByteDance-Seed/SeedVR2-3B` full clip at `1x`: `1893.11s` generation, `1897.77s` wall
-  time, peak MLX memory `39.37 GB`, max RSS `27.37 GB`
-- official `ByteDance-Seed/SeedVR2-7B` full clip at `1x`: `1778.50s` generation, `1785.53s` wall
-  time, peak MLX memory `53.50 GB`, max RSS `66.16 GB`
+- official `ByteDance-Seed/SeedVR2-3B` full clip at `1x`: `2210.12s` generation, `2215.64s` wall
+  time, peak MLX memory `31.36 GB`, max RSS `27.40 GB`
+- official `ByteDance-Seed/SeedVR2-7B` full clip at `1x`: `3062.79s` generation, `3070.42s` wall
+  time, peak MLX memory `22.93 GB`, max RSS `66.18 GB`
 
 Both proof clips preserved source FPS and wrote `audio_copied=false`.
 
@@ -224,16 +230,15 @@ The public metric panel compares sampled restored frames after downscaling them 
 original `320x240` source resolution so the numbers measure restoration behavior rather than raw
 output size. On this exact Eiffel full clip:
 
-- `3B 1x` scored `65.43` with `sharpness_gain 1.70x`, `contrast_gain 1.09x`,
-  `temporal_ratio 1.13`, and `drift_mae 0.0688`;
-- `7B 1x` scored `69.07` with `sharpness_gain 1.35x`, `contrast_gain 1.06x`,
-  `temporal_ratio 1.07`, and `drift_mae 0.0587`.
+- `3B 1x` scored `53.34` with `sharpness_gain 1.7187x`, `contrast_gain 1.0942x`,
+  `temporal_ratio 1.7634`, and `drift_mae 0.069546`;
+- `7B 1x` scored `68.03` with `sharpness_gain 1.8153x`, `contrast_gain 1.0720x`,
+  `temporal_ratio 1.1041`, and `drift_mae 0.060194`.
 
-That means the current regular `7B 1x` route was numerically steadier across the full archival
-clip, while `3B 1x` stayed visually crisper and materially lower-memory. The higher `7B` heuristic
-score should be read as lower-drift / smoother-temporal behavior, not as an unconditional visual
-winner. The upstream 7B repository also includes a separate `7B-sharp` checkpoint, but this item
-does not claim first-class MLX-Gen support for that variant.
+These metrics are useful route-health evidence for drift, sharpness, and temporal behavior, but
+they are not a blanket 3B-versus-7B family-quality ranking. The upstream 7B repository also
+includes a separate `7B-sharp` checkpoint, but this item does not claim first-class MLX-Gen video
+quality ranking for that variant.
 
 Local limitation check:
 

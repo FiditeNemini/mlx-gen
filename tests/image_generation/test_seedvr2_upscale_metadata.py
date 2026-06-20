@@ -173,7 +173,7 @@ def test_seedvr2_generate_video_records_source_video_metadata(monkeypatch, tmp_p
         "read_video_clip",
         staticmethod(
             lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
-                frames=[Image.new("RGB", (64, 48), (0, 0, 0)) for _ in range(6)],
+                frames=[Image.new("RGB", (64, 48), (0, 0, 0)) for _ in range(max_frames or 1)],
                 fps=29.97,
                 source_width=64,
                 source_height=48,
@@ -181,7 +181,7 @@ def test_seedvr2_generate_video_records_source_video_metadata(monkeypatch, tmp_p
                 source_duration_seconds=4.004,
                 audio_present=True,
                 clip_start_frame=12,
-                clip_frame_count=6,
+                clip_frame_count=max_frames or 1,
             )
         ),
     )
@@ -227,7 +227,7 @@ def test_seedvr2_generate_video_records_source_video_metadata(monkeypatch, tmp_p
         resolution=256,
         softness=0.25,
         start_seconds=1.5,
-        max_frames=6,
+        max_frames=1,
     )
 
     assert result["task"] == "video-to-video"
@@ -241,4 +241,4 @@ def test_seedvr2_generate_video_records_source_video_metadata(monkeypatch, tmp_p
     assert result["extra_metadata"]["seedvr2_checkpoint_variant"] == "7b"
     assert result["extra_metadata"]["seedvr2_source_layout"] == "prepared"
     assert result["extra_metadata"]["source_clip_start_seconds"] == 1.5
-    assert result["extra_metadata"]["source_clip_frames"] == 6
+    assert result["extra_metadata"]["source_clip_frames"] == 1

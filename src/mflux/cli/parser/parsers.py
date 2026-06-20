@@ -151,7 +151,7 @@ class CommandLineParser(argparse.ArgumentParser):
             "--color-correction",
             choices=["wavelet", "lab", "off"],
             default="wavelet",
-            help="Video/image color post-processing. 'wavelet' is the upstream-like restoration default for video. Default: wavelet.",
+            help="Video/image color post-processing. 'wavelet' is the current MLX-Gen default for SeedVR2 video restore. Default: wavelet.",
         )
         seedvr2_group.add_argument("--vae-tiling", action="store_true", help="Force tiled VAE encode/decode. By default, small outputs stay untiled and large outputs automatically use tiled decode.")
         seedvr2_group.add_argument("--start-seconds", type=float, default=0.0, help="For video inputs, skip frames before this source timestamp in seconds.")

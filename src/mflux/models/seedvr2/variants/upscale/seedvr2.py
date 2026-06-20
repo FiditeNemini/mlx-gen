@@ -120,7 +120,7 @@ class SeedVR2(nn.Module):
         # 10. Read metadata from the original image if available
         init_metadata = MetadataReader.read_all_metadata(image_path) if image_path else None
 
-        return ImageUtil.to_image(
+        generated_image = ImageUtil.to_image(
             seed=seed,
             prompt="",
             config=config,
@@ -136,6 +136,10 @@ class SeedVR2(nn.Module):
                 **self._seedvr2_metadata(),
             },
         )
+        del decoded
+        mx.clear_cache()
+        gc.collect()
+        return generated_image
 
     def generate_video(
         self,
@@ -149,10 +153,33 @@ class SeedVR2(nn.Module):
         restore_metadata: dict | None = None,
     ):
         start_time = time.perf_counter()
+        clip_probe = VideoUtil.read_video_clip(
+            path=video_path,
+            start_seconds=start_seconds,
+            max_frames=1,
+        )
+        if clip_probe.source_frame_count is not None:
+            available_frames = max(0, clip_probe.source_frame_count - clip_probe.clip_start_frame)
+        elif clip_probe.source_duration_seconds is not None:
+            available_frames = max(1, int(round(clip_probe.source_duration_seconds * clip_probe.fps)) - clip_probe.clip_start_frame)
+        else:
+            raise RuntimeError("SeedVR2 video restore requires a finite source frame count or duration.")
+        requested_clip_frames = min(max_frames, available_frames) if max_frames is not None else available_frames
+        if requested_clip_frames > 1:
+            raise ValueError(
+                "SeedVR2.generate_video() is limited to single-frame in-memory use. "
+                "Use restore_video_to_path() or `mlxgen upscale --video-path ...` for streamed multi-frame restore."
+            )
+        self._assert_generate_video_supported(
+            frame_count=requested_clip_frames,
+            source_width=clip_probe.source_width,
+            source_height=clip_probe.source_height,
+            resolution=resolution,
+        )
         video_clip = VideoUtil.read_video_clip(
             path=video_path,
             start_seconds=start_seconds,
-            max_frames=max_frames,
+            max_frames=requested_clip_frames,
         )
         decoded, true_height, true_width, padded_input_frames = self._restore_video_frames(
             seed=seed,
@@ -163,7 +190,7 @@ class SeedVR2(nn.Module):
         )
         generation_time = time.perf_counter() - start_time
 
-        return VideoUtil.to_video(
+        generated_video = VideoUtil.to_video(
             decoded_latents=decoded,
             fps=video_clip.fps,
             model_config=self.model_config,
@@ -200,6 +227,10 @@ class SeedVR2(nn.Module):
                 "color_correction_mode": color_correction_mode,
             },
         )
+        del decoded
+        mx.clear_cache()
+        gc.collect()
+        return generated_video
 
     def restore_video_to_path(
         self,
@@ -242,6 +273,7 @@ class SeedVR2(nn.Module):
         final_width: int | None = None
         final_height: int | None = None
         writer = None
+        file_path: Path | None = None
         try:
             chunk_clips = VideoUtil.iter_video_frame_windows(
                 video_path,
@@ -249,6 +281,10 @@ class SeedVR2(nn.Module):
                 windows=chunk_plan,
             )
             for chunk_index, chunk_clip in enumerate(chunk_clips):
+                try:
+                    mx.reset_peak_memory()
+                except (AttributeError, RuntimeError, TypeError, ValueError):
+                    pass
                 chunk_frames = chunk_clip.frames
                 start_frame, end_frame = chunk_plan[chunk_index]
                 decoded, true_height, true_width, _ = self._restore_video_frames(
@@ -300,6 +336,11 @@ class SeedVR2(nn.Module):
                 del restored_frames
                 mx.clear_cache()
                 gc.collect()
+                self._assert_post_chunk_memory_health(
+                    true_height=true_height,
+                    true_width=true_width,
+                    frame_count=end_frame - start_frame,
+                )
 
             if pending_overlap_frames:
                 if writer is None:
@@ -320,68 +361,73 @@ class SeedVR2(nn.Module):
                 writer.abort()
             raise
 
-        generation_time = time.perf_counter() - start_time
-        metadata = GeneratedVideo.build_metadata(
-            model_config=self.model_config,
-            seed=seed,
-            prompt="",
-            steps=1,
-            guidance=1.0,
-            guidance_2=None,
-            flow_shift=None,
-            solver=None,
-            precision=ModelConfig.precision,
-            quantization=self.bits,
-            generation_time=generation_time,
-            height=final_height or 0,
-            width=final_width or 0,
-            frame_count=requested_clip_frames,
-            fps=clip_probe.fps,
-            task="video-to-video",
-            video_path=video_path,
-            extra_metadata={
-                "resolution": str(resolution),
-                "softness": round(float(softness), 3),
-                **self._seedvr2_metadata(),
-                **(restore_metadata or {}),
-                "source_video_width": clip_probe.source_width,
-                "source_video_height": clip_probe.source_height,
-                "source_video_fps": round(float(clip_probe.fps), 6),
-                "source_video_frames": clip_probe.source_frame_count,
-                "source_video_duration_seconds": (
-                    round(clip_probe.source_duration_seconds, 3)
-                    if clip_probe.source_duration_seconds is not None
-                    else None
-                ),
-                "source_clip_start_frame": clip_probe.clip_start_frame,
-                "source_clip_start_seconds": round(float(start_seconds), 3),
-                "source_clip_frames": requested_clip_frames,
-                "padded_input_frames": SeedVR2Util.padded_video_frame_count(requested_clip_frames),
-                "processed_chunk_input_frames_total": int(sum(end - start for start, end in chunk_plan)),
-                "audio_present": clip_probe.audio_present,
-                "audio_copied": False,
-                "temporal_chunk_size": temporal_chunk_size,
-                "temporal_chunk_overlap": temporal_chunk_overlap,
-                "temporal_chunk_count": len(chunk_plan),
-                "temporal_chunk_plan": [
-                    {"start_frame": start, "end_frame": end, "frame_count": end - start}
-                    for start, end in chunk_plan
-                ],
-                "color_correction_mode": color_correction_mode,
-            },
-        )
-        if validate_health:
-            file_health = VideoHealth.validate_file(
-                file_path,
-                expected_width=final_width,
-                expected_height=final_height,
-                expected_frames=requested_clip_frames,
-                expected_fps=clip_probe.fps,
+        try:
+            generation_time = time.perf_counter() - start_time
+            metadata = GeneratedVideo.build_metadata(
+                model_config=self.model_config,
+                seed=seed,
+                prompt="",
+                steps=1,
+                guidance=1.0,
+                guidance_2=None,
+                flow_shift=None,
+                solver=None,
+                precision=ModelConfig.precision,
+                quantization=self.bits,
+                generation_time=generation_time,
+                height=final_height or 0,
+                width=final_width or 0,
+                frame_count=requested_clip_frames,
+                fps=clip_probe.fps,
+                task="video-to-video",
+                video_path=video_path,
+                extra_metadata={
+                    "resolution": str(resolution),
+                    "softness": round(float(softness), 3),
+                    **self._seedvr2_metadata(),
+                    **(restore_metadata or {}),
+                    "source_video_width": clip_probe.source_width,
+                    "source_video_height": clip_probe.source_height,
+                    "source_video_fps": round(float(clip_probe.fps), 6),
+                    "source_video_frames": clip_probe.source_frame_count,
+                    "source_video_duration_seconds": (
+                        round(clip_probe.source_duration_seconds, 3)
+                        if clip_probe.source_duration_seconds is not None
+                        else None
+                    ),
+                    "source_clip_start_frame": clip_probe.clip_start_frame,
+                    "source_clip_start_seconds": round(float(start_seconds), 3),
+                    "source_clip_frames": requested_clip_frames,
+                    "padded_input_frames": SeedVR2Util.padded_video_frame_count(requested_clip_frames),
+                    "processed_chunk_input_frames_total": int(sum(end - start for start, end in chunk_plan)),
+                    "audio_present": clip_probe.audio_present,
+                    "audio_copied": False,
+                    "temporal_chunk_size": temporal_chunk_size,
+                    "temporal_chunk_overlap": temporal_chunk_overlap,
+                    "temporal_chunk_count": len(chunk_plan),
+                    "temporal_chunk_plan": [
+                        {"start_frame": start, "end_frame": end, "frame_count": end - start}
+                        for start, end in chunk_plan
+                    ],
+                    "color_correction_mode": color_correction_mode,
+                },
             )
-            metadata["video_health"] = {"file": asdict(file_health)}
-        if export_json_metadata:
-            GeneratedVideo.save_metadata(file_path, metadata)
-        return file_path
+            if validate_health:
+                file_health = VideoHealth.validate_file(
+                    file_path,
+                    expected_width=final_width,
+                    expected_height=final_height,
+                    expected_frames=requested_clip_frames,
+                    expected_fps=clip_probe.fps,
+                )
+                metadata["video_health"] = {"file": asdict(file_health)}
+            if export_json_metadata:
+                GeneratedVideo.save_metadata(file_path, metadata)
+            return file_path
+        except Exception:
+            if file_path is not None:
+                SeedVR2._cleanup_video_artifacts(file_path)
+            raise
 
     def _restore_video_frames(
         self,
@@ -397,7 +443,13 @@ class SeedVR2(nn.Module):
             resolution=resolution,
             softness=softness,
         )
+        self._assert_video_restore_memory_budget(
+            frame_count=len(frames),
+            true_height=true_height,
+            true_width=true_width,
+        )
         processed_video, original_frame_count = SeedVR2Util.pad_video_frames(processed_video)
+        padded_frame_count = int(processed_video.shape[2])
         tiling_config = self._effective_tiling_config(
             true_height=true_height,
             true_width=true_width,
@@ -421,6 +473,8 @@ class SeedVR2(nn.Module):
             preserve_temporal_axis=True,
         )
         static_condition = SeedVR2LatentCreator.create_condition(encoded_latent=initial_latent)
+        mx.eval(static_condition)
+        del processed_video
         latents = SeedVR2LatentCreator.create_noise_latents(
             seed=seed,
             height=initial_latent.shape[-2],
@@ -428,6 +482,7 @@ class SeedVR2(nn.Module):
             num_frames=initial_latent.shape[2],
             latent_channels=initial_latent.shape[1],
         )
+        del initial_latent
 
         text_embedding = getattr(self, "text_embedding", None)
         txt_pos = (
@@ -451,6 +506,8 @@ class SeedVR2(nn.Module):
             mx.eval(latents)
 
         ctx.after_loop(latents)
+        del model_input
+        del noise
 
         decoded = VAEUtil.decode(
             vae=self.vae,
@@ -458,14 +515,27 @@ class SeedVR2(nn.Module):
             tiling_config=tiling_config,
             preserve_temporal_axis=True,
         )
+        del latents
         decoded = decoded[:, :, :original_frame_count, :true_height, :true_width]
-        style = processed_video[:, :, :original_frame_count, :true_height, :true_width]
-        decoded = SeedVR2Util.apply_color_correction(
-            decoded,
-            style,
-            mode=color_correction_mode,
-        )
-        return decoded, true_height, true_width, int(processed_video.shape[2])
+        if color_correction_mode != "off":
+            style_video, _, _ = SeedVR2Util.preprocess_video_frames(
+                frames=frames[:original_frame_count],
+                resolution=resolution,
+                softness=softness,
+            )
+            style = style_video[:, :, :original_frame_count, :true_height, :true_width]
+            decoded = SeedVR2Util.apply_color_correction(
+                decoded,
+                style,
+                mode=color_correction_mode,
+            )
+            del style
+            del style_video
+        mx.eval(decoded)
+        del static_condition
+        mx.clear_cache()
+        gc.collect()
+        return decoded, true_height, true_width, padded_frame_count
 
     def _seedvr2_metadata(self) -> dict[str, str | None]:
         return {
@@ -487,19 +557,118 @@ class SeedVR2(nn.Module):
         if not allow_encode_tiling and getattr(tiling_config, "vae_encode_tiled", False):
             tiling_config = replace(tiling_config, vae_encode_tiled=False)
 
+        min_pixels = getattr(tiling_config, "vae_decode_auto_tile_min_pixels", None)
+        output_pixels = int(true_height) * int(true_width)
         tiles_per_dim = getattr(tiling_config, "vae_decode_tiles_per_dim", None)
         if tiles_per_dim and tiles_per_dim > 1:
+            if min_pixels is not None and min_pixels > 0 and output_pixels <= int(min_pixels):
+                return replace(tiling_config, vae_decode_tiles_per_dim=0)
             return tiling_config
 
-        min_pixels = getattr(tiling_config, "vae_decode_auto_tile_min_pixels", None)
         if min_pixels is None or min_pixels <= 0:
             return tiling_config
 
-        output_pixels = int(true_height) * int(true_width)
         if output_pixels <= int(min_pixels):
             return tiling_config
 
         return replace(tiling_config, vae_decode_tiles_per_dim=8)
+
+    def _assert_generate_video_supported(
+        self,
+        *,
+        frame_count: int,
+        source_width: int,
+        source_height: int,
+        resolution: int | ScaleFactor,
+    ) -> None:
+        true_height, true_width = self._estimate_output_size(
+            source_width=source_width,
+            source_height=source_height,
+            resolution=resolution,
+        )
+        self._assert_video_restore_memory_budget(
+            frame_count=frame_count,
+            true_height=true_height,
+            true_width=true_width,
+        )
+
+    def _assert_video_restore_memory_budget(
+        self,
+        *,
+        frame_count: int,
+        true_height: int,
+        true_width: int,
+    ) -> None:
+        overrides = self.model_config.transformer_overrides or {}
+        inner_dim = int(overrides.get("vid_dim", 2560))
+        text_attention_mode = str(overrides.get("text_attention_mode", "window_pool"))
+        estimated_bytes = SeedVR2Util.estimate_video_restore_total_bytes(
+            frame_count=SeedVR2Util.padded_video_frame_count(frame_count),
+            height=true_height,
+            width=true_width,
+            inner_dim=inner_dim,
+            text_attention_mode=text_attention_mode,
+            resident_weight_bytes=int(getattr(self, "seedvr2_resident_weight_bytes", 0)),
+        )
+        budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes()
+        if estimated_bytes > budget_bytes:
+            raise ValueError(
+                "SeedVR2 video restore chunk exceeds the supported host-safe memory budget. "
+                f"estimated={estimated_bytes / (1000**3):.2f} GB, "
+                f"budget={budget_bytes / (1000**3):.2f} GB. "
+                "Use a smaller chunk, a smaller output size, or an explicit unsafe memory profile."
+            )
+
+    def _assert_post_chunk_memory_health(self, *, true_height: int, true_width: int, frame_count: int) -> None:
+        budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes()
+        peak_bytes = SeedVR2Util.mlx_peak_memory_bytes()
+        if peak_bytes is not None and peak_bytes > budget_bytes:
+            raise RuntimeError(
+                "SeedVR2 video restore chunk exceeded the supported host-safe MLX peak memory budget. "
+                f"peak={peak_bytes / (1000**3):.2f} GB, budget={budget_bytes / (1000**3):.2f} GB."
+            )
+
+        resident_weight_bytes = int(getattr(self, "seedvr2_resident_weight_bytes", 0))
+        active_bytes = SeedVR2Util.mlx_active_memory_bytes()
+        if active_bytes is not None and active_bytes > resident_weight_bytes + SeedVR2Util.VIDEO_RUNTIME_SLACK_BYTES:
+            raise RuntimeError(
+                "SeedVR2 video restore did not return close to its resident-weight memory baseline after chunk cleanup. "
+                f"active={active_bytes / (1000**3):.2f} GB, "
+                f"resident={resident_weight_bytes / (1000**3):.2f} GB, "
+                f"slack={SeedVR2Util.VIDEO_RUNTIME_SLACK_BYTES / (1000**3):.2f} GB."
+            )
+
+        cache_bytes = SeedVR2Util.mlx_cache_memory_bytes()
+        if cache_bytes is not None and cache_bytes > SeedVR2Util.VIDEO_RUNTIME_SLACK_BYTES:
+            raise RuntimeError(
+                "SeedVR2 video restore retained too much MLX cache after chunk cleanup. "
+                f"cache={cache_bytes / (1000**3):.2f} GB, "
+                f"slack={SeedVR2Util.VIDEO_RUNTIME_SLACK_BYTES / (1000**3):.2f} GB."
+            )
+
+    @staticmethod
+    def _estimate_output_size(
+        *,
+        source_width: int,
+        source_height: int,
+        resolution: int | ScaleFactor,
+    ) -> tuple[int, int]:
+        min_side = min(source_width, source_height)
+        target_res = resolution.get_scaled_value(min_side) if isinstance(resolution, ScaleFactor) else resolution
+        scale = float(target_res) / float(min_side)
+        width = max(16, (int(source_width * scale) // 2) * 2)
+        height = max(16, (int(source_height * scale) // 2) * 2)
+        width = max(16, width - (width % 16))
+        height = max(16, height - (height % 16))
+        return height, width
+
+    @staticmethod
+    def _cleanup_video_artifacts(file_path: Path) -> None:
+        metadata_path = file_path.with_suffix(".metadata.json")
+        if metadata_path.exists():
+            metadata_path.unlink()
+        if file_path.exists():
+            file_path.unlink()
 
     def save_model(self, path: str) -> None:
         ModelSaver.save_model(

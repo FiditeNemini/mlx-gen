@@ -10,19 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **SeedVR2 full-video restoration**: `mlxgen upscale` now accepts `--video-path` in addition to
-  `--image-path`, keeps short video clips on the direct temporal path, restores longer clips
-  through sequential temporal chunking, preserves source FPS by default, trims padded frames back
-  to the requested clip length, records source-video and chunk metadata in `.metadata.json`,
-  documents the current explicit audio contract (`audio_copied=false`), rejects `--vae-tiling` on
-  video input, and now includes full-length Eiffel proof videos for the official `3B` and `7B`
-  source models plus sampled heuristic restore metrics, command logs, timings, and memory data.
+  `--image-path`, preserves source FPS by default, trims padded frames back to the requested clip
+  length, records source-video and chunk metadata in `.metadata.json`, documents the current
+  explicit audio contract (`audio_copied=false`), rejects `--vae-tiling` on video input, and
+  now includes a rerun full `97s` Eiffel `1x` source-size proof on the exact current route:
+  `3B` on the default safe streaming profile and `7B` on an explicit chunk-5 streaming profile,
+  with updated full MP4 proof files, sampled contact sheet, timings, max RSS, and peak MLX data.
+- **SeedVR2 video host safety**: the public SeedVR2 video CLI path is now conservative by default:
+  it enables `--low-ram` automatically, defaults omitted video resolution to `1x`, uses
+  `--mlx-cache-limit-gb 8` as part of the MLX cache policy in safe mode, runs video restore
+  through sequential temporal chunking with a fresh model per video seed, serializes video work
+  through a runtime lock, and fails closed on enlarged video output unless
+  `--force-unsafe-video-memory` is passed explicitly. The planner now reserves resident-weight
+  headroom up front so the safe preflight chunk budget agrees with the runtime per-chunk budget.
 - **SeedVR2 7B route hardening**: add a first-class `seedvr2-7b-sharp` source route for the
   official `seedvr2_ema_7b_sharp.pth` checkpoint, apply the SeedVR2 image `--color-correction`
   flag end-to-end, record SeedVR2 checkpoint provenance in output metadata, and fail closed if the
   loaded SeedVR2 transformer or VAE weights do not exactly cover the runtime parameter tree.
-- **SeedVR2 7B comparison framing**: update the public upscaling guide so the full native
-  `320x240` Eiffel restore remains the long-run robustness proof, while the bounded `720p`
-  3B/7B/7B-sharp sheet is the comparative family review surface.
+- **SeedVR2 proof framing**: keep the full restored MP4 files as the primary public route proof and
+  treat sampled heuristic metrics as supporting route-health evidence rather than a blanket
+  3B-versus-7B family-quality ranking; the current bounded June 20 proof shows a byte-identical
+  `3B` recovery against the known-good artifact, and the rerun full-clip proof shows the current
+  `7B` route as the better balanced long-run result on the archival Eiffel source.
 - **Qwen localized-edit docs**: add a dedicated public guide that explains Qwen masked edit,
   Qwen structured control, and the planned control-inpaint slice in plain language, including
   what ControlNet means, what “sidecar” means, when control-inpaint is likely to help, and why

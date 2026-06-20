@@ -25,7 +25,7 @@ class MMAttention(nn.Module):
         shift: bool = False,
     ):
         super().__init__()
-        if text_attention_mode != "window_pool":
+        if text_attention_mode not in {"window_pool", "global_text"}:
             raise ValueError(f"Unsupported SeedVR2 text attention mode: {text_attention_mode!r}")
         self.shared_weights = shared_weights
         self.heads = heads
@@ -34,6 +34,7 @@ class MMAttention(nn.Module):
         self.window = window
         self.shift = shift
         self.rope_on_text = rope_on_text
+        self.text_attention_mode = text_attention_mode
 
         inner_dim = heads * head_dim
 
@@ -58,7 +59,6 @@ class MMAttention(nn.Module):
     def __call__(self, vid, txt, vid_shape, txt_shape):
         B, L, Bt, Lt = vid.shape[0], vid.shape[1], txt.shape[0], txt.shape[1]
 
-        # 1. Project to QKV and Partition
         qkv_vid = self.proj_qkv_vid(vid.reshape(-1, vid.shape[-1])).reshape(-1, 3, self.heads, self.head_dim)
         qkv_txt = self.proj_qkv_txt(txt.reshape(-1, txt.shape[-1])).reshape(-1, 3, self.heads, self.head_dim)
 
@@ -71,8 +71,6 @@ class MMAttention(nn.Module):
         v_txt = qkv_txt[:, 2]
 
         counts, txt_len = partitioner.window_counts, txt_shape[:, 0]
-
-        # 3. Apply RoPE
         q_vid = partitioner.partition(q_vid_full)
         k_vid = partitioner.partition(k_vid_full)
         v_vid = partitioner.partition(v_vid_full)
@@ -94,99 +92,187 @@ class MMAttention(nn.Module):
                 vid_shape=partitioner.window_shapes,
             )
 
-        txt_out = self._window_pooled_text_attention(
-            q_txt_rep=q_txt_rep,
-            k_txt_rep=k_txt_rep,
-            v_txt_rep=v_txt_rep,
-            vid_lens=mx.prod(partitioner.window_shapes, axis=1),
-            txt_len=txt_len,
-            counts=counts,
-            q_vid=q_vid,
-            k_vid=k_vid,
-            v_vid=v_vid,
-        )
-        vid_out = self._windowed_video_attention(
-            q_txt_rep=q_txt_rep,
-            k_txt_rep=k_txt_rep,
-            v_txt_rep=v_txt_rep,
-            vid_lens=mx.prod(partitioner.window_shapes, axis=1),
-            txt_len=txt_len,
-            counts=counts,
-            q_vid=q_vid,
-            k_vid=k_vid,
-            v_vid=v_vid,
-        )
+        vid_lens = mx.prod(partitioner.window_shapes, axis=1)
+        window_txt_lens = MMAttention._window_text_lengths(txt_len, counts)
+        window_batch_ids = MMAttention._window_batch_ids(counts)
+
+        if self.text_attention_mode == "window_pool":
+            vid_out, txt_out = self._window_joint_attention(
+                q_txt_rep=q_txt_rep,
+                k_txt_rep=k_txt_rep,
+                v_txt_rep=v_txt_rep,
+                vid_lens=vid_lens,
+                window_txt_lens=window_txt_lens,
+                window_batch_ids=window_batch_ids,
+                counts=counts,
+                q_vid=q_vid,
+                k_vid=k_vid,
+                v_vid=v_vid,
+            )
+        else:
+            vid_out = self._window_video_attention_only(
+                q_txt_rep=q_txt_rep,
+                k_txt_rep=k_txt_rep,
+                v_txt_rep=v_txt_rep,
+                vid_lens=vid_lens,
+                window_txt_lens=window_txt_lens,
+                q_vid=q_vid,
+                k_vid=k_vid,
+                v_vid=v_vid,
+            )
+            txt_out = self._global_text_attention(
+                q_txt=q_txt,
+                k_txt=k_txt,
+                v_txt=v_txt,
+                k_vid_full=k_vid_full,
+                v_vid_full=v_vid_full,
+                vid_shape=vid_shape,
+                txt_shape=txt_shape,
+            )
 
         return (
             self.proj_out_vid(partitioner.reverse(vid_out)).reshape(B, L, -1),
             self.proj_out_txt(txt_out).reshape(Bt, Lt, -1),
         )
 
-    def _windowed_video_attention(
+    def _window_joint_attention(
         self,
         *,
         q_txt_rep: mx.array,
         k_txt_rep: mx.array,
         v_txt_rep: mx.array,
         vid_lens: mx.array,
-        txt_len: mx.array,
+        window_txt_lens: mx.array,
+        window_batch_ids: mx.array,
         counts: list[int],
         q_vid: mx.array,
         k_vid: mx.array,
         v_vid: mx.array,
-    ) -> mx.array:
-        qkv = self._concat_with_text(
-            mx.stack([q_vid, k_vid, v_vid], axis=1),
-            mx.stack([q_txt_rep, k_txt_rep, v_txt_rep], axis=1),
-            vid_lens,
-            txt_len,
-            counts,
+    ) -> tuple[mx.array, mx.array]:
+        vid_parts: list[mx.array] = []
+        txt_parts_by_batch: list[list[mx.array]] = [[] for _ in counts]
+        vid_offset = 0
+        txt_offset = 0
+
+        for window_index in range(int(window_txt_lens.shape[0])):
+            vid_len = int(vid_lens[window_index])
+            txt_len = int(window_txt_lens[window_index])
+            batch_index = int(window_batch_ids[window_index])
+
+            q = MMAttention._concat_tokens(
+                q_vid[vid_offset : vid_offset + vid_len],
+                q_txt_rep[txt_offset : txt_offset + txt_len],
+            )
+            k = MMAttention._concat_tokens(
+                k_vid[vid_offset : vid_offset + vid_len],
+                k_txt_rep[txt_offset : txt_offset + txt_len],
+            )
+            v = MMAttention._concat_tokens(
+                v_vid[vid_offset : vid_offset + vid_len],
+                v_txt_rep[txt_offset : txt_offset + txt_len],
+            )
+            attention = self._run_attention(q=q, k=k, v=v)
+            vid_parts.append(attention[:vid_len])
+            txt_parts_by_batch[batch_index].append(attention[vid_len:])
+
+            vid_offset += vid_len
+            txt_offset += txt_len
+
+        pooled_txt = [mx.stack(parts).mean(axis=0) for parts in txt_parts_by_batch]
+        return (
+            mx.concatenate(vid_parts, axis=0).reshape(-1, self.heads * self.head_dim),
+            mx.concatenate(pooled_txt, axis=0).reshape(-1, self.heads * self.head_dim),
         )
 
-        win_lens = vid_lens + txt_len[mx.repeat(mx.arange(len(counts)), mx.array(counts))]
-        windows = mx.split(qkv, mx.cumsum(win_lens[:-1]).tolist())
-
-        out = []
-        for w in windows:
-            q, k, v = [x[None].transpose(0, 2, 1, 3) for x in [w[:, 0], w[:, 1], w[:, 2]]]
-            o = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
-            out.append(o.transpose(0, 2, 1, 3).squeeze(0))
-
-        return mx.concatenate(out, axis=0).reshape(-1, self.heads * self.head_dim)
-
-    def _window_pooled_text_attention(
+    def _window_video_attention_only(
         self,
         *,
         q_txt_rep: mx.array,
         k_txt_rep: mx.array,
         v_txt_rep: mx.array,
         vid_lens: mx.array,
-        txt_len: mx.array,
-        counts: list[int],
+        window_txt_lens: mx.array,
         q_vid: mx.array,
         k_vid: mx.array,
         v_vid: mx.array,
     ) -> mx.array:
-        qkv = self._concat_with_text(
-            mx.stack([q_vid, k_vid, v_vid], axis=1),
-            mx.stack([q_txt_rep, k_txt_rep, v_txt_rep], axis=1),
-            vid_lens,
-            txt_len,
-            counts,
+        vid_parts: list[mx.array] = []
+        vid_offset = 0
+        txt_offset = 0
+
+        for window_index in range(int(window_txt_lens.shape[0])):
+            vid_len = int(vid_lens[window_index])
+            txt_len = int(window_txt_lens[window_index])
+
+            q = MMAttention._concat_tokens(
+                q_vid[vid_offset : vid_offset + vid_len],
+                q_txt_rep[txt_offset : txt_offset + txt_len],
+            )
+            k = MMAttention._concat_tokens(
+                k_vid[vid_offset : vid_offset + vid_len],
+                k_txt_rep[txt_offset : txt_offset + txt_len],
+            )
+            v = MMAttention._concat_tokens(
+                v_vid[vid_offset : vid_offset + vid_len],
+                v_txt_rep[txt_offset : txt_offset + txt_len],
+            )
+            attention = self._run_attention(q=q, k=k, v=v)
+            vid_parts.append(attention[:vid_len])
+
+            vid_offset += vid_len
+            txt_offset += txt_len
+
+        return mx.concatenate(vid_parts, axis=0).reshape(-1, self.heads * self.head_dim)
+
+    def _global_text_attention(
+        self,
+        *,
+        q_txt: mx.array,
+        k_txt: mx.array,
+        v_txt: mx.array,
+        k_vid_full: mx.array,
+        v_vid_full: mx.array,
+        vid_shape: mx.array,
+        txt_shape: mx.array,
+    ) -> mx.array:
+        vid_lengths = mx.prod(vid_shape, axis=1).tolist()
+        txt_lengths = txt_shape[:, 0].tolist()
+        vid_offsets = MMAttention._offsets(vid_lengths)
+        txt_offsets = MMAttention._offsets(txt_lengths)
+
+        outputs: list[mx.array] = []
+        for batch_index, (vid_offset, vid_len, txt_offset, txt_len) in enumerate(
+            zip(vid_offsets, vid_lengths, txt_offsets, txt_lengths)
+        ):
+            del batch_index
+            attention = self._run_attention(
+                q=q_txt[txt_offset : txt_offset + txt_len],
+                k=MMAttention._concat_tokens(
+                    k_vid_full[vid_offset : vid_offset + vid_len],
+                    k_txt[txt_offset : txt_offset + txt_len],
+                ),
+                v=MMAttention._concat_tokens(
+                    v_vid_full[vid_offset : vid_offset + vid_len],
+                    v_txt[txt_offset : txt_offset + txt_len],
+                ),
+            )
+            outputs.append(attention)
+        return mx.concatenate(outputs, axis=0).reshape(-1, self.heads * self.head_dim)
+
+    def _run_attention(
+        self,
+        *,
+        q: mx.array,
+        k: mx.array,
+        v: mx.array,
+    ) -> mx.array:
+        attention = mx.fast.scaled_dot_product_attention(
+            q[None].transpose(0, 2, 1, 3),
+            k[None].transpose(0, 2, 1, 3),
+            v[None].transpose(0, 2, 1, 3),
+            scale=self.scale,
         )
-
-        win_lens = vid_lens + txt_len[mx.repeat(mx.arange(len(counts)), mx.array(counts))]
-        windows = mx.split(qkv, mx.cumsum(win_lens[:-1]).tolist())
-
-        out = []
-        for w in windows:
-            q, k, v = [x[None].transpose(0, 2, 1, 3) for x in [w[:, 0], w[:, 1], w[:, 2]]]
-            o = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
-            out.append(o.transpose(0, 2, 1, 3).squeeze(0))
-
-        combined = mx.concatenate(out, axis=0).reshape(-1, self.heads * self.head_dim)
-        _, txt_out = self._unconcat_and_coalesce(combined, vid_lens, txt_len, counts)
-        return txt_out
+        return attention.transpose(0, 2, 1, 3).squeeze(0)
 
     @staticmethod
     def _repeat_text_for_windows(txt, txt_len, counts):
@@ -195,23 +281,22 @@ class MMAttention(nn.Module):
         return mx.repeat(txt, mx.array(counts), axis=0).reshape(-1, *txt.shape[2:])
 
     @staticmethod
-    def _concat_with_text(vid, txt, vid_lens, txt_len, counts):
-        v_parts = mx.split(vid, mx.cumsum(vid_lens[:-1]).tolist())
-        t_parts = mx.split(txt, mx.arange(int(txt_len[0]), txt.shape[0], int(txt_len[0])).tolist())
-        parts = [p for pair in zip(v_parts, t_parts) for p in pair]
-        return mx.concatenate(parts, axis=0)
+    def _window_text_lengths(txt_len: mx.array, counts: list[int]) -> mx.array:
+        return txt_len[mx.repeat(mx.arange(len(counts)), mx.array(counts))]
 
     @staticmethod
-    def _unconcat_and_coalesce(combined, vid_lens, txt_len, counts):
-        win_to_batch = mx.repeat(mx.arange(len(txt_len)), mx.array(counts))
-        lens = mx.stack([vid_lens, txt_len[win_to_batch]], axis=1).reshape(-1)
-        parts = mx.split(combined, mx.cumsum(lens[:-1]).tolist())
+    def _window_batch_ids(counts: list[int]) -> mx.array:
+        return mx.repeat(mx.arange(len(counts)), mx.array(counts))
 
-        vid_out = mx.concatenate(parts[0::2], axis=0)
-        t_parts = parts[1::2]
+    @staticmethod
+    def _concat_tokens(left: mx.array, right: mx.array) -> mx.array:
+        return mx.concatenate([left, right], axis=0)
 
-        final_txt, offset = [], 0
-        for count in counts:
-            final_txt.append(mx.stack(t_parts[offset : offset + count]).mean(axis=0))
-            offset += count
-        return vid_out, mx.concatenate(final_txt, axis=0)
+    @staticmethod
+    def _offsets(lengths: list[int]) -> list[int]:
+        offsets: list[int] = []
+        current = 0
+        for length in lengths:
+            offsets.append(current)
+            current += int(length)
+        return offsets

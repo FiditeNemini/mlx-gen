@@ -510,8 +510,8 @@ mlxgen upscale \
   --video-path input.mp4 \
   --start-seconds 16 \
   --max-frames 6 \
-  --resolution 2x \
-  --softness 0.3 \
+  --resolution 1x \
+  --softness 0.0 \
   --metadata \
   --output restored.mp4
 ```
@@ -521,11 +521,11 @@ Current behavior:
 - source FPS is preserved by default;
 - temporary SeedVR2 padding is trimmed back to the requested clip length before save;
 - output is currently a silent MP4, even when the source clip contains audio.
-- longer clips use sequential temporal chunking automatically instead of decoding the whole source
-  into memory at once;
-- the public Eiffel proof is now the full `97s` source clip, restored with official `3B` and `7B`
-  source models at `1x`, plus a sampled metric panel to catch muddy over-smoothing and temporal
-  drift.
+- the public CLI safe profile defaults to `1x`, enables `--low-ram` automatically, uses
+  `--mlx-cache-limit-gb 8` as part of the MLX cache policy, and rejects enlarged video output
+  unless you explicitly pass `--force-unsafe-video-memory`;
+- the public Eiffel proof is the full `97s` source clip, restored with official `3B` and `7B`
+  source models at `1x`, plus sampled route-health metrics.
 
 It is a better fit for visibly degraded, noisy, low-resolution, or compressed footage than for
 already-clean high-resolution footage. In local validation, archival material improved cleanly,
@@ -546,8 +546,8 @@ mlxgen upscale \
   --output restored.mp4
 ```
 
-On the checked-in Eiffel proof, the 3B full run used materially less memory than 7B, while 7B
-scored slightly better on the sampled full-clip metric panel.
+On the checked-in Eiffel proof, the 3B full run used materially less memory than 7B. The sampled
+metric panel is kept as a route-health aid rather than a blanket family-quality ranking.
 
 ## Can SeedVR2 Use The Official ByteDance Checkpoint?
 

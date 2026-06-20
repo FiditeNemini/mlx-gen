@@ -4,6 +4,7 @@ from mlx.utils import tree_flatten
 
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.download_policy import DownloadRequiredError
 from mflux.models.common.resolution.path_resolution import PathResolution
 from mflux.models.common.vae.tiling_config import TilingConfig
 from mflux.models.common.weights.loading.loaded_weights import LoadedWeights
@@ -27,6 +28,10 @@ class SeedVR2Initializer:
         root_path = SeedVR2Initializer._resolve_weight_root(path, runtime_config)
         weight_definition = SeedVR2WeightDefinition.resolve(runtime_config, root_path=root_path)
         SeedVR2Initializer._init_config(model, runtime_config)
+        model.seedvr2_resident_weight_bytes = SeedVR2WeightDefinition.estimate_resident_weight_bytes(
+            root_path=root_path,
+            weight_definition=weight_definition,
+        )
         weights = SeedVR2Initializer._load_weights(root_path, weight_definition)
         SeedVR2Initializer._init_text_embedding(model, weights)
         SeedVR2Initializer._init_models(model, runtime_config)
@@ -131,12 +136,17 @@ class SeedVR2Initializer:
 
     @staticmethod
     def _assert_weight_coverage(model, weights: LoadedWeights) -> None:
+        stored_q = weights.meta_data.quantization_level
         for component_name, component_model in (("transformer", model.transformer), ("vae", model.vae)):
             component_weights = weights.components.get(component_name)
             if component_weights is None:
                 continue
             expected = {key for key, _ in tree_flatten(component_model.parameters())}
-            provided = {key for key, _ in tree_flatten(component_weights)}
+            provided = {
+                key
+                for key, _ in tree_flatten(component_weights)
+                if not (stored_q is not None and (key.endswith(".scales") or key.endswith(".biases")))
+            }
             missing = sorted(expected - provided)
             extra = sorted(provided - expected)
             if missing or extra:
@@ -147,6 +157,27 @@ class SeedVR2Initializer:
                     f"missing={len(missing)} ({missing_preview}); "
                     f"extra={len(extra)} ({extra_preview})"
                 )
+
+    @staticmethod
+    def estimate_resident_weight_bytes(model_config: ModelConfig, model_path: str | None = None) -> int:
+        path = model_path if model_path else model_config.model_name
+        runtime_config = SeedVR2Initializer._model_config_for_source(model_config, path)
+        try:
+            root_path = SeedVR2Initializer._resolve_weight_root(path, runtime_config)
+            weight_definition = SeedVR2WeightDefinition.resolve(runtime_config, root_path=root_path)
+            return SeedVR2WeightDefinition.estimate_resident_weight_bytes(
+                root_path=root_path,
+                weight_definition=weight_definition,
+            )
+        except (DownloadRequiredError, FileNotFoundError, ValueError, OSError):
+            return SeedVR2Initializer._default_resident_weight_bytes(runtime_config)
+
+    @staticmethod
+    def _default_resident_weight_bytes(model_config: ModelConfig) -> int:
+        aliases = {alias.lower() for alias in getattr(model_config, "aliases", [])}
+        if "seedvr2-7b" in aliases or "seedvr2-7b-sharp" in aliases:
+            return 34 * (1000**3)
+        return 15 * (1000**3)
 
     @staticmethod
     def _apply_weights(model, weights: LoadedWeights, quantize: int | None, weight_definition) -> None:

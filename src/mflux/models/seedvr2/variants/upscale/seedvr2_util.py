@@ -1,3 +1,6 @@
+import os
+import platform
+import subprocess
 from pathlib import Path
 
 import mlx.core as mx
@@ -8,6 +11,12 @@ from mflux.utils.scale_factor import ScaleFactor
 
 
 class SeedVR2Util:
+    PATCH_AREA = 4
+    LATENT_SPATIAL_SCALE = 8
+    VIDEO_SAFE_MEMORY_FRACTION = 0.5
+    VIDEO_SAFE_MEMORY_CEILING_BYTES = 48 * (1000**3)
+    VIDEO_RUNTIME_SLACK_BYTES = 6 * (1000**3)
+
     @staticmethod
     def preprocess_image(
         image_path: str | Path,
@@ -38,8 +47,10 @@ class SeedVR2Util:
         cropped_first = SeedVR2Util._center_crop_to_multiple(resized_first, factor=16)
         true_w, true_h = cropped_first.size
 
-        processed_frames = [SeedVR2Util._pil_to_numpy_video_frame(cropped_first)]
-        for frame in frames[1:]:
+        frame_count = len(frames)
+        video_np = np.empty((frame_count, true_h, true_w, 3), dtype=np.float32)
+        video_np[0] = SeedVR2Util._pil_to_numpy_video_frame(cropped_first)
+        for index, frame in enumerate(frames[1:], start=1):
             rgb_frame = frame.convert("RGB")
             resized, _, _ = SeedVR2Util._resize_and_soften(
                 image=rgb_frame,
@@ -49,9 +60,8 @@ class SeedVR2Util:
             cropped = SeedVR2Util._center_crop_to_multiple(resized, factor=16)
             if cropped.size != (true_w, true_h):
                 cropped = cropped.resize((true_w, true_h), Image.Resampling.BICUBIC)
-            processed_frames.append(SeedVR2Util._pil_to_numpy_video_frame(cropped))
+            video_np[index] = SeedVR2Util._pil_to_numpy_video_frame(cropped)
 
-        video_np = np.stack(processed_frames, axis=0)
         video_mx = mx.array(video_np, dtype=mx.float32)
         video_mx = mx.transpose(video_mx, (3, 0, 1, 2))
         video_mx = video_mx[None, ...]
@@ -71,7 +81,7 @@ class SeedVR2Util:
         if mode != "lab":
             raise ValueError(f"Unsupported SeedVR2 color correction mode: {mode}")
         if content.ndim == 5 and style.ndim == 5:
-            return SeedVR2Util._apply_video_color_correction(
+            return SeedVR2Util._apply_video_color_correction_framewise(
                 content=content,
                 style=style,
                 luminance_weight=luminance_weight,
@@ -79,7 +89,7 @@ class SeedVR2Util:
         return SeedVR2Util._lab_color_transfer_exact(content, style, luminance_weight=luminance_weight)
 
     @staticmethod
-    def _apply_video_color_correction(
+    def _apply_video_color_correction_framewise(
         content: mx.array,
         style: mx.array,
         luminance_weight: float = 0.8,
@@ -87,16 +97,15 @@ class SeedVR2Util:
         if content.shape != style.shape:
             raise ValueError(f"Video color correction requires same shapes, got {content.shape} vs {style.shape}")
 
-        batch, channels, frames, height, width = content.shape
-        content_4d = mx.transpose(content, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
-        style_4d = mx.transpose(style, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
-        corrected = SeedVR2Util._lab_color_transfer_exact(
-            content_4d,
-            style_4d,
-            luminance_weight=luminance_weight,
-        )
-        corrected = corrected.reshape(batch, frames, channels, height, width)
-        return mx.transpose(corrected, (0, 2, 1, 3, 4))
+        frame_outputs: list[mx.array] = []
+        for frame_index in range(content.shape[2]):
+            corrected_frame = SeedVR2Util._lab_color_transfer_exact(
+                content[:, :, frame_index, :, :],
+                style[:, :, frame_index, :, :],
+                luminance_weight=luminance_weight,
+            )
+            frame_outputs.append(corrected_frame[:, :, None, :, :])
+        return mx.concatenate(frame_outputs, axis=2)
 
     @staticmethod
     def _apply_wavelet_color_reconstruction(content: mx.array, style: mx.array) -> mx.array:
@@ -104,12 +113,14 @@ class SeedVR2Util:
             raise ValueError(f"Wavelet reconstruction requires same shapes, got {content.shape} vs {style.shape}")
 
         if content.ndim == 5:
-            batch, channels, frames, height, width = content.shape
-            content_4d = mx.transpose(content, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
-            style_4d = mx.transpose(style, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
-            reconstructed = SeedVR2Util._apply_wavelet_color_reconstruction(content_4d, style_4d)
-            reconstructed = reconstructed.reshape(batch, frames, channels, height, width)
-            return mx.transpose(reconstructed, (0, 2, 1, 3, 4))
+            frame_outputs: list[mx.array] = []
+            for frame_index in range(content.shape[2]):
+                reconstructed_frame = SeedVR2Util._apply_wavelet_color_reconstruction(
+                    content[:, :, frame_index, :, :],
+                    style[:, :, frame_index, :, :],
+                )
+                frame_outputs.append(reconstructed_frame[:, :, None, :, :])
+            return mx.concatenate(frame_outputs, axis=2)
 
         content_np = np.array(content.astype(mx.float32), dtype=np.float32)
         style_np = np.array(style.astype(mx.float32), dtype=np.float32)
@@ -161,6 +172,143 @@ class SeedVR2Util:
                 break
             start += step
         return chunks
+
+    @staticmethod
+    def estimate_video_restore_working_set_bytes(
+        *,
+        frame_count: int,
+        height: int,
+        width: int,
+        inner_dim: int,
+        text_attention_mode: str,
+    ) -> int:
+        if frame_count <= 0 or height <= 0 or width <= 0 or inner_dim <= 0:
+            raise ValueError("frame_count, height, width, and inner_dim must be greater than zero.")
+
+        tokens_per_frame = (height // 2) * (width // 2)
+        video_tokens = frame_count * tokens_per_frame
+        qkv_bytes = video_tokens * 3 * inner_dim * 2
+        attention_multiplier = 2.75 if text_attention_mode == "global_text" else 2.0
+
+        processed_video_bytes = frame_count * height * width * 3 * 4
+        decoded_video_bytes = frame_count * height * width * 3 * 2
+        latent_height = max(1, height // SeedVR2Util.LATENT_SPATIAL_SCALE)
+        latent_width = max(1, width // SeedVR2Util.LATENT_SPATIAL_SCALE)
+        latent_bytes = frame_count * latent_height * latent_width * 16 * 2
+
+        return int((qkv_bytes * attention_multiplier) + processed_video_bytes + decoded_video_bytes + (latent_bytes * 4))
+
+    @staticmethod
+    def estimate_video_restore_total_bytes(
+        *,
+        frame_count: int,
+        height: int,
+        width: int,
+        inner_dim: int,
+        text_attention_mode: str,
+        resident_weight_bytes: int,
+    ) -> int:
+        return int(
+            resident_weight_bytes
+            + SeedVR2Util.estimate_video_restore_working_set_bytes(
+                frame_count=frame_count,
+                height=height,
+                width=width,
+                inner_dim=inner_dim,
+                text_attention_mode=text_attention_mode,
+            )
+        )
+
+    @staticmethod
+    def host_safe_video_memory_budget_bytes(*, reserve_bytes: int = 0) -> int:
+        total_bytes = SeedVR2Util._host_total_memory_bytes()
+        available_bytes = SeedVR2Util._host_available_memory_bytes()
+        basis_bytes = available_bytes if available_bytes is not None and available_bytes > 0 else total_bytes
+        if reserve_bytes > 0:
+            basis_bytes = max(1 * (1000**3), basis_bytes - int(reserve_bytes))
+        target = int(basis_bytes * SeedVR2Util.VIDEO_SAFE_MEMORY_FRACTION)
+        return max(1 * (1000**3), min(target, SeedVR2Util.VIDEO_SAFE_MEMORY_CEILING_BYTES))
+
+    @staticmethod
+    def _host_total_memory_bytes() -> int:
+        if platform.system() == "Darwin":
+            try:
+                result = subprocess.run(
+                    ["sysctl", "-n", "hw.memsize"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                value = int(result.stdout.strip())
+                if value > 0:
+                    return value
+            except (OSError, ValueError, subprocess.CalledProcessError):
+                pass
+
+        page_size_name = "SC_PAGE_SIZE"
+        page_count_name = "SC_PHYS_PAGES"
+        if hasattr(os, "sysconf") and page_size_name in os.sysconf_names and page_count_name in os.sysconf_names:
+            page_size = int(os.sysconf(page_size_name))
+            page_count = int(os.sysconf(page_count_name))
+            if page_size > 0 and page_count > 0:
+                return page_size * page_count
+
+        return 32 * (1000**3)
+
+    @staticmethod
+    def _host_available_memory_bytes() -> int | None:
+        if platform.system() == "Darwin":
+            try:
+                result = subprocess.run(
+                    ["vm_stat"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                lines = result.stdout.splitlines()
+                if not lines:
+                    return None
+                page_size_line = lines[0]
+                page_size = int(page_size_line.split("page size of", 1)[1].split("bytes", 1)[0].strip(" )"))
+                page_counts: dict[str, int] = {}
+                for line in lines[1:]:
+                    if ":" not in line:
+                        continue
+                    key, value = line.split(":", 1)
+                    digits = value.strip().rstrip(".")
+                    if digits.isdigit():
+                        page_counts[key.strip()] = int(digits)
+                available_pages = (
+                    page_counts.get("Pages free", 0)
+                    + page_counts.get("Pages inactive", 0)
+                    + page_counts.get("Pages speculative", 0)
+                )
+                if page_size > 0 and available_pages > 0:
+                    return page_size * available_pages
+            except (OSError, ValueError, IndexError, subprocess.CalledProcessError):
+                return None
+        return None
+
+    @staticmethod
+    def mlx_active_memory_bytes() -> int | None:
+        try:
+            return int(mx.get_active_memory())
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def mlx_peak_memory_bytes() -> int | None:
+        try:
+            return int(mx.get_peak_memory())
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def mlx_cache_memory_bytes() -> int | None:
+        try:
+            return int(mx.get_cache_memory())
+        except (AttributeError, RuntimeError, TypeError, ValueError):
+            return None
 
     @staticmethod
     def blend_overlapping_frames(

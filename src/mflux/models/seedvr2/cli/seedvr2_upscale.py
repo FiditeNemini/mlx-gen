@@ -1,3 +1,5 @@
+import fcntl
+import gc
 import json
 import sys
 import traceback
@@ -8,12 +10,15 @@ from pathlib import Path
 import mlx.core as mx
 
 from mflux.callbacks.callback_manager import CallbackManager
+from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.download_policy import DownloadRequiredError, is_huggingface_repo_id
 from mflux.models.common.vae.tiling_config import TilingConfig
 from mflux.models.seedvr2.latent_creator.seedvr2_latent_creator import SeedVR2LatentCreator
+from mflux.models.seedvr2.seedvr2_initializer import SeedVR2Initializer
 from mflux.models.seedvr2.variants.upscale.seedvr2 import SeedVR2
+from mflux.models.seedvr2.variants.upscale.seedvr2_util import SeedVR2Util
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.scale_factor import ScaleFactor
 from mflux.utils.video_util import VideoUtil
@@ -41,16 +46,6 @@ SUPPORTED_VIDEO_SUFFIXES = {
 }
 
 DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB = 8.0
-SEEDVR2_DIRECT_VIDEO_PIXEL_VOLUME_LIMITS = {
-    "3b": 4_500_000,
-    "7b": 4_250_000,
-    "7b-sharp": 4_250_000,
-}
-SEEDVR2_STREAMING_CHUNK_PIXEL_VOLUME_LIMITS = {
-    "3b": 4_500_000,
-    "7b": 4_250_000,
-    "7b-sharp": 4_250_000,
-}
 SEEDVR2_MIN_STREAMING_CHUNK_FRAMES = 5
 
 
@@ -71,6 +66,37 @@ class SeedVR2VideoRestorePlan:
     cache_limit_gb: float | None
     risk_level: str
     warnings: tuple[str, ...]
+
+
+class SeedVR2VideoRunLock:
+    def __init__(self):
+        self.path = ui_defaults.MFLUX_CACHE_DIR / "locks" / "seedvr2-video.lock"
+        self.handle = None
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.handle = self.path.open("w")
+        try:
+            fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            self.handle.close()
+            self.handle = None
+            raise RuntimeError(
+                "Another SeedVR2 video restore is already running in mlx-gen. "
+                "Wait for it to finish or override with --force-unsafe-video-memory."
+            ) from exc
+        self.handle.write(f"{datetime.now().isoformat()} pid-lock\n")
+        self.handle.flush()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self.handle is None:
+            return
+        try:
+            fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self.handle.close()
+            self.handle = None
 
 
 def _is_image_file(path: Path) -> bool:
@@ -278,15 +304,51 @@ def _aligned_chunk_size(max_frames: int) -> int:
     return max(candidate, 1)
 
 
-def _safe_chunk_frame_limit(*, area: int, variant: str) -> int:
-    if area <= 0:
-        raise ValueError("area must be greater than zero.")
-    return max(1, SEEDVR2_STREAMING_CHUNK_PIXEL_VOLUME_LIMITS[variant] // area)
+def _seedvr2_memory_profile(model_config: ModelConfig) -> tuple[int, str]:
+    overrides = model_config.transformer_overrides or {}
+    inner_dim = int(overrides.get("vid_dim", 2560))
+    text_attention_mode = str(overrides.get("text_attention_mode", "window_pool"))
+    return inner_dim, text_attention_mode
+
+
+def _safe_chunk_frame_limit(
+    *,
+    model_config: ModelConfig,
+    resolved_model_path: str | None,
+    height: int,
+    width: int,
+    requested_frames: int,
+) -> int:
+    if requested_frames <= 0 or height <= 0 or width <= 0:
+        raise ValueError("requested_frames, height, and width must be greater than zero.")
+    inner_dim, text_attention_mode = _seedvr2_memory_profile(model_config)
+    resident_weight_bytes = SeedVR2Initializer.estimate_resident_weight_bytes(
+        model_config=model_config,
+        model_path=resolved_model_path,
+    )
+    budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes(reserve_bytes=resident_weight_bytes)
+
+    max_safe = 0
+    for candidate in range(1, requested_frames + 1):
+        estimate = SeedVR2Util.estimate_video_restore_total_bytes(
+            frame_count=SeedVR2Util.padded_video_frame_count(candidate),
+            height=height,
+            width=width,
+            inner_dim=inner_dim,
+            text_attention_mode=text_attention_mode,
+            resident_weight_bytes=resident_weight_bytes,
+        )
+        if estimate <= budget_bytes:
+            max_safe = candidate
+        else:
+            break
+    return max_safe
 
 
 def _plan_seedvr2_video_restore(
     *,
     model_config: ModelConfig,
+    resolved_model_path: str | None = None,
     source_probe,
     requested_frames: int,
     resolution: int | ScaleFactor,
@@ -304,45 +366,48 @@ def _plan_seedvr2_video_restore(
     )
     area = height * width
     scale = _seedvr2_resolution_scale(resolution, min(source_probe.source_width, source_probe.source_height))
-    direct_pixel_volume = requested_frames * area
-    safe_chunk_limit = _safe_chunk_frame_limit(area=area, variant=variant)
+    safe_chunk_limit = _safe_chunk_frame_limit(
+        model_config=model_config,
+        resolved_model_path=resolved_model_path,
+        height=height,
+        width=width,
+        requested_frames=requested_frames,
+    )
     warnings: list[str] = []
-    low_ram_required = variant in {"7b", "7b-sharp"}
+    low_ram_required = True
 
     if low_ram_required and not low_ram_requested and not force_unsafe_memory_profile:
-        warnings.append("SeedVR2 7B video restore requires --low-ram for the supported safe profile.")
+        warnings.append("SeedVR2 video restore requires --low-ram on the supported safe profile.")
 
-    direct_allowed = requested_frames <= 121 and direct_pixel_volume <= SEEDVR2_DIRECT_VIDEO_PIXEL_VOLUME_LIMITS[variant]
-    if direct_allowed:
-        restore_mode = "direct"
-        route_reason = "direct_safe"
-        effective_chunk_size = None
-        effective_chunk_overlap = None
-        chunk_pixel_volume = None
+    requested_chunk_size = min(temporal_chunk_size, requested_frames)
+    if force_unsafe_memory_profile:
+        restore_mode = "streaming"
+        route_reason = "unsafe_override"
+        effective_chunk_size = _aligned_chunk_size(requested_chunk_size)
+        overlap_cap = max(0, effective_chunk_size // 3)
+        effective_chunk_overlap = min(temporal_chunk_overlap, overlap_cap)
+        chunk_pixel_volume = effective_chunk_size * area
     else:
-        requested_chunk_size = min(temporal_chunk_size, requested_frames)
-        safe_chunk_size = min(requested_chunk_size, safe_chunk_limit)
-        effective_chunk_size = _aligned_chunk_size(safe_chunk_size)
-        if effective_chunk_size < SEEDVR2_MIN_STREAMING_CHUNK_FRAMES and not force_unsafe_memory_profile:
+        restore_mode = "streaming"
+        route_reason = "safe_streaming"
+        effective_chunk_size = _aligned_chunk_size(min(requested_chunk_size, max(safe_chunk_limit, 1)))
+        if scale > 1.0:
+            warnings.append(
+                "SeedVR2 safe video mode only supports source-size restoration or smaller output. "
+                "Use 1x or override with --force-unsafe-video-memory."
+            )
+        if effective_chunk_size < SEEDVR2_MIN_STREAMING_CHUNK_FRAMES:
             warnings.append(
                 "This SeedVR2 video request exceeds the supported safe memory profile. "
-                "Reduce resolution or use a shorter clip, or override with --force-unsafe-video-memory."
+                "Reduce source size or resolution, use a shorter clip, or override with "
+                "--force-unsafe-video-memory."
             )
-        restore_mode = "streaming"
-        if low_ram_requested:
-            route_reason = "low_ram"
-        elif requested_frames > 121:
-            route_reason = "frame_count"
-        elif effective_chunk_size < requested_chunk_size:
-            route_reason = "chunk_volume_clamped"
-        else:
-            route_reason = "pixel_volume"
         overlap_cap = max(0, effective_chunk_size // 3)
         effective_chunk_overlap = min(temporal_chunk_overlap, overlap_cap)
         chunk_pixel_volume = effective_chunk_size * area
 
     risk_level = "low"
-    if scale > 1.0 or variant in {"7b", "7b-sharp"}:
+    if scale > 1.0 or variant in {"7b", "7b-sharp"} or force_unsafe_memory_profile:
         risk_level = "medium"
     if warnings:
         risk_level = "high"
@@ -460,6 +525,130 @@ def _print_seedvr2_video_preflight(video_path: Path, source_probe, plan: SeedVR2
         print(f"SeedVR2 warning: {warning}")
 
 
+def _run_seedvr2_video_restore(
+    *,
+    model: SeedVR2,
+    args,
+    video_path: Path,
+    source_probe,
+    plan: SeedVR2VideoRestorePlan,
+    output_pattern: str,
+    seed: int,
+) -> None:
+    output_path = output_pattern.format(seed=seed, image_name=video_path.stem)
+    _print_seedvr2_video_preflight(video_path, source_probe, plan)
+    if source_probe.audio_present:
+        print("SeedVR2 warning: source audio will not be copied; output will be a silent MP4.")
+    runtime_metadata = {
+        "restore_mode": plan.restore_mode,
+        "restore_mode_reason": plan.route_reason,
+        "low_ram_requested": bool(args.low_ram),
+        "low_ram_effective": bool(plan.low_ram_effective),
+        "mlx_cache_limit_gb": args.mlx_cache_limit_gb,
+        "requested_temporal_chunk_size": args.temporal_chunk_size,
+        "requested_temporal_chunk_overlap": args.temporal_chunk_overlap,
+        "effective_temporal_chunk_size": plan.effective_chunk_size,
+        "effective_temporal_chunk_overlap": plan.effective_chunk_overlap,
+        "seedvr2_risk_level": plan.risk_level,
+        "seedvr2_target_height": plan.target_height,
+        "seedvr2_target_width": plan.target_width,
+    }
+    try:
+        result_path = model.restore_video_to_path(
+            seed=seed,
+            video_path=video_path,
+            resolution=args.resolution,
+            softness=args.softness,
+            start_seconds=args.start_seconds,
+            max_frames=args.max_frames,
+            output_path=output_path,
+            export_json_metadata=args.metadata,
+            overwrite=args.replace,
+            temporal_chunk_size=plan.effective_chunk_size or args.temporal_chunk_size,
+            temporal_chunk_overlap=plan.effective_chunk_overlap or args.temporal_chunk_overlap,
+            color_correction_mode=args.color_correction,
+            restore_metadata=runtime_metadata,
+        )
+    except Exception as exc:
+        failure_path = _write_seedvr2_failure_manifest(
+            output_path=output_path,
+            video_path=video_path,
+            model=args.model,
+            seed=seed,
+            resolution=args.resolution,
+            softness=args.softness,
+            color_correction_mode=args.color_correction,
+            start_seconds=args.start_seconds,
+            max_frames=args.max_frames,
+            plan=plan,
+            error=exc,
+        )
+        print(f"SeedVR2 failure manifest saved at: {failure_path}")
+        raise
+    print(f"Video saved successfully at: {result_path}")
+
+
+def _load_seedvr2_model(
+    *,
+    parser: CommandLineParser,
+    args,
+    resolved_model_path: str | None,
+    model_config: ModelConfig,
+) -> SeedVR2:
+    try:
+        model = SeedVR2(
+            quantize=args.quantize,
+            model_path=resolved_model_path,
+            model_config=model_config,
+        )
+    except DownloadRequiredError as exc:
+        parser.error(str(exc))
+    return model
+
+
+def _run_video_with_fresh_model(
+    *,
+    parser: CommandLineParser,
+    args,
+    resolved_model_path: str | None,
+    model_config: ModelConfig,
+    video_path: Path,
+    source_probe,
+    plan: SeedVR2VideoRestorePlan,
+    output_pattern: str,
+    seed: int,
+) -> None:
+    model = _load_seedvr2_model(
+        parser=parser,
+        args=args,
+        resolved_model_path=resolved_model_path,
+        model_config=model_config,
+    )
+    memory_saver = CallbackManager.register_callbacks(
+        args=args,
+        model=model,
+        latent_creator=SeedVR2LatentCreator,
+    )
+    if memory_saver is not None:
+        memory_saver.keep_transformer = True
+    try:
+        _run_seedvr2_video_restore(
+            model=model,
+            args=args,
+            video_path=video_path,
+            source_probe=source_probe,
+            plan=plan,
+            output_pattern=output_pattern,
+            seed=seed,
+        )
+    finally:
+        if memory_saver:
+            print(memory_saver.memory_stats())
+        del model
+        gc.collect()
+        mx.clear_cache()
+
+
 def main():
     # 1. Parse command line arguments
     parser = CommandLineParser(description="Upscale an image using SeedVR2 diffusion-based super-resolution.")
@@ -485,8 +674,12 @@ def main():
         parser.error("--temporal-chunk-overlap must be greater than or equal to zero.")
     if args.temporal_chunk_overlap >= args.temporal_chunk_size:
         parser.error("--temporal-chunk-overlap must be smaller than --temporal-chunk-size.")
+    safe_video_mode = bool(video_paths) and not args.force_unsafe_video_memory
     if video_paths and "--resolution" not in provided_options:
         args.resolution = ScaleFactor(1)
+    if video_paths and not args.low_ram:
+        print("SeedVR2 video mode: enabling --low-ram automatically.")
+        args.low_ram = True
 
     try:
         model_config, resolved_model_path = _resolve_seedvr2_model(args.model, args.model_path)
@@ -496,7 +689,15 @@ def main():
     video_probes: dict[Path, object] = {}
     video_restore_plans: dict[Path, SeedVR2VideoRestorePlan] = {}
     if video_paths:
-        cache_limit_gb = args.mlx_cache_limit_gb or DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB
+        if args.mlx_cache_limit_gb is None:
+            args.mlx_cache_limit_gb = DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB
+        elif safe_video_mode and args.mlx_cache_limit_gb > DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB:
+            print(
+                "SeedVR2 safe video mode: clamping --mlx-cache-limit-gb to "
+                f"{DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB:g}."
+            )
+            args.mlx_cache_limit_gb = DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB
+        cache_limit_gb = args.mlx_cache_limit_gb
         for video_path in video_paths:
             source_probe = VideoUtil.read_video_clip(
                 video_path,
@@ -507,6 +708,7 @@ def main():
             requested_frames = _requested_video_frame_count(source_probe, args.max_frames)
             plan = _plan_seedvr2_video_restore(
                 model_config=model_config,
+                resolved_model_path=resolved_model_path,
                 source_probe=source_probe,
                 requested_frames=requested_frames,
                 resolution=args.resolution,
@@ -517,133 +719,62 @@ def main():
                 force_unsafe_memory_profile=args.force_unsafe_video_memory,
             )
             video_restore_plans[video_path] = plan
-            if plan.low_ram_required and not args.low_ram and not args.force_unsafe_video_memory:
-                parser.error(
-                    "SeedVR2 7B video restore requires --low-ram on the supported safe profile. "
-                    "Use --low-ram --mlx-cache-limit-gb 8, or override with --force-unsafe-video-memory."
-                )
             if plan.warnings and not args.force_unsafe_video_memory:
                 parser.error(plan.warnings[0])
-        if args.mlx_cache_limit_gb is None:
-            args.mlx_cache_limit_gb = cache_limit_gb
         _apply_cache_limit_if_needed(args.mlx_cache_limit_gb)
 
-    # 3. Load the SeedVR2 model
     try:
-        model = SeedVR2(
-            quantize=args.quantize,
-            model_path=resolved_model_path,
-            model_config=model_config,
-        )
-    except DownloadRequiredError as exc:
-        parser.error(str(exc))
-    if args.vae_tiling:
-        model.tiling_config = TilingConfig()
-
-    # 4. Register callbacks
-    memory_saver = CallbackManager.register_callbacks(
-        args=args,
-        model=model,
-        latent_creator=SeedVR2LatentCreator,
-    )
-    if memory_saver is not None and video_paths:
-        memory_saver.keep_transformer = True
-
-    try:
-        # 5. Upscale the image for each seed
         output_pattern = _default_output_for_inputs(args.output, is_video=bool(video_paths))
-        for image_path in image_paths:
-            for seed in args.seed:
-                result = model.generate_image(
-                    seed=seed,
-                    image_path=image_path,
-                    resolution=args.resolution,
-                    softness=args.softness,
-                    color_correction_mode=args.color_correction,
-                )
+        if image_paths:
+            model = _load_seedvr2_model(
+                parser=parser,
+                args=args,
+                resolved_model_path=resolved_model_path,
+                model_config=model_config,
+            )
+            if args.vae_tiling:
+                model.tiling_config = TilingConfig()
+            memory_saver = CallbackManager.register_callbacks(
+                args=args,
+                model=model,
+                latent_creator=SeedVR2LatentCreator,
+            )
+            try:
+                for image_path in image_paths:
+                    for seed in args.seed:
+                        result = model.generate_image(
+                            seed=seed,
+                            image_path=image_path,
+                            resolution=args.resolution,
+                            softness=args.softness,
+                            color_correction_mode=args.color_correction,
+                        )
 
-                result.save(
-                    output_pattern.format(seed=seed, image_name=image_path.stem),
-                    export_json_metadata=args.metadata,
-                    overwrite=args.replace,
-                )
-        for video_path in video_paths:
-            for seed in args.seed:
-                source_probe = video_probes[video_path]
-                plan = video_restore_plans[video_path]
-                output_path = output_pattern.format(seed=seed, image_name=video_path.stem)
-                _print_seedvr2_video_preflight(video_path, source_probe, plan)
-                if source_probe.audio_present:
-                    print("SeedVR2 warning: source audio will not be copied; output will be a silent MP4.")
-                runtime_metadata = {
-                    "restore_mode": plan.restore_mode,
-                    "restore_mode_reason": plan.route_reason,
-                    "low_ram_requested": bool(args.low_ram),
-                    "low_ram_effective": bool(plan.low_ram_effective),
-                    "mlx_cache_limit_gb": args.mlx_cache_limit_gb,
-                    "requested_temporal_chunk_size": args.temporal_chunk_size,
-                    "requested_temporal_chunk_overlap": args.temporal_chunk_overlap,
-                    "effective_temporal_chunk_size": plan.effective_chunk_size,
-                    "effective_temporal_chunk_overlap": plan.effective_chunk_overlap,
-                    "seedvr2_risk_level": plan.risk_level,
-                    "seedvr2_target_height": plan.target_height,
-                    "seedvr2_target_width": plan.target_width,
-                }
-                try:
-                    if plan.restore_mode == "streaming":
-                        result_path = model.restore_video_to_path(
-                            seed=seed,
-                            video_path=video_path,
-                            resolution=args.resolution,
-                            softness=args.softness,
-                            start_seconds=args.start_seconds,
-                            max_frames=args.max_frames,
-                            output_path=output_path,
-                            export_json_metadata=args.metadata,
-                            overwrite=args.replace,
-                            temporal_chunk_size=plan.effective_chunk_size or args.temporal_chunk_size,
-                            temporal_chunk_overlap=plan.effective_chunk_overlap or args.temporal_chunk_overlap,
-                            color_correction_mode=args.color_correction,
-                            restore_metadata=runtime_metadata,
-                        )
-                    else:
-                        result = model.generate_video(
-                            seed=seed,
-                            video_path=video_path,
-                            resolution=args.resolution,
-                            softness=args.softness,
-                            start_seconds=args.start_seconds,
-                            max_frames=args.max_frames,
-                            color_correction_mode=args.color_correction,
-                            restore_metadata=runtime_metadata,
-                        )
-                        result_path = result.save(
-                            output_path,
+                        result.save(
+                            output_pattern.format(seed=seed, image_name=image_path.stem),
                             export_json_metadata=args.metadata,
                             overwrite=args.replace,
                         )
-                except Exception as exc:
-                    failure_path = _write_seedvr2_failure_manifest(
-                        output_path=output_path,
-                        video_path=video_path,
-                        model=args.model,
-                        seed=seed,
-                        resolution=args.resolution,
-                        softness=args.softness,
-                        color_correction_mode=args.color_correction,
-                        start_seconds=args.start_seconds,
-                        max_frames=args.max_frames,
-                        plan=plan,
-                        error=exc,
-                    )
-                    print(f"SeedVR2 failure manifest saved at: {failure_path}")
-                    raise
-                print(f"Video saved successfully at: {result_path}")
+            finally:
+                if memory_saver:
+                    print(memory_saver.memory_stats())
+        elif video_paths:
+            with SeedVR2VideoRunLock():
+                for video_path in video_paths:
+                    for seed in args.seed:
+                        _run_video_with_fresh_model(
+                            parser=parser,
+                            args=args,
+                            resolved_model_path=resolved_model_path,
+                            model_config=model_config,
+                            video_path=video_path,
+                            source_probe=video_probes[video_path],
+                            plan=video_restore_plans[video_path],
+                            output_pattern=output_pattern,
+                            seed=seed,
+                        )
     except StopImageGenerationException as exc:
         print(exc)
-    finally:
-        if memory_saver:
-            print(memory_saver.memory_stats())
 
 
 if __name__ == "__main__":

@@ -254,10 +254,11 @@ class SeedVR2VideoRestoreMetrics:
         body_font = PIL.ImageFont.load_default(size=18)
         small_font = PIL.ImageFont.load_default(size=15)
 
-        draw.text((24, 18), "SeedVR2 Eiffel bounded restore proof", fill="black", font=title_font)
+        title, subtitle, source_label = SeedVR2VideoRestoreMetrics._contact_sheet_header(source_clip)
+        draw.text((24, 18), title, fill="black", font=title_font)
         draw.text(
             (24, 54),
-            "Frames sampled from the same 6-frame source excerpt. Videos are the primary proof; this sheet supports review.",
+            subtitle,
             fill=(60, 60, 60),
             font=body_font,
         )
@@ -272,7 +273,7 @@ class SeedVR2VideoRestoreMetrics:
         SeedVR2VideoRestoreMetrics._draw_contact_row(
             canvas=canvas,
             top=y,
-            left_label="Source\n320x240 excerpt",
+            left_label=source_label,
             frames=source_clip.frames,
             frame_indices=frame_indices,
             panel_width=panel_width,
@@ -377,6 +378,20 @@ class SeedVR2VideoRestoreMetrics:
     @staticmethod
     def _contact_label_text(item: dict) -> str:
         return f"{item['label']}\n{item['generation_time_seconds']}s"
+
+    @staticmethod
+    def _contact_sheet_header(source_clip: DecodedVideoClip) -> tuple[str, str, str]:
+        if source_clip.clip_frame_count <= 14:
+            return (
+                "SeedVR2 Eiffel bounded restore proof",
+                "Frames sampled from the same bounded source clip. Videos are the primary proof; this sheet supports review.",
+                f"Source\n{source_clip.source_width}x{source_clip.source_height}\nexcerpt",
+            )
+        return (
+            "SeedVR2 Eiffel full restore proof",
+            "Frames sampled across the full source clip. The restored MP4 files are the primary evidence.",
+            f"Source\n{source_clip.source_width}x{source_clip.source_height}\nsampled frames",
+        )
 
     @staticmethod
     def _video_label_text(item: dict) -> str:

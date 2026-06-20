@@ -310,6 +310,66 @@ def test_seedvr2_restore_video_to_path_cleans_temp_file_on_failure(monkeypatch, 
 
 
 @pytest.mark.fast
+def test_seedvr2_restore_video_to_path_cleans_final_file_on_postwrite_validation_failure(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.touch()
+    output = tmp_path / "restored.mp4"
+
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = object()
+
+    frames = [_solid_frame((index * 25, index * 25, index * 25)) for index in range(8)]
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=frames[:1],
+                fps=12.0,
+                source_width=16,
+                source_height=16,
+                source_frame_count=8,
+                source_duration_seconds=8 / 12.0,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "iter_video_frame_windows",
+        staticmethod(lambda path, start_frame=0, windows=None: _iter_fake_chunk_clips(frames, windows or [], False)),
+    )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_restore_video_frames", lambda self, **kwargs: (list(kwargs["frames"]), 16, 16, len(kwargs["frames"])))
+    monkeypatch.setattr(seedvr2_module.VideoUtil, "_latents_to_frames", staticmethod(lambda decoded: decoded))
+    monkeypatch.setattr(seedvr2_module.VideoHealth, "validate_file", staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("bad video"))))
+
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
+    with pytest.raises(RuntimeError, match="bad video"):
+        model.restore_video_to_path(
+            seed=42,
+            video_path=source,
+            resolution=256,
+            softness=0.0,
+            output_path=output,
+            export_json_metadata=True,
+            temporal_chunk_size=5,
+            temporal_chunk_overlap=2,
+        )
+
+    assert not output.exists()
+    assert not output.with_suffix(".metadata.json").exists()
+
+
+@pytest.mark.fast
 def test_seedvr2_restore_video_frames_trims_temporal_padding(monkeypatch):
     def fake_init(model, model_config, quantize=None, model_path=None):
         model.model_config = model_config
@@ -353,6 +413,7 @@ def test_seedvr2_restore_video_frames_trims_temporal_padding(monkeypatch):
         "apply_color_correction",
         staticmethod(lambda content, style, mode="lab": content),
     )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_assert_video_restore_memory_budget", lambda self, **kwargs: None)
 
     model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
     decoded, _, _, padded_frames = model._restore_video_frames(
@@ -365,6 +426,46 @@ def test_seedvr2_restore_video_frames_trims_temporal_padding(monkeypatch):
 
     assert decoded.shape[2] == 6
     assert padded_frames == 9
+
+
+@pytest.mark.fast
+def test_seedvr2_generate_video_rejects_multi_frame_in_memory_restore_before_full_decode(monkeypatch):
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = object()
+
+    calls: list[int | None] = []
+
+    def fake_read_video_clip(path, start_seconds=0.0, max_frames=None):
+        calls.append(max_frames)
+        return DecodedVideoClip(
+            frames=[_solid_frame((0, 0, 0))],
+            fps=12.0,
+            source_width=320,
+            source_height=240,
+            source_frame_count=120,
+            source_duration_seconds=10.0,
+            audio_present=False,
+            clip_start_frame=0,
+            clip_frame_count=1,
+        )
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(seedvr2_module.VideoUtil, "read_video_clip", staticmethod(fake_read_video_clip))
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_7b())
+    with pytest.raises(ValueError, match="limited to single-frame in-memory use"):
+        model.generate_video(
+            seed=42,
+            video_path="source.mp4",
+            resolution=ScaleFactor(1),
+            max_frames=40,
+        )
+
+    assert calls == [1]
 
 
 @pytest.mark.fast
@@ -408,6 +509,7 @@ def test_seedvr2_restore_video_frames_keeps_single_frame_temporal_axis(monkeypat
         "apply_color_correction",
         staticmethod(lambda content, style, mode="lab": content),
     )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_assert_video_restore_memory_budget", lambda self, **kwargs: None)
 
     model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
     decoded, _, _, padded_frames = model._restore_video_frames(
@@ -469,6 +571,7 @@ def test_seedvr2_restore_video_frames_disables_tiled_encode_for_video(monkeypatc
         "apply_color_correction",
         staticmethod(lambda content, style, mode="lab": content),
     )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_assert_video_restore_memory_budget", lambda self, **kwargs: None)
 
     model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
     model._restore_video_frames(
@@ -480,6 +583,115 @@ def test_seedvr2_restore_video_frames_disables_tiled_encode_for_video(monkeypatc
     )
 
     assert captured["vae_encode_tiled"] is False
+
+
+@pytest.mark.fast
+def test_seedvr2_restore_video_frames_disables_decode_tiling_for_small_video(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = lambda txt, vid, timestep: mx.zeros_like(vid[:, :16])
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(
+        seedvr2_module.SeedVR2Util,
+        "preprocess_video_frames",
+        staticmethod(lambda frames, resolution, softness: (mx.zeros((1, 3, 6, 32, 32), dtype=mx.float32), 32, 32)),
+    )
+
+    monkeypatch.setattr(
+        seedvr2_module.VAEUtil,
+        "encode",
+        staticmethod(lambda vae, image, tiling_config, preserve_temporal_axis=False: mx.zeros((1, 16, image.shape[2], 4, 4), dtype=mx.float32)),
+    )
+
+    def fake_decode(vae, latent, tiling_config, preserve_temporal_axis=False):
+        captured["vae_decode_tiles_per_dim"] = tiling_config.vae_decode_tiles_per_dim if tiling_config is not None else None
+        return mx.zeros((1, 3, latent.shape[2], 32, 32), dtype=mx.float32)
+
+    monkeypatch.setattr(seedvr2_module.VAEUtil, "decode", staticmethod(fake_decode))
+    monkeypatch.setattr(
+        seedvr2_module.SeedVR2TextEmbeddings,
+        "load_positive",
+        staticmethod(lambda: mx.zeros((1, 1, 5120), dtype=mx.float32)),
+    )
+    monkeypatch.setattr(
+        seedvr2_module.SeedVR2Util,
+        "apply_color_correction",
+        staticmethod(lambda content, style, mode="lab": content),
+    )
+
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
+    model._restore_video_frames(
+        seed=42,
+        frames=[_solid_frame((0, 0, 0)) for _ in range(6)],
+        resolution=256,
+        softness=0.0,
+        color_correction_mode="wavelet",
+    )
+
+    assert captured["vae_decode_tiles_per_dim"] == 0
+
+
+@pytest.mark.fast
+def test_seedvr2_restore_video_frames_keeps_decode_tiling_for_large_video(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = lambda txt, vid, timestep: mx.zeros_like(vid[:, :16])
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(
+        seedvr2_module.SeedVR2Util,
+        "preprocess_video_frames",
+        staticmethod(
+            lambda frames, resolution, softness: (mx.zeros((1, 3, 6, 1536, 1024), dtype=mx.float32), 1536, 1024)
+        ),
+    )
+
+    monkeypatch.setattr(
+        seedvr2_module.VAEUtil,
+        "encode",
+        staticmethod(lambda vae, image, tiling_config, preserve_temporal_axis=False: mx.zeros((1, 16, image.shape[2], 4, 4), dtype=mx.float32)),
+    )
+
+    def fake_decode(vae, latent, tiling_config, preserve_temporal_axis=False):
+        captured["vae_decode_tiles_per_dim"] = tiling_config.vae_decode_tiles_per_dim if tiling_config is not None else None
+        return mx.zeros((1, 3, latent.shape[2], 1536, 1024), dtype=mx.float32)
+
+    monkeypatch.setattr(seedvr2_module.VAEUtil, "decode", staticmethod(fake_decode))
+    monkeypatch.setattr(
+        seedvr2_module.SeedVR2TextEmbeddings,
+        "load_positive",
+        staticmethod(lambda: mx.zeros((1, 1, 5120), dtype=mx.float32)),
+    )
+    monkeypatch.setattr(
+        seedvr2_module.SeedVR2Util,
+        "apply_color_correction",
+        staticmethod(lambda content, style, mode="lab": content),
+    )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_assert_video_restore_memory_budget", lambda self, **kwargs: None)
+
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
+    model._restore_video_frames(
+        seed=42,
+        frames=[_solid_frame((0, 0, 0)) for _ in range(6)],
+        resolution=1536,
+        softness=0.0,
+        color_correction_mode="wavelet",
+    )
+
+    assert captured["vae_decode_tiles_per_dim"] == 8
 
 
 @pytest.mark.fast

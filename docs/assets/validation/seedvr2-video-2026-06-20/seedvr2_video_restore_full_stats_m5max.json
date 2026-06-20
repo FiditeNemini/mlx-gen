@@ -1,0 +1,82 @@
+{
+  "machine": "Apple M5 Max",
+  "memory_gb": 128,
+  "note": "Both full-video proof runs were executed sequentially. The 3B run used the default safe streaming profile. The 7B run used an explicit chunk-5 streaming profile with force_unsafe_video_memory while preserving the runtime per-chunk memory checks.",
+  "source_video": {
+    "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+    "width": 320,
+    "height": 240,
+    "frames": 2908,
+    "fps": 29.97002997002997,
+    "duration_seconds": 97.03
+  },
+  "runs": {
+    "eiffel_full_source_3b_1x": {
+      "model": "ByteDance-Seed/SeedVR2-3B",
+      "resolution": "1x",
+      "softness": 0.0,
+      "color_correction_mode": "wavelet",
+      "restore_mode_reason": "safe_streaming",
+      "temporal_chunk_size": 49,
+      "temporal_chunk_overlap": 16,
+      "low_ram_effective": true,
+      "mlx_cache_limit_gb": 8.0,
+      "generation_time_seconds": 2210.12,
+      "wall_time_seconds": 2215.64,
+      "width": 320,
+      "height": 240,
+      "frames": 2908,
+      "fps": 29.97002997002997,
+      "audio_copied": false,
+      "peak_mlx_memory_gb": 31.36,
+      "max_resident_set_size_bytes": 27396128768,
+      "max_resident_set_size_gb": 27.4,
+      "processed_chunk_input_frames_total": 4300,
+      "temporal_chunk_count": 88,
+      "output": "docs/assets/validation/seedvr2-video-2026-06-20/eiffel_full_source3b_restore1x_current.mp4"
+    },
+    "eiffel_full_source_7b_1x": {
+      "model": "ByteDance-Seed/SeedVR2-7B",
+      "resolution": "1x",
+      "softness": 0.0,
+      "color_correction_mode": "wavelet",
+      "restore_mode_reason": "unsafe_override",
+      "temporal_chunk_size": 5,
+      "temporal_chunk_overlap": 1,
+      "low_ram_effective": true,
+      "mlx_cache_limit_gb": 8.0,
+      "generation_time_seconds": 3062.79,
+      "wall_time_seconds": 3070.42,
+      "width": 320,
+      "height": 240,
+      "frames": 2908,
+      "fps": 29.97002997002997,
+      "audio_copied": false,
+      "peak_mlx_memory_gb": 22.93,
+      "max_resident_set_size_bytes": 66182119424,
+      "max_resident_set_size_gb": 66.18,
+      "processed_chunk_input_frames_total": 3634,
+      "temporal_chunk_count": 727,
+      "output": "docs/assets/validation/seedvr2-video-2026-06-20/eiffel_full_source7b_restore1x_current.mp4"
+    }
+  },
+  "metrics_summary": {
+    "comparison_space": "Sampled restored frames were downscaled back to the original 320x240 source resolution before scoring.",
+    "eiffel_full_source_3b_1x": {
+      "sharpness_gain": 1.7187,
+      "contrast_gain": 1.0942,
+      "temporal_ratio": 1.7634,
+      "drift_mae": 0.069546,
+      "heuristic_score": 53.34,
+      "heuristic_read": "aggressive drift or flicker risk"
+    },
+    "eiffel_full_source_7b_1x": {
+      "sharpness_gain": 1.8153,
+      "contrast_gain": 1.072,
+      "temporal_ratio": 1.1041,
+      "drift_mae": 0.060194,
+      "heuristic_score": 68.03,
+      "heuristic_read": "balanced restore candidate"
+    }
+  }
+}

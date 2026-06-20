@@ -234,6 +234,55 @@ def test_seedvr2_weight_coverage_audit_rejects_missing_transformer_key():
 
 
 @pytest.mark.fast
+def test_seedvr2_weight_coverage_ignores_quantized_auxiliary_keys():
+    transformer = SeedVR2Transformer(**(ModelConfig.seedvr2_3b().transformer_overrides or {}))
+    flat = dict(tree_flatten(transformer.parameters()))
+    quantized = dict(flat)
+    quantized["txt_in.scales"] = mx.ones((1,), dtype=mx.float16)
+    quantized["txt_in.biases"] = mx.ones((1,), dtype=mx.float16)
+
+    dummy_model = type("DummyModel", (), {"transformer": transformer, "vae": object()})()
+    weights = LoadedWeights(
+        components={"transformer": quantized},
+        meta_data=MetaData(quantization_level=8),
+    )
+
+    SeedVR2Initializer._assert_weight_coverage(dummy_model, weights)
+
+
+@pytest.mark.fast
+def test_seedvr2_estimate_resident_weight_bytes_sums_official_component_files(tmp_path):
+    (tmp_path / "seedvr2_ema_3b.pth").write_bytes(b"a" * 11)
+    (tmp_path / "ema_vae.pth").write_bytes(b"b" * 7)
+    (tmp_path / "pos_emb.pt").write_bytes(b"c" * 5)
+
+    estimated = SeedVR2WeightDefinition.estimate_resident_weight_bytes(
+        root_path=tmp_path,
+        weight_definition=SeedVR2WeightDefinition3BOfficial,
+    )
+
+    assert estimated == 23
+
+
+@pytest.mark.fast
+def test_seedvr2_estimate_resident_weight_bytes_sums_prepared_safetensors(tmp_path):
+    transformer = tmp_path / "transformer"
+    vae = tmp_path / "vae"
+    transformer.mkdir()
+    vae.mkdir()
+    (transformer / "a.safetensors").write_bytes(b"a" * 13)
+    (transformer / "b.safetensors").write_bytes(b"b" * 17)
+    (vae / "c.safetensors").write_bytes(b"c" * 19)
+
+    estimated = SeedVR2WeightDefinition.estimate_resident_weight_bytes(
+        root_path=tmp_path,
+        weight_definition=SeedVR2WeightDefinition3BPrepared,
+    )
+
+    assert estimated == 49
+
+
+@pytest.mark.fast
 def test_seedvr2_missing_abstractframework_package_does_not_fallback_to_source(monkeypatch, tmp_path):
     repo_id = "AbstractFramework/seedvr2-7b-8bit"
     model_config = ModelConfig.seedvr2_7b()

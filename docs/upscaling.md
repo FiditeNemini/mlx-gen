@@ -13,10 +13,17 @@ Video restoration uses the same command with `--video-path` instead of `--image-
 preserves the source clip FPS by default, trims temporary SeedVR2 padding back to the requested
 clip length, and currently writes a silent MP4 even when the source video contains audio.
 
-Short clips stay on the direct temporal path. Longer clips are restored through sequential temporal
-chunking so MLX-Gen does not need to hold a full decoded source clip in memory at once. For long
-video runs, prefer `--low-ram --mlx-cache-limit-gb 8`. `--vae-tiling` is for image runs only and
-is rejected on video input.
+The public safe video profile is conservative by design:
+
+- if you omit `--resolution`, video restore defaults to `1x`;
+- MLX-Gen enables `--low-ram` automatically for video inputs;
+- the safe profile uses `--mlx-cache-limit-gb 8` as an MLX cache setting, not as a total process or
+  machine-memory cap;
+- the CLI uses sequential temporal chunking for video instead of the bounded in-memory direct path;
+- enlarged video output profiles are rejected in safe mode unless you pass
+  `--force-unsafe-video-memory`.
+
+`--vae-tiling` is for image runs only and is rejected on video input.
 
 Validated public example downloads:
 
@@ -33,19 +40,38 @@ mlxgen upscale \
   --video-path '/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4' \
   --start-seconds 16 \
   --max-frames 6 \
-  --resolution 2x \
+  --resolution 1x \
   --softness 0.0 \
   --metadata \
   --output eiffel_16s_6f_restore_3b.mp4
 ```
 
-The final public proof for this route is the full `97s` Eiffel source clip restored at native
-resolution. Treat that proof as the long-run robustness proof for full-video restoration, not as
-the primary `3B`-versus-`7B` family ranking surface. For this archival source, `1x` restoration
-gave the better full-clip balance than `2x` upscaling: the enlarged `2x` runs could sharpen early
-frames but were more prone to muddy over-smoothing later in the clip.
+The checked proof surface for this route now has two layers on the exact current tree:
 
-Official 3B full-source proof:
+- bounded `1x` source-size quick checks:
+  - 6-frame official `3B` / `7B` video restore at `320x240`
+  - 14-frame official `3B` / `7B` video restore at `320x240`
+  - matching single-frame `1x` image restore from the same source frame
+- full `97s` `1x` source-size long-run checks:
+  - official `3B` full clip restore at `320x240`
+  - official `7B` full clip restore at `320x240`
+
+Use this exact bounded command for the primary route check:
+
+```sh
+mlxgen upscale \
+  --model ByteDance-Seed/SeedVR2-3B \
+  --video-path '/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4' \
+  --start-seconds 16 \
+  --max-frames 6 \
+  --resolution 1x \
+  --softness 0.0 \
+  --color-correction wavelet \
+  --metadata \
+  --output eiffel_16s_6f_restore_3b.mp4
+```
+
+Use this exact full-clip command for the current `3B` long-run proof:
 
 ```sh
 mlxgen upscale \
@@ -54,15 +80,11 @@ mlxgen upscale \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
-  --temporal-chunk-size 49 \
-  --temporal-chunk-overlap 16 \
-  --low-ram \
-  --mlx-cache-limit-gb 8 \
   --metadata \
-  --output eiffel_full_restore_3b_1x.mp4
+  --output eiffel_full_source3b_restore1x_current.mp4
 ```
 
-Official 7B full-source proof:
+Use this exact full-clip command for the current `7B` long-run proof on the same machine:
 
 ```sh
 mlxgen upscale \
@@ -71,30 +93,78 @@ mlxgen upscale \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
-  --temporal-chunk-size 49 \
-  --temporal-chunk-overlap 16 \
-  --low-ram \
-  --mlx-cache-limit-gb 8 \
+  --temporal-chunk-size 5 \
+  --temporal-chunk-overlap 1 \
+  --force-unsafe-video-memory \
   --metadata \
-  --output eiffel_full_restore_7b_1x.mp4
+  --output eiffel_full_source7b_restore1x_current.mp4
 ```
 
-The public proof for this route is the restored full-length `3B` and `7B` videos themselves:
+Current full proof assets:
 
-- [Restored 3B full video](assets/validation/seedvr2-video-2026-06-19/eiffel_full_restore_3b_1x.mp4)
-- [Restored 7B full video](assets/validation/seedvr2-video-2026-06-19/eiffel_full_restore_7b_1x.mp4)
+- [Restored 3B full video](assets/validation/seedvr2-video-2026-06-20/eiffel_full_source3b_restore1x_current.mp4)
+- [Restored 7B full video](assets/validation/seedvr2-video-2026-06-20/eiffel_full_source7b_restore1x_current.mp4)
+- [Full sampled contact sheet](assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_contact_sheet.jpg)
+- [Full sampled metrics](assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_metrics.json)
+- [Full command log](assets/validation/seedvr2-video-2026-06-20/seedvr2_video_restore_full_command_log.md)
+- [Full timing and memory stats](assets/validation/seedvr2-video-2026-06-20/seedvr2_video_restore_full_stats_m5max.json)
 
-The frame sheet below is only a review aid:
+The full sampled sheet below is the current long-run review aid:
 
-![SeedVR2 Eiffel full-video 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-19/eiffel_full_3b_7b_1x_contact_sheet.jpg)
+![SeedVR2 Eiffel full 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_contact_sheet.jpg)
 
-Supporting assets:
+Current bounded proof assets:
 
-- [SeedVR2 full-video command log](assets/validation/seedvr2-video-2026-06-19/seedvr2_video_restore_full_command_log.md)
-- [SeedVR2 full-video timings and settings](assets/validation/seedvr2-video-2026-06-19/seedvr2_video_restore_full_stats_m5max.json)
-- [SeedVR2 full-video sampled metrics](assets/validation/seedvr2-video-2026-06-19/eiffel_full_3b_7b_1x_metrics.json)
-- [SeedVR2 bounded `720p` comparison sheet](assets/validation/seedvr2-video-2026-06-19/eiffel_16s_6f_720p_all_contact_sheet.jpg)
-- [SeedVR2 bounded `720p` comparison metrics](assets/validation/seedvr2-video-2026-06-19/eiffel_16s_6f_720p_all_metrics.json)
+- [Restored 3B bounded video](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_3b_1x_current.mp4)
+- [Restored 7B bounded video](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_7b_1x_current.mp4)
+
+The 6-frame sheet below is the direct current-code review aid:
+
+![SeedVR2 Eiffel bounded 6-frame 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_3b_vs_7b_current_contact_sheet.jpg)
+
+The 14-frame sheet below is the current stability check:
+
+![SeedVR2 Eiffel bounded 14-frame 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_14f_3b_vs_7b_current_contact_sheet.jpg)
+
+The matching single-frame image check from the same source frame is:
+
+![SeedVR2 Eiffel single-frame 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_frame16s_3b_vs_7b_1x_current_contact_sheet.jpg)
+
+Supporting bounded metrics:
+
+- [6-frame sampled metrics](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_3b_vs_7b_current_metrics.json)
+- [14-frame sampled metrics](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_14f_3b_vs_7b_current_metrics.json)
+
+Measured on an Apple M5 Max with 128 GB unified memory:
+
+- `3B full 1x` safe streaming profile: `generation_time 2210.12s`, `wall_time 2215.64s`,
+  `peak_mlx 31.36 GB`, `max_rss 27.40 GB`
+- `7B full 1x` explicit chunk-5 profile: `generation_time 3062.79s`, `wall_time 3070.42s`,
+  `peak_mlx 22.93 GB`, `max_rss 66.18 GB`
+
+Peak MLX memory and max RSS are different measurements. Peak MLX tracks allocator activity inside
+MLX. Max RSS tracks the full process footprint seen by the OS.
+
+On the exact current proofs:
+
+- `3B 6f 1x`: `sharpness_gain 1.6969`, `contrast_gain 1.0822`, `drift_mae 0.065269`,
+  `temporal_ratio 1.0075`
+- `7B 6f 1x`: `sharpness_gain 1.5177`, `contrast_gain 1.0602`, `drift_mae 0.058795`,
+  `temporal_ratio 0.8866`
+- `3B 14f 1x`: visually sharper, but `temporal_ratio 1.7773` and `drift_mae 0.078679`
+- `7B 14f 1x`: visually cleaner and more stable, with `temporal_ratio 1.2141` and
+  `drift_mae 0.065077`
+- `3B full 1x`: `sharpness_gain 1.7187`, `contrast_gain 1.0942`, `temporal_ratio 1.7634`,
+  `drift_mae 0.069546`
+- `7B full 1x`: `sharpness_gain 1.8153`, `contrast_gain 1.0720`, `temporal_ratio 1.1041`,
+  `drift_mae 0.060194`
+
+That is the current public conclusion:
+
+- `3B` is a strong bounded restore route and the fresh `6f` current-code MP4 is byte-identical to
+  the known-good June 20 `after_mmrope_fix` artifact.
+- `7B` is the better balanced result on the current `14f`, single-frame, and full-source checks.
+- `3B` remains the faster and lower-RSS full-route proof on this machine.
 
 Metric interpretation:
 
@@ -105,26 +175,7 @@ Metric interpretation:
 - `temporal_ratio` close to `1.0` is preferred because it means the restored clip changes over
   time at roughly the same rate as the source instead of becoming muddy or flickery.
 
-On this exact Eiffel full clip:
-
-- `3B 1x`: `1893.11s` generation, `1897.77s` wall time, `sharpness_gain 1.70x`,
-  `contrast_gain 1.09x`, `drift_mae 0.0688`, `temporal_ratio 1.13`, heuristic score `65.43`,
-  peak MLX memory `39.37 GB`, max RSS `27.37 GB`
-- `7B 1x`: `1778.50s` generation, `1785.53s` wall time, `sharpness_gain 1.35x`,
-  `contrast_gain 1.06x`, `drift_mae 0.0587`, `temporal_ratio 1.07`, heuristic score `69.07`,
-  peak MLX memory `53.50 GB`, max RSS `66.16 GB`
-
-So for this clip, the current regular `7B 1x` route was numerically steadier across the full clip,
-while `3B 1x` stayed visibly crisper and used materially less memory. Do not read the slightly
-higher `7B` heuristic score as “7B looks better” in a blanket sense. The score rewards lower
-source drift and temporal smoothness; a user who prefers stronger edge detail on this archival clip
-may reasonably prefer `3B`.
-
-For actual family comparison, use the bounded `720p` sheet instead of the tiny `320x240` native
-surface. On that higher-output comparison, regular `7B` cuts source drift materially relative to
-`3B`, while `3B` still pushes harder edge detail. The `7B` sharp checkpoint is also available and
-can push detail harder, but on this exact Eiffel archival segment it was not the best-balanced
-result.
+These metrics are route-health aids, not a public family leaderboard.
 
 One important scope note: MLX-Gen now exposes both official `ByteDance-Seed/SeedVR2-7B`
 checkpoints:
@@ -140,9 +191,11 @@ Practical guidance:
   clip;
 - start with `--resolution 1x` and `--softness 0.0` when the goal is archival restoration rather
   than enlargement;
-- when comparing `seedvr2-7b` on small or native-resolution archival clips, check `--color-correction lab`
-  against `wavelet` instead of assuming one mode is always best. On the checked-in tiny Eiffel
-  segment, regular `7B` improved with `lab`, while the long full-video proof kept `wavelet`;
+- when comparing `seedvr2-7b` on small or native-resolution archival clips, judge the actual
+  frames and MP4 output directly instead of trusting one heuristic score;
+- when the default safe planner refuses a longer `7B` full-clip run on a busy machine, reduce
+  `--temporal-chunk-size` and `--temporal-chunk-overlap` first; the current full proof used
+  `5` and `1`;
 - increase `--resolution` to `2x` only after a short clip check proves the larger profile is still
   preserving detail instead of drifting muddy;
 - use `--low-ram --mlx-cache-limit-gb 8` for longer clips and keep the default chunk profile

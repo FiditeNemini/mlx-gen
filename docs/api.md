@@ -569,10 +569,11 @@ recommended full-resolution, frame-count, and step-count settings for your targe
 
 ## SeedVR2 Upscale Command
 
-SeedVR2 image and video restoration use `mlxgen upscale`. Short clips stay on the direct temporal
-path; longer clips are restored through sequential temporal chunking so MLX-Gen does not need to
-keep a full decoded clip in memory. See [Image Upscaling](upscaling.md) for a reproducible 5x
-image comparison and the validated full-length Eiffel video proofs.
+SeedVR2 image and video restoration use `mlxgen upscale`. The public video CLI path uses
+sequential temporal chunking, defaults video restore to `1x` when `--resolution` is omitted,
+enables `--low-ram` automatically, and fails closed on enlarged video output unless you explicitly
+pass `--force-unsafe-video-memory`. See [Image Upscaling](upscaling.md) for a reproducible 5x
+image comparison and the current bounded plus full Eiffel video proof set.
 
 ```sh
 mlxgen upscale \
@@ -603,7 +604,7 @@ Useful options:
 | --- | --- |
 | `--image-path` | One or more image files or directories. Directories are expanded to supported image files. Mutually exclusive with `--video-path`. |
 | `--video-path` | One or more video files or directories. Directories are expanded to supported video files. Mutually exclusive with `--image-path`. |
-| `--resolution` | Integer shorter-edge target or scale factor such as `2x` or `3x`. Default: `384`. |
+| `--resolution` | Integer shorter-edge target or scale factor such as `2x` or `3x`. Default: `384` for image input. Video input defaults to `1x` when omitted. |
 | `--model` | Optional SeedVR2 model selector. Defaults to `seedvr2-3b`, the official `ByteDance-Seed/SeedVR2-3B` source model. Use `seedvr2-7b` for the official 7B source model, `AbstractFramework/seedvr2-3b-8bit`, `AbstractFramework/seedvr2-3b-4bit`, `AbstractFramework/seedvr2-7b-8bit`, `AbstractFramework/seedvr2-7b-4bit`, or a local path such as `./models/seedvr2-7b-8bit`. |
 | `--quantize` | Optional runtime quantization for source-model runs. Published q8/q4 packages do not need this flag. |
 | `--softness` | Optional input smoothing from `0.0` to `1.0`. `0.0` preserves the preprocessed source most directly. Higher values pre-downsample the conditioning image before reconstruction, which can suppress source grain/JPEG texture but can also soften fine details or make a clip look muddy. Try `0.25` to `0.5` for noisy or compressed sources only after checking a short clip first. |
@@ -613,6 +614,7 @@ Useful options:
 | `--max-frames` | For video inputs, decode at most this many frames after `--start-seconds`. |
 | `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. |
 | `--temporal-chunk-overlap` | For longer video inputs, overlap adjacent temporal chunks by this many frames before crossfading them. |
+| `--force-unsafe-video-memory` | Bypass the conservative SeedVR2 safe-video profile. Use only when you are intentionally accepting the risk of a high-memory run. |
 | `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
 
 For video inputs:
@@ -620,12 +622,11 @@ For video inputs:
 - SeedVR2 preserves the source FPS by default;
 - MLX-Gen trims temporary SeedVR2 padding frames back to the requested clip length before saving;
 - current output is always a silent MP4, even when the source clip contains audio;
-- once the requested clip exceeds the small direct path, MLX-Gen restores it through sequential
-  temporal chunking instead of decoding the whole clip into memory at once;
-- the public Eiffel proof in [upscaling.md](upscaling.md) compares official `3B` and `7B` full
-  source runs with sampled heuristic metrics that score sharpness gain, contrast gain, source
-  drift, and temporal stability after downscaling the restored clip back to the original source
-  resolution.
+- the public CLI safe profile uses sequential temporal chunking, defaults video restore to `1x`,
+  enables `--low-ram` automatically, and rejects enlarged video output unless you explicitly pass
+  `--force-unsafe-video-memory`;
+- the public Eiffel proof in [upscaling.md](upscaling.md) preserves full `3B` and `7B` restored
+  MP4 files plus timings, memory measurements, and heuristic route-health metrics.
 
 ## Model Management Commands
 

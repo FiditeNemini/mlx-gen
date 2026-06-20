@@ -360,6 +360,25 @@ class SeedVR2WeightDefinition:
         return SeedVR2WeightDefinition3BOfficial.get_download_patterns()
 
     @staticmethod
+    def estimate_resident_weight_bytes(root_path: Path, weight_definition) -> int:
+        files: set[Path] = set()
+        for component in weight_definition.get_components():
+            component_root = root_path / component.hf_subdir
+            if component.weight_files:
+                for file_name in component.weight_files:
+                    file_path = component_root / file_name
+                    if file_path.exists():
+                        files.add(file_path.resolve())
+                continue
+
+            if component_root.exists():
+                for file_path in component_root.rglob("*.safetensors"):
+                    if file_path.is_file():
+                        files.add(file_path.resolve())
+
+        return int(sum(path.stat().st_size for path in files))
+
+    @staticmethod
     def quantization_predicate(path: str, module) -> bool:
         if isinstance(module, (nn.Conv2d, nn.Conv3d)):
             return False
