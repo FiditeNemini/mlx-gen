@@ -1,0 +1,32 @@
+{
+    "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+    "source_clip_start_seconds": 16.0,
+    "source_clip_frames": 6,
+    "audio_present": true,
+    "audio_copied": false,
+    "note": "Source excerpt for SeedVR2 restore comparison.",
+    "video_health": {
+        "frames": {
+            "source": "frames",
+            "frame_count": 6,
+            "width": 320,
+            "height": 240,
+            "fps": 29.97002997002997,
+            "luma_min": 0.0,
+            "luma_max": 253.71119689941406,
+            "luma_mean": 136.1030019124349,
+            "mean_temporal_delta": 6.661230361461639
+        },
+        "file": {
+            "source": "docs/assets/validation/seedvr2-video-2026-06-18/eiffel_16s_6f_source_excerpt.mp4",
+            "frame_count": 6,
+            "width": 320,
+            "height": 240,
+            "fps": 29.97002997002997,
+            "luma_min": 0.0,
+            "luma_max": 249.28199768066406,
+            "luma_mean": 134.43827056884766,
+            "mean_temporal_delta": 6.623977839946747
+        }
+    }
+}

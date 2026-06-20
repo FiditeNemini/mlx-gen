@@ -23,6 +23,7 @@ class SeedVR2Transformer(nn.Module):
         mlp_type: str = "swiglu",
         rope_on_text: bool = True,
         rope_freqs_for: str = "lang",
+        text_rope_freqs_for: str | None = None,
         use_output_ada: bool = True,
         last_layer_vid_only: bool = True,
         norm_eps: float = 1e-5,
@@ -31,6 +32,7 @@ class SeedVR2Transformer(nn.Module):
         mm_layers: int = 10,
         rope_dim: int = 128,
         window: tuple[int, int, int] = (4, 3, 3),
+        text_attention_mode: str = "window_pool",
     ):
         super().__init__()
 
@@ -77,7 +79,9 @@ class SeedVR2Transformer(nn.Module):
                     qk_bias=False,
                     rope_dim=rope_dim,
                     rope_freqs_for=rope_freqs_for,
+                    text_rope_freqs_for=text_rope_freqs_for,
                     rope_on_text=rope_on_text,
+                    text_attention_mode=text_attention_mode,
                     shared_weights=shared_weights,
                     is_last_layer=is_last_layer,
                     window=window,

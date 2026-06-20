@@ -1,18 +1,22 @@
 import mlx.core as mx
 import pytest
 import torch
+from mlx.utils import tree_flatten, tree_unflatten
 
 import mflux.models.common.resolution.path_resolution as path_resolution
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.download_policy import DownloadRequiredError
+from mflux.models.common.weights.loading.loaded_weights import LoadedWeights, MetaData
 from mflux.models.common.weights.loading.weight_loader import WeightLoader
 from mflux.models.seedvr2.model.seedvr2_text_encoder.text_embeddings import SeedVR2TextEmbeddings
+from mflux.models.seedvr2.model.seedvr2_transformer.transformer import SeedVR2Transformer
 from mflux.models.seedvr2.seedvr2_initializer import SeedVR2Initializer
 from mflux.models.seedvr2.weights.seedvr2_weight_definition import (
     SeedVR2WeightDefinition,
     SeedVR2WeightDefinition3BOfficial,
     SeedVR2WeightDefinition3BPrepared,
     SeedVR2WeightDefinition7BOfficial,
+    SeedVR2WeightDefinition7BOfficialSharp,
     SeedVR2WeightDefinition7BPrepared,
 )
 
@@ -67,6 +71,16 @@ def test_seedvr2_weight_definition_selects_official_7b_layout_from_source_handle
 
 
 @pytest.mark.fast
+def test_seedvr2_weight_definition_selects_official_7b_sharp_layout_from_source_handle():
+    patterns = SeedVR2WeightDefinition.get_download_patterns_for_source(
+        ModelConfig.seedvr2_7b_sharp(),
+        "ByteDance-Seed/SeedVR2-7B",
+    )
+
+    assert patterns == ["seedvr2_ema_7b_sharp.pth", "ema_vae.pth"]
+
+
+@pytest.mark.fast
 def test_seedvr2_weight_definition_selects_official_layout_from_local_files(tmp_path):
     (tmp_path / "seedvr2_ema_3b.pth").touch()
 
@@ -94,6 +108,18 @@ def test_seedvr2_weight_definition_selects_official_7b_layout_from_local_files(t
 
 
 @pytest.mark.fast
+def test_seedvr2_weight_definition_selects_official_7b_sharp_layout_from_local_files(tmp_path):
+    (tmp_path / "seedvr2_ema_7b_sharp.pth").touch()
+
+    resolved = SeedVR2WeightDefinition.resolve(ModelConfig.seedvr2_7b_sharp(), root_path=tmp_path)
+    components = {component.name: component for component in resolved.get_components()}
+
+    assert resolved is SeedVR2WeightDefinition7BOfficialSharp
+    assert components["transformer"].weight_files == ["seedvr2_ema_7b_sharp.pth"]
+    assert components["vae"].loading_mode == "torch_checkpoint"
+
+
+@pytest.mark.fast
 def test_seedvr2_weight_definition_uses_official_layout_by_default():
     resolved = SeedVR2WeightDefinition.resolve(ModelConfig.seedvr2_3b())
 
@@ -105,6 +131,13 @@ def test_seedvr2_weight_definition_uses_official_7b_layout_by_default():
     resolved = SeedVR2WeightDefinition.resolve(ModelConfig.seedvr2_7b())
 
     assert resolved is SeedVR2WeightDefinition7BOfficial
+
+
+@pytest.mark.fast
+def test_seedvr2_weight_definition_uses_official_7b_sharp_layout_by_default():
+    resolved = SeedVR2WeightDefinition.resolve(ModelConfig.seedvr2_7b_sharp())
+
+    assert resolved is SeedVR2WeightDefinition7BOfficialSharp
 
 
 @pytest.mark.fast
@@ -182,6 +215,22 @@ def test_seedvr2_runtime_config_records_requested_official_source_without_mutati
 
     assert runtime_config.model_name == "ByteDance-Seed/SeedVR2-3B"
     assert default_config.model_name == "ByteDance-Seed/SeedVR2-3B"
+
+
+@pytest.mark.fast
+def test_seedvr2_weight_coverage_audit_rejects_missing_transformer_key():
+    transformer = SeedVR2Transformer(**(ModelConfig.seedvr2_7b().transformer_overrides or {}))
+    flat = tree_flatten(transformer.parameters())
+    incomplete = tree_unflatten(flat[1:])
+
+    dummy_model = type("DummyModel", (), {"transformer": transformer, "vae": object()})()
+    weights = LoadedWeights(
+        components={"transformer": incomplete},
+        meta_data=MetaData(),
+    )
+
+    with pytest.raises(ValueError, match="SeedVR2 transformer weight coverage mismatch"):
+        SeedVR2Initializer._assert_weight_coverage(dummy_model, weights)
 
 
 @pytest.mark.fast

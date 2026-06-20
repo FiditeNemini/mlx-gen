@@ -130,18 +130,49 @@ class CommandLineParser(argparse.ArgumentParser):
         self.supports_image_generation = True
         self.require_prompt = False
         seedvr2_group = self.add_argument_group("SeedVR2 upscale configuration")
-        seedvr2_group.add_argument(
+        input_group = seedvr2_group.add_mutually_exclusive_group(required=True)
+        input_group.add_argument(
             "--image-path",
             "-i",
             type=Path,
-            required=True,
             nargs="+",
             help="Path to the input image(s) or directories to upscale.",
         )
+        input_group.add_argument(
+            "--video-path",
+            type=Path,
+            nargs="+",
+            help="Path to the input video(s) or directories to restore/upscale.",
+        )
         seedvr2_group.add_argument("--seed", "-s", type=int, default=[42], nargs="+", help="Random seed(s) for reproducibility.")
-        seedvr2_group.add_argument("--resolution", "-r", type=int_or_special_value, default=384, help="Target resolution for the shortest edge (pixels) or scale factor (e.g., '2x').")
+        seedvr2_group.add_argument("--resolution", "-r", type=int_or_special_value, default=384, help="Target resolution for the shortest edge (pixels) or scale factor (e.g., '2x'). For video, omitting --resolution defaults to 1x.")
         seedvr2_group.add_argument("--softness", type=float, default=0.0, help="Value between 0.0 (off, factor 1) and 1.0 (max, factor 8). Default: 0.0.")
+        seedvr2_group.add_argument(
+            "--color-correction",
+            choices=["wavelet", "lab", "off"],
+            default="wavelet",
+            help="Video/image color post-processing. 'wavelet' is the upstream-like restoration default for video. Default: wavelet.",
+        )
         seedvr2_group.add_argument("--vae-tiling", action="store_true", help="Force tiled VAE encode/decode. By default, small outputs stay untiled and large outputs automatically use tiled decode.")
+        seedvr2_group.add_argument("--start-seconds", type=float, default=0.0, help="For video inputs, skip frames before this source timestamp in seconds.")
+        seedvr2_group.add_argument("--max-frames", type=int, default=None, help="For video inputs, decode at most this many frames after --start-seconds.")
+        seedvr2_group.add_argument(
+            "--temporal-chunk-size",
+            type=int,
+            default=49,
+            help="For video inputs, restore this many source frames per chunk before stitching. Default: 49.",
+        )
+        seedvr2_group.add_argument(
+            "--temporal-chunk-overlap",
+            type=int,
+            default=16,
+            help="For video inputs, overlap this many source frames between chunks. Default: 16.",
+        )
+        seedvr2_group.add_argument(
+            "--force-unsafe-video-memory",
+            action="store_true",
+            help="Bypass SeedVR2 video memory safety checks. Use only when you are intentionally accepting the risk of machine instability or process failure.",
+        )
 
     def add_model_arguments(self, path_type: t.Literal["load", "save"] = "load", require_model_arg: bool = True) -> None:
         self.require_model_arg = require_model_arg

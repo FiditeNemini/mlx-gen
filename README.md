@@ -6,7 +6,7 @@
 
 MLX-Gen is a local image and video generation runtime for Apple Silicon and MLX. It exposes
 `mlxgen` for text-to-image, image-to-image, text-to-video, image-to-video, model download, model
-preparation, SeedVR2 image upscaling, optimized quantized model variants, and application progress
+preparation, SeedVR2 image/video restoration and upscaling, optimized quantized model variants, and application progress
 callbacks.
 
 > [!IMPORTANT]
@@ -49,9 +49,10 @@ The main capabilities are:
 - Wan2.2 text-to-video and image-to-video, including TI2V-5B BF16/q8 packages plus A14B
   T2V/I2V BF16 and mixed q8/BF16 packages; Wan I2V resolves output size from the source
   image aspect ratio so inputs are not stretched into a mismatched canvas;
-- SeedVR2 image super-resolution through `mlxgen upscale`, with official 3B/7B source support,
-  published q8/q4 packages, shortest-edge target sizing, and explicit scale factors such as `2x`
-  and `3x`;
+- SeedVR2 image and video restoration through `mlxgen upscale`, with official 3B/7B source
+  support including the first-class `seedvr2-7b-sharp` route, published q8/q4 packages,
+  shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, full-video chunked
+  restore for longer clips, and preserved source FPS;
 - explicit `download` and `prepare` workflows for local MLX-Gen model packages;
 - JSON model capability inspection before starting a heavy run;
 - experimental LoRA routing and strict adapter application checks, with model-card compatibility
@@ -93,6 +94,10 @@ Check the command surface:
 mlxgen --help
 ```
 
+For application integration and shell-outs, use the `mlxgen` commands shown in
+`mlxgen --help`. The package still installs some `mflux-generate-*` compatibility entry points
+from the upstream codebase, but those are not the recommended integration surface for new tools.
+
 ## First Commands
 
 Download model files explicitly:
@@ -131,9 +136,32 @@ mlxgen upscale \
 
 For SeedVR2, an integer `--resolution` is the target shorter edge while values such as `2x` and
 `3x` are scale factors. Both modes preserve the source aspect ratio. Use `--softness 0.25` to
-`0.5` when the source has visible grain in smooth areas. Small outputs use the untiled VAE path;
-large outputs automatically use tiled VAE decode, and `--vae-tiling` also forces tiled encode. See
-[docs/upscaling.md](docs/upscaling.md) for a reproducible 5x SeedVR2 comparison.
+`0.5` when the source has visible grain in smooth areas. Small image outputs use the untiled VAE
+path; large image outputs automatically use tiled VAE decode, and `--vae-tiling` forces tiled VAE
+encode/decode for image runs only. See [docs/upscaling.md](docs/upscaling.md) for a reproducible
+5x SeedVR2 image comparison and the validated full-video Eiffel restoration proofs.
+
+Restore a short video clip with SeedVR2:
+
+```sh
+mlxgen upscale \
+  --model AbstractFramework/seedvr2-3b-8bit \
+  --video-path input.mp4 \
+  --start-seconds 16 \
+  --max-frames 6 \
+  --resolution 2x \
+  --softness 0.0 \
+  --metadata \
+  --output restored.mp4
+```
+
+For video inputs, SeedVR2 preserves the source FPS by default and currently writes a silent MP4
+even when the source clip contains audio. For longer videos, use `--low-ram` with
+`--mlx-cache-limit-gb 8`; MLX-Gen routes those runs through sequential temporal chunking instead of
+loading the full decoded clip at once. See [docs/upscaling.md](docs/upscaling.md) for the full
+`97s` Eiffel source/3B/7B robustness proof videos, the bounded `720p` 3B/7B/7B-sharp comparison
+sheet, timings, memory measurements, and the sampled heuristic restore metrics used to catch muddy
+over-smoothing.
 
 Inspect model capabilities before a run:
 
@@ -248,8 +276,8 @@ SeedVR2 upscaling:
 - `AbstractFramework/seedvr2-7b-4bit`
 - `AbstractFramework/seedvr2-7b-8bit`
 
-SeedVR2 7B can also run from the official `ByteDance-Seed/SeedVR2-7B` source model or from the
-published q8/q4 package handles above. See
+SeedVR2 7B can also run from the official `ByteDance-Seed/SeedVR2-7B` source model, including the
+`seedvr2-7b-sharp` checkpoint alias, or from the published q8/q4 package handles above. See
 [docs/upscaling.md](docs/upscaling.md) and [docs/quantization.md](docs/quantization.md) for the
 validated 7B source/q8/q4 profile.
 
@@ -317,9 +345,9 @@ progress callbacks make long runs observable.
 - [Getting started](docs/getting-started.md): installation, first runs, SeedVR2 upscaling, and Wan video.
 - [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, experimental generative reframe, backend-specific outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
 - [Image edit modes](docs/image-edit-modes.md): what latent img2img, edit-reference, multi-reference, generative reframe, and outpaint mean in practice, with examples.
-- [Wan video](docs/wan-video.md): practical Wan2.2 T2V/I2V sizing and 5-second M5 Max comparison clips.
+- [Wan video](docs/wan-video.md): practical Wan2.2 T2V/I2V sizing, broader A14B target size families, and 5-second M5 Max comparison clips.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
-- [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, quality controls, and 5x source/output comparisons.
+- [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, quality controls, the full-video Eiffel 3B/7B restore proof, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.
 - [Reframe and outpaint](docs/reframe-outpaint.md): experimental `--reframe-padding` and `--outpaint-padding` routes with the mixed June 8 profile plus the current FLUX.2 Klein base source-model proof.
 - [Model management](docs/model-management.md): download, prepare, and run from local model files.

@@ -23,6 +23,24 @@ Wan uses a flow-matching schedule shift. MLX-Gen uses the selected model's defau
 `--flow-shift`: TI2V-5B defaults to `5.0` for native 720p-class runs, while A14B defaults to `3.0`.
 For new 480p-class TI2V-5B checks such as `832x480`, use `--flow-shift 3`.
 
+## A14B Size Families
+
+The official A14B quality envelope centers on `480P` and `720P`, but MLX-Gen accepts a broader set
+of 16-pixel-multiple target sizes for both A14B routes:
+
+- square: `240x240`, `480x480`, `720x720`, `960x960`, `1280x1280`, `1440x1440`
+- portrait targets: `240x480`, `480x832`, `720x1280`, `832x1104`, `1248x1648`, `1080x1920`
+- landscape targets: `480x240`, `832x480`, `1280x720`, `1104x832`, `1648x1248`, `1920x1080`
+
+Practical reading:
+
+- `480x240` / `240x480`: quick local previews
+- `832x480` / `480x832`: strong lower-cost working sizes
+- `1280x720` / `720x1280`: better presentation-quality targets
+
+For A14B image-to-video, treat these as target size classes rather than exact guarantees. MLX-Gen
+preserves the source image aspect ratio and resolves to the nearest supported canvas.
+
 ## Example Prompt
 
 The comparison clips use this prompt:

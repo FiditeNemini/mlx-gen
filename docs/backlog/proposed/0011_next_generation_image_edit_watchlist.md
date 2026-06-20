@@ -29,6 +29,16 @@ The strongest external watch candidates right now are:
   same direct edit space that AbstractVision cares about.
 - OmniGen2, because it is Apache 2.0, Diffusers-ready, and tries to unify text-to-image, editing,
   and in-context multimodal generation behind one public model family.
+- Ideogram 4, because open-weight fp8/nf4 checkpoints, Diffusers support, strong text rendering,
+  and structured JSON prompting make it strategically interesting even though the current license is
+  non-commercial and gated.
+- Ovis-Image 7B, because it is a compact text-to-image route optimized for strong text rendering
+  under tighter compute budgets.
+- PRXPixel, because it is a public pixel-space text-to-image architecture with no VAE and a
+  Qwen3-VL text encoder, making it a strong "different runtime shape" watch candidate rather than
+  just another diffusion-family clone.
+- DreamLite, because the current public Diffusers surface already exposes both a full pipeline and
+  a distilled mobile pipeline for text-to-image and editing.
 
 Qwen-Image-2.0 remains worth tracking because the technical report describes a stronger unified
 generation/editing path, but it still needs public weights and loading code before it becomes
@@ -39,14 +49,17 @@ docs still describe them as not yet released.
 
 - MLX-Gen already supports Qwen Image/Edit, FLUX.2 Klein, Z-Image/Z-Image-Turbo, ERNIE Image
   Turbo, Bonsai ternary, and FIBO family routing.
-- Local Diffusers includes `hidream_image`, `glm_image`, `flux`, `flux2`, `qwenimage`, and
-  `z_image` pipelines.
+- Local Diffusers includes `hidream_image`, `glm_image`, `flux`, `flux2`, `qwenimage`,
+  `ideogram4`, `dreamlite`, and `z_image` pipelines.
 - `ModelConfig` does not include HiDream-O1, Qwen-Image-2.0, GLM-Image, Step1X-Edit, JoyAI,
-  OmniGen2, or Z-Image-Edit/Omni as first-class MLX-Gen targets.
+  OmniGen2, Ideogram 4, Ovis-Image, PRXPixel, DreamLite, or Z-Image-Edit/Omni as first-class
+  MLX-Gen targets.
 - MLX-Gen already has explicit FLUX.1 Kontext code and config surfaces, so Kontext is no longer a
   missing-implementation watch item. It is now mainly a product-positioning and license question.
 - HiDream-O1 likely needs an MLX-VLM/pixel-space design review rather than a small weight-mapping
   addition.
+- Ideogram 4 and PRXPixel also imply runtime-shape work beyond MLX-Gen's current VAE plus
+  diffusion-transformer norm.
 
 ## Problem or opportunity
 
@@ -65,14 +78,18 @@ Maintain a watchlist table and promote only after concrete evidence appears:
 
 | Candidate | Current evidence | Proposed status |
 | --- | --- | --- |
-| HiDream-O1-Image / Dev | MIT, 8-9B class, text-to-image, editing, subject-driven personalization, native 2048px claims, Transformers loading, local Diffusers pipeline. | Research after Qwen parity and ERNIE non-turbo validation. |
+| HiDream-O1-Image / Dev | MIT, 8-9B class, text-to-image, editing, subject-driven personalization, Transformers loading, local Diffusers pipeline. | Research after Qwen parity and ERNIE non-turbo validation. |
 | Step1X-Edit-v1p2 | Apache 2.0, public Diffusers usage, explicit image-edit focus, reasoning-heavy edit framing. | Watch; likely worth a focused upstream smoke before any MLX port work. |
 | JoyAI-Image-Edit / Diffusers | Apache 2.0, dedicated edit family, public Diffusers repo, relevant to direct instruction editing. | Watch; compare against Qwen 2511 and Step1X before promoting. |
 | OmniGen2 | Apache 2.0, Any-to-Any positioning, public Diffusers route, strong in-context multimodal claim. | Watch; only promote if MLX-Gen decides the multimodal/edit opportunity is worth a new runtime shape. |
 | Qwen-Image-2.0 | May 2026 technical report describes unified generation/editing and stronger VAE research. | Watch until public weights and Diffusers/Transformers loading paths are verified. |
-| Z-Image-Edit / Z-Image-Omni-Base | Z-Image card describes editing/omni variants but says they are to be released. | Watch; likely high value once weights ship because Z-Image is already in MLX-Gen. |
+| Z-Image-Edit / Z-Image-Omni-Base | Z-Image docs describe editing/omni variants but say they are not yet released. | Watch; likely high value once weights ship because Z-Image is already in MLX-Gen. |
 | FLUX.1 Kontext | Already present locally in MLX-Gen, but gated/non-commercial and partly overlaps Qwen edit goals. | Keep as a positioning/licensing watch item, not a missing-core-model item. |
 | GLM-Image | MIT and local Diffusers pipeline, but custom GLM/VLM stack. | Lower priority than ERNIE/Qwen/HiDream unless text-rendering evidence beats them locally. |
+| Ideogram 4 | Open weights, Diffusers support, strong text/layout control, structured JSON prompting. | Watch only; current Ideogram Non-Commercial gate and a different prompt contract make it a product-positioning question before implementation. |
+| Ovis-Image 7B | Compact 7B text-to-image, text-rendering focus, public weights. | Watch; potentially strong local text-rendering route, but needs real quality comparison against Qwen/Z-Image/Ideogram before promotion. |
+| PRXPixel | Apache 2.0, public pixel-space no-VAE text-to-image pipeline, different runtime shape. | Watch; likely needs an ADR because it is not just another VAE plus transformer port. |
+| DreamLite | Public text-to-image plus editing surface, including a distilled mobile route. | Watch; interesting for low-latency local editing, but still lower priority than finishing Qwen and Z-Image adjacent work. |
 
 ## Why it might matter
 
@@ -100,7 +117,8 @@ becomes available without interrupting current release-critical work.
 
 ## Non-goals
 
-- Do not start HiDream, GLM, or FLUX.1 Kontext implementation from this proposal alone.
+- Do not start HiDream, GLM, Ideogram 4, PRXPixel, or FLUX.1 Kontext implementation from this
+  proposal alone.
 - Do not treat Qwen-Image-2.0 as available until actual model weights and loading code are
   verified.
 - Do not publish derivatives of gated or non-commercial models without matching upstream terms.
@@ -123,3 +141,10 @@ existing Qwen/FLUX-style backend.
 - Qwen-Image-2.0 technical report: https://arxiv.org/abs/2605.10730
 - Z-Image-Turbo model card and model zoo: https://huggingface.co/Tongyi-MAI/Z-Image-Turbo
 - FLUX.1 Kontext announcement: https://bfl.ai/blog/flux-1-kontext-dev
+- Ideogram 4 model card: https://huggingface.co/ideogram-ai/ideogram-4-nf4
+- Ideogram 4 license: https://huggingface.co/ideogram-ai/ideogram-4-fp8/blob/main/LICENSE.md
+- Diffusers Ideogram 4 docs: https://huggingface.co/docs/diffusers/main/api/pipelines/ideogram4
+- Ovis-Image-7B model card: https://huggingface.co/AIDC-AI/Ovis-Image-7B
+- PRXPixel model card: https://huggingface.co/Photoroom/prxpixel-t2i
+- Diffusers PRXPixel docs: https://huggingface.co/docs/diffusers/main/api/pipelines/prx_pixel
+- Diffusers DreamLite docs: https://huggingface.co/docs/diffusers/main/api/pipelines/dreamlite

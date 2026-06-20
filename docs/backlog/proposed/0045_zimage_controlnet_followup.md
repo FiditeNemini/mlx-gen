@@ -1,0 +1,84 @@
+# Proposed: Z-Image ControlNet follow-up
+
+## Metadata
+
+- Created: 2026-06-18
+- Status: Proposed
+- Completed: N/A
+
+## ADR status
+
+- Governing ADRs: [ADR 0001](../../adr/0001_runtime_smoke_validation_for_model_routes.md), [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md)
+- ADR impact: None if this remains a narrow follow-up after native Z-Image inpaint. A small ADR
+  may be warranted only if MLX-Gen decides to share one explicit control-image contract across
+  several image families.
+
+## Context
+
+Planned item 0043 already tracks native Z-Image inpaint. Public Z-Image and Z-Image-Turbo
+ControlNet weights now exist, including inpaint-related control variants. That makes a clean
+follow-up worth preserving without broadening 0043 prematurely.
+
+## Current code reality
+
+- MLX-Gen already supports Z-Image and Z-Image-Turbo text generation plus latent img2img.
+- Planned item 0043 owns native Z-Image inpaint, not ControlNet.
+- MLX-Gen already has a bounded base-Qwen structured-control path and the first narrow Qwen masked
+  edit path, so a control-image contract now exists in one family.
+- There is no first-class Z-Image control-image route today.
+
+## Problem or opportunity
+
+Once native Z-Image inpaint lands, users will reasonably ask for the same stronger
+structure-constrained editing/control pattern that is becoming available in Qwen. Public
+ControlNet weights make that a real possibility, but it should remain a separate decision from
+native inpaint because the user contract, sidecar requirements, and validation burden are larger.
+
+## Proposed direction
+
+Track Z-Image ControlNet as a follow-up rather than bundling it into 0043:
+
+1. Finish native Z-Image inpaint first.
+2. Audit the public ControlNet weight families for `Z-Image` and `Z-Image-Turbo`.
+3. Decide whether the first MLX-Gen route should be:
+   - structured control,
+   - control-inpaint, or
+   - one union-style route with explicit control-image metadata.
+4. Keep route selection fail-closed and preserve exact model-plus-sidecar identity in metadata and
+   capabilities.
+
+## Why it might matter
+
+This is the clearest Z-Image follow-up after native inpaint. It extends an already-supported family
+instead of introducing a new base image architecture, and it could eventually give MLX-Gen a second
+strong structured-control family next to Qwen.
+
+## Promotion criteria
+
+- Planned item 0043 is complete with exact proof assets.
+- Public ControlNet weight paths remain available and runnable.
+- One bounded upstream smoke proves the conditioning contract before any MLX port work starts.
+
+## Validation ideas
+
+- Same prompt, seed, and source across no-control vs control runs.
+- Include source image, control image, and result in the proof sheet.
+- If control-inpaint is chosen, also include the mask and localized result.
+
+## Non-goals
+
+- Do not bundle this into the first Z-Image inpaint pass.
+- Do not assume Qwen control semantics and Z-Image control semantics are identical.
+- Do not create implicit auto-preprocessors from this item alone.
+
+## Guidance for future agents
+
+Treat this as a narrow family-adjacent follow-up. If control-image preprocessing becomes the real
+user pain point, split that into a separate item instead of hiding it inside the model port.
+
+## Sources checked
+
+- Z-Image native docs: https://huggingface.co/docs/diffusers/api/pipelines/z_image
+- Z-Image Fun ControlNet Union 2.1: https://huggingface.co/alibaba-pai/Z-Image-Fun-Controlnet-Union-2.1
+- Z-Image-Turbo Fun ControlNet Union 2.1: https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1
+- VideoX-Fun repository: https://github.com/aigc-apps/VideoX-Fun

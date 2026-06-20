@@ -34,6 +34,40 @@ mlxgen generate \
 
 Supported router families are `qwen`, `flux2`, `bonsai`, `fibo`, `z-image`, `ernie-image`, and `wan`.
 
+## A Package Calls `mflux-generate-flux2*` Directly And Fails
+
+If another package shells out to `mflux-generate-flux2` or `mflux-generate-flux2-edit`, treat that
+as a legacy integration path. New integrations should call `mlxgen generate` instead.
+
+For FLUX.2, this difference matters because MLX-Gen's public FLUX.2 contract is:
+
+- use `mlxgen generate`;
+- omit `--negative-prompt` entirely;
+- use `--image` for image-conditioned edit/reference workflows;
+- use `mlxgen capabilities --model <flux2-model>` when you need the route contract before running.
+
+Example migration:
+
+```sh
+# Legacy compatibility entry point
+mflux-generate-flux2-edit \
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --image-paths input.png \
+  --prompt "Add sunglasses"
+```
+
+```sh
+# Supported public entry point
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --image input.png \
+  --prompt "Add sunglasses" \
+  --output edited.png
+```
+
+If the old integration also forwarded `--negative-prompt`, remove that option for FLUX.2. MLX-Gen
+rejects negative prompts on FLUX.2 routes by design.
+
 ## ERNIE Images Look Cropped At Tiny Sizes
 
 ERNIE Image Turbo is validated for practical generation at 384px and above. Very small outputs, such as 256x256, can crop or truncate subjects even when the pipeline is working.

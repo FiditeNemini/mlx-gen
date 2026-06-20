@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **SeedVR2 full-video restoration**: `mlxgen upscale` now accepts `--video-path` in addition to
+  `--image-path`, keeps short video clips on the direct temporal path, restores longer clips
+  through sequential temporal chunking, preserves source FPS by default, trims padded frames back
+  to the requested clip length, records source-video and chunk metadata in `.metadata.json`,
+  documents the current explicit audio contract (`audio_copied=false`), rejects `--vae-tiling` on
+  video input, and now includes full-length Eiffel proof videos for the official `3B` and `7B`
+  source models plus sampled heuristic restore metrics, command logs, timings, and memory data.
+- **SeedVR2 7B route hardening**: add a first-class `seedvr2-7b-sharp` source route for the
+  official `seedvr2_ema_7b_sharp.pth` checkpoint, apply the SeedVR2 image `--color-correction`
+  flag end-to-end, record SeedVR2 checkpoint provenance in output metadata, and fail closed if the
+  loaded SeedVR2 transformer or VAE weights do not exactly cover the runtime parameter tree.
+- **SeedVR2 7B comparison framing**: update the public upscaling guide so the full native
+  `320x240` Eiffel restore remains the long-run robustness proof, while the bounded `720p`
+  3B/7B/7B-sharp sheet is the comparative family review surface.
+- **Qwen localized-edit docs**: add a dedicated public guide that explains Qwen masked edit,
+  Qwen structured control, and the planned control-inpaint slice in plain language, including
+  what ControlNet means, what “sidecar” means, when control-inpaint is likely to help, and why
+  the extra control model is not a LoRA.
+- **Legacy FLUX.2 CLI guidance**: make the legacy `mflux-generate-flux2` and
+  `mflux-generate-flux2-edit` entry points identify themselves as compatibility commands, point
+  new integrations to `mlxgen generate`, document the FLUX.2 negative-prompt exception more
+  clearly, and add a dedicated troubleshooting migration note for packages that still shell out to
+  the legacy commands.
+
 ## [0.18.19] - 2026-06-15
 
 ### Added

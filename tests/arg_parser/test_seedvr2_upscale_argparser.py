@@ -4,10 +4,18 @@ from unittest.mock import patch
 import pytest
 
 from mflux.cli.parser.parsers import CommandLineParser
+from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.download_policy import DownloadRequiredError
 from mflux.models.seedvr2.cli import seedvr2_upscale
-from mflux.models.seedvr2.cli.seedvr2_upscale import _expand_image_paths, _resolve_seedvr2_model
+from mflux.models.seedvr2.cli.seedvr2_upscale import (
+    _aligned_chunk_size,
+    _expand_image_paths,
+    _expand_video_paths,
+    _plan_seedvr2_video_restore,
+    _resolve_seedvr2_model,
+)
 from mflux.utils.scale_factor import ScaleFactor
+from mflux.utils.video_util import DecodedVideoClip
 
 
 def _create_seedvr2_upscale_parser() -> CommandLineParser:
@@ -69,6 +77,44 @@ def test_seedvr2_multiple_images_and_seeds(seedvr2_upscale_parser):
         assert args.seed == [42, 43]
         # Verify output pattern is updated for multiple seeds
         assert "{seed}" in args.output
+
+
+@pytest.mark.fast
+def test_seedvr2_video_path_and_bounded_clip_args(seedvr2_upscale_parser):
+    argv = [
+        "mflux-upscale-seedvr2",
+        "--video-path",
+        "clip.mp4",
+        "--start-seconds",
+        "1.25",
+        "--max-frames",
+        "17",
+        "--temporal-chunk-size",
+        "49",
+        "--temporal-chunk-overlap",
+        "16",
+        "--color-correction",
+        "wavelet",
+    ]
+    with patch("sys.argv", argv):
+        args = seedvr2_upscale_parser.parse_args()
+        assert args.video_path == [Path("clip.mp4")]
+        assert args.start_seconds == 1.25
+        assert args.max_frames == 17
+        assert args.temporal_chunk_size == 49
+        assert args.temporal_chunk_overlap == 16
+        assert args.color_correction == "wavelet"
+
+
+@pytest.mark.fast
+def test_seedvr2_requires_exactly_one_input_kind(seedvr2_upscale_parser):
+    with patch("sys.argv", ["mflux-upscale-seedvr2"]):
+        with pytest.raises(SystemExit):
+            seedvr2_upscale_parser.parse_args()
+
+    with patch("sys.argv", ["mflux-upscale-seedvr2", "--image-path", "image.png", "--video-path", "clip.mp4"]):
+        with pytest.raises(SystemExit):
+            seedvr2_upscale_parser.parse_args()
 
 
 @pytest.mark.fast
@@ -138,11 +184,12 @@ def test_seedvr2_main_passes_metadata_flag_to_save(monkeypatch, tmp_path):
             saved["model_config"] = model_config.model_name
             self.tiling_config = None
 
-        def generate_image(self, *, seed, image_path, resolution, softness):
+        def generate_image(self, *, seed, image_path, resolution, softness, color_correction_mode):
             saved["seed"] = seed
             saved["image_path"] = image_path
             saved["resolution"] = resolution
             saved["softness"] = softness
+            saved["color_correction_mode"] = color_correction_mode
             return FakeResult()
 
     monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
@@ -168,6 +215,297 @@ def test_seedvr2_main_passes_metadata_flag_to_save(monkeypatch, tmp_path):
     assert saved["path"] == str(output_path)
     assert saved["export_json_metadata"] is True
     assert saved["overwrite"] is True
+    assert saved["color_correction_mode"] == "wavelet"
+
+
+@pytest.mark.fast
+def test_seedvr2_main_routes_video_inputs_to_restore_video_to_path(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+    output_path = tmp_path / "restored.mp4"
+    saved: dict[str, object] = {}
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            self.tiling_config = None
+
+        def restore_video_to_path(
+            self,
+            *,
+            seed,
+            video_path,
+            resolution,
+            softness,
+            start_seconds,
+            max_frames,
+            output_path,
+            export_json_metadata,
+            overwrite,
+            temporal_chunk_size,
+            temporal_chunk_overlap,
+            color_correction_mode,
+            restore_metadata,
+        ):
+            saved["seed"] = seed
+            saved["video_path"] = video_path
+            saved["resolution"] = resolution
+            saved["softness"] = softness
+            saved["start_seconds"] = start_seconds
+            saved["max_frames"] = max_frames
+            saved["path"] = output_path
+            saved["export_json_metadata"] = export_json_metadata
+            saved["overwrite"] = overwrite
+            saved["temporal_chunk_size"] = temporal_chunk_size
+            saved["temporal_chunk_overlap"] = temporal_chunk_overlap
+            saved["color_correction_mode"] = color_correction_mode
+            saved["restore_metadata"] = restore_metadata
+            return output_path
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        seedvr2_upscale.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=29.97,
+                source_width=64,
+                source_height=48,
+                source_frame_count=200,
+                source_duration_seconds=4.004,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--start-seconds",
+            "1.5",
+            "--max-frames",
+            "130",
+            "--temporal-chunk-size",
+            "49",
+            "--temporal-chunk-overlap",
+            "16",
+            "--color-correction",
+            "off",
+            "--metadata",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saved["path"] == str(output_path)
+    assert saved["video_path"] == video_path
+    assert saved["start_seconds"] == 1.5
+    assert saved["max_frames"] == 130
+    assert saved["temporal_chunk_size"] == 49
+    assert saved["temporal_chunk_overlap"] == 16
+    assert saved["color_correction_mode"] == "off"
+
+
+@pytest.mark.fast
+def test_seedvr2_main_routes_small_video_inputs_to_generate_video(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+    output_path = tmp_path / "restored.mp4"
+    saved: dict[str, object] = {}
+
+    class FakeResult:
+        def save(self, path, export_json_metadata=False, overwrite=True):
+            saved["path"] = path
+            saved["export_json_metadata"] = export_json_metadata
+            saved["overwrite"] = overwrite
+            return path
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            self.tiling_config = None
+
+        def generate_video(
+            self,
+            *,
+            seed,
+            video_path,
+            resolution,
+            softness,
+            start_seconds,
+            max_frames,
+            color_correction_mode,
+            restore_metadata,
+        ):
+            saved["seed"] = seed
+            saved["video_path"] = video_path
+            saved["resolution"] = resolution
+            saved["softness"] = softness
+            saved["start_seconds"] = start_seconds
+            saved["max_frames"] = max_frames
+            saved["color_correction_mode"] = color_correction_mode
+            saved["restore_metadata"] = restore_metadata
+            return FakeResult()
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        seedvr2_upscale.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=29.97,
+                source_width=64,
+                source_height=48,
+                source_frame_count=100,
+                source_duration_seconds=4.004,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--max-frames",
+            "100",
+            "--color-correction",
+            "wavelet",
+            "--metadata",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saved["video_path"] == video_path
+    assert saved["max_frames"] == 100
+    assert saved["color_correction_mode"] == "wavelet"
+    assert saved["path"] == str(output_path)
+    assert str(saved["resolution"]) == "1x"
+    assert saved["restore_metadata"]["restore_mode"] == "direct"
+
+
+@pytest.mark.fast
+def test_seedvr2_main_rejects_vae_tiling_for_video_input(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--vae-tiling",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        seedvr2_upscale.main()
+
+
+@pytest.mark.fast
+def test_seedvr2_main_keeps_transformer_in_low_ram_for_video_input(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+    output_path = tmp_path / "restored.mp4"
+    saver = type("Saver", (), {"keep_transformer": False, "memory_stats": lambda self: "mem"})()
+
+    class FakeResult:
+        def save(self, path, export_json_metadata=False, overwrite=True):
+            return path
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            self.tiling_config = None
+
+        def generate_video(
+            self,
+            *,
+            seed,
+            video_path,
+            resolution,
+            softness,
+            start_seconds,
+            max_frames,
+            color_correction_mode,
+            restore_metadata,
+        ):
+            return FakeResult()
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: saver)
+    monkeypatch.setattr(
+        seedvr2_upscale.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=29.97,
+                source_width=64,
+                source_height=48,
+                source_frame_count=100,
+                source_duration_seconds=4.004,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--max-frames",
+            "100",
+            "--low-ram",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saver.keep_transformer is True
+
+
+@pytest.mark.fast
+def test_seedvr2_main_rejects_bounded_clip_args_for_image_input(monkeypatch, tmp_path):
+    image_path = tmp_path / "source.png"
+    image_path.touch()
+
+    def fail_if_loaded(*args, **kwargs):
+        raise AssertionError("SeedVR2 should not be constructed when parser validation should fail")
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", fail_if_loaded)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--image-path",
+            str(image_path),
+            "--max-frames",
+            "5",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        seedvr2_upscale.main()
 
 
 @pytest.mark.fast
@@ -186,8 +524,9 @@ def test_seedvr2_main_enables_vae_tiling_when_requested(monkeypatch, tmp_path):
             self.tiling_config = None
             saved["model"] = self
 
-        def generate_image(self, *, seed, image_path, resolution, softness):
+        def generate_image(self, *, seed, image_path, resolution, softness, color_correction_mode):
             saved["tiling_config"] = self.tiling_config
+            saved["color_correction_mode"] = color_correction_mode
             return FakeResult()
 
     monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
@@ -208,6 +547,7 @@ def test_seedvr2_main_enables_vae_tiling_when_requested(monkeypatch, tmp_path):
 
     assert saved["tiling_config"].vae_encode_tiled is True
     assert saved["tiling_config"].vae_decode_tiles_per_dim == 8
+    assert saved["color_correction_mode"] == "wavelet"
 
 
 @pytest.mark.fast
@@ -296,6 +636,87 @@ def test_seedvr2_expands_directories_and_files_in_order(tmp_path):
 
 
 @pytest.mark.fast
+def test_seedvr2_expands_directory_video_paths(tmp_path):
+    video_a = tmp_path / "a.mp4"
+    video_b = tmp_path / "b.MOV"
+    not_video = tmp_path / "note.txt"
+
+    video_a.touch()
+    video_b.touch()
+    not_video.touch()
+
+    assert _expand_video_paths([tmp_path]) == [video_a, video_b]
+
+
+@pytest.mark.fast
+def test_seedvr2_video_plan_clamps_chunk_size_for_high_scale_long_clip():
+    source_probe = DecodedVideoClip(
+        frames=[],
+        fps=29.97,
+        source_width=320,
+        source_height=240,
+        source_frame_count=130,
+        source_duration_seconds=4.337,
+        audio_present=False,
+        clip_start_frame=0,
+        clip_frame_count=1,
+    )
+
+    plan = _plan_seedvr2_video_restore(
+        model_config=ModelConfig.seedvr2_3b(),
+        source_probe=source_probe,
+        requested_frames=130,
+        resolution=ScaleFactor(2),
+        temporal_chunk_size=49,
+        temporal_chunk_overlap=16,
+        low_ram_requested=True,
+        cache_limit_gb=8.0,
+        force_unsafe_memory_profile=False,
+    )
+
+    assert plan.restore_mode == "streaming"
+    assert plan.effective_chunk_size == 13
+    assert plan.effective_chunk_overlap == 4
+
+
+@pytest.mark.fast
+def test_seedvr2_video_plan_requires_low_ram_for_7b_video():
+    source_probe = DecodedVideoClip(
+        frames=[],
+        fps=29.97,
+        source_width=320,
+        source_height=240,
+        source_frame_count=6,
+        source_duration_seconds=0.2,
+        audio_present=False,
+        clip_start_frame=0,
+        clip_frame_count=1,
+    )
+
+    plan = _plan_seedvr2_video_restore(
+        model_config=ModelConfig.seedvr2_7b(),
+        source_probe=source_probe,
+        requested_frames=6,
+        resolution=720,
+        temporal_chunk_size=49,
+        temporal_chunk_overlap=16,
+        low_ram_requested=False,
+        cache_limit_gb=8.0,
+        force_unsafe_memory_profile=False,
+    )
+
+    assert plan.low_ram_required is True
+    assert plan.warnings
+
+
+@pytest.mark.fast
+def test_aligned_chunk_size_prefers_one_mod_four():
+    assert _aligned_chunk_size(49) == 49
+    assert _aligned_chunk_size(14) == 13
+    assert _aligned_chunk_size(2) == 1
+
+
+@pytest.mark.fast
 def test_seedvr2_model_resolution_defaults_to_3b():
     model_config, model_path = _resolve_seedvr2_model(model_arg=None, model_path=None)
     assert "seedvr2-3b" in model_config.aliases
@@ -307,6 +728,14 @@ def test_seedvr2_model_resolution_defaults_to_3b():
 def test_seedvr2_model_resolution_supports_7b_alias():
     model_config, model_path = _resolve_seedvr2_model(model_arg="seedvr2-7b", model_path="seedvr2-7b")
     assert "seedvr2-7b" in model_config.aliases
+    assert model_config.model_name == "ByteDance-Seed/SeedVR2-7B"
+    assert model_path is None
+
+
+@pytest.mark.fast
+def test_seedvr2_model_resolution_supports_7b_sharp_alias():
+    model_config, model_path = _resolve_seedvr2_model(model_arg="seedvr2-7b-sharp", model_path="seedvr2-7b-sharp")
+    assert "seedvr2-7b-sharp" in model_config.aliases
     assert model_config.model_name == "ByteDance-Seed/SeedVR2-7B"
     assert model_path is None
 
@@ -346,6 +775,21 @@ def test_seedvr2_model_resolution_detects_official_7b_directory(tmp_path):
     )
 
     assert "seedvr2-7b" in model_config.aliases
+    assert model_path == str(model_dir)
+
+
+@pytest.mark.fast
+def test_seedvr2_model_resolution_detects_official_7b_sharp_directory(tmp_path):
+    model_dir = tmp_path / "seedvr2-official-7b-sharp"
+    model_dir.mkdir()
+    (model_dir / "seedvr2_ema_7b_sharp.pth").touch()
+
+    model_config, model_path = _resolve_seedvr2_model(
+        model_arg=str(model_dir),
+        model_path=str(model_dir),
+    )
+
+    assert "seedvr2-7b-sharp" in model_config.aliases
     assert model_path == str(model_dir)
 
 

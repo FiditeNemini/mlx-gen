@@ -1,0 +1,45 @@
+{
+  "machine": "M5 Max",
+  "note": "The validated public proof preserves source FPS and writes silent MP4 output even when the source contains audio.",
+  "runs": {
+    "eiffel_source_3b_soft0": {
+      "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+      "resolution": "2x",
+      "softness": 0.0,
+      "generation_time_seconds": 11.88,
+      "width": 640,
+      "height": 480,
+      "frames": 6,
+      "fps": 29.97002997002997,
+      "audio_copied": false
+    },
+    "eiffel_source_7b_soft0": {
+      "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+      "resolution": "2x",
+      "softness": 0.0,
+      "generation_time_seconds": 15.23,
+      "width": 640,
+      "height": 480,
+      "frames": 6,
+      "fps": 29.97002997002997,
+      "audio_copied": false
+    }
+  },
+  "metrics_summary": {
+    "comparison_space": "Restored clips were downscaled back to the original 320x240 source resolution before scoring.",
+    "eiffel_source_3b_soft0": {
+      "sharpness_gain": 1.5363,
+      "contrast_gain": 1.0226,
+      "temporal_ratio": 0.9264,
+      "drift_mae": 0.046183,
+      "heuristic_score": 69.84
+    },
+    "eiffel_source_7b_soft0": {
+      "sharpness_gain": 1.4305,
+      "contrast_gain": 1.015,
+      "temporal_ratio": 0.7834,
+      "drift_mae": 0.04363,
+      "heuristic_score": 58.88
+    }
+  }
+}

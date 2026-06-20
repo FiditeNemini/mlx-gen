@@ -16,7 +16,7 @@ class GeneratedVideo:
     def __init__(
         self,
         frames: list[PIL.Image.Image],
-        fps: int,
+        fps: int | float,
         model_config: ModelConfig,
         seed: int,
         prompt: str,
@@ -29,6 +29,7 @@ class GeneratedVideo:
         width: int,
         task: str = "text-to-video",
         image_path: str | Path | None = None,
+        video_path: str | Path | None = None,
         negative_prompt: str | None = None,
         guidance_2: float | None = None,
         flow_shift: float | None = None,
@@ -60,6 +61,7 @@ class GeneratedVideo:
         self.width = width
         self.task = task
         self.image_path = image_path
+        self.video_path = video_path
         self.negative_prompt = negative_prompt
         self.source_width = source_width
         self.source_height = source_height
@@ -75,7 +77,7 @@ class GeneratedVideo:
 
     @property
     def duration_seconds(self) -> float:
-        return self.num_frames / self.fps
+        return self.num_frames / float(self.fps)
 
     def save(
         self,
@@ -100,38 +102,98 @@ class GeneratedVideo:
         return self.frames[0]
 
     def _get_metadata(self) -> dict:
+        return GeneratedVideo.build_metadata(
+            model_config=self.model_config,
+            seed=self.seed,
+            prompt=self.prompt,
+            steps=self.steps,
+            guidance=self.guidance,
+            guidance_2=self.guidance_2,
+            flow_shift=self.flow_shift,
+            solver=self.solver,
+            precision=self.precision,
+            quantization=self.quantization,
+            generation_time=self.generation_time,
+            height=self.height,
+            width=self.width,
+            frame_count=self.num_frames,
+            fps=self.fps,
+            task=self.task,
+            image_path=self.image_path,
+            video_path=self.video_path,
+            negative_prompt=self.negative_prompt,
+            source_width=self.source_width,
+            source_height=self.source_height,
+            requested_width=self.requested_width,
+            requested_height=self.requested_height,
+            lora_paths=self.lora_paths,
+            lora_scales=self.lora_scales,
+            extra_metadata=self.extra_metadata,
+        )
+
+    @staticmethod
+    def build_metadata(
+        *,
+        model_config: ModelConfig,
+        seed: int,
+        prompt: str,
+        steps: int,
+        guidance: float | None,
+        guidance_2: float | None,
+        flow_shift: float | None,
+        solver: str | None,
+        precision: mx.Dtype,
+        quantization: int,
+        generation_time: float,
+        height: int,
+        width: int,
+        frame_count: int,
+        fps: int | float,
+        task: str = "text-to-video",
+        image_path: str | Path | None = None,
+        video_path: str | Path | None = None,
+        negative_prompt: str | None = None,
+        source_width: int | None = None,
+        source_height: int | None = None,
+        requested_width: int | None = None,
+        requested_height: int | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        extra_metadata: dict | None = None,
+    ) -> dict:
         metadata = {
             "mflux_version": VersionUtil.get_mflux_version(),
-            "model": self.model_config.model_name,
-            "base_model": str(self.model_config.base_model),
-            "task": self.task,
-            "seed": self.seed,
-            "steps": self.steps,
-            "guidance": self.guidance if self.model_config.supports_guidance else None,
-            "guidance_2": self.guidance_2 if self.model_config.supports_guidance else None,
-            "flow_shift": self.flow_shift,
-            "solver": self.solver,
-            "height": self.height,
-            "width": self.width,
-            "requested_height": self.requested_height,
-            "requested_width": self.requested_width,
-            "source_image_height": self.source_height,
-            "source_image_width": self.source_width,
-            "frames": self.num_frames,
-            "fps": self.fps,
-            "duration_seconds": round(self.duration_seconds, 3),
-            "precision": str(self.precision),
-            "quantize": self.quantization,
-            "generation_time_seconds": round(self.generation_time, 2),
+            "model": model_config.model_name,
+            "base_model": str(model_config.base_model),
+            "task": task,
+            "seed": seed,
+            "steps": steps,
+            "guidance": guidance if model_config.supports_guidance else None,
+            "guidance_2": guidance_2 if model_config.supports_guidance else None,
+            "flow_shift": flow_shift,
+            "solver": solver,
+            "height": height,
+            "width": width,
+            "requested_height": requested_height,
+            "requested_width": requested_width,
+            "source_image_height": source_height,
+            "source_image_width": source_width,
+            "frames": frame_count,
+            "fps": fps,
+            "duration_seconds": round(frame_count / float(fps), 3),
+            "precision": str(precision),
+            "quantize": quantization,
+            "generation_time_seconds": round(generation_time, 2),
             "created_at": datetime.now().isoformat(),
-            "image_path": str(self.image_path) if self.image_path else None,
-            "prompt": self.prompt,
-            "negative_prompt": self.negative_prompt if self.negative_prompt else None,
-            "lora_paths": [str(path) for path in self.lora_paths] if self.lora_paths else None,
-            "lora_scales": [round(scale, 2) for scale in self.lora_scales] if self.lora_scales else None,
+            "image_path": str(image_path) if image_path else None,
+            "video_path": str(video_path) if video_path else None,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt if negative_prompt else None,
+            "lora_paths": [str(path) for path in lora_paths] if lora_paths else None,
+            "lora_scales": [round(scale, 2) for scale in lora_scales] if lora_scales else None,
         }
-        if self.extra_metadata:
-            metadata.update(self.extra_metadata)
+        if extra_metadata:
+            metadata.update(extra_metadata)
         return metadata
 
     @staticmethod

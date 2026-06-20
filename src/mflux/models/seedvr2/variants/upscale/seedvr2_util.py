@@ -15,52 +15,172 @@ class SeedVR2Util:
         softness: float = 0.0,
     ) -> tuple[mx.array, int, int]:
         image = Image.open(image_path).convert("RGB")
-        w, h = image.size
-
-        if isinstance(resolution, ScaleFactor):
-            target_res = resolution.get_scaled_value(min(w, h))
-        else:
-            target_res = resolution
-
-        scale = target_res / min(w, h)
-        true_w = int(w * scale)
-        true_h = int(h * scale)
-        true_w = (true_w // 2) * 2
-        true_h = (true_h // 2) * 2
-
-        # Map normalized 0.0-1.0 to factor 1.0-8.0
-        # factor = 1.0 + normalized_value * 7.0
-        factor = 1.0 + (max(0.0, min(1.0, softness)) * 7.0)
-
-        if factor > 1.0:
-            down_w = max(2, int(true_w / factor))
-            down_h = max(2, int(true_h / factor))
-            down = image.resize((down_w, down_h), Image.Resampling.BICUBIC)
-            resized = down.resize((true_w, true_h), Image.Resampling.BICUBIC)
-        else:
-            resized = image.resize((true_w, true_h), Image.Resampling.BICUBIC)
-
-        pad_w = (16 - (true_w % 16)) % 16
-        pad_h = (16 - (true_h % 16)) % 16
-        if pad_w or pad_h:
-            padded = Image.new("RGB", (true_w + pad_w, true_h + pad_h), (0, 0, 0))
-            padded.paste(resized, (0, 0))
-            resized = padded
-
-        img_mx = mx.array(np.array(resized)).astype(mx.float32) / 255.0
-        img_mx = mx.clip(img_mx, 0.0, 1.0)
-        img_mx = img_mx * 2.0 - 1.0
-        img_mx = mx.transpose(img_mx, (2, 0, 1))
-        img_mx = img_mx[None, ...]
+        resized, true_h, true_w = SeedVR2Util._resize_and_soften(image=image, resolution=resolution, softness=softness)
+        resized = SeedVR2Util._pad_to_multiple(resized, factor=16)
+        img_mx = SeedVR2Util._pil_to_mx_image(resized)
         return img_mx, true_h, true_w
+
+    @staticmethod
+    def preprocess_video_frames(
+        frames: list[Image.Image],
+        resolution: int | ScaleFactor,
+        softness: float = 0.0,
+    ) -> tuple[mx.array, int, int]:
+        if not frames:
+            raise ValueError("preprocess_video_frames requires at least one frame.")
+
+        first = frames[0].convert("RGB")
+        resized_first, _, _ = SeedVR2Util._resize_and_soften(
+            image=first,
+            resolution=resolution,
+            softness=softness,
+        )
+        cropped_first = SeedVR2Util._center_crop_to_multiple(resized_first, factor=16)
+        true_w, true_h = cropped_first.size
+
+        processed_frames = [SeedVR2Util._pil_to_numpy_video_frame(cropped_first)]
+        for frame in frames[1:]:
+            rgb_frame = frame.convert("RGB")
+            resized, _, _ = SeedVR2Util._resize_and_soften(
+                image=rgb_frame,
+                resolution=resolution,
+                softness=softness,
+            )
+            cropped = SeedVR2Util._center_crop_to_multiple(resized, factor=16)
+            if cropped.size != (true_w, true_h):
+                cropped = cropped.resize((true_w, true_h), Image.Resampling.BICUBIC)
+            processed_frames.append(SeedVR2Util._pil_to_numpy_video_frame(cropped))
+
+        video_np = np.stack(processed_frames, axis=0)
+        video_mx = mx.array(video_np, dtype=mx.float32)
+        video_mx = mx.transpose(video_mx, (3, 0, 1, 2))
+        video_mx = video_mx[None, ...]
+        return video_mx, true_h, true_w
 
     @staticmethod
     def apply_color_correction(
         content: mx.array,
         style: mx.array,
+        mode: str = "lab",
         luminance_weight: float = 0.8,
     ) -> mx.array:
+        if mode == "off":
+            return content
+        if mode == "wavelet":
+            return SeedVR2Util._apply_wavelet_color_reconstruction(content=content, style=style)
+        if mode != "lab":
+            raise ValueError(f"Unsupported SeedVR2 color correction mode: {mode}")
+        if content.ndim == 5 and style.ndim == 5:
+            return SeedVR2Util._apply_video_color_correction(
+                content=content,
+                style=style,
+                luminance_weight=luminance_weight,
+            )
         return SeedVR2Util._lab_color_transfer_exact(content, style, luminance_weight=luminance_weight)
+
+    @staticmethod
+    def _apply_video_color_correction(
+        content: mx.array,
+        style: mx.array,
+        luminance_weight: float = 0.8,
+    ) -> mx.array:
+        if content.shape != style.shape:
+            raise ValueError(f"Video color correction requires same shapes, got {content.shape} vs {style.shape}")
+
+        batch, channels, frames, height, width = content.shape
+        content_4d = mx.transpose(content, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
+        style_4d = mx.transpose(style, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
+        corrected = SeedVR2Util._lab_color_transfer_exact(
+            content_4d,
+            style_4d,
+            luminance_weight=luminance_weight,
+        )
+        corrected = corrected.reshape(batch, frames, channels, height, width)
+        return mx.transpose(corrected, (0, 2, 1, 3, 4))
+
+    @staticmethod
+    def _apply_wavelet_color_reconstruction(content: mx.array, style: mx.array) -> mx.array:
+        if content.shape != style.shape:
+            raise ValueError(f"Wavelet reconstruction requires same shapes, got {content.shape} vs {style.shape}")
+
+        if content.ndim == 5:
+            batch, channels, frames, height, width = content.shape
+            content_4d = mx.transpose(content, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
+            style_4d = mx.transpose(style, (0, 2, 1, 3, 4)).reshape(batch * frames, channels, height, width)
+            reconstructed = SeedVR2Util._apply_wavelet_color_reconstruction(content_4d, style_4d)
+            reconstructed = reconstructed.reshape(batch, frames, channels, height, width)
+            return mx.transpose(reconstructed, (0, 2, 1, 3, 4))
+
+        content_np = np.array(content.astype(mx.float32), dtype=np.float32)
+        style_np = np.array(style.astype(mx.float32), dtype=np.float32)
+        reconstructed = SeedVR2Util._wavelet_reconstruction(content_np, style_np)
+        return mx.array(reconstructed, dtype=content.dtype)
+
+    @staticmethod
+    def pad_video_frames(video: mx.array) -> tuple[mx.array, int]:
+        if video.ndim != 5:
+            raise ValueError(f"Expected video tensor [B, C, T, H, W], got {video.shape}")
+
+        frame_count = int(video.shape[2])
+        if frame_count == 1:
+            return video, frame_count
+        if (frame_count - 1) % 4 == 0:
+            return video, frame_count
+
+        pad_frames = 4 - ((frame_count - 1) % 4)
+        last_frame = video[:, :, -1:, :, :]
+        padding = mx.repeat(last_frame, pad_frames, axis=2)
+        return mx.concatenate([video, padding], axis=2), frame_count
+
+    @staticmethod
+    def padded_video_frame_count(frame_count: int) -> int:
+        if frame_count <= 0:
+            raise ValueError("frame_count must be greater than zero.")
+        if frame_count == 1 or (frame_count - 1) % 4 == 0:
+            return frame_count
+        return frame_count + (4 - ((frame_count - 1) % 4))
+
+    @staticmethod
+    def plan_video_chunks(frame_count: int, chunk_size: int, overlap: int) -> list[tuple[int, int]]:
+        if frame_count <= 0:
+            raise ValueError("frame_count must be greater than zero.")
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than zero.")
+        if overlap < 0:
+            raise ValueError("overlap must be greater than or equal to zero.")
+        if overlap >= chunk_size:
+            raise ValueError("overlap must be smaller than chunk_size.")
+
+        chunks: list[tuple[int, int]] = []
+        start = 0
+        step = chunk_size - overlap
+        while start < frame_count:
+            end = min(start + chunk_size, frame_count)
+            chunks.append((start, end))
+            if end >= frame_count:
+                break
+            start += step
+        return chunks
+
+    @staticmethod
+    def blend_overlapping_frames(
+        existing_tail: list[Image.Image],
+        incoming_head: list[Image.Image],
+    ) -> list[Image.Image]:
+        if len(existing_tail) != len(incoming_head):
+            raise ValueError("SeedVR2 overlap blending requires equal-length frame lists.")
+        if not existing_tail:
+            return []
+
+        blended: list[Image.Image] = []
+        total = len(existing_tail)
+        for index, (left, right) in enumerate(zip(existing_tail, incoming_head)):
+            alpha = float(index + 1) / float(total + 1)
+            left_np = np.array(left.convert("RGB"), dtype=np.float32)
+            right_np = np.array(right.convert("RGB"), dtype=np.float32)
+            merged = ((1.0 - alpha) * left_np) + (alpha * right_np)
+            blended.append(Image.fromarray(np.clip(merged, 0.0, 255.0).round().astype(np.uint8), mode="RGB"))
+        return blended
 
     @staticmethod
     def _lab_color_transfer_exact(content: mx.array, style: mx.array, luminance_weight: float = 0.8) -> mx.array:
@@ -233,3 +353,69 @@ class SeedVR2Util:
             inv = np.argsort(src_idx, kind="stable")
             out[i] = ref_sorted[inv].reshape(source.shape[1:]).astype(np.float32)
         return out
+
+    @staticmethod
+    def _resize_and_soften(
+        *,
+        image: Image.Image,
+        resolution: int | ScaleFactor,
+        softness: float,
+    ) -> tuple[Image.Image, int, int]:
+        w, h = image.size
+        if isinstance(resolution, ScaleFactor):
+            target_res = resolution.get_scaled_value(min(w, h))
+        else:
+            target_res = resolution
+
+        scale = target_res / min(w, h)
+        true_w = max(2, (int(w * scale) // 2) * 2)
+        true_h = max(2, (int(h * scale) // 2) * 2)
+        factor = 1.0 + (max(0.0, min(1.0, softness)) * 7.0)
+
+        if factor <= 1.0 and true_w == w and true_h == h:
+            return image.copy(), true_h, true_w
+
+        if factor > 1.0:
+            down_w = max(2, int(true_w / factor))
+            down_h = max(2, int(true_h / factor))
+            down = image.resize((down_w, down_h), Image.Resampling.BICUBIC)
+            resized = down.resize((true_w, true_h), Image.Resampling.BICUBIC)
+        else:
+            resized = image.resize((true_w, true_h), Image.Resampling.BICUBIC)
+
+        return resized, true_h, true_w
+
+    @staticmethod
+    def _pad_to_multiple(image: Image.Image, *, factor: int) -> Image.Image:
+        width, height = image.size
+        pad_w = (factor - (width % factor)) % factor
+        pad_h = (factor - (height % factor)) % factor
+        if pad_w == 0 and pad_h == 0:
+            return image
+
+        padded = Image.new("RGB", (width + pad_w, height + pad_h), (0, 0, 0))
+        padded.paste(image, (0, 0))
+        return padded
+
+    @staticmethod
+    def _center_crop_to_multiple(image: Image.Image, *, factor: int) -> Image.Image:
+        width, height = image.size
+        cropped_width = width - (width % factor)
+        cropped_height = height - (height % factor)
+        left = max((width - cropped_width) // 2, 0)
+        top = max((height - cropped_height) // 2, 0)
+        return image.crop((left, top, left + cropped_width, top + cropped_height))
+
+    @staticmethod
+    def _pil_to_mx_image(image: Image.Image) -> mx.array:
+        img_mx = mx.array(np.array(image)).astype(mx.float32) / 255.0
+        img_mx = mx.clip(img_mx, 0.0, 1.0)
+        img_mx = img_mx * 2.0 - 1.0
+        img_mx = mx.transpose(img_mx, (2, 0, 1))
+        return img_mx[None, ...]
+
+    @staticmethod
+    def _pil_to_numpy_video_frame(image: Image.Image) -> np.ndarray:
+        frame_np = np.asarray(image, dtype=np.float32) / 255.0
+        frame_np = np.clip(frame_np, 0.0, 1.0)
+        return frame_np * 2.0 - 1.0

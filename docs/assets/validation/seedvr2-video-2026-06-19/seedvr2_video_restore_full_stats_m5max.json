@@ -1,0 +1,72 @@
+{
+  "machine": "M5 Max",
+  "note": "Both full-video proof runs were executed sequentially with --low-ram and --mlx-cache-limit-gb 8. Output FPS was preserved and audio_copied remained false.",
+  "source_video": {
+    "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+    "width": 320,
+    "height": 240,
+    "frames": 2908,
+    "fps": 29.97002997002997,
+    "duration_seconds": 97.03
+  },
+  "profile": {
+    "resolution": "1x",
+    "softness": 0.0,
+    "color_correction_mode": "wavelet",
+    "temporal_chunk_size": 49,
+    "temporal_chunk_overlap": 16,
+    "low_ram": true,
+    "mlx_cache_limit_gb": 8
+  },
+  "runs": {
+    "eiffel_full_source_3b_1x": {
+      "model": "ByteDance-Seed/SeedVR2-3B",
+      "generation_time_seconds": 1893.11,
+      "wall_time_seconds": 1897.77,
+      "width": 320,
+      "height": 240,
+      "frames": 2908,
+      "fps": 29.97002997002997,
+      "audio_copied": false,
+      "peak_mlx_memory_gb": 39.37,
+      "max_resident_set_size_bytes": 27372601344,
+      "processed_chunk_input_frames_total": 4300,
+      "temporal_chunk_count": 88,
+      "output": "docs/assets/validation/seedvr2-video-2026-06-19/eiffel_full_restore_3b_1x.mp4"
+    },
+    "eiffel_full_source_7b_1x": {
+      "model": "ByteDance-Seed/SeedVR2-7B",
+      "generation_time_seconds": 1778.5,
+      "wall_time_seconds": 1785.53,
+      "width": 320,
+      "height": 240,
+      "frames": 2908,
+      "fps": 29.97002997002997,
+      "audio_copied": false,
+      "peak_mlx_memory_gb": 53.5,
+      "max_resident_set_size_bytes": 66161246208,
+      "processed_chunk_input_frames_total": 4300,
+      "temporal_chunk_count": 88,
+      "output": "docs/assets/validation/seedvr2-video-2026-06-19/eiffel_full_restore_7b_1x.mp4"
+    }
+  },
+  "metrics_summary": {
+    "comparison_space": "Sampled restored frames were downscaled back to the original 320x240 source resolution before scoring.",
+    "eiffel_full_source_3b_1x": {
+      "sharpness_gain": 1.7026,
+      "contrast_gain": 1.0916,
+      "temporal_ratio": 1.1263,
+      "drift_mae": 0.068814,
+      "heuristic_score": 65.43,
+      "heuristic_read": "balanced restore candidate"
+    },
+    "eiffel_full_source_7b_1x": {
+      "sharpness_gain": 1.3509,
+      "contrast_gain": 1.0567,
+      "temporal_ratio": 1.0711,
+      "drift_mae": 0.058738,
+      "heuristic_score": 69.07,
+      "heuristic_read": "balanced restore candidate"
+    }
+  }
+}

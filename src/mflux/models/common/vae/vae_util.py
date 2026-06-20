@@ -11,6 +11,7 @@ class VAEUtil:
         vae: nn.Module,
         image: mx.array,
         tiling_config: TilingConfig | None = None,
+        preserve_temporal_axis: bool = False,
     ) -> mx.array:
         # 1. Tiled encoding if enabled
         if tiling_config is not None and tiling_config.vae_encode_tiled:
@@ -30,7 +31,7 @@ class VAEUtil:
 
         # 3. Handle dimension fixups (5D -> 4D if needed)
         # Most of our latent processing utilities expect (B, C, H, W) for non-tiled encoding
-        if encoded.ndim == 5 and encoded.shape[2] == 1:
+        if not preserve_temporal_axis and encoded.ndim == 5 and encoded.shape[2] == 1:
             encoded = encoded[:, :, 0, :, :]
 
         return encoded
@@ -40,6 +41,7 @@ class VAEUtil:
         vae: nn.Module,
         latent: mx.array,
         tiling_config: TilingConfig | None = None,
+        preserve_temporal_axis: bool = False,
     ) -> mx.array:
         # 1. Tiled decoding if enabled
         if (
@@ -66,7 +68,7 @@ class VAEUtil:
 
         # 3. Handle dimension fixups (5D -> 4D if needed)
         # Most of our image saving/processing utilities expect (B, C, H, W)
-        if decoded.ndim == 5 and decoded.shape[2] == 1:
+        if not preserve_temporal_axis and decoded.ndim == 5 and decoded.shape[2] == 1:
             decoded = decoded[:, :, 0, :, :]
 
         return decoded

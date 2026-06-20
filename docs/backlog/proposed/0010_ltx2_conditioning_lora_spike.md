@@ -14,13 +14,17 @@
 
 ## Context
 
-LTX is the most interesting non-Wan video family right now, but it should not be treated as a
-quick model alias. The current public family includes the more immediately practical `LTX-Video`
-image-to-video stack, plus `LTX-2` and `LTX-2.3` audio-video foundation models with distilled
-checkpoints, LoRA variants, and spatial/temporal latent upscalers.
+LTX remains one of the most interesting non-Wan video families, but the first realistic MLX-Gen
+target is not "all of LTX." The public family now includes:
+
+- `LTX-Video` and `LTX-Video-0.9.8-13B-distilled`, which are the most practical first local
+  T2V/I2V/V2V candidates;
+- `LTX-2`, which broadens conditioning and modality support;
+- `LTX-2.3`, which pushes toward a larger audio-video platform with distilled checkpoints, LoRAs,
+  and latent upscalers.
 
 This proposal is separate from the broader second-family selection item because the LTX family has
-a specific conditioning and LoRA surface that could become important for MLX-Gen's video roadmap.
+its own conditioning, LoRA, latent-upscaling, and potential audio-video surface.
 
 ## Current code reality
 
@@ -42,34 +46,35 @@ a specific conditioning and LoRA surface that could become important for MLX-Gen
 ## Problem or opportunity
 
 If MLX-Gen wants meaningful video LoRA support beyond Wan, the LTX family may be the cleanest
-target to study because Diffusers already separates IC LoRA and HDR LoRA pipelines. But
-implementing it before the video
-runtime boundary is clear would be risky: audio latents, video latents, conditioning, temporal
-upsampling, and LoRA adapters all pull the API beyond today's Wan scope.
+target to study because Diffusers already separates IC LoRA and HDR LoRA pipelines. But leading
+with the full LTX-2.3 platform would be risky: audio latents, extra conditioning surfaces,
+temporal upscaling, and LoRA adapters all pull the public API beyond today's Wan scope.
 
 ## Proposed direction
 
-Keep this as a spike that can be promoted only after item 0009 selects the LTX family or after
-AbstractVision needs LTX-specific capabilities:
+Keep this as a spike that can be promoted only after item 0009 selects the LTX family or after a
+concrete consumer workflow needs it. If promoted, start with `LTX-Video` first:
 
-1. Run the upstream Diffusers LTX-family pipelines first and record exact model files, memory,
-   runtime, output shape, fps, audio behavior, and license constraints.
-2. Decide whether MLX-Gen should initially port only `LTX-Video`/`LTX-2` image-to-video without
-   audio, or whether audio is part of the first-class target.
+1. Run the upstream Diffusers `LTX-Video` pipelines first and record exact model files, memory,
+   runtime, output shape, fps, and license constraints.
+2. Decide whether MLX-Gen should initially port only `LTX-Video` / distilled I2V without audio,
+   or whether `LTX-2` adds enough value to justify a broader first pass.
 3. Map LTX-family LoRA semantics separately from image LoRA semantics.
-4. Prototype only the smallest deterministic path first: distilled I2V without audio.
-5. Add IC LoRA only after the base LTX path has parity fixtures.
+4. Prototype only the smallest deterministic path first: `LTX-Video` distilled I2V without audio.
+5. Keep `LTX-2.3` audio-video and larger multi-stage workflows as explicit follow-up scope.
+6. Add IC LoRA only after the base LTX path has parity fixtures.
 
 ## Why it might matter
 
 The LTX family is one of the few open-weight candidates that could move MLX-Gen beyond
-"generate a video" into reusable video direction: reference conditioning, camera/control LoRAs, audio-video, and
-latent upscaling. That is valuable, but only if the package can support it cleanly.
+"generate a video" into reusable video direction: reference conditioning, camera/control LoRAs,
+video-to-video, and latent upscaling. That is valuable, but only if the package can support it
+cleanly without inheriting an audio-video contract too early.
 
 ## Promotion criteria
 
-- Item 0009 selects the LTX family as the next video family, or a concrete AbstractVision workflow
-  needs LTX-specific conditioning/LoRA.
+- Item 0009 selects the LTX family as the next video family, or a concrete consumer workflow needs
+  LTX-specific conditioning/LoRA.
 - License review confirms the intended use and redistribution terms are acceptable.
 - Upstream Diffusers generation works locally with a practical low-cost validation clip.
 - A scoped first implementation can avoid broad audio-video API churn.
@@ -92,13 +97,15 @@ latent upscaling. That is valuable, but only if the package can support it clean
 
 ## Guidance for future agents
 
-Treat LTX as a video platform, not a single model id. Start with upstream Diffusers behavior
-and write a small ADR if the port requires new public concepts such as audio latents, temporal
+Treat LTX as a video platform, not a single model id. Start with upstream Diffusers behavior and
+write a small ADR if the port requires new public concepts such as audio latents, temporal
 upscalers, video LoRA adapters, or multi-stage generation.
 
 ## Sources checked
 
-- Local Diffusers checkout LTX pipelines under `diffusers/src/diffusers/pipelines/ltx/` and `diffusers/src/diffusers/pipelines/ltx2/`
+- Local Diffusers checkout LTX pipelines under `diffusers/src/diffusers/pipelines/ltx/` and
+  `diffusers/src/diffusers/pipelines/ltx2/`
 - LTX-Video model card: https://huggingface.co/Lightricks/LTX-Video
+- LTX-Video-0.9.8-13B-distilled model card: https://huggingface.co/Lightricks/LTX-Video-0.9.8-13B-distilled
 - LTX-2 model card: https://huggingface.co/Lightricks/LTX-2
 - LTX-2.3 model card: https://huggingface.co/Lightricks/LTX-2.3

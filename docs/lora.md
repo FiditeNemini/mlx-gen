@@ -609,9 +609,9 @@ mlxgen generate \
   --lora-scales 1
 ```
 
-For Wan A14B, the current recommended fast path is the official `lightx2v/Wan2.2-Lightning`
-paired 4-step recipe. The accepted proof is same-seed `4`-step no-LoRA versus same-seed `4`-step
-with the paired Lightning files, using:
+For Wan2.2 A14B text-to-video and image-to-video, the current recommended fast path is the
+official `lightx2v/Wan2.2-Lightning` paired 4-step recipe. The accepted proof is same-seed
+`4`-step no-LoRA versus same-seed `4`-step with the paired Lightning files, using:
 
 - `steps=4`
 - `flow_shift=5.0`
@@ -718,6 +718,21 @@ Treat Lightning as an explicit fast recipe, not as a universal quality replaceme
 original Wan profile. The measured result is that it produces coherent local videos much faster.
 Depending on the prompt and route, the original longer profile can still yield a stronger or simply
 different interpretation.
+
+For A14B routes, MLX-Gen accepts a broader set of 16-pixel-multiple target sizes than the three
+headline examples in this section. Useful target families include:
+
+- square: `240x240`, `480x480`, `720x720`, `960x960`, `1280x1280`, `1440x1440`
+- portrait targets: `240x480`, `480x832`, `720x1280`, `832x1104`, `1248x1648`, `1080x1920`
+- landscape targets: `480x240`, `832x480`, `1280x720`, `1104x832`, `1648x1248`, `1920x1080`
+
+The validated LightX2V fast path still centers on the usual A14B quality envelope:
+
+- `480x240` / `240x480` for quick local previews
+- `832x480` / `480x832` for a stronger fast path
+- `1280x720` / `720x1280` for better presentation quality
+
+See [Wan video](wan-video.md) for the broader size guidance and the route-level examples.
 
 The LightX2V README itself also matters here:
 

@@ -8,7 +8,7 @@
 
 ## ADR status
 
-- Governing ADRs: [ADR 0001](../../adr/0001_runtime_smoke_validation_for_model_routes.md), [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md)
+- Governing ADRs: [ADR 0001](../../adr/0001_runtime_smoke_validation_for_model_routes.md), [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md), [ADR 0003](../../adr/0003_runtime_truth_vs_consumer_convenience.md)
 - ADR impact: None if Qwen control, masked edit, and structured conditioning remain task-specific
   capability metadata under the existing generation contract.
 
@@ -65,9 +65,28 @@ is intentionally narrow: base q8 prepared package only, one control image, no ed
 and no control-inpaint yet.
 
 Update 2026-06-15 (next slice): the strongest next bounded expansion is now control-inpaint on the
-base Qwen lane with `InstantX/Qwen-Image-ControlNet-Inpainting`. That route combines the two
-public Qwen surfaces MLX-Gen just validated separately: localization and structure. It is a better
-next slice than broadening to multiple edit-plus or control families at once.
+base Qwen lane with `InstantX/Qwen-Image-ControlNet-Inpainting`. The user-facing request shape is
+still "source image + mask + prompt", but the backend is different from the current Qwen edit
+masked route: it adds a dedicated inpaint control branch on top of base Qwen instead of relying on
+the edit model plus masked latent blending alone. The point of this slice is not a new kind of
+prompt; it is stronger locality, tighter mask-boundary adherence, and fewer unintended whole-frame
+changes on hard localized edits. That makes it a better next slice than broadening to multiple
+edit-plus or control families at once.
+
+Update 2026-06-16 (public explanation boundary): the current public docs now explicitly separate
+three different Qwen concepts so users do not confuse them:
+
+- current masked edit / inpaint (`qwen.inpaint`) on `AbstractFramework/qwen-image-edit-2511-8bit`;
+- current structured control (`qwen.control`) on `AbstractFramework/qwen-image-8bit`;
+- planned control-inpaint on base Qwen with `InstantX/Qwen-Image-ControlNet-Inpainting`.
+
+The new guide and explainer are intentionally documentation-only for the planned route. They do not
+claim support yet; they explain why control-inpaint would still feel like "edit one masked part of
+an image" to the user, while using a stricter backend than the current edit-model mask route.
+Those docs also now state the important implementation truth in plain language: ControlNet
+inpainting is not a LoRA, not a replacement base model, and not universally "better". It is an
+extra model package loaded alongside the base Qwen model when stronger locality and boundary
+discipline matter more than minimal setup.
 
 ## Current code reality
 
@@ -203,6 +222,8 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 - A clear Qwen feature matrix with implemented vs unsupported rows.
 - At least one validated masked-edit Qwen route with public proof artifacts.
 - At least one validated structured-control Qwen route with public proof artifacts.
+- A public-facing explanation that distinguishes shipped masked edit, shipped structured control,
+  and planned control-inpaint without overstating support.
 - Capability output and docs that tell AbstractVision exactly when Qwen can expose control/mask
   inputs.
 

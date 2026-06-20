@@ -13,10 +13,27 @@ from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationExcep
 from mflux.utils.outpaint_util import OutpaintCanvas, OutpaintUtil
 from mflux.utils.prompt_util import PromptUtil
 
+LEGACY_NOTICE = (
+    "Warning: mflux-generate-flux2-edit is a legacy compatibility command. "
+    "Use `mlxgen generate --model <model> --image <path> ...` for new integrations."
+)
+
+
+def _print_legacy_notice() -> None:
+    print(LEGACY_NOTICE, file=sys.stderr)
+
 
 def main():
     # 0. Parse command line arguments
-    parser = CommandLineParser(description="Generate an image using Flux2 Klein Edit with image conditioning.")
+    parser = CommandLineParser(
+        description=(
+            "Legacy compatibility command for FLUX.2 Klein image conditioning and edit workflows. "
+            "Prefer `mlxgen generate --model <model> --image <path> ...` for new integrations."
+        ),
+        epilog=(
+            "Preferred migration target: mlxgen generate --model <flux2-model> --image <path> ..."
+        ),
+    )
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     parser.add_lora_arguments()
@@ -42,9 +59,14 @@ def main():
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_output_arguments()
     args = parser.parse_args()
+    _print_legacy_notice()
 
     if getattr(args, "negative_prompt", ""):
-        parser.error("--negative-prompt is not supported for FLUX.2. Focus on describing what you want.")
+        parser.error(
+            "--negative-prompt is not supported for FLUX.2. Omit it for FLUX.2 routes. "
+            "For new integrations, call `mlxgen generate --model <flux2-model> --image <path> ...` "
+            "instead of `mflux-generate-flux2-edit`."
+        )
     source_image_paths = [Path(p) for p in args.image_paths]
     _validate_canvas_args(parser=parser, args=args, source_image_paths=source_image_paths)
 

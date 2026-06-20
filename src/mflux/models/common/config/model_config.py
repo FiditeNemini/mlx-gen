@@ -202,6 +202,11 @@ class ModelConfig:
 
     @staticmethod
     @lru_cache
+    def seedvr2_7b_sharp() -> "ModelConfig":
+        return AVAILABLE_MODELS["seedvr2-7b-sharp"]
+
+    @staticmethod
+    @lru_cache
     def wan2_2_ti2v_5b() -> "ModelConfig":
         return AVAILABLE_MODELS["wan2.2-ti2v-5b"]
 
@@ -689,6 +694,10 @@ AVAILABLE_MODELS = {
         max_sequence_length=None,
         supports_guidance=True,
         requires_sigma_shift=None,
+        transformer_overrides={
+            "rope_freqs_for": "pixel",
+            "text_rope_freqs_for": "lang",
+        },
     ),
     "seedvr2-7b": ModelConfig(
         priority=24,
@@ -714,8 +723,32 @@ AVAILABLE_MODELS = {
             "last_layer_vid_only": False,
         },
     ),
-    "wan2.2-ti2v-5b": ModelConfig(
+    "seedvr2-7b-sharp": ModelConfig(
         priority=25,
+        aliases=["seedvr2-7b-sharp", "seedvr2-7b-sharp-fp16"],
+        model_name="ByteDance-Seed/SeedVR2-7B",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=None,
+        max_sequence_length=None,
+        supports_guidance=True,
+        requires_sigma_shift=None,
+        transformer_overrides={
+            "vid_dim": 3072,
+            "heads": 24,
+            "num_layers": 36,
+            "mm_layers": 36,
+            "rope_dim": 64,
+            "rope_on_text": False,
+            "rope_freqs_for": "pixel",
+            "mlp_type": "normal",
+            "use_output_ada": False,
+            "last_layer_vid_only": False,
+        },
+    ),
+    "wan2.2-ti2v-5b": ModelConfig(
+        priority=26,
         aliases=[
             "wan2.2-ti2v-5b",
             "wan2-2-ti2v-5b",

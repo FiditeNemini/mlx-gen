@@ -1,6 +1,6 @@
 # Architecture
 
-MLX-Gen is an independent package forked from mflux. It keeps the MLX-native model runtime from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The supported video paths include Wan2.2 TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, Wan2.2 A14B text-to-video, and Wan2.2 A14B image-to-video. SeedVR2 image super-resolution uses `mlxgen upscale`.
+MLX-Gen is an independent package forked from mflux. It keeps the MLX-native model runtime from mflux while exposing a cleaner `mlxgen` command surface for new users and applications. The supported video paths include Wan2.2 TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, Wan2.2 A14B text-to-video, and Wan2.2 A14B image-to-video. SeedVR2 image and video restoration use `mlxgen upscale`.
 
 ## Package Shape
 
@@ -19,7 +19,7 @@ The public command surface separates setup from inference:
 - `mlxgen download` is an explicit cache population command.
 - `mlxgen prepare` is an explicit local model-folder creation command.
 - `mlxgen generate` is the inference command and does not start downloads by default.
-- `mlxgen upscale` is the inference command for SeedVR2 image super-resolution.
+- `mlxgen upscale` is the inference command for SeedVR2 image and video restoration.
 
 This boundary is important for embedded workflow systems such as AbstractVision: a generation request should not unexpectedly start a large network transfer in the middle of a larger job.
 

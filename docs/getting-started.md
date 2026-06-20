@@ -23,6 +23,10 @@ The top-level command shows the public workflows:
 - `mlxgen download` for explicit Hugging Face cache downloads.
 - `mlxgen prepare` for reusable local MLX-Gen model packages.
 
+For scripts, desktop apps, and other integrations, call these `mlxgen` commands directly. The
+package still includes some `mflux-generate-*` compatibility entry points from the upstream code,
+but they are not the recommended public command surface for new integrations.
+
 ## Prepare Model Files
 
 Before generation, either download the source repository into the local Hugging Face cache or create
@@ -176,10 +180,11 @@ For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image
 edits, and multi-reference image-to-image with copy/pasteable commands.
 
-## Upscale An Image
+## Restore Or Upscale With SeedVR2
 
 SeedVR2 is available through `mlxgen upscale`. It is a diffusion super-resolution/restoration
-model: it can increase image size while also cleaning noise and reconstructing detail.
+model: it can increase image size while also cleaning noise and reconstructing detail. The same
+command also accepts `--video-path` for video restoration.
 
 Use a published q8 package for a smaller reusable SeedVR2 model:
 
@@ -215,12 +220,13 @@ For example, a `320x192` source becomes `640x384` with `--resolution 2x` and `96
 `--resolution 3x`. For visual quality checks, choose a target that changes the dimensions
 materially; a near-same-size target is mainly useful for restoration/denoising checks.
 
-SeedVR2 keeps small outputs on the untiled VAE path for image quality and automatically uses tiled
-VAE decode for large outputs. `--softness` controls input smoothing before reconstruction: `0.0`
-keeps the source conditioning most direct, while higher values suppress grain or JPEG texture at
-the cost of softer fine detail. If the source has visible grain in smooth regions, try
-`--softness 0.25` to `0.5`. Add `--vae-tiling` when you also want tiled VAE encoding or the same
-tiled path for smaller outputs.
+SeedVR2 keeps small image outputs on the untiled VAE path for image quality and automatically uses
+tiled VAE decode for large image outputs. `--softness` controls input smoothing before
+reconstruction: `0.0` keeps the source conditioning most direct, while higher values suppress
+grain or JPEG texture at the cost of softer fine detail. If the source has visible grain in smooth
+regions, try `--softness 0.25` to `0.5`. Add `--vae-tiling` only for image runs when you also want
+tiled VAE encoding or the same tiled path for smaller outputs. Video restore rejects
+`--vae-tiling`; use `--low-ram` and temporal chunking instead.
 
 The `seedvr2` and `seedvr2-3b` aliases resolve to the official upstream 3B checkpoint. To run that
 source model directly, download it and pass its full handle:
@@ -239,7 +245,28 @@ mlxgen upscale \
 
 Use `seedvr2-7b` for the official 7B source model after downloading
 `ByteDance-Seed/SeedVR2-7B`. See [Image Upscaling](upscaling.md) for 5x SeedVR2 3B and 7B
-examples, source/q8/q4 comparisons, package sizes, and measured memory profiles.
+examples, the validated full-video Eiffel restoration proofs, source/q8/q4 image comparisons,
+package sizes, and measured memory profiles.
+
+For a short video restoration smoke:
+
+```sh
+mlxgen upscale \
+  --model AbstractFramework/seedvr2-3b-8bit \
+  --video-path input.mp4 \
+  --start-seconds 16 \
+  --max-frames 6 \
+  --resolution 2x \
+  --softness 0.0 \
+  --metadata \
+  --output restored.mp4
+```
+
+For video inputs, SeedVR2 preserves source FPS by default and currently writes a silent MP4 even
+when the source clip contains audio. For longer sources, add `--low-ram --mlx-cache-limit-gb 8`;
+MLX-Gen switches to sequential temporal chunking automatically once the requested clip exceeds the
+small direct path. See [Image Upscaling](upscaling.md) for the full `97s` Eiffel source/3B/7B
+proof videos, timings, memory measurements, and sampled restore metrics.
 
 ## Generate A Video
 

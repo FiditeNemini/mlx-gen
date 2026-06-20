@@ -212,6 +212,46 @@ class SeedVR2WeightDefinition7BOfficial:
         return SeedVR2WeightDefinition.quantization_predicate(path, module)
 
 
+class SeedVR2WeightDefinition7BOfficialSharp:
+    @staticmethod
+    def get_components() -> List[ComponentDefinition]:
+        return [
+            ComponentDefinition(
+                name="transformer",
+                hf_subdir=".",
+                num_blocks=36,
+                loading_mode="torch_checkpoint",
+                precision=mx.float16,
+                mapping_getter=lambda: SeedVR2WeightMapping.get_transformer_mapping(num_blocks=36),
+                weight_files=["seedvr2_ema_7b_sharp.pth"],
+            ),
+            ComponentDefinition(
+                name="vae",
+                hf_subdir=".",
+                num_blocks=4,
+                loading_mode="torch_checkpoint",
+                precision=mx.float16,
+                mapping_getter=SeedVR2WeightMapping.get_vae_mapping,
+                weight_files=["ema_vae.pth"],
+            ),
+        ]
+
+    @staticmethod
+    def get_tokenizers() -> List[TokenizerDefinition]:
+        return []
+
+    @staticmethod
+    def get_download_patterns() -> List[str]:
+        return [
+            "seedvr2_ema_7b_sharp.pth",
+            "ema_vae.pth",
+        ]
+
+    @staticmethod
+    def quantization_predicate(path: str, module) -> bool:
+        return SeedVR2WeightDefinition.quantization_predicate(path, module)
+
+
 class SeedVR2WeightDefinition7BPrepared:
     @staticmethod
     def get_components() -> List[ComponentDefinition]:
@@ -249,36 +289,45 @@ class SeedVR2WeightDefinition:
     @staticmethod
     def resolve(model_config, root_path: Path | str | None = None):
         aliases = {a.lower() for a in getattr(model_config, "aliases", [])}
+        wants_7b_sharp = SeedVR2WeightDefinition._aliases_include_7b_sharp(aliases)
         if root_path is not None and (Path(root_path) / "transformer" / "model.safetensors.index.json").exists():
-            if "seedvr2-7b" in aliases:
+            if SeedVR2WeightDefinition._aliases_include_7b_family(aliases):
                 return SeedVR2WeightDefinition7BPrepared
             return SeedVR2WeightDefinition3BPrepared
         if root_path is not None and (Path(root_path) / "seedvr2_ema_3b.pth").exists():
             return SeedVR2WeightDefinition3BOfficial
+        if root_path is not None and (Path(root_path) / "seedvr2_ema_7b_sharp.pth").exists():
+            if wants_7b_sharp or not (Path(root_path) / "seedvr2_ema_7b.pth").exists():
+                return SeedVR2WeightDefinition7BOfficialSharp
         if root_path is not None and (Path(root_path) / "seedvr2_ema_7b.pth").exists():
             return SeedVR2WeightDefinition7BOfficial
         if SeedVR2WeightDefinition._source_is_official_3b(getattr(model_config, "model_name", None)):
             return SeedVR2WeightDefinition3BOfficial
         if SeedVR2WeightDefinition._source_is_official_7b(getattr(model_config, "model_name", None)):
+            if wants_7b_sharp:
+                return SeedVR2WeightDefinition7BOfficialSharp
             return SeedVR2WeightDefinition7BOfficial
 
-        if "seedvr2-7b" in aliases:
+        if SeedVR2WeightDefinition._aliases_include_7b_family(aliases):
             return SeedVR2WeightDefinition7B
         return SeedVR2WeightDefinition3B
 
     @staticmethod
     def for_saving(model_config):
         aliases = {a.lower() for a in getattr(model_config, "aliases", [])}
-        if "seedvr2-7b" in aliases:
+        if SeedVR2WeightDefinition._aliases_include_7b_family(aliases):
             return SeedVR2WeightDefinition7BPrepared
         return SeedVR2WeightDefinition3BPrepared
 
     @staticmethod
     def get_download_patterns_for_source(model_config, source: str | None) -> List[str]:
         aliases = {a.lower() for a in getattr(model_config, "aliases", [])}
+        wants_7b_sharp = SeedVR2WeightDefinition._aliases_include_7b_sharp(aliases)
         if SeedVR2WeightDefinition._source_is_official_3b(source):
             return SeedVR2WeightDefinition3BOfficial.get_download_patterns()
         if SeedVR2WeightDefinition._source_is_official_7b(source):
+            if wants_7b_sharp:
+                return SeedVR2WeightDefinition7BOfficialSharp.get_download_patterns()
             return SeedVR2WeightDefinition7BOfficial.get_download_patterns()
 
         if source is not None:
@@ -288,11 +337,11 @@ class SeedVR2WeightDefinition:
 
         normalized = (source or "").lower()
         if normalized == "numz/seedvr2_comfyui":
-            if "seedvr2-7b" in aliases:
+            if SeedVR2WeightDefinition._aliases_include_7b_family(aliases):
                 return SeedVR2WeightDefinition7B.get_download_patterns()
             return SeedVR2WeightDefinition3B.get_download_patterns()
         if "abstractframework/seedvr2" in normalized or normalized.endswith("-4bit") or normalized.endswith("-8bit"):
-            if "seedvr2-7b" in normalized or "seedvr2-7b" in aliases:
+            if "seedvr2-7b" in normalized or SeedVR2WeightDefinition._aliases_include_7b_family(aliases):
                 return SeedVR2WeightDefinition7BPrepared.get_download_patterns()
             return SeedVR2WeightDefinition3BPrepared.get_download_patterns()
 
@@ -343,3 +392,11 @@ class SeedVR2WeightDefinition:
             "bytedance-seed/seedvr2-7b",
             "bytedance-seed/seedvr2_7b",
         }
+
+    @staticmethod
+    def _aliases_include_7b_family(aliases: set[str]) -> bool:
+        return "seedvr2-7b" in aliases or "seedvr2-7b-sharp" in aliases
+
+    @staticmethod
+    def _aliases_include_7b_sharp(aliases: set[str]) -> bool:
+        return "seedvr2-7b-sharp" in aliases

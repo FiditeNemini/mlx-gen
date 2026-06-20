@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from mlx.utils import tree_flatten
+
 from mflux.callbacks.callback_registry import CallbackRegistry
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.resolution.path_resolution import PathResolution
@@ -28,6 +30,8 @@ class SeedVR2Initializer:
         weights = SeedVR2Initializer._load_weights(root_path, weight_definition)
         SeedVR2Initializer._init_text_embedding(model, weights)
         SeedVR2Initializer._init_models(model, runtime_config)
+        SeedVR2Initializer._record_checkpoint_provenance(model, weight_definition, root_path)
+        SeedVR2Initializer._assert_weight_coverage(model, weights)
         SeedVR2Initializer._apply_weights(model, weights, quantize, weight_definition)
 
     @staticmethod
@@ -60,6 +64,8 @@ class SeedVR2Initializer:
         model.model_config = model_config
         model.callbacks = CallbackRegistry()
         model.tiling_config = TilingConfig(vae_encode_tiled=False, vae_decode_tiles_per_dim=0)
+        model.seedvr2_checkpoint_variant = None
+        model.seedvr2_source_layout = None
 
     @staticmethod
     def _resolve_weight_root(model_path: str, model_config: ModelConfig) -> Path:
@@ -88,6 +94,59 @@ class SeedVR2Initializer:
     def _init_models(model, model_config: ModelConfig) -> None:
         model.vae = SeedVR2VAE()
         model.transformer = SeedVR2Transformer(**(model_config.transformer_overrides or {}))
+
+    @staticmethod
+    def _record_checkpoint_provenance(model, weight_definition, root_path: Path) -> None:
+        name = getattr(weight_definition, "__name__", "")
+        if name == "SeedVR2WeightDefinition3BOfficial":
+            model.seedvr2_checkpoint_variant = "3b"
+            model.seedvr2_source_layout = "official"
+            return
+        if name == "SeedVR2WeightDefinition7BOfficial":
+            model.seedvr2_checkpoint_variant = "7b"
+            model.seedvr2_source_layout = "official"
+            return
+        if name == "SeedVR2WeightDefinition7BOfficialSharp":
+            model.seedvr2_checkpoint_variant = "7b-sharp"
+            model.seedvr2_source_layout = "official"
+            return
+        if name == "SeedVR2WeightDefinition3BPrepared":
+            model.seedvr2_checkpoint_variant = "3b"
+            model.seedvr2_source_layout = "prepared"
+            return
+        if name == "SeedVR2WeightDefinition7BPrepared":
+            aliases = {alias.lower() for alias in getattr(model.model_config, "aliases", [])}
+            model.seedvr2_checkpoint_variant = "7b-sharp" if "seedvr2-7b-sharp" in aliases else "7b"
+            model.seedvr2_source_layout = "prepared"
+            return
+
+        aliases = {alias.lower() for alias in getattr(model.model_config, "aliases", [])}
+        if "seedvr2-7b-sharp" in aliases or "seedvr2_ema_7b_sharp" in str(root_path).lower():
+            model.seedvr2_checkpoint_variant = "7b-sharp"
+        elif "seedvr2-7b" in aliases:
+            model.seedvr2_checkpoint_variant = "7b"
+        else:
+            model.seedvr2_checkpoint_variant = "3b"
+        model.seedvr2_source_layout = "mlx-native"
+
+    @staticmethod
+    def _assert_weight_coverage(model, weights: LoadedWeights) -> None:
+        for component_name, component_model in (("transformer", model.transformer), ("vae", model.vae)):
+            component_weights = weights.components.get(component_name)
+            if component_weights is None:
+                continue
+            expected = {key for key, _ in tree_flatten(component_model.parameters())}
+            provided = {key for key, _ in tree_flatten(component_weights)}
+            missing = sorted(expected - provided)
+            extra = sorted(provided - expected)
+            if missing or extra:
+                missing_preview = ", ".join(missing[:5]) if missing else "none"
+                extra_preview = ", ".join(extra[:5]) if extra else "none"
+                raise ValueError(
+                    f"SeedVR2 {component_name} weight coverage mismatch: "
+                    f"missing={len(missing)} ({missing_preview}); "
+                    f"extra={len(extra)} ({extra_preview})"
+                )
 
     @staticmethod
     def _apply_weights(model, weights: LoadedWeights, quantize: int | None, weight_definition) -> None:

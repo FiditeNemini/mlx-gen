@@ -1,3 +1,5 @@
+import sys
+
 from mflux.callbacks.callback_manager import CallbackManager
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.models.common.config import ModelConfig
@@ -6,10 +8,25 @@ from mflux.models.flux2.variants import Flux2Klein
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
+LEGACY_NOTICE = (
+    "Warning: mflux-generate-flux2 is a legacy compatibility command. "
+    "Use `mlxgen generate --model <model> ...` for new integrations."
+)
+
+
+def _print_legacy_notice() -> None:
+    print(LEGACY_NOTICE, file=sys.stderr)
+
 
 def main():
     # 0. Parse command line arguments
-    parser = CommandLineParser(description="Generate an image using Flux2 Klein.")
+    parser = CommandLineParser(
+        description=(
+            "Legacy compatibility command for FLUX.2 Klein image generation. "
+            "Prefer `mlxgen generate --model <model> ...` for new integrations."
+        ),
+        epilog="Preferred migration target: mlxgen generate --model <flux2-model> --prompt ...",
+    )
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     parser.add_lora_arguments()
@@ -17,9 +34,14 @@ def main():
     parser.add_image_to_image_arguments(required=False)
     parser.add_output_arguments()
     args = parser.parse_args()
+    _print_legacy_notice()
 
     if getattr(args, "negative_prompt", ""):
-        parser.error("--negative-prompt is not supported for FLUX.2. Focus on describing what you want.")
+        parser.error(
+            "--negative-prompt is not supported for FLUX.2. Omit it for FLUX.2 routes. "
+            "For new integrations, call `mlxgen generate --model <flux2-model> ...` instead of "
+            "`mflux-generate-flux2`."
+        )
 
     model_name = args.model or "flux2-klein-4b"
     model_config = ModelConfig.from_name(model_name=model_name, base_model=args.base_model)

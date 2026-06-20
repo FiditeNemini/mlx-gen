@@ -1,0 +1,27 @@
+{
+    "note": "SeedVR2 restore comparison video.",
+    "video_health": {
+        "frames": {
+            "source": "frames",
+            "frame_count": 6,
+            "width": 1944,
+            "height": 550,
+            "fps": 29.97002997002997,
+            "luma_min": 0.0,
+            "luma_max": 255.0,
+            "luma_mean": 149.22159322102866,
+            "mean_temporal_delta": 5.281926310062408
+        },
+        "file": {
+            "source": "docs/assets/validation/seedvr2-video-2026-06-18/eiffel_3b_7b_restore_comparison.mp4",
+            "frame_count": 6,
+            "width": 1944,
+            "height": 550,
+            "fps": 29.97002997002997,
+            "luma_min": 0.0,
+            "luma_max": 255.0,
+            "luma_mean": 147.63116200764975,
+            "mean_temporal_delta": 5.178320777416229
+        }
+    }
+}

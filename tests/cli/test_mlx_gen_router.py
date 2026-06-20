@@ -48,6 +48,34 @@ def test_backend_edit_help_renders_canvas_expansion_options(module_name, argv0, 
     assert "source blend" in help_output
 
 
+def test_flux2_legacy_help_calls_out_mlxgen_generate(monkeypatch, capsys):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    monkeypatch.setattr(sys, "argv", ["mflux-generate-flux2-edit", "--help"])
+
+    with pytest.raises(SystemExit) as exc:
+        flux2_edit_generate.main()
+
+    assert exc.value.code == 0
+    help_output = capsys.readouterr().out
+    assert "Legacy compatibility command" in help_output
+    assert "mlxgen generate" in help_output
+
+
+def test_flux2_legacy_generate_help_calls_out_mlxgen_generate(monkeypatch, capsys):
+    from mflux.models.flux2.cli import flux2_generate
+
+    monkeypatch.setattr(sys, "argv", ["mflux-generate-flux2", "--help"])
+
+    with pytest.raises(SystemExit) as exc:
+        flux2_generate.main()
+
+    assert exc.value.code == 0
+    help_output = capsys.readouterr().out
+    assert "Legacy compatibility command" in help_output
+    assert "mlxgen generate" in help_output
+
+
 def test_flux2_edit_backend_rejects_distilled_outpaint_before_model_load(tmp_path, monkeypatch, capsys):
     from mflux.models.flux2.cli import flux2_edit_generate
 
@@ -73,6 +101,34 @@ def test_flux2_edit_backend_rejects_distilled_outpaint_before_model_load(tmp_pat
         flux2_edit_generate.main()
 
     assert "requires a FLUX.2 Klein base model" in capsys.readouterr().err
+
+
+def test_flux2_edit_backend_rejects_negative_prompt_with_migration_guidance(monkeypatch, capsys):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-4b",
+            "--image-paths",
+            "input.png",
+            "--prompt",
+            "add sunglasses",
+            "--negative-prompt",
+            "blurry",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        flux2_edit_generate.main()
+
+    error_output = capsys.readouterr().err
+    assert "not supported for FLUX.2" in error_output
+    assert "mlxgen generate" in error_output
+    assert "legacy compatibility command" in error_output
 
 
 def test_qwen_base_single_image_requires_latent_strength(capsys):

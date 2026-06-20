@@ -3,18 +3,29 @@ from mlx import nn
 
 
 class RoPEModule(nn.Module):
-    def __init__(self, dim: int = 64, freqs_for: str = "lang", theta: float = 10000.0, max_freq: float = 256.0):
+    def __init__(
+        self,
+        dim: int = 64,
+        freqs_for: str = "lang",
+        text_freqs_for: str | None = None,
+        theta: float = 10000.0,
+        max_freq: float = 256.0,
+    ):
         super().__init__()
         self.dim = dim
         self.freqs_for = freqs_for
+        self.text_freqs_for = text_freqs_for or freqs_for
         self.rope_dim = 3
         self.freq_dim = dim // self.rope_dim
+        self.theta = theta
+        self.max_freq = max_freq
+        self.freqs = RoPEModule._build_freqs(freqs_for=freqs_for, freq_dim=self.freq_dim, theta=theta, max_freq=max_freq)
+
+    @staticmethod
+    def _build_freqs(freqs_for: str, freq_dim: int, theta: float = 10000.0, max_freq: float = 256.0) -> mx.array:
         if freqs_for == "pixel":
-            self.freqs = mx.linspace(1.0, max_freq / 2.0, self.freq_dim // 2, dtype=mx.float32) * mx.pi
-        else:
-            self.freqs = 1.0 / (
-                theta ** (mx.arange(0, self.freq_dim, 2, dtype=mx.float32)[: (self.freq_dim // 2)] / self.freq_dim)
-            )
+            return mx.linspace(1.0, max_freq / 2.0, freq_dim // 2, dtype=mx.float32) * mx.pi
+        return 1.0 / (theta ** (mx.arange(0, freq_dim, 2, dtype=mx.float32)[: (freq_dim // 2)] / freq_dim))
 
     def __call__(
         self,
@@ -42,8 +53,17 @@ class RoPEModule(nn.Module):
             txt_k,
             txt_shape,
             self.freqs,
+            self.freqs
+            if self.text_freqs_for == self.freqs_for
+            else RoPEModule._build_freqs(
+                freqs_for=self.text_freqs_for,
+                freq_dim=self.freq_dim,
+                theta=self.theta,
+                max_freq=self.max_freq,
+            ),
             self.rope_dim,
             self.freqs_for,
+            self.text_freqs_for,
         )
 
     @classmethod
@@ -147,21 +167,38 @@ class RoPEModule(nn.Module):
         txt_q: mx.array,
         txt_k: mx.array,
         txt_shape: mx.array,
-        freqs: mx.array,
+        video_freqs: mx.array,
+        text_freqs: mx.array,
         rope_dim: int = 3,
-        freqs_for: str = "lang",
+        video_freqs_for: str = "lang",
+        text_freqs_for: str = "lang",
     ) -> tuple[mx.array, mx.array, mx.array, mx.array]:
         vid_freq_list = []
         txt_freq_list = []
-        if freqs_for == "pixel":
-            # Same rationale as _apply_rope_3d: compute exact grids in pixel mode.
+        if video_freqs_for == "pixel" and text_freqs_for == "lang":
+            # Match the official 3B mmrope3d cache surface.
+            vid_freqs_full = RoPEModule._get_axial_freqs(
+                video_freqs, 1024, 128, 128, freqs_for=video_freqs_for
+            )
+            txt_freqs_1d = RoPEModule._get_axial_freqs(text_freqs, 1024, freqs_for=text_freqs_for)
+
             for b in range(vid_shape.shape[0]):
                 f, h, w = int(vid_shape[b, 0]), int(vid_shape[b, 1]), int(vid_shape[b, 2])
                 txt_len = int(txt_shape[b, 0])
 
-                full = RoPEModule._get_axial_freqs(freqs, txt_len + f, h, w, freqs_for=freqs_for)
+                vid_freq = vid_freqs_full[txt_len : txt_len + f, :h, :w].reshape(-1, vid_freqs_full.shape[-1])
+                txt_freq = mx.tile(txt_freqs_1d[:txt_len], (1, rope_dim))
+
+                vid_freq_list.append(vid_freq)
+                txt_freq_list.append(txt_freq)
+        elif video_freqs_for == "pixel":
+            for b in range(vid_shape.shape[0]):
+                f, h, w = int(vid_shape[b, 0]), int(vid_shape[b, 1]), int(vid_shape[b, 2])
+                txt_len = int(txt_shape[b, 0])
+
+                full = RoPEModule._get_axial_freqs(video_freqs, txt_len + f, h, w, freqs_for=video_freqs_for)
                 vid_freq = full[txt_len : txt_len + f, :h, :w].reshape(-1, full.shape[-1])
-                txt_freq = RoPEModule._get_axial_freqs(freqs, txt_len, freqs_for=freqs_for)
+                txt_freq = RoPEModule._get_axial_freqs(text_freqs, txt_len, freqs_for=text_freqs_for)
                 txt_freq = mx.tile(txt_freq, (1, rope_dim))
 
                 vid_freq_list.append(vid_freq)
@@ -177,9 +214,13 @@ class RoPEModule(nn.Module):
             clamp_width = min(max_width + 4, 128)
 
             vid_freqs_full = RoPEModule._get_axial_freqs(
-                freqs, clamp_temporal, clamp_height, clamp_width, freqs_for=freqs_for
+                video_freqs, clamp_temporal, clamp_height, clamp_width, freqs_for=video_freqs_for
             )
-            txt_freqs_1d = RoPEModule._get_axial_freqs(freqs, min(max_txt_len + 16, 1024), freqs_for=freqs_for)
+            txt_freqs_1d = RoPEModule._get_axial_freqs(
+                text_freqs,
+                min(max_txt_len + 16, 1024),
+                freqs_for=text_freqs_for,
+            )
 
             for b in range(vid_shape.shape[0]):
                 f, h, w = int(vid_shape[b, 0]), int(vid_shape[b, 1]), int(vid_shape[b, 2])

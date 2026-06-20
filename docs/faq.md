@@ -322,6 +322,32 @@ The exact sidecar is injected automatically for that validated row. For the acce
 timings, and full example commands, see [Image Edit Capabilities](edit-capabilities.md) and
 [LoRA](lora.md).
 
+## How Is Qwen Masked Edit Different From ControlNet Inpaint?
+
+Today, MLX-Gen ships:
+
+- Qwen masked edit / inpaint on the Qwen edit route;
+- Qwen structured control on the base Qwen route.
+
+It does **not** ship base-Qwen control-inpaint yet.
+
+The practical difference is:
+
+- masked edit means “edit this existing image, but only inside the white mask”;
+- structured control means “generate from text, but use a guide image to lock the layout”;
+- control-inpaint means “still edit only one masked region, but use an extra control model to make
+  that local replacement more disciplined.”
+
+So control-inpaint is not mainly a new kind of prompt. It is a stricter backend for harder local
+edits.
+
+ControlNet is not a LoRA. It is an extra model package loaded beside the base model for one route.
+When MLX-Gen docs say “sidecar”, that is all they mean: an extra model package loaded alongside the
+main one.
+
+For the detailed route comparison, pros/cons, and the visual explainer sheet, see
+[Qwen localized editing](qwen-localized-editing.md).
+
 ## Which Qwen Image Edit Model Should I Use?
 
 Use the exact Qwen edit handle for the capability you need:
@@ -372,6 +398,40 @@ object remaining intact when the prompt asks for damage.
 Wan video models are different: when the negative prompt is omitted, MLX-Gen uses Wan's official
 default negative prompt. Pass `--negative ""` or `--negative-prompt ""` only when you intentionally
 want no negative prompt.
+
+FLUX.2 is different again: FLUX.2 Klein routes do not support negative prompts in MLX-Gen. Omit
+`--negative` / `--negative-prompt` entirely for FLUX.2 runs.
+
+## Should Integrations Call `mflux-generate-*` Commands Directly?
+
+No. New integrations should call the public `mlxgen` commands instead:
+
+- `mlxgen generate`
+- `mlxgen upscale`
+- `mlxgen capabilities`
+- `mlxgen validation`
+- `mlxgen download`
+- `mlxgen prepare`
+
+MLX-Gen still installs some `mflux-generate-*` compatibility entry points from the upstream
+codebase, but they are not the recommended integration contract for new tools.
+
+For example, a FLUX.2 integration should use:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-9b-8bit \
+  --prompt "A cinematic wide shot of a compact sci-fi spaceship resting in deep snow" \
+  --width 768 \
+  --height 432 \
+  --steps 24 \
+  --guidance 1.0 \
+  --seed 6107 \
+  --output spaceship.png
+```
+
+Do not call `mflux-generate-flux2` or `mflux-generate-flux2-edit` directly from a package unless
+you are deliberately targeting the legacy compatibility layer.
 
 ## How Does Image-To-Image Choose Output Size?
 
@@ -429,12 +489,65 @@ low-resolution artifacts and choose a target that materially increases pixel dim
 For noisy low-resolution sources, use `--softness 0.25` to `0.5` to smooth source grain before the
 diffusion reconstruction. `--softness 0.0` keeps the source conditioning most direct. Higher values
 temporarily downsample and re-enlarge the conditioning image, which can reduce grain or JPEG
-texture but can also soften fine details. SeedVR2 keeps small outputs untiled for image quality and
-automatically uses tiled VAE decode for large outputs. Use `--vae-tiling` when you also want tiled
-VAE encoding or the same tiled path for smaller outputs.
+texture but can also soften fine details. SeedVR2 keeps small image outputs untiled for quality and
+automatically uses tiled VAE decode for large image outputs. Use `--vae-tiling` when you also want
+tiled VAE encoding or the same tiled image path for smaller outputs. Video restore rejects
+`--vae-tiling`; use `--low-ram` and temporal chunking instead.
 
 See [Image Upscaling](upscaling.md) for a checked-in 5x SeedVR2 comparison where the original
 source is enlarged to the generated output resolution for side-by-side assessment.
+
+## Can SeedVR2 Restore Video?
+
+Yes, through `mlxgen upscale --video-path ...`.
+
+Use `--start-seconds` and `--max-frames` for short, reproducible validation clips before you try a
+longer source:
+
+```sh
+mlxgen upscale \
+  --model AbstractFramework/seedvr2-3b-8bit \
+  --video-path input.mp4 \
+  --start-seconds 16 \
+  --max-frames 6 \
+  --resolution 2x \
+  --softness 0.3 \
+  --metadata \
+  --output restored.mp4
+```
+
+Current behavior:
+
+- source FPS is preserved by default;
+- temporary SeedVR2 padding is trimmed back to the requested clip length before save;
+- output is currently a silent MP4, even when the source clip contains audio.
+- longer clips use sequential temporal chunking automatically instead of decoding the whole source
+  into memory at once;
+- the public Eiffel proof is now the full `97s` source clip, restored with official `3B` and `7B`
+  source models at `1x`, plus a sampled metric panel to catch muddy over-smoothing and temporal
+  drift.
+
+It is a better fit for visibly degraded, noisy, low-resolution, or compressed footage than for
+already-clean high-resolution footage. In local validation, archival material improved cleanly,
+while already-clean modern footage could over-smooth instead of improving.
+
+For long archival clips, start with:
+
+```sh
+mlxgen upscale \
+  --model ByteDance-Seed/SeedVR2-3B \
+  --video-path input.mp4 \
+  --resolution 1x \
+  --softness 0.0 \
+  --color-correction wavelet \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
+  --metadata \
+  --output restored.mp4
+```
+
+On the checked-in Eiffel proof, the 3B full run used materially less memory than 7B, while 7B
+scored slightly better on the sampled full-clip metric panel.
 
 ## Can SeedVR2 Use The Official ByteDance Checkpoint?
 

@@ -50,6 +50,7 @@ def test_generated_video_saves_mp4_and_metadata(tmp_path):
     assert metadata["guidance_2"] == 3.0
     assert metadata["flow_shift"] == 5.0
     assert metadata["solver"] == "euler"
+    assert metadata["video_path"] is None
     assert metadata["video_health"]["frames"]["frame_count"] == 3
     assert metadata["video_health"]["file"]["frame_count"] == 3
     assert metadata["video_health"]["file"]["width"] == 32
@@ -94,6 +95,32 @@ def test_generated_video_metadata_records_i2v_source_and_requested_dimensions():
     assert metadata["requested_height"] == 288
     assert metadata["source_image_width"] == 320
     assert metadata["source_image_height"] == 240
+
+
+def test_generated_video_metadata_records_video_source_path():
+    video = GeneratedVideo(
+        frames=[_solid_frame((255, 0, 0))],
+        fps=29.97,
+        model_config=ModelConfig.seedvr2_3b(),
+        seed=42,
+        prompt="",
+        steps=1,
+        guidance=1.0,
+        precision=mx.bfloat16,
+        quantization=8,
+        generation_time=0.5,
+        height=240,
+        width=320,
+        task="video-to-video",
+        video_path="source.mp4",
+        extra_metadata={"audio_copied": False},
+    )
+
+    metadata = video._get_metadata()
+
+    assert metadata["video_path"] == "source.mp4"
+    assert metadata["fps"] == 29.97
+    assert metadata["audio_copied"] is False
 
 
 def test_generated_video_records_lora_application_metadata():
@@ -251,6 +278,26 @@ def test_video_util_converts_decoded_latents_to_video(tmp_path):
     assert video.num_frames == 2
     assert video.first_frame().size == (16, 16)
     assert output_path.exists()
+
+
+def test_video_util_reads_bounded_clip(tmp_path):
+    output_path = tmp_path / "clip.mp4"
+    frames = [
+        _solid_frame((255, 0, 0)),
+        _solid_frame((0, 255, 0)),
+        _solid_frame((0, 0, 255)),
+        _solid_frame((255, 255, 0)),
+    ]
+    VideoUtil.save_video(frames=frames, path=output_path, fps=4)
+
+    clip = VideoUtil.read_video_clip(output_path, start_seconds=0.25, max_frames=2)
+
+    assert clip.source_width == 32
+    assert clip.source_height == 24
+    assert clip.clip_start_frame == 1
+    assert clip.clip_frame_count == 2
+    assert len(clip.frames) == 2
+    assert abs(clip.fps - 4.0) < 0.1
 
 
 @pytest.mark.parametrize("invalid_value", [np.nan, np.inf, -np.inf])

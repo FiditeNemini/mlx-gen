@@ -36,6 +36,7 @@ MODEL_CHOICES = [
     "seedvr2",
     "seedvr2-3b",
     "seedvr2-7b",
+    "seedvr2-7b-sharp",
     "wan2.2-ti2v-5b",
     "bonsai-image-ternary",
     "bonsai-image-binary",

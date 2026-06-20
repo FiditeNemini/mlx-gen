@@ -15,7 +15,7 @@ FLUX.2-dev support is added.
 The following uses the distilled 9B model to generate a photorealistic hummingbird image in a small number of steps:
 
 ```sh
-mflux-generate-flux2 \
+mlxgen generate \
   --model flux2-klein-9b \
   --prompt "Photorealistic close-up of a hummingbird hovering near red flowers, frozen wings, detailed feathers, soft green background bokeh, high shutter speed look." \
   --steps 4 \
@@ -31,7 +31,7 @@ Base (non-distilled) FLUX.2 models use more steps and allow guidance > 1.0:
 > Base (non-distilled) FLUX.2 Klein models are typically slower and worse for general image editing, but can be successfully used for training.
 
 ```sh
-mflux-generate-flux2 \
+mlxgen generate \
   --model flux2-klein-base-9b \
   --prompt "A red fox resting in fresh snow under soft winter light, detailed fur, gentle bokeh, natural color grading." \
   --steps 50 \
@@ -68,9 +68,10 @@ FLUX.2 supports image-conditioned editing with one or more reference images:
 *Example image from [Unsplash](https://unsplash.com/photos/shallow-focus-photography-of-woman-outdoor-during-day-rDEOVtE7vOs)*
 
 ```sh
-mflux-generate-flux2-edit \
+mlxgen generate \
   --model flux2-klein-9b \
-  --image-paths person.jpg glasses.jpg \
+  --image person.jpg \
+  --image glasses.jpg \
   --prompt "Make the woman wear the eyeglasses (regular glasses, not sunglasses)" \
   --steps 4 \
   --seed 42
@@ -98,6 +99,9 @@ image.save("flux2_edit.png")
 > Note: FLUX.2-klein-4B requires downloading the `black-forest-labs/FLUX.2-klein-4B` model weights (~15GB), and FLUX.2-klein-9B requires `black-forest-labs/FLUX.2-klein-9B` model weights (~32GB), or use quantization for smaller sizes.
 
 ## Notes
+- Use `mlxgen generate` for FLUX.2 integrations and automation. The package still installs
+  `mflux-generate-flux2` and `mflux-generate-flux2-edit` as compatibility entry points, but they
+  are not the recommended public integration surface.
 - FLUX.2 does not support `--negative-prompt`.
 - Distilled FLUX.2 variants use `--guidance 1.0`. Base variants support guidance values above `1.0`.
 - Supported distilled variants: `flux2-klein-4b` (default) and `flux2-klein-9b`. Distilled models run in fewer steps than base.

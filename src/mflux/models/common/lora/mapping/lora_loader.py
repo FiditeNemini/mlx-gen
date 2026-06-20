@@ -165,6 +165,23 @@ class LoRALoader:
             weights = dict(mx.load(resolved_path, return_metadata=True)[0].items())
         except (FileNotFoundError, ValueError, RuntimeError) as e:
             raise LoRAApplicationError(f"Failed to load LoRA file {resolved_path}: {e}") from e
+        
+        # Clean PEFT/Diffusers prefixes from weight keys
+        cleaned_weights = {}
+        for k, v in weights.items():
+            cleaned_key = k
+            for prefix in [
+                "base_model.model.model.",
+                "base_model.model.",
+                "lora_unet.",
+                "lora_transformer.",
+            ]:
+                if cleaned_key.startswith(prefix):
+                    cleaned_key = cleaned_key[len(prefix):]
+                    break
+            cleaned_weights[cleaned_key] = v
+        weights = cleaned_weights
+
         if state_dict_transform is not None:
             weights = state_dict_transform(weights, transformer)
 

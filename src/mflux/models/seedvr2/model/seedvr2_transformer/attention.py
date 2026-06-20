@@ -17,12 +17,16 @@ class MMAttention(nn.Module):
         qk_norm_eps: float = 1e-5,
         rope_dim: int = 128,
         rope_freqs_for: str = "lang",
+        text_rope_freqs_for: str | None = None,
         rope_on_text: bool = True,
+        text_attention_mode: str = "window_pool",
         shared_weights: bool = False,
         window: tuple[int, int, int] = (4, 3, 3),
         shift: bool = False,
     ):
         super().__init__()
+        if text_attention_mode != "window_pool":
+            raise ValueError(f"Unsupported SeedVR2 text attention mode: {text_attention_mode!r}")
         self.shared_weights = shared_weights
         self.heads = heads
         self.head_dim = head_dim
@@ -49,7 +53,7 @@ class MMAttention(nn.Module):
             self.norm_q_txt = RMSNorm(head_dim, eps=qk_norm_eps)
             self.norm_k_txt = RMSNorm(head_dim, eps=qk_norm_eps)
 
-        self.rope = RoPEModule(dim=rope_dim, freqs_for=rope_freqs_for)
+        self.rope = RoPEModule(dim=rope_dim, freqs_for=rope_freqs_for, text_freqs_for=text_rope_freqs_for)
 
     def __call__(self, vid, txt, vid_shape, txt_shape):
         B, L, Bt, Lt = vid.shape[0], vid.shape[1], txt.shape[0], txt.shape[1]
@@ -59,17 +63,21 @@ class MMAttention(nn.Module):
         qkv_txt = self.proj_qkv_txt(txt.reshape(-1, txt.shape[-1])).reshape(-1, 3, self.heads, self.head_dim)
 
         partitioner = WindowPartitioner(vid_shape, self.window, self.shift)
-        qkv_vid = partitioner.partition(qkv_vid)
-
-        # 2. Normalize and repeat text
-        q_vid, k_vid, v_vid = self.norm_q_vid(qkv_vid[:, 0]), self.norm_k_vid(qkv_vid[:, 1]), qkv_vid[:, 2]
-        q_txt, k_txt, v_txt = self.norm_q_txt(qkv_txt[:, 0]), self.norm_k_txt(qkv_txt[:, 1]), qkv_txt[:, 2]
+        q_vid_full = self.norm_q_vid(qkv_vid[:, 0])
+        k_vid_full = self.norm_k_vid(qkv_vid[:, 1])
+        v_vid_full = qkv_vid[:, 2]
+        q_txt = self.norm_q_txt(qkv_txt[:, 0])
+        k_txt = self.norm_k_txt(qkv_txt[:, 1])
+        v_txt = qkv_txt[:, 2]
 
         counts, txt_len = partitioner.window_counts, txt_shape[:, 0]
-        qkv_t_rep = self._repeat_text_for_windows(mx.stack([q_txt, k_txt, v_txt], axis=1), txt_len, counts)
-        q_txt_rep, k_txt_rep, v_txt_rep = qkv_t_rep[:, 0], qkv_t_rep[:, 1], qkv_t_rep[:, 2]
 
         # 3. Apply RoPE
+        q_vid = partitioner.partition(q_vid_full)
+        k_vid = partitioner.partition(k_vid_full)
+        v_vid = partitioner.partition(v_vid_full)
+        qkv_t_rep = self._repeat_text_for_windows(mx.stack([q_txt, k_txt, v_txt], axis=1), txt_len, counts)
+        q_txt_rep, k_txt_rep, v_txt_rep = qkv_t_rep[:, 0], qkv_t_rep[:, 1], qkv_t_rep[:, 2]
         if self.rope_on_text:
             q_vid, k_vid, q_txt_rep, k_txt_rep = self.rope(
                 vid_q=q_vid,
@@ -86,8 +94,47 @@ class MMAttention(nn.Module):
                 vid_shape=partitioner.window_shapes,
             )
 
-        # 4. Attention
-        vid_lens = mx.prod(partitioner.window_shapes, axis=1)
+        txt_out = self._window_pooled_text_attention(
+            q_txt_rep=q_txt_rep,
+            k_txt_rep=k_txt_rep,
+            v_txt_rep=v_txt_rep,
+            vid_lens=mx.prod(partitioner.window_shapes, axis=1),
+            txt_len=txt_len,
+            counts=counts,
+            q_vid=q_vid,
+            k_vid=k_vid,
+            v_vid=v_vid,
+        )
+        vid_out = self._windowed_video_attention(
+            q_txt_rep=q_txt_rep,
+            k_txt_rep=k_txt_rep,
+            v_txt_rep=v_txt_rep,
+            vid_lens=mx.prod(partitioner.window_shapes, axis=1),
+            txt_len=txt_len,
+            counts=counts,
+            q_vid=q_vid,
+            k_vid=k_vid,
+            v_vid=v_vid,
+        )
+
+        return (
+            self.proj_out_vid(partitioner.reverse(vid_out)).reshape(B, L, -1),
+            self.proj_out_txt(txt_out).reshape(Bt, Lt, -1),
+        )
+
+    def _windowed_video_attention(
+        self,
+        *,
+        q_txt_rep: mx.array,
+        k_txt_rep: mx.array,
+        v_txt_rep: mx.array,
+        vid_lens: mx.array,
+        txt_len: mx.array,
+        counts: list[int],
+        q_vid: mx.array,
+        k_vid: mx.array,
+        v_vid: mx.array,
+    ) -> mx.array:
         qkv = self._concat_with_text(
             mx.stack([q_vid, k_vid, v_vid], axis=1),
             mx.stack([q_txt_rep, k_txt_rep, v_txt_rep], axis=1),
@@ -105,14 +152,41 @@ class MMAttention(nn.Module):
             o = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
             out.append(o.transpose(0, 2, 1, 3).squeeze(0))
 
-        # 5. Coalesce and Project Out
-        out = mx.concatenate(out, axis=0).reshape(-1, self.heads * self.head_dim)
-        vid_out, txt_out = self._unconcat_and_coalesce(out, vid_lens, txt_len, counts)
+        return mx.concatenate(out, axis=0).reshape(-1, self.heads * self.head_dim)
 
-        return (
-            self.proj_out_vid(partitioner.reverse(vid_out)).reshape(B, L, -1),
-            self.proj_out_txt(txt_out).reshape(Bt, Lt, -1),
+    def _window_pooled_text_attention(
+        self,
+        *,
+        q_txt_rep: mx.array,
+        k_txt_rep: mx.array,
+        v_txt_rep: mx.array,
+        vid_lens: mx.array,
+        txt_len: mx.array,
+        counts: list[int],
+        q_vid: mx.array,
+        k_vid: mx.array,
+        v_vid: mx.array,
+    ) -> mx.array:
+        qkv = self._concat_with_text(
+            mx.stack([q_vid, k_vid, v_vid], axis=1),
+            mx.stack([q_txt_rep, k_txt_rep, v_txt_rep], axis=1),
+            vid_lens,
+            txt_len,
+            counts,
         )
+
+        win_lens = vid_lens + txt_len[mx.repeat(mx.arange(len(counts)), mx.array(counts))]
+        windows = mx.split(qkv, mx.cumsum(win_lens[:-1]).tolist())
+
+        out = []
+        for w in windows:
+            q, k, v = [x[None].transpose(0, 2, 1, 3) for x in [w[:, 0], w[:, 1], w[:, 2]]]
+            o = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
+            out.append(o.transpose(0, 2, 1, 3).squeeze(0))
+
+        combined = mx.concatenate(out, axis=0).reshape(-1, self.heads * self.head_dim)
+        _, txt_out = self._unconcat_and_coalesce(combined, vid_lens, txt_len, counts)
+        return txt_out
 
     @staticmethod
     def _repeat_text_for_windows(txt, txt_len, counts):

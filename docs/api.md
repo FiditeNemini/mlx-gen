@@ -15,7 +15,7 @@ The public workflows are:
 | Command | Purpose |
 | --- | --- |
 | `mlxgen generate` | Generate images or supported videos from a downloaded source model or MLX-Gen model package. Image input selects image-to-image or image-to-video when the model supports it. |
-| `mlxgen upscale` | Upscale and restore images with SeedVR2. |
+| `mlxgen upscale` | Upscale and restore images or video clips with SeedVR2. |
 | `mlxgen capabilities` | Inspect the public tasks, internal modes, and option support for a model without loading weights. |
 | `mlxgen validation` | Inspect generated-output and benchmark records for exact model/package rows. |
 | `mlxgen download` | Explicitly download model or LoRA files into the local cache. |
@@ -23,6 +23,11 @@ The public workflows are:
 
 The package also installs compatibility entry points from the mflux codebase. New workflows should
 prefer the `mlxgen` commands above when a matching command exists.
+
+That recommendation is especially important for application integrations that shell out to a
+subprocess. Use `mlxgen generate` instead of calling model-family commands such as
+`mflux-generate-flux2` or `mflux-generate-flux2-edit` directly. The unified `mlxgen` surface is
+the command contract that MLX-Gen documents, tests, and evolves for integrations.
 
 For a full copy/pasteable workflow that exercises T2I, I2I edit, multi-reference I2I, T2V A14B,
 and I2V A14B, see [Spaceship Snow Workflow](examples/spaceship-snow.md). For practical Wan size
@@ -101,6 +106,10 @@ its packed ternary runtime does not expose standard replaceable linear-module ta
 Most image and video backends accept a negative prompt. In the unified CLI,
 `--negative-prompt` and `--negative` are aliases. Python callers pass the same value as
 `negative_prompt=...` on the model-specific generation method.
+
+FLUX.2 is the important exception: FLUX.2 Klein routes do not accept `--negative-prompt`. Use the
+positive prompt to describe the target result and omit the negative prompt entirely for FLUX.2
+generation and FLUX.2 image-conditioned edit runs.
 
 Use `mlxgen validation` when you need exact release evidence for a model/package:
 
@@ -331,6 +340,9 @@ Qwen edit models, so true CFG remains enabled by default. Passing an explicit ne
 still useful for blocking concrete failure modes such as crop, blur, text, intact object state, or
 unwanted color.
 
+For FLUX.2 Klein, omit the negative prompt entirely. FLUX.2 routes do not support
+`--negative-prompt` in MLX-Gen.
+
 For Wan, omitting the option uses the model's official default negative prompt. Pass
 `--negative ""` or `--negative-prompt ""` to intentionally run without a negative prompt.
 
@@ -517,6 +529,17 @@ Common Wan video sizes:
 | T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` | Text-to-video only; image input is rejected. |
 | I2V-A14B | 16 px | Source-ratio canvas near `1280x720` or `720x1280` | Source-ratio canvas near `832x480`, `448x256`, or `432x240` | Requires one input image; output preserves the source image ratio at a nearby supported canvas. |
 
+Additional A14B target families that MLX-Gen accepts are useful when you want a different aspect
+ratio while staying on a 16-pixel multiple:
+
+- square: `240x240`, `480x480`, `720x720`, `960x960`, `1280x1280`, `1440x1440`
+- portrait targets: `240x480`, `480x832`, `720x1280`, `832x1104`, `1248x1648`, `1080x1920`
+- landscape targets: `480x240`, `832x480`, `1280x720`, `1104x832`, `1648x1248`, `1920x1080`
+
+For A14B, the official quality envelope still centers on `480P` and `720P`. For image-to-video,
+these are target size classes rather than exact guarantees because MLX-Gen preserves the source
+image ratio and resolves to the nearest supported canvas.
+
 The upstream TI2V-5B guidance is 1280x704 or 704x1280, 121 frames, 50 steps, 24 fps, and flow shift
 `5.0`. The upstream A14B guidance is 1280x720 or 720x1280, 81 frames, 40 steps, `--guidance 4`,
 optional `--guidance-2 3`, flow shift `3.0`, and 16 fps. Lower resolutions, frame counts, or step
@@ -546,8 +569,10 @@ recommended full-resolution, frame-count, and step-count settings for your targe
 
 ## SeedVR2 Upscale Command
 
-SeedVR2 image super-resolution uses `mlxgen upscale`. See [Image Upscaling](upscaling.md) for a
-reproducible 5x source/output comparison.
+SeedVR2 image and video restoration use `mlxgen upscale`. Short clips stay on the direct temporal
+path; longer clips are restored through sequential temporal chunking so MLX-Gen does not need to
+keep a full decoded clip in memory. See [Image Upscaling](upscaling.md) for a reproducible 5x
+image comparison and the validated full-length Eiffel video proofs.
 
 ```sh
 mlxgen upscale \
@@ -576,13 +601,31 @@ Useful options:
 
 | Option | Behavior |
 | --- | --- |
-| `--image-path` | One or more image files or directories. Directories are expanded to supported image files. |
+| `--image-path` | One or more image files or directories. Directories are expanded to supported image files. Mutually exclusive with `--video-path`. |
+| `--video-path` | One or more video files or directories. Directories are expanded to supported video files. Mutually exclusive with `--image-path`. |
 | `--resolution` | Integer shorter-edge target or scale factor such as `2x` or `3x`. Default: `384`. |
 | `--model` | Optional SeedVR2 model selector. Defaults to `seedvr2-3b`, the official `ByteDance-Seed/SeedVR2-3B` source model. Use `seedvr2-7b` for the official 7B source model, `AbstractFramework/seedvr2-3b-8bit`, `AbstractFramework/seedvr2-3b-4bit`, `AbstractFramework/seedvr2-7b-8bit`, `AbstractFramework/seedvr2-7b-4bit`, or a local path such as `./models/seedvr2-7b-8bit`. |
 | `--quantize` | Optional runtime quantization for source-model runs. Published q8/q4 packages do not need this flag. |
-| `--softness` | Optional input smoothing from `0.0` to `1.0`. `0.0` preserves the preprocessed source most directly. Higher values pre-downsample the conditioning image before reconstruction, which can suppress source grain/JPEG texture but can also soften fine details. Try `0.25` to `0.5` for noisy or compressed sources. |
-| `--vae-tiling` | Force tiled VAE encode/decode. By default, small outputs stay untiled and large outputs automatically use tiled VAE decode. |
+| `--softness` | Optional input smoothing from `0.0` to `1.0`. `0.0` preserves the preprocessed source most directly. Higher values pre-downsample the conditioning image before reconstruction, which can suppress source grain/JPEG texture but can also soften fine details or make a clip look muddy. Try `0.25` to `0.5` for noisy or compressed sources only after checking a short clip first. |
+| `--vae-tiling` | Force tiled VAE encode/decode for image runs. Video restore rejects this flag; use `--low-ram` and temporal chunking instead. |
+| `--color-correction` | Video restore color post-process. Current values: `wavelet`, `lab`, `off`. |
+| `--start-seconds` | For video inputs, skip frames before this source timestamp in seconds. |
+| `--max-frames` | For video inputs, decode at most this many frames after `--start-seconds`. |
+| `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. |
+| `--temporal-chunk-overlap` | For longer video inputs, overlap adjacent temporal chunks by this many frames before crossfading them. |
 | `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
+
+For video inputs:
+
+- SeedVR2 preserves the source FPS by default;
+- MLX-Gen trims temporary SeedVR2 padding frames back to the requested clip length before saving;
+- current output is always a silent MP4, even when the source clip contains audio;
+- once the requested clip exceeds the small direct path, MLX-Gen restores it through sequential
+  temporal chunking instead of decoding the whole clip into memory at once;
+- the public Eiffel proof in [upscaling.md](upscaling.md) compares official `3B` and `7B` full
+  source runs with sampled heuristic metrics that score sharpness gain, contrast gain, source
+  drift, and temporal stability after downscaling the restored clip back to the original source
+  resolution.
 
 ## Model Management Commands
 

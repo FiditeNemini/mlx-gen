@@ -8,7 +8,7 @@
 
 ## ADR status
 
-- Governing ADRs: [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md)
+- Governing ADRs: [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md), [ADR 0003](../../adr/0003_runtime_truth_vs_consumer_convenience.md)
 - ADR impact: May revise the generation capability contract. No new ADR is needed if LoRA remains
   task-specific capability metadata plus per-family adapter mappings. Escalate to an ADR only if
   MLX-Gen changes LoRA into a plugin/provider interface, stores adapters as a separate package
