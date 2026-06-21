@@ -72,14 +72,13 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     if forwarded_model is not None:
         normalized_argv.extend(["--model", forwarded_model])
     if route.control_model is not None:
-        explicit_control_model = _option_value(forwarded, "--controlnet-model")
-        if explicit_control_model is not None and explicit_control_model != route.control_model:
+        if args.requested_controlnet_model is not None and args.requested_controlnet_model != route.control_model:
             _parser().error(
-                "--controlnet-model conflicts with the exact structured-control row selected by mlxgen generate. "
-                "Use the documented control route, or call the backend command directly if you need a different "
+                "--controlnet-model conflicts with the exact ControlNet route selected by mlxgen generate. "
+                "Use the documented route, or call the backend command directly if you need a different "
                 "ControlNet package."
             )
-        if explicit_control_model is None:
+        if args.requested_controlnet_model is None:
             normalized_argv.extend(["--controlnet-model", route.control_model])
     if args.base_model is not None and _route_accepts_base_model(route):
         normalized_argv.extend(["--base-model", args.base_model])
@@ -140,12 +139,14 @@ def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     args.has_reframe = args.reframe_padding is not None
     args.has_lora = _has_lora_option(argv, metadata)
     args.lora_paths = _lora_paths_from_options(argv, metadata)
+    args.requested_controlnet_model = _option_value(argv, "--controlnet-model") or metadata.get("controlnet_model")
+    args.requested_controlnet_strength = _option_value(argv, "--controlnet-strength")
+    if args.requested_controlnet_strength is None and metadata.get("controlnet_strength") is not None:
+        args.requested_controlnet_strength = str(metadata["controlnet_strength"])
+    args.has_explicit_controlnet_model = args.requested_controlnet_model is not None
+    args.has_explicit_controlnet_strength = args.requested_controlnet_strength is not None
     if args.has_lora and _has_lora_scales_without_paths(argv, metadata):
         parser.error("--lora-scales requires --lora-paths.")
-    if _option_was_provided(argv, "--controlnet-model") and not args.has_control_image:
-        parser.error("--controlnet-model requires --controlnet-image-path.")
-    if _option_was_provided(argv, "--controlnet-strength") and not args.has_control_image:
-        parser.error("--controlnet-strength requires --controlnet-image-path.")
     if args.has_reframe and args.has_outpaint:
         parser.error("--reframe-padding and --outpaint-padding are different workflows and cannot be used together.")
     if args.model is None:
@@ -354,10 +355,14 @@ def _parser() -> argparse.ArgumentParser:
         epilog=(
             "Common generation options are forwarded to the selected backend, including --prompt, "
             "--prompt-file, --width, --height, --steps, --guidance, --seed, --auto-seeds, "
-            "--negative-prompt/--negative, --canvas-policy, --quantize, --lora-paths, --lora-scales, --metadata, "
-            "--config-from-metadata/-C, --output, --replace, --frames, --fps, --guidance-2, --flow-shift, "
-            "--reframe-padding, --outpaint-padding, --low-ram, --debug, --tensor-health-check-interval, "
-            "--failure-diagnostics, and --progress/--no-progress."
+            "--negative-prompt/--negative, --canvas-policy, --quantize, --lora-paths, --lora-scales, "
+            "--mask-path, --controlnet-image-path, --controlnet-strength, --metadata, "
+            "--config-from-metadata/-C, --output, --replace, --frames, --fps, --guidance-2, "
+            "--flow-shift, --reframe-padding, --outpaint-padding, --low-ram, --debug, "
+            "--tensor-health-check-interval, --failure-diagnostics, and --progress/--no-progress.\n\n"
+            "Use --mask-path for localized masked edit or inpaint on models that support masked edit or inpaint.\n"
+            "Use --controlnet-image-path for structured control on a text-to-image route; it is not the same as "
+            "source-image editing."
         ),
     )
     parser.add_argument("--model", "-m", type=str, help="Model alias, Hugging Face repo, or local model path.")
@@ -759,6 +764,7 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
     has_images = image_count > 0
     model_config = _model_config(args.model, base_model=args.base_model)
     plan = _resolve_generation_plan(args, image_count=image_count, model_config=model_config)
+    _validate_controlnet_route_options(args, plan=plan)
     _validate_lora_compatibility(args=args, model_config=model_config)
     _validate_family_override(args, model_config=model_config, plan=plan)
     return _route_for_plan(
@@ -767,6 +773,26 @@ def _resolve_route(args: argparse.Namespace, image_count: int) -> _Route:
         model_override=plan.model_override,
         control_model=plan.control_model,
     )
+
+
+def _validate_controlnet_route_options(args: argparse.Namespace, *, plan) -> None:
+    if not args.has_explicit_controlnet_model and not args.has_explicit_controlnet_strength:
+        return
+    if _plan_accepts_explicit_controlnet_options(plan):
+        return
+    if args.has_explicit_controlnet_model:
+        _parser().error(
+            "--controlnet-model is only supported on exact ControlNet routes selected by mlxgen generate. "
+            "Use --controlnet-image-path for structured control, or a validated masked control-inpaint row."
+        )
+    _parser().error(
+        "--controlnet-strength is only supported on exact ControlNet routes selected by mlxgen generate. "
+        "Use --controlnet-image-path for structured control, or a validated masked control-inpaint row."
+    )
+
+
+def _plan_accepts_explicit_controlnet_options(plan) -> bool:
+    return plan.capability_id in {"qwen.control", "qwen.control-inpaint"}
 
 
 def _validate_lora_compatibility(args: argparse.Namespace, model_config: ModelConfig | None) -> None:

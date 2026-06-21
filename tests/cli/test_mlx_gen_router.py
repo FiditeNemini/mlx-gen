@@ -23,7 +23,10 @@ def test_generate_help_renders_padding_examples(monkeypatch, capsys):
     help_output = capsys.readouterr().out
     assert "--reframe-padding" in help_output
     assert "--debug" in help_output
+    assert "--mask-path" in help_output
+    assert "--controlnet-image-path" in help_output
     assert "0,25%,0,25%" in help_output
+    assert "localized masked edit or inpaint" in help_output
 
 
 @pytest.mark.parametrize(
@@ -1124,7 +1127,37 @@ def test_mask_path_routes_qwen_edit_inpaint():
         ]
 
 
-def test_mask_path_is_rejected_for_qwen_base_route(capsys):
+def test_mask_path_routes_qwen_base_control_inpaint():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--image",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--prompt",
+            "repair the hull",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen"
+    assert invocation.argv == [
+        "mflux-generate-qwen",
+        "--model",
+        "AbstractFramework/qwen-image-8bit",
+        "--controlnet-model",
+        "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors",
+        "--image-path",
+        "input.png",
+        "--mask-path",
+        "mask.png",
+        "--prompt",
+        "repair the hull",
+    ]
+
+
+def test_mask_path_is_rejected_for_unvalidated_qwen_base_route(capsys):
     with pytest.raises(SystemExit):
         mlx_gen._resolve_invocation(
             [
@@ -1140,6 +1173,34 @@ def test_mask_path_is_rejected_for_qwen_base_route(capsys):
         )
 
     assert "mask-path is only supported" in capsys.readouterr().err
+
+
+def test_mask_path_routes_zimage_turbo_native_inpaint():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "z-image-turbo",
+            "--image",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--prompt",
+            "replace the broken sign",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-z-image-turbo"
+    assert invocation.argv == [
+        "mflux-generate-z-image-turbo",
+        "--model",
+        "z-image-turbo",
+        "--image-path",
+        "input.png",
+        "--mask-path",
+        "mask.png",
+        "--prompt",
+        "replace the broken sign",
+    ]
 
 
 def test_controlnet_image_routes_base_qwen_structured_control():
@@ -1187,7 +1248,7 @@ def test_controlnet_image_rejects_conflicting_exact_sidecar(capsys):
             ]
         )
 
-    assert "conflicts with the exact structured-control row selected by mlxgen generate" in capsys.readouterr().err
+    assert "conflicts with the exact ControlNet route selected by mlxgen generate" in capsys.readouterr().err
 
 
 def test_controlnet_image_is_rejected_for_qwen_edit_route(capsys):
@@ -1235,7 +1296,7 @@ def test_controlnet_model_requires_control_image(capsys):
             ]
         )
 
-    assert "controlnet-model requires --controlnet-image-path" in capsys.readouterr().err
+    assert "controlnet-model is only supported on exact ControlNet routes selected by mlxgen generate" in capsys.readouterr().err
 
 
 def test_controlnet_strength_requires_control_image(capsys):
@@ -1251,7 +1312,192 @@ def test_controlnet_strength_requires_control_image(capsys):
             ]
         )
 
-    assert "controlnet-strength requires --controlnet-image-path" in capsys.readouterr().err
+    assert (
+        "controlnet-strength is only supported on exact ControlNet routes selected by mlxgen generate"
+        in capsys.readouterr().err
+    )
+
+
+def test_controlnet_strength_routes_qwen_base_control_inpaint():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--image",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--controlnet-strength",
+            "0.4",
+            "--prompt",
+            "repair the hull",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen"
+    assert invocation.argv == [
+        "mflux-generate-qwen",
+        "--model",
+        "AbstractFramework/qwen-image-8bit",
+        "--controlnet-model",
+        "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors",
+        "--image-path",
+        "input.png",
+        "--mask-path",
+        "mask.png",
+        "--controlnet-strength",
+        "0.4",
+        "--prompt",
+        "repair the hull",
+    ]
+
+
+def test_controlnet_model_accepts_exact_qwen_base_control_inpaint_sidecar():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--image",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--controlnet-model",
+            "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors",
+            "--prompt",
+            "repair the hull",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen"
+    assert invocation.argv == [
+        "mflux-generate-qwen",
+        "--model",
+        "AbstractFramework/qwen-image-8bit",
+        "--image-path",
+        "input.png",
+        "--mask-path",
+        "mask.png",
+        "--controlnet-model",
+        "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors",
+        "--prompt",
+        "repair the hull",
+    ]
+
+
+def test_controlnet_model_rejects_conflicting_qwen_base_control_inpaint_sidecar(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-8bit",
+                "--image",
+                "input.png",
+                "--mask-path",
+                "mask.png",
+                "--controlnet-model",
+                "other/repo:model.safetensors",
+                "--prompt",
+                "repair the hull",
+            ]
+        )
+
+    assert "conflicts with the exact ControlNet route selected by mlxgen generate" in capsys.readouterr().err
+
+
+def test_controlnet_strength_is_rejected_for_zimage_native_inpaint(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "z-image-turbo",
+                "--image",
+                "input.png",
+                "--mask-path",
+                "mask.png",
+                "--controlnet-strength",
+                "0.4",
+                "--prompt",
+                "repair the hull",
+            ]
+        )
+
+    assert (
+        "controlnet-strength is only supported on exact ControlNet routes selected by mlxgen generate"
+        in capsys.readouterr().err
+    )
+
+
+def test_controlnet_strength_routes_qwen_base_control_inpaint_from_metadata(tmp_path):
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "AbstractFramework/qwen-image-8bit",
+                "image_path": "input.png",
+                "mask_path": "mask.png",
+                "controlnet_strength": 0.4,
+                "prompt": "repair the hull",
+            }
+        )
+    )
+
+    invocation = mlx_gen._resolve_invocation(["--config-from-metadata", str(metadata_path)])
+
+    assert invocation.target_name == "mflux-generate-qwen"
+    assert invocation.argv == [
+        "mflux-generate-qwen",
+        "--model",
+        "AbstractFramework/qwen-image-8bit",
+        "--controlnet-model",
+        "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors",
+        "--image-path",
+        "input.png",
+        "--config-from-metadata",
+        str(metadata_path),
+    ]
+
+
+def test_controlnet_model_rejects_conflicting_qwen_base_control_inpaint_sidecar_from_metadata(tmp_path, capsys):
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "AbstractFramework/qwen-image-8bit",
+                "image_path": "input.png",
+                "mask_path": "mask.png",
+                "controlnet_model": "other/repo:model.safetensors",
+                "prompt": "repair the hull",
+            }
+        )
+    )
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(["--config-from-metadata", str(metadata_path)])
+
+    assert "conflicts with the exact ControlNet route selected by mlxgen generate" in capsys.readouterr().err
+
+
+def test_controlnet_strength_is_rejected_for_non_control_route_from_metadata(tmp_path, capsys):
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+                "image_path": "input.png",
+                "mask_path": "mask.png",
+                "controlnet_strength": 0.4,
+                "prompt": "repair the hull",
+            }
+        )
+    )
+
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(["--config-from-metadata", str(metadata_path)])
+
+    assert (
+        "controlnet-strength is only supported on exact ControlNet routes selected by mlxgen generate"
+        in capsys.readouterr().err
+    )
 
 
 def test_qwen_backend_controlnet_model_requires_control_image(monkeypatch, capsys):
@@ -1304,6 +1550,257 @@ def test_qwen_backend_rejects_unvalidated_control_model_identity(monkeypatch, ca
         qwen_image_generate.main()
 
     assert "controlnet-image-path is only supported" in capsys.readouterr().err
+
+
+def test_qwen_backend_forwards_mask_path_to_control_inpaint(monkeypatch, tmp_path):
+    from mflux.models.qwen.cli import qwen_image_generate
+
+    source = tmp_path / "source.png"
+    mask = tmp_path / "mask.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    Image.new("L", (12, 8), color=255).save(mask)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self):
+            self.image = Image.new("RGB", (12, 8), color=(0, 255, 0))
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeQwenControlNet:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_generate, "QwenImageControlNet", FakeQwenControlNet)
+    monkeypatch.setattr(qwen_image_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen",
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--image-path",
+            str(source),
+            "--mask-path",
+            str(mask),
+            "--prompt",
+            "repair the cockpit",
+            "--output",
+            str(output),
+        ],
+    )
+
+    qwen_image_generate.main()
+
+    assert observed["init"]["controlnet_model"] == (
+        "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
+    )
+    assert observed["generate"]["image_path"] == source
+    assert observed["generate"]["mask_path"] == mask
+    assert observed["generate"]["controlnet_image_path"] is None
+
+
+def test_qwen_backend_forwards_controlnet_strength_to_control_inpaint(monkeypatch, tmp_path):
+    from mflux.models.qwen.cli import qwen_image_generate
+
+    source = tmp_path / "source.png"
+    mask = tmp_path / "mask.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    Image.new("L", (12, 8), color=255).save(mask)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self):
+            self.image = Image.new("RGB", (12, 8), color=(0, 255, 0))
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeQwenControlNet:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(qwen_image_generate, "QwenImageControlNet", FakeQwenControlNet)
+    monkeypatch.setattr(qwen_image_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen",
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--image-path",
+            str(source),
+            "--mask-path",
+            str(mask),
+            "--controlnet-strength",
+            "0.4",
+            "--prompt",
+            "repair the cockpit",
+            "--output",
+            str(output),
+        ],
+    )
+
+    qwen_image_generate.main()
+
+    assert observed["generate"]["controlnet_strength"] == 0.4
+
+
+def test_qwen_backend_rejects_mask_with_image_strength(monkeypatch, capsys):
+    from mflux.models.qwen.cli import qwen_image_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-qwen",
+            "--model",
+            "AbstractFramework/qwen-image-8bit",
+            "--image-path",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--image-strength",
+            "0.4",
+            "--prompt",
+            "repair the cockpit",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        qwen_image_generate.main()
+
+    assert "cannot be combined with --mask-path" in capsys.readouterr().err
+
+
+def test_z_image_turbo_backend_forwards_mask_path(monkeypatch, tmp_path):
+    from mflux.models.z_image.cli import z_image_turbo_generate
+
+    source = tmp_path / "source.png"
+    mask = tmp_path / "mask.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(20, 40, 60)).save(source)
+    Image.new("L", (12, 8), color=255).save(mask)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self):
+            self.image = Image.new("RGB", (12, 8), color=(0, 255, 0))
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeZImage:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(z_image_turbo_generate, "ZImage", FakeZImage)
+    monkeypatch.setattr(z_image_turbo_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-z-image-turbo",
+            "--model",
+            "z-image-turbo",
+            "--image-path",
+            str(source),
+            "--mask-path",
+            str(mask),
+            "--prompt",
+            "replace the broken sign",
+            "--output",
+            str(output),
+        ],
+    )
+
+    z_image_turbo_generate.main()
+
+    assert observed["generate"]["image_path"] == source
+    assert observed["generate"]["mask_path"] == mask
+
+
+def test_z_image_backend_rejects_mask_path_on_non_turbo_before_model_init(monkeypatch, capsys):
+    from mflux.models.z_image.cli import z_image_generate
+    observed = {}
+
+    class FakeZImage:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+    monkeypatch.setattr(
+        z_image_generate,
+        "ZImage",
+        FakeZImage,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-z-image",
+            "--model",
+            "z-image",
+            "--image-path",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--prompt",
+            "repair the sign",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        z_image_generate.main()
+
+    assert "unrecognized arguments: --mask-path mask.png" in capsys.readouterr().err
+    assert "init" not in observed
+
+
+def test_z_image_turbo_backend_rejects_mask_with_image_strength(monkeypatch, capsys):
+    from mflux.models.z_image.cli import z_image_turbo_generate
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-z-image-turbo",
+            "--model",
+            "z-image-turbo",
+            "--image-path",
+            "input.png",
+            "--mask-path",
+            "mask.png",
+            "--image-strength",
+            "0.6",
+            "--prompt",
+            "replace the broken sign",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        z_image_turbo_generate.main()
+
+    assert "cannot be combined with --mask-path" in capsys.readouterr().err
 
 
 def test_outpaint_padding_routes_flux2_edit():

@@ -10,6 +10,7 @@ from mflux.lora_validation_registry import (
     QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
     QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
     QWEN_EDIT_Q8_GHIBLI_PROFILE_ID,
+    QWEN_Q8_CONTROL_INPAINT_LIGHTNING_PROFILE_ID,
     QWEN_Q8_CONTROL_LIGHTNING_PROFILE_ID,
     WAN_A14B_Q8_FOLLOWCAM_T2V_PROFILE_ID,
     WAN_A14B_Q8_LIGHTX2V_4STEP_I2V_PROFILE_ID,
@@ -52,6 +53,9 @@ WAN_LORA_VALIDATION_DIR = "docs/assets/validation/wan-lora-2026-06-11"
 LIGHTX2V_WAN_4STEP_VALIDATION_DIR = "docs/assets/validation/lightx2v-wan-4step-2026-06-12"
 QWEN_INPAINT_VALIDATION_DIR = "docs/assets/validation/qwen-inpaint-2026-06-15"
 QWEN_CONTROL_VALIDATION_DIR = "docs/assets/validation/qwen-control-2026-06-15"
+QWEN_CONTROL_INPAINT_VALIDATION_DIR = "docs/assets/validation/qwen-control-inpaint-2026-06-21"
+ZIMAGE_INPAINT_VALIDATION_DIR = "docs/assets/validation/zimage-inpaint-2026-06-21"
+ZIMAGE_INPAINT_PROFILE_ID = "zimage_inpaint_2026_06_21"
 
 
 @dataclass(frozen=True)
@@ -166,6 +170,7 @@ def list_validation_profiles() -> tuple[ValidationProfile, ...]:
         _i2i_edit_profile(),
         _reframe_outpaint_profile(),
         _flux2_klein_base_starship_profile(),
+        _zimage_inpaint_profile(),
         *_lora_profiles(),
     )
 
@@ -314,6 +319,37 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
             title="Qwen Image q8 Structured Control Lightning Validation",
             canonical_source="InstantX/Qwen-Image-ControlNet-Union:conds/canny.png",
             description="Exact structured-control LoRA proof for the base Qwen Image q8 route.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN_Q8_CONTROL_INPAINT_LIGHTNING_PROFILE_ID,
+                model="AbstractFramework/qwen-image-8bit",
+                family="Qwen Image",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{QWEN_CONTROL_INPAINT_VALIDATION_DIR}/qwen_control_inpaint_contact_sheet.png",
+                source_images=(
+                    "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+                    "docs/assets/examples/spaceship-snow/03_i2i_crash_snow.png",
+                ),
+                prompt=(
+                    "Two-condition base-Qwen control-inpaint proof. Condition A intensifies the masked engine area "
+                    "into brighter plasma thrusters. Condition B repairs the masked hull and cockpit while keeping "
+                    "the rest of the crash scene stable. Both rows keep the same source, mask, prompt, seed, and "
+                    "Qwen Lightning adapter between the existing masked-edit comparison and the new base-Qwen route."
+                ),
+                reviewer_notes=(
+                    "PASS on the 2026-06-21 base-Qwen control-inpaint proof. The accepted row uses the exact "
+                    "InstantX inpainting ControlNet sidecar with lightx2v/Qwen-Image-Lightning on the prepared q8 "
+                    "base package. The published sheet shows acceptable localized engine and repair edits on the "
+                    "same source/mask pairs used for the existing Qwen edit masked route."
+                ),
+                evidence_date="2026-06-21",
+            ),
+            title="Qwen Image q8 Control-Inpaint Lightning Validation",
+            canonical_source="docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+            description="Exact base-Qwen control-inpaint LoRA proof for the prepared q8 route.",
         ),
         _single_record_profile(
             _lora_record(
@@ -617,6 +653,45 @@ def _lora_record(
         prompt=prompt,
         reviewer_notes=reviewer_notes,
         evidence_date=evidence_date,
+    )
+
+
+def _zimage_inpaint_profile() -> ValidationProfile:
+    return ValidationProfile(
+        id=ZIMAGE_INPAINT_PROFILE_ID,
+        title="Z-Image Turbo q8 Native Inpaint Validation",
+        canonical_source="docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+        description=(
+            "Manual visual QA for the first narrow Z-Image Turbo native inpaint proof. The public validation "
+            "surface compares the accepted masked engine edit against a same-prompt same-seed latent img2img "
+            "baseline so the route difference is visible."
+        ),
+        records=(
+            ValidationRecord(
+                profile_id=ZIMAGE_INPAINT_PROFILE_ID,
+                model="AbstractFramework/z-image-turbo-8bit",
+                family="Z-Image Turbo",
+                package_variant="q8 prepared",
+                step="ENGINE",
+                step_label="engine localized inpaint",
+                public_task="image-to-image",
+                mode="edit-reference",
+                status=STATUS_PASS,
+                artifact_path=f"{ZIMAGE_INPAINT_VALIDATION_DIR}/zimage_inpaint_contact_sheet.png",
+                source_images=("docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",),
+                prompt=(
+                    "Keep the same silver spaceship, icy canyon, and sunrise lighting. Only inside the masked "
+                    "engine area, intensify both blue engines into brighter plasma thrusters, add dense blue "
+                    "glow and snow vapor around the thrusters, and preserve the rest of the image unchanged."
+                ),
+                reviewer_notes=(
+                    "PASS on the 2026-06-21 narrow native-inpaint proof. The accepted public row is the exact "
+                    "AbstractFramework/z-image-turbo-8bit package on the engine mask example, with a published "
+                    "same-prompt same-seed latent baseline and a masked-area crop sheet."
+                ),
+                evidence_date="2026-06-21",
+            ),
+        ),
     )
 
 

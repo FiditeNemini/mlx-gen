@@ -88,6 +88,24 @@ inpainting is not a LoRA, not a replacement base model, and not universally "bet
 extra model package loaded alongside the base Qwen model when stronger locality and boundary
 discipline matter more than minimal setup.
 
+Update 2026-06-21 (base-Qwen control-inpaint): the next narrow slice is now implemented and
+proven. `mlxgen generate` accepts `--image + --mask-path` on the exact
+`AbstractFramework/qwen-image-8bit` q8 row, routes the request to `qwen.control-inpaint`, injects
+the exact `InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors`
+sidecar, and publishes a same-source same-mask same-seed Lightning proof bundle. The accepted
+public sheet compares the new base-Qwen route against the existing Qwen Edit 2511 masked route on
+localized engine enhancement and localized crash repair. The unified `mlxgen generate --help`
+surface now also names `--mask-path` and `--controlnet-image-path` directly so the route is easier
+to discover without backend-specific help.
+
+Maintenance update on the accepted route:
+
+- the exact public `guidance=1` Lightning proof path now skips inactive negative-prompt work,
+  records only the effective negative-prompt metadata, and invalidates cached source/mask
+  conditions when those files change in place;
+- the accepted engine and repair proof rows are still visually stable, and the current M5 Max
+  timings for the published rows are `17.29s` / `24.65s` and `17.74s` / `23.86s` generation / wall.
+
 ## Current code reality
 
 - MLX-Gen has Qwen text-to-image and image-edit variants under `src/mflux/models/qwen/`.
@@ -118,6 +136,15 @@ discipline matter more than minimal setup.
 - The structured-control route is fail-closed at the public contract layer: the unified router
   injects the exact `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
   sidecar, and conflicting `--controlnet-model` values are rejected.
+- MLX-Gen now also exposes one exact control-inpaint route through `mlxgen generate`:
+  `AbstractFramework/qwen-image-8bit` on `qwen.control-inpaint` with `--image + --mask-path`.
+- The control-inpaint route is also fail-closed at the public contract layer: the unified router
+  injects the exact `InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors`
+  sidecar, rejects conflicting `--controlnet-model` values, and keeps the generic user request
+  shape instead of introducing a Qwen-only public flag.
+- The public docs now include an explicit Qwen localized-editing route matrix covering the shipped
+  `qwen.inpaint`, `qwen.control`, and `qwen.control-inpaint` rows, their exact request shapes, and
+  their accepted proof sheets.
 - Non-validated base-Qwen rows do not advertise `qwen.control`; the accepted public control slice
   is the prepared q8 route only.
 - There is legacy mask/control plumbing in the inherited FLUX.1 command surface, but it is not
@@ -131,7 +158,7 @@ Qwen edit modes that users naturally expect once they can edit images:
 
 - inpainting and masked edit;
 - structured control on the exact prepared q8 base route;
-- control-inpaint and edit-plus / multi-image behavior;
+- edit-plus / multi-image behavior;
 - layered composition;
 - broader structured control and ControlNet-inpaint with depth, edge, pose, sketch, and related
   condition maps after the first exact slice;
@@ -222,8 +249,9 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 - A clear Qwen feature matrix with implemented vs unsupported rows.
 - At least one validated masked-edit Qwen route with public proof artifacts.
 - At least one validated structured-control Qwen route with public proof artifacts.
+- At least one validated base-Qwen control-inpaint route with public proof artifacts.
 - A public-facing explanation that distinguishes shipped masked edit, shipped structured control,
-  and planned control-inpaint without overstating support.
+  and shipped base-Qwen control-inpaint without overstating broader support.
 - Capability output and docs that tell AbstractVision exactly when Qwen can expose control/mask
   inputs.
 
@@ -237,12 +265,14 @@ on non-commercial FLUX.1 Kontext for high-quality local editing.
 
 ## Progress checklist
 
-- [ ] Write the Qwen feature matrix against local Diffusers pipelines.
+- [x] Write the Qwen feature matrix against local Diffusers pipelines.
 - [x] Decide the first public Qwen control target and its proof weights.
 - [x] Implement strict route selection and capability surfacing for that target.
 - [x] Validate the first q8 masked-edit proof row with visible contact sheets and a no-mask control.
 - [x] Validate the first q8 structured-control proof row with visible same-seed no-control vs control contact sheets.
 - [x] Decide the next narrow Qwen parity slice after masked edit and structured control: base-Qwen control-inpaint with the exact InstantX inpainting sidecar.
+- [x] Implement strict base-Qwen control-inpaint routing on the exact prepared q8 row.
+- [x] Validate the first q8 base-Qwen control-inpaint proof row with visible contact sheets and accepted public artifacts.
 
 ## Guidance for the implementing agent
 

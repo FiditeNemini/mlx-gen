@@ -43,8 +43,10 @@ The main capabilities are:
 - text-to-image generation with Qwen Image, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image,
   FIBO, and their optimized quantized variants where available;
 - image-to-image modes, including latent img2img, instruction/reference edits, multi-reference
-  edits, masked edit/inpaint where the selected model supports `--mask-path`, Qwen structured
-  control where the selected model supports `--controlnet-image-path`, and experimental
+  edits, masked edit/inpaint where the selected model supports `--mask-path`, base-Qwen
+  control-inpaint on the exact validated `AbstractFramework/qwen-image-8bit` row, Qwen structured
+  control where the selected model supports `--controlnet-image-path`, Z-Image Turbo native
+  inpaint on the exact validated `AbstractFramework/z-image-turbo-8bit` row, and experimental
   reframe/outpaint workflows where the selected model supports them;
 - Wan2.2 text-to-video and image-to-video, including TI2V-5B BF16/q8 packages plus A14B
   T2V/I2V BF16 and mixed q8/BF16 packages; Wan I2V resolves output size from the source
@@ -58,16 +60,16 @@ The main capabilities are:
 - JSON model capability inspection before starting a heavy run;
 - experimental LoRA routing and strict adapter application checks, with model-card compatibility
   preflight when cached adapter metadata is available and exact q8 proof rows for Qwen Image Edit
-  original/2509/2511, Qwen Image 2512, the base Qwen Image q8 structured-control row, Z-Image
-  Turbo, FLUX.2 Klein 9B edit, ERNIE Image Turbo text-to-image, and all current Wan q8 video
-  routes; the LoRA guide now includes the documented `720p` Wan q8-vs-BF16 LightX2V keyframe
-  comparison, readable `41`-frame M5 Max progress matrices, same-seed no-LoRA-versus-Lightning
-  A/B sheets, a `240p`-versus-`480p` T2V sweep, time/RSS tables for T2V and I2V, a Qwen Image
-  Edit 2511 q8 masked-edit proof using the dedicated Lightning adapter, and the exact base Qwen
-  q8 structured-control proof using the InstantX union ControlNet sidecar plus Qwen Lightning.
-  Those Lightning examples are documented against MLX-Gen q8 packages, not arbitrary external FP8
-  checkpoints. Base Qwen Image text generation remains experimental, and Bonsai LoRA stays
-  fail-closed;
+  original/2509/2511, Qwen Image 2512, the base Qwen Image q8 structured-control row, the base
+  Qwen Image q8 control-inpaint row, Z-Image Turbo, FLUX.2 Klein 9B edit, ERNIE Image Turbo
+  text-to-image, and all current Wan q8 video routes; the LoRA guide now includes the documented
+  `720p` Wan q8-vs-BF16 LightX2V keyframe comparison, readable `41`-frame M5 Max progress
+  matrices, same-seed no-LoRA-versus-Lightning A/B sheets, a `240p`-versus-`480p` T2V sweep,
+  time/RSS tables for T2V and I2V, a Qwen Image Edit 2511 q8 masked-edit proof using the
+  dedicated Lightning adapter, and the exact base Qwen q8 structured-control plus
+  control-inpaint proofs using the InstantX sidecars plus Qwen Lightning. Those Lightning examples
+  are documented against MLX-Gen q8 packages, not arbitrary external FP8 checkpoints. Base Qwen
+  Image text generation remains experimental, and Bonsai LoRA stays fail-closed;
 - shared progress events for applications embedding MLX-Gen.
 
 Use `mlxgen capabilities --model ...` before long image-edit runs. Capability output describes the
@@ -230,8 +232,9 @@ included assets.
 For current image-edit contact sheets, command logs, and model/package status across Qwen Image
 Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I models, see
 [docs/edit-capabilities.md](docs/edit-capabilities.md).
-That guide now also includes the exact base Qwen q8 structured-control proof route and its
-accepted contact sheet.
+That guide now also includes the exact base Qwen q8 structured-control proof route, the exact
+base Qwen q8 control-inpaint proof route, and the exact Z-Image Turbo q8 native-inpaint proof
+route.
 For a plain-language guide to latent img2img, instruction edit, masked edit/inpaint, multi-reference composition,
 Qwen structured control, generative reframe, and outpaint, see
 [docs/image-edit-modes.md](docs/image-edit-modes.md).

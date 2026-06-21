@@ -20,6 +20,12 @@ def main():
     parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_image_to_image_arguments(required=False)
+    parser.add_mask_path_argument(
+        help_text=(
+            "Optional mask image path for the exact base-Qwen control-inpaint route. White pixels are repainted and "
+            "black pixels are preserved."
+        ),
+    )
     parser.add_controlnet_arguments()
     parser.add_output_arguments()
     args = parser.parse_args()
@@ -29,18 +35,45 @@ def main():
         args.scheduler = "flow_match_euler_discrete"
     if args.guidance is None:
         args.guidance = ui_defaults.GUIDANCE_SCALE
-    if args.controlnet_model is not None and args.controlnet_image_path is None:
-        parser.error("--controlnet-model requires --controlnet-image-path.")
+    if args.controlnet_model is not None and args.controlnet_image_path is None and args.mask_path is None:
+        parser.error("--controlnet-model requires --controlnet-image-path or --mask-path.")
 
     # 1. Load the model
     model_config = ModelConfig.from_name(model_name=args.model or "qwen-image", base_model=args.base_model)
-    if args.controlnet_image_path is not None:
+    if args.mask_path is not None:
+        if args.image_path is None:
+            parser.error("--mask-path requires --image-path.")
+        if args.image_strength is not None:
+            parser.error("--image-strength cannot be combined with --mask-path; base-Qwen control-inpaint is a separate route.")
+        if args.controlnet_image_path is not None:
+            parser.error("--mask-path cannot be combined with --controlnet-image-path on the base-Qwen control-inpaint route.")
+        try:
+            plan = resolve_generation_plan(
+                model=args.model,
+                model_config=model_config,
+                image_count=1,
+                has_mask=True,
+            )
+        except TaskInferenceError as exc:
+            parser.error(str(exc))
+        if args.controlnet_model is not None and args.controlnet_model != plan.control_model:
+            parser.error(
+                "--controlnet-model conflicts with the exact base-Qwen control-inpaint row. "
+                "Use the documented route, or call a different backend explicitly if you need another ControlNet package."
+            )
+        qwen = QwenImageControlNet(
+            controlnet_model=args.controlnet_model or plan.control_model,
+            model_config=model_config,
+            quantize=args.quantize,
+            model_path=args.model_path,
+            lora_paths=args.lora_paths,
+            lora_scales=args.lora_scales,
+        )
+    elif args.controlnet_image_path is not None:
         if args.image_path is not None:
             parser.error("--controlnet-image-path cannot be combined with --image-path or latent image-to-image mode.")
-        if args.controlnet_model is None:
-            parser.error("--controlnet-model is required when --controlnet-image-path is used.")
         try:
-            resolve_generation_plan(
+            plan = resolve_generation_plan(
                 model=args.model,
                 model_config=model_config,
                 image_count=0,
@@ -48,8 +81,13 @@ def main():
             )
         except TaskInferenceError as exc:
             parser.error(str(exc))
+        if args.controlnet_model is not None and args.controlnet_model != plan.control_model:
+            parser.error(
+                "--controlnet-model conflicts with the exact structured-control row selected by this backend. "
+                "Use the documented route, or call a different backend explicitly if you need another ControlNet package."
+            )
         qwen = QwenImageControlNet(
-            controlnet_model=args.controlnet_model,
+            controlnet_model=args.controlnet_model or plan.control_model,
             model_config=model_config,
             quantize=args.quantize,
             model_path=args.model_path,
@@ -75,7 +113,7 @@ def main():
     try:
         for seed in args.seed:
             # 3. Generate an image for each seed value
-            if args.controlnet_image_path is not None:
+            if args.controlnet_image_path is not None or args.mask_path is not None:
                 image = qwen.generate_image(
                     seed=seed,
                     prompt=PromptUtil.read_prompt(args),
@@ -87,6 +125,9 @@ def main():
                     controlnet_image_path=args.controlnet_image_path,
                     controlnet_strength=args.controlnet_strength,
                     num_inference_steps=args.steps,
+                    image_path=args.image_path,
+                    mask_path=args.mask_path,
+                    canvas_policy=args.canvas_policy,
                 )
             else:
                 image = qwen.generate_image(

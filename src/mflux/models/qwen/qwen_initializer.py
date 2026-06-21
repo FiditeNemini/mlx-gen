@@ -120,6 +120,7 @@ class QwenImageInitializer:
     @staticmethod
     def _init_config(model, model_config: ModelConfig) -> None:
         model.prompt_cache = {}
+        model.controlnet_condition_cache = {}
         model.model_config = model_config
         model.callbacks = CallbackRegistry()
         model.tiling_config = None

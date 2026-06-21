@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.22] - 2026-06-22
+
+### Added
+
+- **Qwen base control-inpaint proof**: add the first exact `qwen.control-inpaint` public row on
+  `AbstractFramework/qwen-image-8bit`, inject the exact
+  `InstantX/Qwen-Image-ControlNet-Inpainting` sidecar through unified `mlxgen generate`, validate
+  the route with two same-source same-mask same-seed q8 Lightning rows, and publish a dedicated
+  contact sheet, command log, and M5 Max timings.
+- **Z-Image Turbo native inpaint proof**: add the first exact `z-image.inpaint` public row on
+  `AbstractFramework/z-image-turbo-8bit`, validate it with a same-prompt same-seed engine-thruster
+  comparison against the old latent route, and publish a full-sheet plus masked-area crop proof.
+
+### Changed
+
+- **Masked-route docs and help**: document the new base-Qwen control-inpaint and Z-Image Turbo
+  native-inpaint routes across the README, API reference, image-edit capability guide, FAQ,
+  Qwen localized-edit guide, and top-level `mlxgen generate --help`, so `--mask-path` now
+  describes the current shipped route surface instead of the earlier planned-only state.
+- **Qwen and Z-Image masked-route runtime**: tighten the shipped localized-edit routes without
+  expanding the public API. Base-Qwen control-inpaint now skips inactive negative-prompt work on
+  the exact `guidance=1` Lightning proof path and records only the effective negative prompt in
+  metadata. Base-Qwen and Z-Image native inpaint now also invalidate cached source/mask conditions
+  when those files change in place. The published proof bundles were refreshed with the accepted
+  current timings: Qwen control-inpaint engine/repair at `17.29s` / `24.65s` and `17.74s` /
+  `23.86s`, and Z-Image Turbo native inpaint at `21.00s` / `26.86s` on the documented M5 Max
+  proof rows.
+- **Secondary CLI contract alignment**: unified `mlxgen generate` now forwards
+  `--controlnet-strength` to the exact base-Qwen `qwen.control-inpaint` route and accepts an
+  explicit `--controlnet-model` only when it matches the validated inpainting sidecar. The direct
+  non-turbo `mflux-generate-z-image` command no longer advertises `--mask-path`; native
+  `z-image.inpaint` remains the Turbo-only public masked route.
+
 ## [0.18.21] - 2026-06-21
 
 ### Changed

@@ -11,9 +11,9 @@ outside chat history.
 
 | State | Count |
 | --- | ---: |
-| Planned | 14 |
+| Planned | 13 |
 | Proposed | 12 |
-| Completed | 21 |
+| Completed | 22 |
 | Deprecated | 1 |
 | Recurrent | 1 |
 
@@ -21,81 +21,72 @@ outside chat history.
 
 1. Continue
    [Qwen edit parity expansion](planned/0008_qwen_edit_parity_expansion.md) from the new masked
-   edit and structured-control baselines. The first narrow public slices are now in place:
-   `--mask-path` routes to `qwen.inpaint` on the validated
-   `AbstractFramework/qwen-image-edit-2511-8bit` q8 row, and `--controlnet-image-path` routes to
-   `qwen.control` on the validated `AbstractFramework/qwen-image-8bit` q8 row with the exact
-   InstantX union sidecar. The next concrete missing piece is base-Qwen control-inpaint with the
-   exact `InstantX/Qwen-Image-ControlNet-Inpainting` sidecar; only after that should MLX-Gen
-   broaden into another Qwen edit-plus or control family.
-2. Promote and implement
-   [Z-Image native inpaint](planned/0043_zimage_native_inpaint.md) as the clearest next
-   non-Qwen image-route expansion. Z-Image is already a real MLX-Gen family, the official
-   Diffusers surface exposes `ZImageInpaintPipeline`, and a native mask route is a better
-   short-term addition than another watchlist model family.
-3. Implement the
+   edit, structured-control, and base-Qwen control-inpaint baselines. The next concrete missing
+   piece is the Qwen feature matrix plus one more bounded edit-family slice such as edit-plus or a
+   broader multi-image parity route, not another generic route rewrite.
+2. Implement the
    [LoRA capability matrix and strict application](planned/0007_lora_capability_matrix_and_strict_application.md)
    item to completion. The fail-closed contract is now in place, exact validated rows exist for
    original Qwen Image Edit q8 single-image edit, Qwen 2511 q8 single-image edit and masked edit,
-   Qwen 2509 q8 single-image edit, Qwen Image 2512 q8 text-to-image, Z-Image Turbo q8
-   text-to-image, ERNIE Image Turbo q8 text-to-image, and FLUX.2 Klein 9B q8 single-image edit,
-   but base Qwen Image and the remaining route directions still need model-backed accepted-adapter
-   proofs before the item can be considered done.
-4. Finish
+   Qwen 2509 q8 single-image edit, Qwen Image 2512 q8 text-to-image, base Qwen q8 structured
+   control and control-inpaint, Z-Image Turbo q8 text-to-image, ERNIE Image Turbo q8
+   text-to-image, and FLUX.2 Klein 9B q8 single-image edit, but the remaining route directions
+   still need model-backed accepted-adapter proofs before the item can be considered done.
+3. Finish
    [Wan prompt adherence parity validation](planned/0015_wan_prompt_adherence_parity_validation.md)
    before treating T2V/I2V prompt or motion behavior as quality-proven; explicitly match official
    Wan negative prompts and A14B guidance pairs in Diffusers-vs-MLX runs.
-5. Keep proposed
+4. Keep proposed
    [SeedVR2 enlarged-video safe-profile certification](proposed/0048_seedvr2_enlarged_video_safe_profile_certification.md)
    as the remaining SeedVR2 proof question after release `0.18.20`. The bounded June 21 public
    proof already answers the `3B` versus `7B` comparison on the accepted slice; what remains is
    whether any enlarged SeedVR2 video recipe should graduate from explicit unsafe override to a
    documented safe public profile.
-6. Keep proposed
+5. Keep proposed
    [LightX2V Wan distilled-model loader support](proposed/0041_lightx2v_wan_distilled_model_loader_support.md)
    scoped as the next Wan acceleration follow-up, not the current one. Completed
    [item 0040](completed/0040_lightx2v_wan_4step_acceleration_profiles.md) now provides the exact
    LightX2V Lightning 4-step A14B fast path on the current runtime, so 0041 should only advance if
    native distilled checkpoints still offer clearer user value than the explicit LoRA recipe.
-7. Finish
+6. Finish
    [Wan2.2 TI2V-5B math and behavior parity](planned/0035_wan_ti2v5b_math_and_behavior_parity.md)
    only after the remaining image LoRA proofs under item 0007 are settled. The official Wan source
    and local Diffusers parity audit found no tensor mismatch in the existing TI2V-5B fixtures, but
    it did expose a missing public flow-shift override. New 480p-class TI2V-5B checks should pass
    `--flow-shift 3` before drawing model-quality conclusions from the `832x480` starship profile.
-8. Finish the residual
+7. Finish the residual
    [first-class I2I modes and outpaint/reframe UX](planned/0019_first_class_i2i_modes_and_outpaint_reframe.md)
    work only where it adds new capability beyond the shipped FLUX.2/Qwen path. FLUX.2 Klein 4B/9B
    plus Qwen Image Edit original, 2509, and 2511 now have source/q8/q4 model-backed proof for
    experimental `--reframe-padding` and canvas-guided `--outpaint-padding`. Keep native fill/inpaint
    outpaint separate until a fill/mask backend is deliberately revalidated. Evaluate Z-Image and
    ERNIE only if their latent I2I behavior can preserve source identity on a dedicated profile.
-9. Keep proposed
+8. Keep proposed
    [Wan VACE video editing and control](proposed/0039_wan_vace_video_editing_and_control.md) in
    view once current Wan parity work settles. Upstream Wan already has video-to-video and VACE
    editing/control pipelines, and this is a better medium-term extension than jumping to a second
    unrelated video family too early. Keep `Wan2.2-Animate-14B` and `Wan2.2-S2V-14B` as adjacent
    Wan-family watch points, not as silent scope creep inside 0039.
-10. Preserve
+9. Preserve
    [Z-Image ControlNet follow-up](proposed/0045_zimage_controlnet_followup.md) as the next image
    follow-up after native Z-Image inpaint rather than broadening 0043 prematurely. Public
    ControlNet weights now exist for Z-Image and Z-Image-Turbo, but native inpaint is still the
    cleaner first step.
-11. Keep the
+10. Keep the
    [FLUX.2-dev multi-angle LoRA support](planned/0034_flux2_dev_multi_angle_lora_support.md)
    item parked until 0007 is materially complete. The lovis multi-angle adapter still targets
    `black-forest-labs/FLUX.2-dev`, not FLUX.2 Klein, so there is no reason to expand the runtime
    surface until the current supported image families have exact LoRA proofs.
-12. Finish the prepared-package residue in
+11. Finish the prepared-package residue in
    [FLUX.2 Klein base source validation and contact sheets](planned/0036_flux2_klein_base_source_validation_and_contact_sheets.md).
    Source-model base `4B/9B` now have starship proof and a source-only validation profile, but the
    prepared base q8/q4 packages still need the same starship contact-sheet pass before docs or the
    validation registry should claim package-level success.
-13. Validate and finish
+12. Validate and finish
    [Wan A14B boundary memory recovery and full-size validation](planned/0013_wan_a14b_boundary_memory_recovery.md)
    after the full-size I2V retry captures memory, exit-code, metadata, and output evidence across
    the high-noise to low-noise denoiser boundary.
-14. Finish the [Wan quantization and motion parity](planned/0002_wan_quantization_motion_parity.md)
+13. Finish the [Wan quantization and motion parity](planned/0002_wan_quantization_motion_parity.md)
    residuals: TI2V-5B now has clean source/BF16/q8 evidence at 1280x704, 17 frames, 20 steps, but
    the TI2V-5B memory result is storage/MLX-footprint focused rather than a full-process physical
    peak reduction; full-duration validation, I2V-A14B mixed q8 quality, q4 policy, and exact-setting
@@ -163,7 +154,6 @@ outside chat history.
 | 0034 | [FLUX.2-dev multi-angle LoRA support](planned/0034_flux2_dev_multi_angle_lora_support.md) | LoRA, FLUX.2-dev, validation | P0 | Planned |
 | 0035 | [Wan2.2 TI2V-5B math and behavior parity](planned/0035_wan_ti2v5b_math_and_behavior_parity.md) | Video, Wan TI2V-5B, official/Diffusers parity | P0 | Planned |
 | 0036 | [FLUX.2 Klein base source validation and contact sheets](planned/0036_flux2_klein_base_source_validation_and_contact_sheets.md) | FLUX.2 base, validation, docs | P0 | Planned |
-| 0043 | [Z-Image native inpaint](planned/0043_zimage_native_inpaint.md) | Image edit, Z-Image, mask-based inpaint | P1 | Planned |
 
 ## Proposed ledger
 
@@ -178,7 +168,7 @@ outside chat history.
 | 0039 | [Wan VACE video editing and control](proposed/0039_wan_vace_video_editing_and_control.md) | Video editing, Wan, VACE | Promote after current Wan parity work settles and one official Wan VACE or Wan video-to-video route is selected for bounded smoke validation. |
 | 0041 | [LightX2V Wan distilled-model loader support](proposed/0041_lightx2v_wan_distilled_model_loader_support.md) | Video, Wan, LightX2V, native distilled checkpoints | Promote after completed item 0040 and one exact distilled A14B file set is audited deeply enough to size the scheduler-plus-loader delta. |
 | 0044 | [HunyuanVideo-1.5 second-family spike](proposed/0044_hunyuanvideo15_second_family_spike.md) | Video, HunyuanVideo, second-family selection | Promote after a bounded upstream Diffusers smoke and a license/value comparison against Wan, SeedVR2, and LTX. |
-| 0045 | [Z-Image ControlNet follow-up](proposed/0045_zimage_controlnet_followup.md) | Image edit, Z-Image, ControlNet | Promote after planned item 0043 proves native Z-Image inpaint and one public ControlNet weight family is audited cleanly. |
+| 0045 | [Z-Image ControlNet follow-up](proposed/0045_zimage_controlnet_followup.md) | Image edit, Z-Image, ControlNet | Promote after completed item 0043 is accepted as the native-inpaint baseline and one public ControlNet weight family is audited cleanly. |
 | 0048 | [SeedVR2 enlarged-video safe-profile certification](proposed/0048_seedvr2_enlarged_video_safe_profile_certification.md) | Video restoration, SeedVR2, validation | Promote after the accepted `0.18.20` proof bundle is stable, completed item 0046 is no longer the blocking follow-up, and there is a concrete reason to revisit the safe enlarged-video boundary. |
 | 0049 | [Boogu image family support](proposed/0049_boogu_image_family_support.md) | Image model roadmap, Boogu, text rendering, editing | Promote only if independent evidence or repeatable local proof shows a meaningful win over current Qwen/Z-Image/FLUX routes and the non-fp8 Boogu path looks credible on Apple Silicon. |
 
@@ -203,6 +193,7 @@ outside chat history.
 | 0031 | [SeedVR2 official ByteDance checkpoint support](completed/0031_seedvr2_official_bytedance_checkpoint_support.md) | Upscale, SeedVR2, official checkpoints | 2026-06-07 | Added direct official `ByteDance-Seed/SeedVR2-3B` and `ByteDance-Seed/SeedVR2-7B` `.pth` loading, switched SeedVR2 aliases to official sources, added q8/q4 `mlxgen prepare` support, generated reusable package cards, and validated source/q8/q4 5x upscale profiles. |
 | 0032 | [SeedVR2 video restoration and upscaling](completed/0032_seedvr2_video_restoration_upscaling.md) | Video restoration, upscale, SeedVR2 | 2026-06-21 | Added bounded and streamed `--video-path` restore under `mlxgen upscale`, official temporal clip handling, source-FPS preservation, explicit host-safe video guardrails, accepted June 21 five-second `1x 29/8` and `2x 29/8` proof bundles, and the release-quality visual validation surface that item 0046 then completed with audio copy-through. |
 | 0046 | [SeedVR2 video audio copy-through](completed/0046_seedvr2_video_audio_copythrough.md) | Video restoration, audio, remux | 2026-06-21 | Added shared post-write audio copy-through for SeedVR2 video restore, made source-audio preservation the default saved-output contract with explicit `--drop-audio` opt-out, kept fail-closed metadata, and published a real-source Air France `25s–35s` proof bundle. |
+| 0043 | [Z-Image native inpaint](completed/0043_zimage_native_inpaint.md) | Image edit, Z-Image, mask-based inpaint | 2026-06-21 | Added exact `z-image.inpaint` routing on `AbstractFramework/z-image-turbo-8bit`, fail-closed `--mask-path` validation, native latent-mask blending, and an accepted same-prompt same-seed engine-thruster proof against the old latent route. |
 | 0033 | [Video LoRA support for T2V and I2V](completed/0033_video_lora_for_t2v_i2v.md) | Video, LoRA, Wan2.2 | 2026-06-11 | Added Wan-specific LoRA mapping and explicit role routing, then validated all current Wan q8 public rows with model-backed A/B artifacts: TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B first-frame image-to-video. |
 | 0040 | [LightX2V Wan 4-step acceleration profiles](completed/0040_lightx2v_wan_4step_acceleration_profiles.md) | Video, Wan, LightX2V, fast-path validation | 2026-06-12 | Validated the explicit LightX2V Lightning 4-step A14B fast path on q8 T2V and I2V with same-seed no-LoRA vs paired-LoRA A/B contact sheets, route-level validation profiles, and documented exact commands using `steps=4`, `flow_shift=5.0`, `guidance=1.0`, and `guidance_2=1.0`. |
 | 0042 | [GitHub Actions Node 24 migration](completed/0042_github_actions_node24_migration.md) | CI, release automation, GitHub Actions | 2026-06-14 | Finished the Node 24 cleanup by replacing `softprops/action-gh-release@v2` with a GitHub CLI release step, validating PR checks and a non-publishing release rehearsal, and preserving the final PR as a reusable migration example. |

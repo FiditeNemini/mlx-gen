@@ -120,10 +120,15 @@ The public contract is simple:
 If you omit `--mask-path` and keep the same prompt and seed, an edit-capable route is still free
 to recompose the frame. The mask is what turns that global edit behavior into a localized edit.
 
-Current exact public proof exists for `AbstractFramework/qwen-image-edit-2511-8bit` with the
-Lightning adapter fast path. See [Image Edit Capabilities](edit-capabilities.md) for the accepted
-contact sheet and command log. For a direct comparison against Qwen structured control and the
-planned future control-inpaint route, see [Qwen localized editing](qwen-localized-editing.md).
+Current exact public proof exists for:
+
+- `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.inpaint`
+- `AbstractFramework/qwen-image-8bit` on `qwen.control-inpaint`
+- `AbstractFramework/z-image-turbo-8bit` on `z-image.inpaint`
+
+See [Image Edit Capabilities](edit-capabilities.md) for the accepted contact sheets and command
+logs. For a direct comparison between Qwen masked edit, Qwen structured control, and Qwen
+base control-inpaint, see [Qwen localized editing](qwen-localized-editing.md).
 
 Example:
 
@@ -163,8 +168,8 @@ Do not treat `--controlnet-image-path` as another name for `--image`. The curren
 proof row is `AbstractFramework/qwen-image-8bit` on `qwen.control`, and the route uses the exact
 InstantX union ControlNet sidecar that `mlxgen generate` injects automatically for that row. See
 [Image Edit Capabilities](edit-capabilities.md) for the accepted contact sheet and command log. If
-you want the plain-language difference between Qwen masked edit, Qwen structured control, and the
-planned ControlNet inpaint slice, see [Qwen localized editing](qwen-localized-editing.md).
+you want the plain-language difference between Qwen masked edit, Qwen structured control, and Qwen
+base control-inpaint, see [Qwen localized editing](qwen-localized-editing.md).
 
 Example:
 

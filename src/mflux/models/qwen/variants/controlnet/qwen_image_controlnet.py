@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import mlx.core as mx
 from mlx import nn
 
@@ -15,9 +17,11 @@ from mflux.models.qwen.model.qwen_vae.qwen_vae import QwenVAE
 from mflux.models.qwen.qwen_initializer import QwenImageInitializer
 from mflux.models.qwen.variants.controlnet.qwen_controlnet_util import QwenControlNetUtil
 from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
+from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.scale_factor import ScaleFactor
 
 
 class QwenImageControlNet(nn.Module):
@@ -52,39 +56,64 @@ class QwenImageControlNet(nn.Module):
         *,
         seed: int,
         prompt: str,
-        controlnet_image_path: str,
+        controlnet_image_path: str | None = None,
         controlnet_strength: float = 0.85,
         num_inference_steps: int = 4,
-        height: int | None = None,
-        width: int | None = None,
+        height: int | ScaleFactor | None = None,
+        width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
         scheduler: str = "flow_match_euler_discrete",
         negative_prompt: str | None = None,
+        image_path: Path | str | None = None,
+        mask_path: Path | str | None = None,
+        canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        if mask_path is not None and image_path is None:
+            raise ValueError("mask_path requires image_path for Qwen control-inpaint.")
+        if mask_path is not None and controlnet_image_path is not None:
+            raise ValueError("Qwen control-inpaint uses image_path + mask_path and cannot be combined with controlnet_image_path.")
+        if mask_path is None and controlnet_image_path is None:
+            raise ValueError("Qwen ControlNet generation requires either controlnet_image_path or image_path + mask_path.")
         config = Config(
             width=width,
             height=height,
             guidance=guidance,
             scheduler=scheduler,
+            image_path=image_path,
             model_config=self.model_config,
             num_inference_steps=num_inference_steps,
             controlnet_strength=controlnet_strength,
+            canvas_policy=canvas_policy,
+            preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
-        controlnet_condition = QwenControlNetUtil.create_controlnet_condition(
-            vae=self.vae,
+        use_cfg = QwenImageControlNet._use_classifier_free_guidance(config.guidance)
+        controlnet_condition = self._resolve_controlnet_condition(
             controlnet_image_path=controlnet_image_path,
+            image_path=image_path,
+            mask_path=mask_path,
             height=config.height,
             width=config.width,
-            tiling_config=self.tiling_config,
         )
         latents = QwenLatentCreator.create_noise(seed=seed, width=config.width, height=config.height)
-        prompt_embeds, prompt_mask, negative_prompt_embeds, negative_prompt_mask = QwenPromptEncoder.encode_prompt(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            prompt_cache=self.prompt_cache,
-            qwen_tokenizer=self.tokenizers["qwen"],
-            qwen_text_encoder=self.text_encoder,
-        )
+        if use_cfg:
+            prompt_embeds, prompt_mask, negative_prompt_embeds, negative_prompt_mask = QwenPromptEncoder.encode_prompt(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                prompt_cache=self.prompt_cache,
+                qwen_tokenizer=self.tokenizers["qwen"],
+                qwen_text_encoder=self.text_encoder,
+            )
+            effective_negative_prompt = negative_prompt
+        else:
+            prompt_embeds, prompt_mask = QwenPromptEncoder.encode_positive_prompt(
+                prompt=prompt,
+                prompt_cache=self.prompt_cache,
+                qwen_tokenizer=self.tokenizers["qwen"],
+                qwen_text_encoder=self.text_encoder,
+            )
+            negative_prompt_embeds = None
+            negative_prompt_mask = None
+            effective_negative_prompt = None
         ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config)
         ctx.before_loop(latents)
         for t in config.time_steps:
@@ -107,15 +136,18 @@ class QwenImageControlNet(nn.Module):
                     encoder_hidden_states_mask=prompt_mask,
                     controlnet_block_samples=controlnet_block_samples,
                 )
-                noise_negative = self.transformer(
-                    t=t,
-                    config=config,
-                    hidden_states=latents,
-                    encoder_hidden_states=negative_prompt_embeds,
-                    encoder_hidden_states_mask=negative_prompt_mask,
-                    controlnet_block_samples=controlnet_block_samples,
-                )
-                guided_noise = QwenImageControlNet.compute_guided_noise(noise, noise_negative, config.guidance)
+                if use_cfg:
+                    noise_negative = self.transformer(
+                        t=t,
+                        config=config,
+                        hidden_states=latents,
+                        encoder_hidden_states=negative_prompt_embeds,
+                        encoder_hidden_states_mask=negative_prompt_mask,
+                        controlnet_block_samples=controlnet_block_samples,
+                    )
+                    guided_noise = QwenImageControlNet.compute_guided_noise(noise, noise_negative, config.guidance)
+                else:
+                    guided_noise = noise
                 latents = config.scheduler.step(noise=guided_noise, timestep=t, latents=latents)
                 ctx.in_loop(t, latents)
                 mx.eval(latents)
@@ -135,9 +167,11 @@ class QwenImageControlNet(nn.Module):
             quantization=self.bits,
             lora_paths=self.lora_paths,
             lora_scales=self.lora_scales,
+            image_path=image_path,
             controlnet_image_path=controlnet_image_path,
+            masked_image_path=mask_path,
             generation_time=config.time_steps.format_dict["elapsed"],
-            negative_prompt=negative_prompt,
+            negative_prompt=effective_negative_prompt,
             extra_metadata={
                 **LoRALoader.extra_metadata_for_model(self),
                 "controlnet_model": self.controlnet_model,
@@ -162,3 +196,78 @@ class QwenImageControlNet(nn.Module):
         cond_norm = mx.sqrt(mx.sum(noise * noise, axis=-1, keepdims=True) + 1e-12)
         noise_norm = mx.sqrt(mx.sum(combined * combined, axis=-1, keepdims=True) + 1e-12)
         return combined * (cond_norm / noise_norm)
+
+    @staticmethod
+    def _use_classifier_free_guidance(guidance: float) -> bool:
+        return guidance > 1.0
+
+    def _resolve_controlnet_condition(
+        self,
+        *,
+        controlnet_image_path: str | None,
+        image_path: Path | str | None,
+        mask_path: Path | str | None,
+        height: int,
+        width: int,
+    ) -> mx.array:
+        cache_key = self._controlnet_condition_cache_key(
+            controlnet_image_path=controlnet_image_path,
+            image_path=image_path,
+            mask_path=mask_path,
+            height=height,
+            width=width,
+        )
+        if cache_key in self.controlnet_condition_cache:
+            return self.controlnet_condition_cache[cache_key]
+        if mask_path is not None:
+            condition = QwenControlNetUtil.create_inpaint_controlnet_condition(
+                vae=self.vae,
+                image_path=str(image_path),
+                mask_path=str(mask_path),
+                height=height,
+                width=width,
+                tiling_config=self.tiling_config,
+            )
+        else:
+            condition = QwenControlNetUtil.create_controlnet_condition(
+                vae=self.vae,
+                controlnet_image_path=controlnet_image_path,
+                height=height,
+                width=width,
+                tiling_config=self.tiling_config,
+            )
+        condition = mx.stop_gradient(condition)
+        mx.eval(condition)
+        self.controlnet_condition_cache[cache_key] = condition
+        return condition
+
+    def _controlnet_condition_cache_key(
+        self,
+        *,
+        controlnet_image_path: str | None,
+        image_path: Path | str | None,
+        mask_path: Path | str | None,
+        height: int,
+        width: int,
+    ) -> tuple[str, str, tuple[str, int | None, int | None] | None, tuple[str, int | None, int | None] | None, int, int]:
+        if mask_path is not None:
+            return (
+                "inpaint",
+                self.controlnet_model,
+                self._path_signature(image_path),
+                self._path_signature(mask_path),
+                height,
+                width,
+            )
+        return ("control", self.controlnet_model, self._path_signature(controlnet_image_path), None, height, width)
+
+    @staticmethod
+    def _path_signature(path: Path | str | None) -> tuple[str, int | None, int | None] | None:
+        if path is None:
+            return None
+        path_obj = Path(path)
+        try:
+            stat = path_obj.stat()
+        except OSError:
+            return (str(path_obj), None, None)
+        return (str(path_obj), stat.st_mtime_ns, stat.st_size)

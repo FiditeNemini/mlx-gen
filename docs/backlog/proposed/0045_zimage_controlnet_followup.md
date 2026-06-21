@@ -15,14 +15,15 @@
 
 ## Context
 
-Planned item 0043 already tracks native Z-Image inpaint. Public Z-Image and Z-Image-Turbo
-ControlNet weights now exist, including inpaint-related control variants. That makes a clean
-follow-up worth preserving without broadening 0043 prematurely.
+Completed item [0043](../completed/0043_zimage_native_inpaint.md) now covers the first narrow
+native Z-Image inpaint route with published proof assets. Public Z-Image and Z-Image-Turbo
+ControlNet weights also exist, including inpaint-related control variants. That makes a clean
+follow-up worth preserving without reopening 0043 or broadening its accepted public claim.
 
 ## Current code reality
 
 - MLX-Gen already supports Z-Image and Z-Image-Turbo text generation plus latent img2img.
-- Planned item 0043 owns native Z-Image inpaint, not ControlNet.
+- Completed item 0043 owns native Z-Image inpaint, not ControlNet.
 - MLX-Gen already has a bounded base-Qwen structured-control path and the first narrow Qwen masked
   edit path, so a control-image contract now exists in one family.
 - There is no first-class Z-Image control-image route today.
@@ -55,7 +56,7 @@ strong structured-control family next to Qwen.
 
 ## Promotion criteria
 
-- Planned item 0043 is complete with exact proof assets.
+- Completed item 0043 remains the accepted native-inpaint baseline with exact proof assets.
 - Public ControlNet weight paths remain available and runnable.
 - One bounded upstream smoke proves the conditioning contract before any MLX port work starts.
 

@@ -24,13 +24,11 @@ def main():
     parser.add_lora_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_argument("--image-paths", type=Path, nargs="+", required=True, help="Local paths to one or more init images. For single image editing, provide one path. For multiple image editing, provide multiple paths.")  # fmt: off
-    parser.add_argument(
-        "--mask-path",
-        "--masked-image-path",
-        dest="mask_path",
-        type=Path,
-        default=None,
-        help="Optional mask image path for localized Qwen edits. White pixels are repainted and black pixels are preserved.",
+    parser.add_mask_path_argument(
+        help_text=(
+            "Optional mask image path for localized Qwen edits. White pixels are repainted and black pixels are "
+            "preserved."
+        ),
     )
     parser.add_argument(
         "--reframe-padding",

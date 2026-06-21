@@ -34,6 +34,10 @@ QWEN_CONTROL_UNION_MODEL = (
     "InstantX/Qwen-Image-ControlNet-Union:"
     "diffusion_pytorch_model.safetensors"
 )
+QWEN_CONTROL_INPAINT_MODEL = (
+    "InstantX/Qwen-Image-ControlNet-Inpainting:"
+    "diffusion_pytorch_model.safetensors"
+)
 
 I2I_MODE_AUTO = "auto"
 MODE_TEXT_ONLY = "text-only"
@@ -259,6 +263,10 @@ def resolve_generation_plan(
         raise TaskInferenceError("--image-strength requires --image or --image-path.")
     if has_mask and image_count == 0:
         raise TaskInferenceError("--mask-path requires --image or --image-path.")
+    if has_mask and has_image_strength:
+        raise TaskInferenceError(
+            "--image-strength cannot be combined with --mask-path; masked inpaint is a separate route from latent image-to-image."
+        )
     if has_control_image and image_count > 0:
         raise TaskInferenceError(
             "--controlnet-image-path currently targets text-to-image structured control and cannot be combined "
@@ -517,18 +525,7 @@ def _capabilities_for(identity: _ModelIdentity) -> ModelCapabilities:
             supports_lora=True,
         )
     if family == "z-image":
-        handler_id = (
-            "z-image-turbo.generate" if _is_z_image_turbo(identity.aliases, identity.model_key) else "z-image.generate"
-        )
-        return _image_latent_capabilities(
-            identity=identity,
-            family=family,
-            label="Z-Image",
-            model_name=identity.model_name,
-            handler_id=handler_id,
-            supports_guidance=True,
-            supports_lora=True,
-        )
+        return _z_image_capabilities(identity)
     if family == "qwen":
         return _qwen_capabilities(identity)
     if family == "flux2":
@@ -616,6 +613,43 @@ def _image_latent_capabilities(
                     identity=identity, capability_id=f"{family}.latent", supports_lora=supports_lora
                 ),
                 **i2i_canvas,
+            ),
+        ),
+    )
+
+
+def _z_image_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    handler_id = (
+        "z-image-turbo.generate" if _is_z_image_turbo(identity.aliases, identity.model_key) else "z-image.generate"
+    )
+    base = _image_latent_capabilities(
+        identity=identity,
+        family="z-image",
+        label="Z-Image",
+        model_name=identity.model_name,
+        handler_id=handler_id,
+        supports_guidance=True,
+        supports_lora=True,
+    )
+    if not _is_z_image_turbo(identity.aliases, identity.model_key):
+        return base
+    return ModelCapabilities(
+        schema_version=base.schema_version,
+        family=base.family,
+        label=base.label,
+        model_name=base.model_name,
+        capabilities=(
+            *base.capabilities,
+            GenerationCapability(
+                id="z-image.inpaint",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_EDIT_REFERENCE,
+                handler_id=handler_id,
+                min_images=1,
+                max_images=1,
+                supports_mask=True,
+                **_lora_capability_kwargs(identity=identity, capability_id="z-image.inpaint", supports_lora=True),
+                **_ordinary_i2i_canvas_contract(),
             ),
         ),
     )
@@ -712,6 +746,28 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                             capability_id="qwen.control",
                             supports_lora=True,
                         ),
+                    ),
+                )
+                if _supports_qwen_base_control(identity)
+                else ()
+            ),
+            *(
+                (
+                    GenerationCapability(
+                        id="qwen.control-inpaint",
+                        public_task=IMAGE_TO_IMAGE,
+                        mode=MODE_EDIT_REFERENCE,
+                        handler_id="qwen.generate",
+                        min_images=1,
+                        max_images=1,
+                        supports_mask=True,
+                        control_model=QWEN_CONTROL_INPAINT_MODEL,
+                        **_lora_capability_kwargs(
+                            identity=identity,
+                            capability_id="qwen.control-inpaint",
+                            supports_lora=True,
+                        ),
+                        **i2i_canvas,
                     ),
                 )
                 if _supports_qwen_base_control(identity)

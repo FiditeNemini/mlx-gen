@@ -263,15 +263,20 @@ need a Qwen edit model that can route multi-reference requests.
 
 ## How Do I Do Masked Edit Or Inpaint?
 
-Use a model whose capability row reports `supports_mask=true`, then pass one input image plus
-`--mask-path`. White mask pixels are repainted and black mask pixels are preserved.
+Use a model that supports masked edit or inpaint, then pass one input image plus `--mask-path`.
+White mask pixels are repainted and black mask pixels are preserved.
 
 Without `--mask-path`, the same edit route can still recompose the whole frame. The mask is what
 keeps the change local.
 
-The current exact public proof row is `AbstractFramework/qwen-image-edit-2511-8bit`. The
-recommended fast public path uses the dedicated `lightx2v/Qwen-Image-Edit-2511-Lightning`
-adapter:
+The current exact public proof rows are:
+
+- `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.inpaint`
+- `AbstractFramework/qwen-image-8bit` on `qwen.control-inpaint`
+- `AbstractFramework/z-image-turbo-8bit` on `z-image.inpaint`
+
+The recommended fast public Qwen masked-edit path uses the dedicated
+`lightx2v/Qwen-Image-Edit-2511-Lightning` adapter:
 
 ```sh
 mlxgen download --model lightx2v/Qwen-Image-Edit-2511-Lightning --all-files
@@ -328,8 +333,7 @@ Today, MLX-Gen ships:
 
 - Qwen masked edit / inpaint on the Qwen edit route;
 - Qwen structured control on the base Qwen route.
-
-It does **not** ship base-Qwen control-inpaint yet.
+- Qwen base control-inpaint on the base Qwen route.
 
 The practical difference is:
 
@@ -345,7 +349,7 @@ ControlNet is not a LoRA. It is an extra model package loaded beside the base mo
 When MLX-Gen docs say “sidecar”, that is all they mean: an extra model package loaded alongside the
 main one.
 
-For the detailed route comparison, pros/cons, and the visual explainer sheet, see
+For the detailed route comparison, pros/cons, and the current proof sheets, see
 [Qwen localized editing](qwen-localized-editing.md).
 
 ## Which Qwen Image Edit Model Should I Use?

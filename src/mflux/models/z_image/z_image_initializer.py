@@ -33,6 +33,8 @@ class ZImageInitializer:
     @staticmethod
     def _init_config(model, model_config: ModelConfig) -> None:
         model.model_config = model_config
+        model.prompt_cache = {}
+        model.inpaint_condition_cache = {}
         model.callbacks = CallbackRegistry()
         model.tiling_config = None
 

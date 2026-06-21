@@ -1,48 +1,36 @@
 # Qwen Localized Editing
 
-MLX-Gen currently ships two different Qwen workflows that people can confuse easily:
+MLX-Gen now ships three different Qwen workflows that are easy to confuse:
 
 - masked edit / inpaint on the Qwen edit route;
-- structured control on the base Qwen route.
+- structured control on the base Qwen route;
+- base-Qwen control-inpaint on the base Qwen route.
 
-The next planned Qwen slice is **control-inpaint**, which combines parts of both ideas. This page
-explains the difference in plain language.
+This page explains the practical difference between them.
 
 ## Current Status
 
-What MLX-Gen supports today:
+Current exact public proof rows:
 
 - `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.inpaint`
 - `AbstractFramework/qwen-image-8bit` on `qwen.control`
+- `AbstractFramework/qwen-image-8bit` on `qwen.control-inpaint`
 
-What MLX-Gen does **not** support yet:
+## Route Matrix
 
-- base-Qwen control-inpaint with `InstantX/Qwen-Image-ControlNet-Inpainting`
-
-So if you are reading about control-inpaint below, treat it as the **next planned route**, not a
-current `mlxgen generate` capability.
+| Workflow | Exact public proof row | Public inputs | Best use | Published proof |
+| --- | --- | --- | --- | --- |
+| `qwen.inpaint` | `AbstractFramework/qwen-image-edit-2511-8bit` | `--image + --mask-path + --prompt` | Straightforward localized repair on the edit checkpoint | [masked-edit sheet](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_contact_sheet.png) |
+| `qwen.control` | `AbstractFramework/qwen-image-8bit` | `--controlnet-image-path + --prompt` | Layout-first generation from canny, pose, or similar structure guides | [structured-control sheet](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_contact_sheet.png) |
+| `qwen.control-inpaint` | `AbstractFramework/qwen-image-8bit` | `--image + --mask-path + --prompt` | Harder localized repair where the edit route drifts too much | [control-inpaint sheet](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_contact_sheet.png) |
 
 ## One-Sentence Difference
 
-- **Masked edit / inpaint** means: start from an existing image and change only the white masked
-  region.
-- **Structured control** means: generate from text, but force the layout with a guide image such as
+- **Masked edit / inpaint**: start from an existing image and repaint only the white masked region.
+- **Structured control**: generate from text, but force layout from a control image such as canny
   edges or pose.
-- **Control-inpaint** means: still edit only one masked region, but add an extra control model to
-  make that local replacement more disciplined.
-
-## Comparison Sheet
-
-![Qwen masked edit vs ControlNet inpaint explainer](assets/explainers/qwen_masked_edit_vs_control_inpaint_explainer.png)
-
-Use this sheet as a route guide:
-
-- left panel: what MLX-Gen ships today for localized Qwen edit;
-- middle panel: what MLX-Gen ships today for Qwen structured control;
-- right panel: what the planned control-inpaint route would add.
-
-The left and middle panels use real current proof assets. The right panel is an explanatory route
-diagram because control-inpaint is not yet implemented in MLX-Gen.
+- **Control-inpaint**: still start from an existing image and a mask, but add a dedicated
+  inpainting ControlNet sidecar so the localized replacement is more disciplined.
 
 ## What “ControlNet” Means
 
@@ -50,18 +38,12 @@ For MLX-Gen users, the practical definition is simple:
 
 - a **ControlNet** is an extra model package that guides the base image model;
 - it is **not** a LoRA;
-- it is **not** a replacement for the base model;
-- it is loaded **alongside** the base model for a specific route.
+- it is **not** a replacement base model;
+- it is loaded **alongside** the base model for one exact route.
 
-When MLX-Gen docs say **sidecar**, they mean exactly that: an extra model package loaded beside the
-main model for one route.
+When MLX-Gen docs say **sidecar**, they mean that extra model package.
 
-So:
-
-- base Qwen model = the main generator;
-- ControlNet model = extra guidance model for one kind of request.
-
-## What The Current Masked Edit Route Does
+## Masked Edit / Inpaint On Qwen Image Edit
 
 Current shipped route:
 
@@ -79,25 +61,24 @@ User-facing inputs:
 
 Best use:
 
-- repair one damaged region;
-- replace one local object area;
-- intensify or redraw one local feature;
-- preserve the existing framing and background outside the mask.
+- straightforward local repairs;
+- object-part replacement in one bounded region;
+- appearance changes that should stay inside the mask.
 
-Weakness:
+Proof:
 
-- hard local edits can still drift inside the masked region;
-- without the mask, the same edit route can recompose the whole frame;
-- it is not the best tool when you want a separate guide image to control layout.
+- [masked-edit contact sheet](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_contact_sheet.png)
+- [masked-edit command log](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_command_log.md)
 
-## What The Current Structured Control Route Does
+## Structured Control On Base Qwen
 
 Current shipped route:
 
 - model family: base `Qwen Image`
 - exact public proof row: `AbstractFramework/qwen-image-8bit`
 - capability id: `qwen.control`
-- exact control model: `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
+- exact sidecar:
+  `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
 
 User-facing inputs:
 
@@ -108,95 +89,71 @@ User-facing inputs:
 
 Best use:
 
-- keep a canny/sketch/pose-like layout;
+- enforce a canny/sketch/pose layout;
 - generate from text while anchoring geometry;
-- control composition without editing an existing source frame.
+- layout-first generation rather than source-image repair.
 
-Weakness:
+Proof:
 
-- this is not a source-image edit route;
-- it is weaker for “keep this exact frame, only repair this small region” tasks;
-- it is a control workflow, not a localized edit workflow.
+- [structured-control contact sheet](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_contact_sheet.png)
+- [structured-control command log](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_command_log.md)
 
-## What Control-Inpaint Would Add
+## Base-Qwen Control-Inpaint
 
-Planned next slice:
+Current shipped route:
 
 - model family: base `Qwen Image`
-- planned extra control model: `InstantX/Qwen-Image-ControlNet-Inpainting`
+- exact public proof row: `AbstractFramework/qwen-image-8bit`
+- capability id: `qwen.control-inpaint`
+- exact sidecar:
+  `InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors`
 
-The user intent is still familiar:
+User-facing inputs stay generic:
 
-- start from an existing image;
-- provide a mask;
-- describe what should appear inside that region.
+- one source image with `--image`;
+- one mask image with `--mask-path`;
+- one prompt;
+- optional negative prompt;
+- optional `--controlnet-strength` on the exact validated route;
+- optional Lightning adapter for the fast `4`-step path.
 
-The difference is backend behavior:
+The route still owns the exact sidecar identity. If you pass `--controlnet-model`, it must match
+`InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors`.
 
-- current masked edit uses the Qwen edit model with mask-localized editing;
-- control-inpaint would use the base Qwen model plus an extra inpainting control model.
+Best use:
 
-The expected benefit is not “a brand-new type of prompt.” The expected benefit is:
+- harder local repairs where the edit route drifts too much;
+- stricter mask-boundary behavior on difficult replacements;
+- keeping the user request shape the same while switching to a tighter backend.
 
-- tighter mask-boundary adherence;
-- fewer unintended whole-frame changes on difficult local edits;
-- stronger control when plain masked edit is not disciplined enough.
+Proof:
 
-This means control-inpaint is **not automatically better** than the current masked route.
+- [control-inpaint contact sheet](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_contact_sheet.png)
+- [control-inpaint report](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_report.md)
+- [control-inpaint command log](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_command_log.md)
 
-Use the current masked route when:
+## When To Use Which One
+
+Use `qwen.inpaint` when:
 
 - the edit is straightforward;
 - you want the smallest setup;
-- the existing qwen.inpaint route already keeps the change local enough.
+- the edit checkpoint already keeps the change local enough.
 
-Control-inpaint becomes interesting when:
+Use `qwen.control` when:
 
-- plain masked edit bleeds across the mask boundary;
-- the replaced region drifts too much;
-- the model changes more of the frame than you asked for.
+- there is no source frame to preserve;
+- the main problem is layout, pose, or edge structure;
+- you want text-to-image generation with a guide image.
 
-## Is Control-Inpaint Better?
+Use `qwen.control-inpaint` when:
 
-Not universally.
-
-The practical answer is:
-
-- **simpler localized repair**: current masked edit is often enough;
-- **hard localized replacement**: control-inpaint is likely to be better if the base masked route
-  is not disciplined enough.
-
-So the global opinion should be framed as:
-
-- not “better everywhere”;
-- better when locality and boundary discipline matter more than minimal setup.
-
-## Is It A LoRA?
-
-No.
-
-`InstantX/Qwen-Image-ControlNet-Inpainting` is not a LoRA adapter. It is a separate control-model
-package.
-
-In practical terms, that means:
-
-- you still need the base Qwen model;
-- you also need the additional ControlNet model package;
-- this is a heavier setup than attaching one LoRA file.
-
-So the download shape is:
-
-1. base Qwen model;
-2. extra ControlNet model.
-
-That is different from:
-
-1. base model;
-2. one LoRA adapter file.
+- the request is still “edit this one masked part of an existing image”;
+- the plain masked-edit route is not disciplined enough;
+- locality matters more than minimal setup.
 
 ## Related Docs
 
 - [Image edit modes](image-edit-modes.md)
 - [Image edit capabilities](edit-capabilities.md)
-- [LoRA](lora.md)
 - [FAQ](faq.md)

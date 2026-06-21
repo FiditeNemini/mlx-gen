@@ -1,0 +1,28 @@
+{
+  "zimage_latent_engine_q8": {
+    "model": "AbstractFramework/z-image-turbo-8bit",
+    "seed": 4201,
+    "steps": 9,
+    "width": 768,
+    "height": 432,
+    "generation_time_seconds": 2.78,
+    "wall_seconds": 5.99,
+    "max_rss_bytes": 11492622336,
+    "output_path": "validation_outputs/masked_generation_routes_2026_06_21/generated/zimage_latent_engine_q8.png",
+    "masked_image_path": null,
+    "image_strength": 0.35
+  },
+  "zimage_inpaint_engine_q8": {
+    "model": "AbstractFramework/z-image-turbo-8bit",
+    "seed": 4201,
+    "steps": 9,
+    "width": 768,
+    "height": 432,
+    "generation_time_seconds": 21.0,
+    "wall_seconds": 26.86,
+    "max_rss_bytes": 18105253888,
+    "output_path": "validation_outputs/masked_generation_routes_2026_06_21/generated/zimage_inpaint_engine_q8.png",
+    "masked_image_path": "validation_outputs/qwen_inpaint_2026_06_15/masks/source01_engine_mask.png",
+    "image_strength": null
+  }
+}

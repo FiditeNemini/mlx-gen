@@ -1,0 +1,28 @@
+{
+  "qwen_control_inpaint_engine_lightning_q8": {
+    "model": "AbstractFramework/qwen-image-8bit",
+    "seed": 4201,
+    "steps": 4,
+    "width": 768,
+    "height": 432,
+    "generation_time_seconds": 17.29,
+    "wall_seconds": 24.65,
+    "max_rss_bytes": 34944155648,
+    "output_path": "validation_outputs/masked_generation_routes_2026_06_21/generated/qwen_control_inpaint_engine_lightning_q8.png",
+    "masked_image_path": "validation_outputs/qwen_inpaint_2026_06_15/masks/source01_engine_mask.png",
+    "image_strength": null
+  },
+  "qwen_control_inpaint_repair_lightning_q8": {
+    "model": "AbstractFramework/qwen-image-8bit",
+    "seed": 4301,
+    "steps": 4,
+    "width": 768,
+    "height": 432,
+    "generation_time_seconds": 17.74,
+    "wall_seconds": 23.86,
+    "max_rss_bytes": 34936848384,
+    "output_path": "validation_outputs/masked_generation_routes_2026_06_21/generated/qwen_control_inpaint_repair_lightning_q8.png",
+    "masked_image_path": "validation_outputs/qwen_inpaint_2026_06_15/masks/source03_repair_mask.png",
+    "image_strength": null
+  }
+}

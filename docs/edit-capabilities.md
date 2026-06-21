@@ -99,7 +99,8 @@ MLX-Gen now exposes one exact Qwen structured-control route through
 - exact sidecar: `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
 
 This slice is intentionally narrow. It is a text-to-image route with one control image, not a
-source-image edit route, and it does not yet claim control-inpaint or edit-route ControlNet.
+source-image edit route. Base-Qwen localized control-inpaint now has its own separate validated row
+below.
 
 ![Qwen Image q8 structured control proof](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_contact_sheet.png)
 
@@ -121,6 +122,36 @@ Exact commands and timings:
 
 - [structured-control command log](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_command_log.md)
 - [structured-control timings on M5 Max](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_stats_m5max.json)
+
+## Qwen Base Control-Inpaint
+
+MLX-Gen now exposes one exact base-Qwen localized control-inpaint route through the same public
+`image + mask + prompt` request shape. The current accepted public row is:
+
+- `AbstractFramework/qwen-image-8bit` on `qwen.control-inpaint`
+- exact sidecar:
+  `InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors`
+
+This route is different from Qwen edit masked inpaint. It keeps the generic `--mask-path` user
+contract, but the backend is the base Qwen model plus the dedicated inpainting ControlNet sidecar.
+
+![Qwen base control-inpaint proof](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_contact_sheet.png)
+
+| Model | Package | Capabilities validated | Result |
+| --- | --- | --- | --- |
+| `AbstractFramework/qwen-image-8bit` | q8 optimized variant | base-Qwen control-inpaint with `--mask-path` | `PASS` |
+
+The accepted proof is still narrow and exact:
+
+- same `768x432` source image, mask, prompt, and seed across the comparison row;
+- exact Qwen Lightning `4`-step fast path;
+- two localized conditions: engine enhancement and crash repair.
+
+Published artifacts:
+
+- [control-inpaint report](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_report.md)
+- [control-inpaint command log](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_command_log.md)
+- [control-inpaint timings on M5 Max](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_stats_m5max.json)
 
 ## Qwen 2509 And Distilled FLUX.2 Matrix
 
@@ -255,6 +286,38 @@ mlxgen generate \
   --output output.png
 ```
 
+## Z-Image Turbo Native Inpaint
+
+Z-Image Turbo now has one exact native inpaint proof row through unified `mlxgen generate`:
+
+- `AbstractFramework/z-image-turbo-8bit` on `z-image.inpaint`
+
+This is intentionally narrower than the Qwen edit surface. The accepted public proof is one
+same-prompt same-seed engine-thruster case that compares the old latent route against the new mask
+route on the same source image.
+
+![Z-Image Turbo native inpaint proof](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_contact_sheet.png)
+
+| Model | Package | Capabilities validated | Result |
+| --- | --- | --- | --- |
+| `AbstractFramework/z-image-turbo-8bit` | q8 optimized variant | native inpaint with `--mask-path` | `PASS` |
+
+The accepted row compares:
+
+- latent baseline: same source, prompt, and seed with `--image-strength 0.35`
+- native inpaint: same source, prompt, and seed with `--mask-path`
+
+The masked-area crop sheet is published separately because that is where the route difference is
+most readable:
+
+![Z-Image Turbo native inpaint crop proof](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_engine_crop_contact_sheet.png)
+
+Published artifacts:
+
+- [native-inpaint report](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_report.md)
+- [native-inpaint command log](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_command_log.md)
+- [native-inpaint timings on M5 Max](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_stats_m5max.json)
+
 ## Exact Validation Commands
 
 The full command logs are published with the proof assets:
@@ -262,6 +325,8 @@ The full command logs are published with the proof assets:
 - [regular Qwen Image Edit command log](assets/validation/i2i-edit-5x4-2026-06-05/qwen-image-edit-command-log.md)
 - [Qwen Image Edit 2511 parity command log](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-command-log.md)
 - [Qwen Image Edit 2511 masked edit command log](assets/validation/qwen-inpaint-2026-06-15/qwen2511_q8_inpaint_lightning_command_log.md)
+- [Qwen base control-inpaint command log](assets/validation/qwen-control-inpaint-2026-06-21/qwen_control_inpaint_command_log.md)
+- [Z-Image Turbo native inpaint command log](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_command_log.md)
 - [5x4 FLUX.2 and Qwen Image Edit 2509 command log](assets/validation/i2i-edit-5x4-2026-06-05/edit-capability-command-log.md)
 - [reframe and outpaint command log](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-command-log.md)
 - [FLUX.2 Klein base starship command log](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-command-log.md)

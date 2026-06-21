@@ -175,9 +175,19 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
         image_count=1,
         has_mask=True,
     )
+    qwen_base_control_inpaint = mlxgen.resolve_generation_plan(
+        model="AbstractFramework/qwen-image-8bit",
+        image_count=1,
+        has_mask=True,
+    )
     assert qwen_inpaint.capability_id == "qwen.inpaint"
     assert qwen_base_inpaint.capability_id == "qwen.inpaint"
     assert qwen_2509_inpaint.capability_id == "qwen.inpaint"
+    assert qwen_base_control_inpaint.capability_id == "qwen.control-inpaint"
+    assert (
+        qwen_base_control_inpaint.control_model
+        == "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
+    )
 
     flux2_outpaint = mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_outpaint=True)
     qwen_outpaint = mlxgen.resolve_generation_plan(
@@ -205,6 +215,15 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
 
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
         mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_outpaint=True)
+
+    z_image_inpaint = mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_mask=True)
+    assert z_image_inpaint.capability_id == "z-image.inpaint"
+
+    with pytest.raises(TaskInferenceError, match="mask-path is only supported"):
+        mlxgen.resolve_generation_plan(model="z-image", image_count=1, has_mask=True)
+
+    with pytest.raises(TaskInferenceError, match="cannot be combined with --mask-path"):
+        mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_mask=True, has_image_strength=True)
 
 
 def test_reframe_option_is_limited_to_validated_edit_capabilities():
@@ -353,14 +372,20 @@ def test_original_qwen_edit_q8_single_edit_lora_status_is_exact():
     assert original_edit_row.lora_validation_profile == "lora_qwen_edit_q8_ghibli_edit_2026_06_11"
 
 
-def test_unvalidated_base_qwen_rows_remain_mapped_unvalidated():
+def test_base_qwen_route_validation_statuses_are_split_cleanly():
     base_qwen = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-8bit")
     base_text = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.text")
     base_latent = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.latent")
+    base_control = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.control")
+    base_control_inpaint = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.control-inpaint")
     assert base_text.lora_status == "mapped-unvalidated"
     assert base_text.lora_validation_profile is None
     assert base_latent.lora_status == "mapped-unvalidated"
     assert base_latent.lora_validation_profile is None
+    assert base_control.lora_status == "validated"
+    assert base_control.lora_validation_profile == "lora_qwen_q8_control_lightning_2026_06_15"
+    assert base_control_inpaint.lora_status == "validated"
+    assert base_control_inpaint.lora_validation_profile == "lora_qwen_q8_control_inpaint_lightning_2026_06_21"
 
 
 def test_zimage_q8_text_lora_status_is_exact():
@@ -368,10 +393,12 @@ def test_zimage_q8_text_lora_status_is_exact():
 
     text = next(capability for capability in capabilities.capabilities if capability.id == "z-image.text")
     latent = next(capability for capability in capabilities.capabilities if capability.id == "z-image.latent")
+    inpaint = next(capability for capability in capabilities.capabilities if capability.id == "z-image.inpaint")
 
     assert text.lora_status == "validated"
     assert text.lora_validation_profile == "lora_zimage_q8_technically_color_t2i_2026_06_11"
     assert latent.lora_status == "mapped-unvalidated"
+    assert inpaint.lora_status == "mapped-unvalidated"
 
 
 def test_flux2_klein9b_q8_edit_lora_status_is_exact():

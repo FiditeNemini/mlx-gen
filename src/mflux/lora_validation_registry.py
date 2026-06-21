@@ -13,6 +13,7 @@ QWEN2511_Q8_INPAINT_LIGHTNING_PROFILE_ID = "lora_qwen2511_q8_inpaint_lightning_2
 QWEN2509_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID = "lora_qwen2509_q8_single_edit_multi_angle_2026_06_11"
 QWEN_EDIT_Q8_GHIBLI_PROFILE_ID = "lora_qwen_edit_q8_ghibli_edit_2026_06_11"
 QWEN_Q8_CONTROL_LIGHTNING_PROFILE_ID = "lora_qwen_q8_control_lightning_2026_06_15"
+QWEN_Q8_CONTROL_INPAINT_LIGHTNING_PROFILE_ID = "lora_qwen_q8_control_inpaint_lightning_2026_06_21"
 QWEN2512_Q8_PIXEL_ART_PROFILE_ID = "lora_qwen2512_q8_pixel_art_t2i_2026_06_11"
 ZIMAGE_Q8_TECHNICALLYCOLOR_PROFILE_ID = "lora_zimage_q8_technically_color_t2i_2026_06_11"
 FLUX2_KLEIN9B_Q8_CONSISTENCY_EDIT_PROFILE_ID = "lora_flux2_klein9b_q8_consistency_edit_2026_06_11"
@@ -57,6 +58,11 @@ _RECORDS: tuple[LoRAValidationRecord, ...] = (
         model="AbstractFramework/qwen-image-8bit",
         capability_id="qwen.control",
         validation_profile=QWEN_Q8_CONTROL_LIGHTNING_PROFILE_ID,
+    ),
+    LoRAValidationRecord(
+        model="AbstractFramework/qwen-image-8bit",
+        capability_id="qwen.control-inpaint",
+        validation_profile=QWEN_Q8_CONTROL_INPAINT_LIGHTNING_PROFILE_ID,
     ),
     LoRAValidationRecord(
         model="AbstractFramework/qwen-image-2512-8bit",

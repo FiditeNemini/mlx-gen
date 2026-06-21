@@ -226,6 +226,16 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--image-path", type=Path, required=required, default=None, help="Local path to init image")
         self.add_argument("--image-strength", type=image_strength_value, required=False, default=None, help=f"Latent image-to-image denoising strength in (0, 1]. Required for latent I2I. Higher values add more noise, allow more change, and run more denoise steps. A practical starting point is {ui_defaults.IMAGE_STRENGTH}.")
 
+    def add_mask_path_argument(self, help_text: str) -> None:
+        self.add_argument(
+            "--mask-path",
+            "--masked-image-path",
+            dest="mask_path",
+            type=Path,
+            default=None,
+            help=help_text,
+        )
+
     def add_batch_image_generator_arguments(self) -> None:
         self.add_argument("--batch-prompts-file", type=Path, required=True, default=argparse.SUPPRESS, help="Local path for a file that holds a batch of prompts.")
         self.add_argument("--global-seed", type=int, default=argparse.SUPPRESS, help="Entropy Seed (used for all prompts in the batch)")
