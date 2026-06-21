@@ -2,6 +2,12 @@ import mlx.core as mx
 from mlx import nn
 
 
+class MemoryState:
+    DISABLED = "disabled"
+    INITIALIZING = "initializing"
+    ACTIVE = "active"
+
+
 class CausalConv3d(nn.Module):
     def __init__(
         self,
@@ -31,19 +37,29 @@ class CausalConv3d(nn.Module):
         kt, kh, kw = kernel_size
         self.weight = mx.zeros((out_channels, kt, kh, kw, in_channels))
         self.bias = mx.zeros((out_channels,))
+        self.memory: mx.array | None = None
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
         B, C, T, H, W = x.shape
         kt, kh, kw = self.kernel_size
         pt, ph, pw = self.padding
         st, sh, sw = self.stride
 
+        if memory_state != MemoryState.ACTIVE:
+            self.memory = None
+
         if self.causal_temporal and kt > 1:
-            causal_pad = (2 * self.padding[0]) if self.use_padding_causal else kt - 1
-            if causal_pad > 0:
-                first_frame = x[:, :, :1, :, :]
-                pad_frames = mx.repeat(first_frame, causal_pad, axis=2)
-                x = mx.concatenate([pad_frames, x], axis=2)
+            if self.memory is not None and memory_state == MemoryState.ACTIVE:
+                x = mx.concatenate([self.memory.astype(x.dtype), x], axis=2)
+            else:
+                causal_pad = (2 * self.padding[0]) if self.use_padding_causal else kt - 1
+                if causal_pad > 0:
+                    first_frame = x[:, :, :1, :, :]
+                    pad_frames = mx.repeat(first_frame, causal_pad, axis=2)
+                    x = mx.concatenate([pad_frames, x], axis=2)
+            mem_size = st - kt
+            if mem_size != 0 and memory_state != MemoryState.DISABLED:
+                self.memory = x[:, :, mem_size:, :, :]
             temporal_padding = 0
         else:
             temporal_padding = pt

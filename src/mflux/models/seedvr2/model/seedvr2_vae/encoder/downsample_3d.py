@@ -1,7 +1,7 @@
 import mlx.core as mx
 from mlx import nn
 
-from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d
+from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d, MemoryState
 
 
 class Downsample3D(nn.Module):
@@ -20,6 +20,6 @@ class Downsample3D(nn.Module):
             padding=(pt, 0, 0),
         )
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
         x = mx.pad(x, [(0, 0), (0, 0), (0, 0), (0, 1), (0, 1)])
-        return self.conv(x)
+        return self.conv(x, memory_state=memory_state)

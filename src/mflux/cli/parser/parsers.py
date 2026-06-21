@@ -151,7 +151,7 @@ class CommandLineParser(argparse.ArgumentParser):
             "--color-correction",
             choices=["wavelet", "lab", "off"],
             default="wavelet",
-            help="Video/image color post-processing. 'wavelet' is the current MLX-Gen default for SeedVR2 video restore. Default: wavelet.",
+            help="Post-process the restored image/video tone against the source. wavelet = wavelet tone reconstruction (default); lab = LAB tone matching; off = raw model output without tone correction. Default: wavelet.",
         )
         seedvr2_group.add_argument("--vae-tiling", action="store_true", help="Force tiled VAE encode/decode. By default, small outputs stay untiled and large outputs automatically use tiled decode.")
         seedvr2_group.add_argument("--start-seconds", type=float, default=0.0, help="For video inputs, skip frames before this source timestamp in seconds.")
@@ -160,13 +160,13 @@ class CommandLineParser(argparse.ArgumentParser):
             "--temporal-chunk-size",
             type=int,
             default=49,
-            help="For video inputs, restore this many source frames per chunk before stitching. Default: 49.",
+            help="For video inputs, restore this many source frames per chunk before stitching. Prefer official 4n+1 sizes such as 45 or 49. Default: 49.",
         )
         seedvr2_group.add_argument(
             "--temporal-chunk-overlap",
             type=int,
             default=16,
-            help="For video inputs, overlap this many source frames between chunks. Default: 16.",
+            help="For video inputs, reuse this many source frames as context between adjacent chunks. This is context overlap, not an output crossfade. Default: 16.",
         )
         seedvr2_group.add_argument(
             "--force-unsafe-video-memory",

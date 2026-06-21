@@ -98,6 +98,7 @@ class SeedVR2Initializer:
     @staticmethod
     def _init_models(model, model_config: ModelConfig) -> None:
         model.vae = SeedVR2VAE()
+        model.vae.set_causal_slicing(split_size=4)
         model.transformer = SeedVR2Transformer(**(model_config.transformer_overrides or {}))
 
     @staticmethod

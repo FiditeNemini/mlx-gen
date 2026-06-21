@@ -17,191 +17,216 @@ The public safe video profile is conservative by design:
 
 - if you omit `--resolution`, video restore defaults to `1x`;
 - MLX-Gen enables `--low-ram` automatically for video inputs;
-- the safe profile uses `--mlx-cache-limit-gb 8` as an MLX cache setting, not as a total process or
-  machine-memory cap;
+- `--mlx-cache-limit-gb 8` is an MLX cache setting, not a total process-memory cap;
 - the CLI uses sequential temporal chunking for video instead of the bounded in-memory direct path;
 - enlarged video output profiles are rejected in safe mode unless you pass
   `--force-unsafe-video-memory`.
 
 `--vae-tiling` is for image runs only and is rejected on video input.
 
-Validated public example downloads:
+### Reader-First Validation Rule
+
+MLX-Gen now treats five contiguous seconds as the minimum public-quality proof for SeedVR2 video.
+Sub-second clips are still useful for local diagnostics, but they are not enough to judge cadence,
+time dilation, or motion distortion. See
+[ADR 0005](adr/0005_seedvr2_video_quality_proof_requires_five_second_reader_first_clips.md).
+
+For the checked-in Eiffel archival proof, the accepted reader-first slice is:
+
+- source video: `Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4`
+- clip window: `70.0s` to `75.0s`
+- source geometry: `320x240`
+- source duration under test: `149` frames at `29.97 fps` (`4.972s`)
+
+Set the source file path once:
 
 ```sh
-mlxgen download --model ByteDance-Seed/SeedVR2-3B
-mlxgen download --model ByteDance-Seed/SeedVR2-7B
+SOURCE_VIDEO="Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4"
 ```
 
-Use short clips first when you want a quick parameter check:
+Run the accepted safe bounded `1x` proof with the official source checkpoints:
 
 ```sh
 mlxgen upscale \
   --model ByteDance-Seed/SeedVR2-3B \
-  --video-path '/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4' \
-  --start-seconds 16 \
-  --max-frames 6 \
-  --resolution 1x \
-  --softness 0.0 \
-  --metadata \
-  --output eiffel_16s_6f_restore_3b.mp4
-```
-
-The checked proof surface for this route now has two layers on the exact current tree:
-
-- bounded `1x` source-size quick checks:
-  - 6-frame official `3B` / `7B` video restore at `320x240`
-  - 14-frame official `3B` / `7B` video restore at `320x240`
-  - matching single-frame `1x` image restore from the same source frame
-- full `97s` `1x` source-size long-run checks:
-  - official `3B` full clip restore at `320x240`
-  - official `7B` full clip restore at `320x240`
-
-Use this exact bounded command for the primary route check:
-
-```sh
-mlxgen upscale \
-  --model ByteDance-Seed/SeedVR2-3B \
-  --video-path '/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4' \
-  --start-seconds 16 \
-  --max-frames 6 \
+  --video-path "$SOURCE_VIDEO" \
+  --start-seconds 70 \
+  --max-frames 149 \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
   --metadata \
-  --output eiffel_16s_6f_restore_3b.mp4
+  --output eiffel_70s_149f_3b_chunk29_overlap8_wavelet_1x_after_causal_slicing.mp4
 ```
-
-Use this exact full-clip command for the current `3B` long-run proof:
-
-```sh
-mlxgen upscale \
-  --model ByteDance-Seed/SeedVR2-3B \
-  --video-path '/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4' \
-  --resolution 1x \
-  --softness 0.0 \
-  --color-correction wavelet \
-  --metadata \
-  --output eiffel_full_source3b_restore1x_current.mp4
-```
-
-Use this exact full-clip command for the current `7B` long-run proof on the same machine:
 
 ```sh
 mlxgen upscale \
   --model ByteDance-Seed/SeedVR2-7B \
-  --video-path '/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4' \
+  --video-path "$SOURCE_VIDEO" \
+  --start-seconds 70 \
+  --max-frames 149 \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
-  --temporal-chunk-size 5 \
-  --temporal-chunk-overlap 1 \
-  --force-unsafe-video-memory \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
   --metadata \
-  --output eiffel_full_source7b_restore1x_current.mp4
+  --output eiffel_70s_149f_7b_chunk29_overlap8_wavelet_1x_after_causal_slicing.mp4
 ```
 
-Current full proof assets:
+Run the accepted enlarged `2x` comparison only after the `1x` slice looks right on the same clip:
 
-- [Restored 3B full video](assets/validation/seedvr2-video-2026-06-20/eiffel_full_source3b_restore1x_current.mp4)
-- [Restored 7B full video](assets/validation/seedvr2-video-2026-06-20/eiffel_full_source7b_restore1x_current.mp4)
-- [Full sampled contact sheet](assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_contact_sheet.jpg)
-- [Full sampled metrics](assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_metrics.json)
-- [Full command log](assets/validation/seedvr2-video-2026-06-20/seedvr2_video_restore_full_command_log.md)
-- [Full timing and memory stats](assets/validation/seedvr2-video-2026-06-20/seedvr2_video_restore_full_stats_m5max.json)
+```sh
+mlxgen upscale \
+  --model ByteDance-Seed/SeedVR2-3B \
+  --video-path "$SOURCE_VIDEO" \
+  --start-seconds 70 \
+  --max-frames 149 \
+  --resolution 2x \
+  --softness 0.0 \
+  --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
+  --force-unsafe-video-memory \
+  --metadata \
+  --output eiffel_70s_149f_3b_chunk29_overlap8_wavelet_2x_after_causal_slicing.mp4
+```
 
-The full sampled sheet below is the current long-run review aid:
+```sh
+mlxgen upscale \
+  --model ByteDance-Seed/SeedVR2-7B \
+  --video-path "$SOURCE_VIDEO" \
+  --start-seconds 70 \
+  --max-frames 149 \
+  --resolution 2x \
+  --softness 0.0 \
+  --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
+  --force-unsafe-video-memory \
+  --metadata \
+  --output eiffel_70s_149f_7b_chunk29_overlap8_wavelet_2x_after_causal_slicing.mp4
+```
 
-![SeedVR2 Eiffel full 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_full_3b_7b_current_contact_sheet.jpg)
+`29/8` means:
 
-Current bounded proof assets:
+- restore `29` source frames per chunk;
+- reuse `8` source frames as context between adjacent chunks;
+- do not crossfade output frames together.
 
-- [Restored 3B bounded video](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_3b_1x_current.mp4)
-- [Restored 7B bounded video](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_7b_1x_current.mp4)
+This matters because the overlap is there to keep the model temporally grounded, not to blend two
+different restored outputs into one display frame.
 
-The 6-frame sheet below is the direct current-code review aid:
+### Color-Correction Labels
 
-![SeedVR2 Eiffel bounded 6-frame 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_3b_vs_7b_current_contact_sheet.jpg)
+The CLI values stay short, but the meanings are:
 
-The 14-frame sheet below is the current stability check:
+| CLI value | Reader-first label | What it does |
+| --- | --- | --- |
+| `wavelet` | Wavelet tone reconstruction | Restores detail, then reuses the source clip's broad low-frequency tone structure. This is the current default and the accepted Eiffel proof mode. |
+| `lab` | LAB tone matching | Matches the restored output back toward the source in perceptual LAB space. Usually a bit more conservative than `wavelet`. |
+| `off` | Raw model output | Leaves the restored output untouched by tone/color post-processing. |
 
-![SeedVR2 Eiffel bounded 14-frame 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_14f_3b_vs_7b_current_contact_sheet.jpg)
+On monochrome archival footage, these are really tone-matching choices more than ordinary color
+choices.
 
-The matching single-frame image check from the same source frame is:
+### Accepted Proof Bundle
 
-![SeedVR2 Eiffel single-frame 3B vs 7B restore proof](assets/validation/seedvr2-video-2026-06-20/eiffel_frame16s_3b_vs_7b_1x_current_contact_sheet.jpg)
+Reader-first report and reproduction files:
 
-Supporting bounded metrics:
+- [Validation report](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_validation_report.md)
+- [Command log](assets/validation/seedvr2-video-2026-06-21/seedvr2_video_restore_command_log.md)
+- [Timing and memory stats](assets/validation/seedvr2-video-2026-06-21/seedvr2_video_restore_stats_m5max.json)
 
-- [6-frame sampled metrics](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_6f_3b_vs_7b_current_metrics.json)
-- [14-frame sampled metrics](assets/validation/seedvr2-video-2026-06-20/eiffel_16s_14f_3b_vs_7b_current_metrics.json)
+Safe `1x` bounded proof:
 
-Measured on an Apple M5 Max with 128 GB unified memory:
+- [3B 1x restored video](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_chunk29_overlap8_wavelet_1x_after_causal_slicing.mp4)
+- [7B 1x restored video](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_7b_chunk29_overlap8_wavelet_1x_after_causal_slicing.mp4)
+- [1x comparison video](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_vs_7b_wavelet_1x_after_causal_slicing_comparison.mp4)
+- [1x contact sheet](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_vs_7b_wavelet_1x_after_causal_slicing_contact_sheet.jpg)
+- [1x mid-clip motion strip](assets/validation/seedvr2-video-2026-06-21/motion_strip_1x_after_causal_slicing_frames_64_72.jpg)
+- [1x tail motion strip](assets/validation/seedvr2-video-2026-06-21/motion_strip_1x_after_causal_slicing_frames_141_148.jpg)
+- [1x metrics JSON](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_vs_7b_wavelet_1x_after_causal_slicing_metrics.json)
 
-- `3B full 1x` safe streaming profile: `generation_time 2210.12s`, `wall_time 2215.64s`,
-  `peak_mlx 31.36 GB`, `max_rss 27.40 GB`
-- `7B full 1x` explicit chunk-5 profile: `generation_time 3062.79s`, `wall_time 3070.42s`,
-  `peak_mlx 22.93 GB`, `max_rss 66.18 GB`
+Enlarged `2x` bounded proof:
+
+- [3B 2x restored video](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_chunk29_overlap8_wavelet_2x_after_causal_slicing.mp4)
+- [7B 2x restored video](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_7b_chunk29_overlap8_wavelet_2x_after_causal_slicing.mp4)
+- [2x comparison video](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_vs_7b_wavelet_2x_after_causal_slicing_comparison.mp4)
+- [2x contact sheet](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_vs_7b_wavelet_2x_after_causal_slicing_contact_sheet.jpg)
+- [2x moving-crowd motion strip](assets/validation/seedvr2-video-2026-06-21/motion_strip_2x_after_causal_slicing_frames_64_72.jpg)
+- [2x tail motion strip](assets/validation/seedvr2-video-2026-06-21/motion_strip_2x_after_causal_slicing_frames_141_149.jpg)
+- [2x crowd detail crop](assets/validation/seedvr2-video-2026-06-21/detail_crop_crowd_2x_after_causal_slicing_64_72.jpg)
+- [2x metrics JSON](assets/validation/seedvr2-video-2026-06-21/eiffel_70s_149f_3b_vs_7b_wavelet_2x_after_causal_slicing_metrics.json)
+
+### Supported Public Proof Profiles
+
+Accepted public profiles for this exact archival slice:
+
+- safe bounded `1x 29/8 wavelet` for `3B` and `7B`
+- explicit enlarged `2x 29/8 wavelet` for `3B` and `7B`
+
+Direct current conclusion:
+
+- the streamed video path is working correctly for both `3B` and `7B`;
+- `1x 29/8` is the right public proof surface to show route correctness, frame integrity, and
+  motion continuity;
+- `3B 1x 29/8` is crisper on this native archival slice, while `7B 1x 29/8` is smoother and less
+  drift-prone;
+- `2x 29/8` is the stronger visual comparison regime on this clip, and `7B 2x 29/8`
+  result is slightly cleaner and more stable than `3B 2x 29/8`.
+
+Supporting metrics on the accepted proofs, after downscaling each candidate back to the
+original `320x240` source resolution before scoring:
+
+- `3B 1x 29/8`: `sharpness_gain 1.5240`, `contrast_gain 1.1046`, `temporal_ratio 1.5097`,
+  `drift_mae 0.056926`, `heuristic_score 58.65`
+- `7B 1x 29/8`: `sharpness_gain 1.2258`, `contrast_gain 1.0682`, `temporal_ratio 1.2874`,
+  `drift_mae 0.041031`, `heuristic_score 60.72`
+- `3B 2x 29/8`: `sharpness_gain 1.4096`, `contrast_gain 1.0504`, `temporal_ratio 1.3493`,
+  `drift_mae 0.035856`, `heuristic_score 61.63`
+- `7B 2x 29/8`: `sharpness_gain 1.4176`, `contrast_gain 1.0523`, `temporal_ratio 1.3563`,
+  `drift_mae 0.033749`, `heuristic_score 62.57`
+
+These metrics are supporting evidence only. The comparison MP4 and motion/crop sheets are the
+primary quality proof.
+
+Measured on an Apple M5 Max with 128 GB unified memory for the accepted `29/8` proofs:
+
+- `3B 1x 29/8`: `generation_time 71.33s`, `wall_time 74.54s`, `peak_mlx 14.55 GB`,
+  `max_rss 27.40 GB`
+- `7B 1x 29/8`: `generation_time 107.44s`, `wall_time 112.93s`, `peak_mlx 24.54 GB`,
+  `max_rss 66.18 GB`
+- `3B 2x 29/8`: `generation_time 539.03s`, `wall_time 542.30s`, `peak_mlx 34.40 GB`,
+  `max_rss 27.40 GB`
+- `7B 2x 29/8`: `generation_time 454.46s`, `wall_time 460.61s`, `peak_mlx 44.27 GB`,
+  `max_rss 66.18 GB`
 
 Peak MLX memory and max RSS are different measurements. Peak MLX tracks allocator activity inside
 MLX. Max RSS tracks the full process footprint seen by the OS.
 
-On the exact current proofs:
-
-- `3B 6f 1x`: `sharpness_gain 1.6969`, `contrast_gain 1.0822`, `drift_mae 0.065269`,
-  `temporal_ratio 1.0075`
-- `7B 6f 1x`: `sharpness_gain 1.5177`, `contrast_gain 1.0602`, `drift_mae 0.058795`,
-  `temporal_ratio 0.8866`
-- `3B 14f 1x`: visually sharper, but `temporal_ratio 1.7773` and `drift_mae 0.078679`
-- `7B 14f 1x`: visually cleaner and more stable, with `temporal_ratio 1.2141` and
-  `drift_mae 0.065077`
-- `3B full 1x`: `sharpness_gain 1.7187`, `contrast_gain 1.0942`, `temporal_ratio 1.7634`,
-  `drift_mae 0.069546`
-- `7B full 1x`: `sharpness_gain 1.8153`, `contrast_gain 1.0720`, `temporal_ratio 1.1041`,
-  `drift_mae 0.060194`
-
-That is the current public conclusion:
-
-- `3B` is a strong bounded restore route and the fresh `6f` current-code MP4 is byte-identical to
-  the known-good June 20 `after_mmrope_fix` artifact.
-- `7B` is the better balanced result on the current `14f`, single-frame, and full-source checks.
-- `3B` remains the faster and lower-RSS full-route proof on this machine.
-
-Metric interpretation:
-
-- the metrics sample 48 frames across the full restored clip and downscale each sampled frame back
-  to the original `320x240` source resolution before scoring;
-- higher `sharpness_gain` and `contrast_gain` are good;
-- lower `drift_mae` is better;
-- `temporal_ratio` close to `1.0` is preferred because it means the restored clip changes over
-  time at roughly the same rate as the source instead of becoming muddy or flickery.
-
-These metrics are route-health aids, not a public family leaderboard.
-
-One important scope note: MLX-Gen now exposes both official `ByteDance-Seed/SeedVR2-7B`
-checkpoints:
-
-- `seedvr2-7b` for the regular 7B checkpoint
-- `seedvr2-7b-sharp` for the `seedvr2_ema_7b_sharp.pth` checkpoint
-
-The sharp route is source-only today; there are no published `q8` or `q4` sharp packages yet.
-
 Practical guidance:
 
-- use `--start-seconds` and `--max-frames` for short, reproducible checks before running a longer
-  clip;
-- start with `--resolution 1x` and `--softness 0.0` when the goal is archival restoration rather
-  than enlargement;
-- when comparing `seedvr2-7b` on small or native-resolution archival clips, judge the actual
-  frames and MP4 output directly instead of trusting one heuristic score;
-- when the default safe planner refuses a longer `7B` full-clip run on a busy machine, reduce
-  `--temporal-chunk-size` and `--temporal-chunk-overlap` first; the current full proof used
-  `5` and `1`;
-- increase `--resolution` to `2x` only after a short clip check proves the larger profile is still
-  preserving detail instead of drifting muddy;
-- use `--low-ram --mlx-cache-limit-gb 8` for longer clips and keep the default chunk profile
-  unless you are deliberately retuning memory versus temporal overlap;
-- prefer visibly degraded, noisy, low-resolution, or compressed footage for restoration/upscale
-  proofs;
+- use `--start-seconds` and `--max-frames` to validate a real five-second slice before longer
+  runs;
+- start with the safe `1x 29/8` profile and `--softness 0.0` when the goal is archival
+  restoration rather than enlargement;
+- use `2x 29/8` only after the same slice looks correct at `1x`, because enlarged proof is an
+  explicit unsafe-memory run;
+- use `wavelet` first, then compare `lab` and `off` only if tone matching looks wrong on the
+  actual clip;
+- judge the MP4 and motion-strip output directly instead of trusting one heuristic score;
+- prefer visibly degraded, noisy, low-resolution, or compressed footage for restoration proofs;
 - treat already-clean high-resolution footage as a harder fit. In local testing, SeedVR2 could
   over-smooth modern native-resolution clips instead of improving them.
 

@@ -13,7 +13,7 @@
 - `docs/api.md`: public CLI, legacy-command migration boundary, router behavior, task/mode resolution, I2I mode selection and canvas policy, Qwen structured control with `--controlnet-image-path`, experimental generative reframe, backend-specific outpaint with Qwen adaptive source restoration and FLUX.2 Klein base source-locked denoising, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor image sizing plus video clip controls, negative prompts including the FLUX.2 exception, Qwen edit-version routing, Wan video sizes, `mlxgen capabilities`, and Python routing helpers.
 - `docs/image-edit-modes.md`: plain-language guide to latent img2img, edit-reference, masked edit/inpaint, structured control, multi-reference, generative reframe, and outpaint, including what each mode preserves and what to expect from the output.
 - `docs/qwen-localized-editing.md`: plain-language guide to Qwen localized-edit routes, contrasting masked edit/inpaint, structured control, and the planned control-inpaint slice, defining ControlNet and “sidecar” in user terms, and explaining why ControlNet inpaint is an extra model package rather than a LoRA.
-- `docs/upscaling.md`: SeedVR2 image and video restoration guide with official 3B/7B source usage, published 3B/7B q8/q4 package handles, shortest-edge and scale-factor sizing, the conservative safe-video profile, the validated bounded and full Eiffel 3B/7B proof set plus timings/memory data, and real 5x source/output comparisons.
+- `docs/upscaling.md`: SeedVR2 image and video restoration guide with official 3B/7B source usage, published 3B/7B q8/q4 package handles, shortest-edge and scale-factor sizing, the conservative safe-video profile, the accepted June 21 five-second Eiffel `1x` and `2x` 3B/7B proof bundles with readable mode labels, reproduction commands, timings/memory data, and real 5x source/output comparisons.
 - `docs/edit-capabilities.md`: image-edit and adjacent structured-control contact sheets, model/package status summaries, and exact command logs for Qwen Image Edit, Qwen Image Edit 2509/2511, base Qwen structured control, FLUX.2 Klein, and latent I2I rows. FIBO Edit is unsupported through unified `mlxgen generate` in the current release.
 - `docs/reframe-outpaint.md`: experimental reframe/outpaint workflows, exact commands, the mixed June 8 profile, the current FLUX.2 Klein base source-model starship proof, and the related validation profile ids.
 - `docs/lora.md`: experimental LoRA capability fields, explicit adapter download, strict scale matching, exact adapter/base-model compatibility, source/no-LoRA/with-LoRA validation, exact q8 proof rows for original Qwen Image Edit, Qwen 2509/2511, Qwen 2512, the base Qwen q8 structured-control row, Z-Image, FLUX.2 Klein, ERNIE Image Turbo, and all current Wan q8 video routes, including direct `lightx2v/Wan2.2-Lightning` download, recommended `4`-step `lightx2v/Qwen-Image-2512-Lightning`, `lightx2v/Qwen-Image-Edit-2511-Lightning`, and `lightx2v/Qwen-Image-Lightning` examples, the Qwen Image Edit 2511 q8 masked-edit Lightning proof, the exact Qwen control Lightning proof with the InstantX union sidecar, stable `repo:subdir/file.safetensors` and absolute local-file usage for Wan A14B, and explicit guidance that the validated Lightning target is the MLX-Gen q8 package rather than an arbitrary external FP8 checkpoint.
@@ -221,10 +221,11 @@ video output unless `--force-unsafe-video-memory` is passed explicitly.
 `docs/upscaling.md` includes published `AbstractFramework/seedvr2-3b-8bit`,
 `AbstractFramework/seedvr2-3b-4bit`, `AbstractFramework/seedvr2-7b-8bit`, and
 `AbstractFramework/seedvr2-7b-4bit` usage, plus checked-in 5x comparisons: a `133x113` source
-enlarged to the generated `658x560` size next to SeedVR2
-3B and 7B source/q8/q4 outputs generated with `--resolution 5x`, `--seed 42`, and `--metadata`.
-It also includes the full `97s` Eiffel archival video restored at `1x` with the official 3B and
-7B source models, command logs, timings, memory notes, and sampled route-health metrics.
+enlarged to the generated `658x560` size next to SeedVR2 3B and 7B source/q8/q4 outputs generated
+with `--resolution 5x`, `--seed 42`, and `--metadata`. It also includes the accepted June 21
+five-second Eiffel archival proof bundles for the accepted `1x` and `2x` 3B/7B video route,
+including comparison MP4s, motion strips, readable validation reports, timings, memory notes, and
+reproduction commands.
 
 ---
 

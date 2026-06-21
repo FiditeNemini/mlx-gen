@@ -573,7 +573,8 @@ SeedVR2 image and video restoration use `mlxgen upscale`. The public video CLI p
 sequential temporal chunking, defaults video restore to `1x` when `--resolution` is omitted,
 enables `--low-ram` automatically, and fails closed on enlarged video output unless you explicitly
 pass `--force-unsafe-video-memory`. See [Image Upscaling](upscaling.md) for a reproducible 5x
-image comparison and the current bounded plus full Eiffel video proof set.
+image comparison plus the accepted June 21 five-second Eiffel `1x` and `2x` 3B/7B validation
+bundles.
 
 ```sh
 mlxgen upscale \
@@ -609,11 +610,11 @@ Useful options:
 | `--quantize` | Optional runtime quantization for source-model runs. Published q8/q4 packages do not need this flag. |
 | `--softness` | Optional input smoothing from `0.0` to `1.0`. `0.0` preserves the preprocessed source most directly. Higher values pre-downsample the conditioning image before reconstruction, which can suppress source grain/JPEG texture but can also soften fine details or make a clip look muddy. Try `0.25` to `0.5` for noisy or compressed sources only after checking a short clip first. |
 | `--vae-tiling` | Force tiled VAE encode/decode for image runs. Video restore rejects this flag; use `--low-ram` and temporal chunking instead. |
-| `--color-correction` | Video restore color post-process. Current values: `wavelet`, `lab`, `off`. |
+| `--color-correction` | Tone/color post-process after restoration. `wavelet` = wavelet tone reconstruction, `lab` = LAB tone matching, `off` = raw model output. |
 | `--start-seconds` | For video inputs, skip frames before this source timestamp in seconds. |
 | `--max-frames` | For video inputs, decode at most this many frames after `--start-seconds`. |
-| `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. |
-| `--temporal-chunk-overlap` | For longer video inputs, overlap adjacent temporal chunks by this many frames before crossfading them. |
+| `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. Streamed SeedVR2 video profiles below `9` frames are rejected because they can preserve frame count while still breaking temporal continuity. |
+| `--temporal-chunk-overlap` | Reuse this many source frames as context between adjacent chunks. This is context overlap, not an output crossfade. |
 | `--force-unsafe-video-memory` | Bypass the conservative SeedVR2 safe-video profile. Use only when you are intentionally accepting the risk of a high-memory run. |
 | `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
 
@@ -625,8 +626,11 @@ For video inputs:
 - the public CLI safe profile uses sequential temporal chunking, defaults video restore to `1x`,
   enables `--low-ram` automatically, and rejects enlarged video output unless you explicitly pass
   `--force-unsafe-video-memory`;
-- the public Eiffel proof in [upscaling.md](upscaling.md) preserves full `3B` and `7B` restored
-  MP4 files plus timings, memory measurements, and heuristic route-health metrics.
+- public quality comparisons should use at least five contiguous seconds of source video, not a
+  sub-second clip;
+- the public Eiffel proof in [upscaling.md](upscaling.md) keeps the accepted `70s` to `75s`
+  comparison MP4s, motion strips, detail crops, and readable report as the primary quality
+  evidence.
 
 ## Model Management Commands
 

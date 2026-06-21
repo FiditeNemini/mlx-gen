@@ -501,17 +501,22 @@ source is enlarged to the generated output resolution for side-by-side assessmen
 
 Yes, through `mlxgen upscale --video-path ...`.
 
-Use `--start-seconds` and `--max-frames` for short, reproducible validation clips before you try a
+Use `--start-seconds` and `--max-frames` for a real five-second validation clip before you try a
 longer source:
 
 ```sh
 mlxgen upscale \
-  --model AbstractFramework/seedvr2-3b-8bit \
+  --model ByteDance-Seed/SeedVR2-3B \
   --video-path input.mp4 \
-  --start-seconds 16 \
-  --max-frames 6 \
+  --start-seconds 70 \
+  --max-frames 149 \
   --resolution 1x \
   --softness 0.0 \
+  --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
   --metadata \
   --output restored.mp4
 ```
@@ -524,8 +529,9 @@ Current behavior:
 - the public CLI safe profile defaults to `1x`, enables `--low-ram` automatically, uses
   `--mlx-cache-limit-gb 8` as part of the MLX cache policy, and rejects enlarged video output
   unless you explicitly pass `--force-unsafe-video-memory`;
-- the public Eiffel proof is the full `97s` source clip, restored with official `3B` and `7B`
-  source models at `1x`, plus sampled route-health metrics.
+- the public Eiffel quality proof is a five-second `70s` to `75s` reader-first clip, with safe
+  bounded `1x` and explicit enlarged `2x` 3B/7B comparison MP4s, motion strips, detail crops, and
+  a readable report.
 
 It is a better fit for visibly degraded, noisy, low-resolution, or compressed footage than for
 already-clean high-resolution footage. In local validation, archival material improved cleanly,
@@ -540,14 +546,16 @@ mlxgen upscale \
   --resolution 1x \
   --softness 0.0 \
   --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
   --low-ram \
   --mlx-cache-limit-gb 8 \
   --metadata \
   --output restored.mp4
 ```
 
-On the checked-in Eiffel proof, the 3B full run used materially less memory than 7B. The sampled
-metric panel is kept as a route-health aid rather than a blanket family-quality ranking.
+Validate a five-second slice first with `--start-seconds` and `--max-frames`, then use the same
+profile for the longer clip.
 
 ## Can SeedVR2 Use The Official ByteDance Checkpoint?
 

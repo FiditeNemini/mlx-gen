@@ -14,11 +14,11 @@ def test_seedvr2_3b_model_config_uses_lang_mmrope3d():
 
 
 @pytest.mark.fast
-def test_seedvr2_7b_model_config_uses_video_only_rope_and_window_text_pooling():
+def test_seedvr2_7b_model_config_uses_video_only_rope_and_global_text_attention():
     overrides = ModelConfig.seedvr2_7b().transformer_overrides or {}
 
     assert overrides["rope_on_text"] is False
-    assert overrides["text_attention_mode"] == "window_pool"
+    assert overrides["text_attention_mode"] == "global_text"
 
 
 @pytest.mark.fast

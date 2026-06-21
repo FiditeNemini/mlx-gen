@@ -51,9 +51,9 @@ The main capabilities are:
   image aspect ratio so inputs are not stretched into a mismatched canvas;
 - SeedVR2 image and video restoration through `mlxgen upscale`, with official 3B/7B source
   support including the first-class `seedvr2-7b-sharp` route, published q8/q4 packages,
-  shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, full-video chunked
-  restore for longer clips, preserved source FPS, and a conservative host-safe default video
-  profile;
+  shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, streamed restore for
+  longer clips, preserved source FPS, a conservative host-safe default video profile, and
+  validated five-second `1x` and `2x` proof bundles for the current 3B/7B video path;
 - explicit `download` and `prepare` workflows for local MLX-Gen model packages;
 - JSON model capability inspection before starting a heavy run;
 - experimental LoRA routing and strict adapter application checks, with model-card compatibility
@@ -140,18 +140,24 @@ For SeedVR2, an integer `--resolution` is the target shorter edge while values s
 `0.5` when the source has visible grain in smooth areas. Small image outputs use the untiled VAE
 path; large image outputs automatically use tiled VAE decode, and `--vae-tiling` forces tiled VAE
 encode/decode for image runs only. See [docs/upscaling.md](docs/upscaling.md) for a reproducible
-5x SeedVR2 image comparison plus the current bounded and full Eiffel `3B` / `7B` restore proofs.
+5x SeedVR2 image comparison plus the accepted five-second Eiffel `1x` and `2x` `3B` / `7B`
+restore proof bundles.
 
-Restore a short video clip with SeedVR2:
+Restore a real five-second validation clip with SeedVR2:
 
 ```sh
 mlxgen upscale \
-  --model AbstractFramework/seedvr2-3b-8bit \
+  --model ByteDance-Seed/SeedVR2-3B \
   --video-path input.mp4 \
-  --start-seconds 16 \
-  --max-frames 6 \
+  --start-seconds 70 \
+  --max-frames 149 \
   --resolution 1x \
   --softness 0.0 \
+  --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
   --metadata \
   --output restored.mp4
 ```
@@ -159,9 +165,9 @@ mlxgen upscale \
 For video inputs, SeedVR2 preserves the source FPS by default and currently writes a silent MP4
 even when the source clip contains audio. The safe public video profile defaults to `1x`, enables
 `--low-ram` automatically, and rejects enlarged video output unless you explicitly pass
-`--force-unsafe-video-memory`. See [docs/upscaling.md](docs/upscaling.md) for the current bounded
-and full Eiffel source/3B/7B proof videos, single-frame check, timings, memory measurements, and
-route-health metrics.
+`--force-unsafe-video-memory`. See [docs/upscaling.md](docs/upscaling.md) for the accepted
+five-second Eiffel `1x` and `2x` source/3B/7B proof videos, readable tone-correction labels,
+reproduction commands, timings, memory measurements, and direct motion/crop review sheets.
 
 Inspect model capabilities before a run:
 
@@ -347,7 +353,7 @@ progress callbacks make long runs observable.
 - [Image edit modes](docs/image-edit-modes.md): what latent img2img, edit-reference, multi-reference, generative reframe, and outpaint mean in practice, with examples.
 - [Wan video](docs/wan-video.md): practical Wan2.2 T2V/I2V sizing, broader A14B target size families, and 5-second M5 Max comparison clips.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
-- [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, the host-safe video restore profile, the current bounded and full Eiffel 3B/7B proof set, and 5x source/output comparisons.
+- [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, the host-safe video restore profile, the accepted June 21 five-second Eiffel `1x` and `2x` 3B/7B proof bundles, readable tone-correction labels, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.
 - [Reframe and outpaint](docs/reframe-outpaint.md): experimental `--reframe-padding` and `--outpaint-padding` routes with the mixed June 8 profile plus the current FLUX.2 Klein base source-model proof.
 - [Model management](docs/model-management.md): download, prepare, and run from local model files.

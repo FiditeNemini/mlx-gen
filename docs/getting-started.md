@@ -245,19 +245,26 @@ mlxgen upscale \
 
 Use `seedvr2-7b` for the official 7B source model after downloading
 `ByteDance-Seed/SeedVR2-7B`. See [Image Upscaling](upscaling.md) for 5x SeedVR2 3B and 7B
-examples, the current bounded and full Eiffel restoration proofs, the host-safe SeedVR2 video profile, source/q8/q4 image comparisons,
-package sizes, and measured memory profiles.
+examples, the accepted June 21 five-second Eiffel `1x` and `2x` restoration proof bundles, the
+host-safe SeedVR2 video profile, source/q8/q4 image comparisons, package sizes, and measured
+memory profiles.
 
-For a short video restoration smoke:
+For a real reader-first video validation clip, use about five seconds instead of a sub-second
+excerpt:
 
 ```sh
 mlxgen upscale \
-  --model AbstractFramework/seedvr2-3b-8bit \
+  --model ByteDance-Seed/SeedVR2-3B \
   --video-path input.mp4 \
-  --start-seconds 16 \
-  --max-frames 6 \
+  --start-seconds 70 \
+  --max-frames 149 \
   --resolution 1x \
   --softness 0.0 \
+  --color-correction wavelet \
+  --temporal-chunk-size 29 \
+  --temporal-chunk-overlap 8 \
+  --low-ram \
+  --mlx-cache-limit-gb 8 \
   --metadata \
   --output restored.mp4
 ```
@@ -266,8 +273,9 @@ For video inputs, SeedVR2 preserves source FPS by default and currently writes a
 when the source clip contains audio. The safe public video profile defaults to `1x`, enables
 `--low-ram` automatically, uses `--mlx-cache-limit-gb 8` as part of the MLX cache policy, and
 rejects enlarged video output unless you explicitly pass `--force-unsafe-video-memory`. See
-[Image Upscaling](upscaling.md) for the bounded and full `97s` Eiffel source/3B/7B proof videos, timings,
-memory measurements, and sampled route-health metrics.
+[Image Upscaling](upscaling.md) for the accepted June 21 `1x` and `2x` Eiffel proof videos,
+readable labels for the tone-correction modes, reproduction commands, timings, memory
+measurements, and direct motion/crop review sheets.
 
 ## Generate A Video
 

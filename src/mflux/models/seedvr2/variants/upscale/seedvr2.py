@@ -249,6 +249,7 @@ class SeedVR2(nn.Module):
         temporal_chunk_overlap: int = 16,
         color_correction_mode: str = "wavelet",
         restore_metadata: dict | None = None,
+        enforce_memory_budget: bool = True,
     ) -> Path:
         start_time = time.perf_counter()
         clip_probe = VideoUtil.read_video_clip(
@@ -263,13 +264,19 @@ class SeedVR2(nn.Module):
         else:
             raise RuntimeError("SeedVR2 video restore requires a finite source frame count or duration.")
         requested_clip_frames = min(max_frames, available_frames) if max_frames is not None else available_frames
-        chunk_plan = SeedVR2Util.plan_video_chunks(
+        chunk_plan = SeedVR2Util.plan_streamed_video_chunks(
             frame_count=requested_clip_frames,
             chunk_size=temporal_chunk_size,
             overlap=temporal_chunk_overlap,
         )
+        global_noise = self._build_streamed_video_noise_latents(
+            seed=seed,
+            requested_clip_frames=requested_clip_frames,
+            source_width=clip_probe.source_width,
+            source_height=clip_probe.source_height,
+            resolution=resolution,
+        )
 
-        pending_overlap_frames: list | None = None
         final_width: int | None = None
         final_height: int | None = None
         writer = None
@@ -278,44 +285,42 @@ class SeedVR2(nn.Module):
             chunk_clips = VideoUtil.iter_video_frame_windows(
                 video_path,
                 start_frame=clip_probe.clip_start_frame,
-                windows=chunk_plan,
+                windows=[(chunk.input_start_frame, chunk.input_end_frame) for chunk in chunk_plan],
             )
             for chunk_index, chunk_clip in enumerate(chunk_clips):
                 try:
                     mx.reset_peak_memory()
                 except (AttributeError, RuntimeError, TypeError, ValueError):
                     pass
-                chunk_frames = chunk_clip.frames
-                start_frame, end_frame = chunk_plan[chunk_index]
+                chunk_info = chunk_plan[chunk_index]
+                chunk_frames = list(chunk_clip.frames)
+                if len(chunk_frames) < chunk_info.target_input_frame_count:
+                    if not chunk_frames:
+                        raise ValueError("SeedVR2 streamed video chunk decode returned no frames.")
+                    pad_frame = chunk_frames[-1]
+                    while len(chunk_frames) < chunk_info.target_input_frame_count:
+                        chunk_frames.append(pad_frame.copy())
+                noise_slice = self._streamed_video_noise_slice(
+                    global_noise=global_noise,
+                    chunk_start_frame=chunk_info.input_start_frame,
+                    target_input_frame_count=chunk_info.target_input_frame_count,
+                )
                 decoded, true_height, true_width, _ = self._restore_video_frames(
                     seed=seed,
                     frames=chunk_frames,
                     resolution=resolution,
                     softness=softness,
                     color_correction_mode=color_correction_mode,
+                    enforce_memory_budget=enforce_memory_budget,
+                    noise_latents=noise_slice,
                 )
                 restored_frames = VideoUtil._latents_to_frames(decoded)
                 final_width = true_width
                 final_height = true_height
 
-                next_overlap = 0
-                if chunk_index + 1 < len(chunk_plan):
-                    next_start, _ = chunk_plan[chunk_index + 1]
-                    next_overlap = max(0, end_frame - next_start)
-
-                if pending_overlap_frames is not None:
-                    current_overlap = len(pending_overlap_frames)
-                    blended_frames = SeedVR2Util.blend_overlapping_frames(
-                        existing_tail=pending_overlap_frames,
-                        incoming_head=restored_frames[:current_overlap],
-                    )
-                    body_start = current_overlap
-                else:
-                    blended_frames = []
-                    body_start = 0
-
-                body_end = len(restored_frames) - next_overlap if next_overlap > 0 else len(restored_frames)
-                batch_to_write = blended_frames + restored_frames[body_start:body_end]
+                body_start = chunk_info.trim_leading_context_frames
+                body_end = body_start + chunk_info.output_frame_count
+                batch_to_write = restored_frames[body_start:body_end]
                 if batch_to_write:
                     if writer is None:
                         writer = VideoStreamWriter(
@@ -327,11 +332,9 @@ class SeedVR2(nn.Module):
                         )
                     writer.write_frames(batch_to_write)
 
-                pending_overlap_frames = restored_frames[-next_overlap:] if next_overlap > 0 else None
-
                 del chunk_frames
                 del batch_to_write
-                del blended_frames
+                del noise_slice
                 del decoded
                 del restored_frames
                 mx.clear_cache()
@@ -339,19 +342,9 @@ class SeedVR2(nn.Module):
                 self._assert_post_chunk_memory_health(
                     true_height=true_height,
                     true_width=true_width,
-                    frame_count=end_frame - start_frame,
+                    frame_count=chunk_info.target_input_frame_count,
+                    enforce_peak_budget=enforce_memory_budget,
                 )
-
-            if pending_overlap_frames:
-                if writer is None:
-                    writer = VideoStreamWriter(
-                        path=output_path,
-                        fps=clip_probe.fps,
-                        width=pending_overlap_frames[0].width,
-                        height=pending_overlap_frames[0].height,
-                        overwrite=overwrite,
-                    )
-                writer.write_frames(pending_overlap_frames)
 
             if writer is None:
                 raise ValueError("SeedVR2 video restore did not produce any frames.")
@@ -399,15 +392,24 @@ class SeedVR2(nn.Module):
                     "source_clip_start_seconds": round(float(start_seconds), 3),
                     "source_clip_frames": requested_clip_frames,
                     "padded_input_frames": SeedVR2Util.padded_video_frame_count(requested_clip_frames),
-                    "processed_chunk_input_frames_total": int(sum(end - start for start, end in chunk_plan)),
+                    "processed_chunk_input_frames_total": int(
+                        sum(chunk.target_input_frame_count for chunk in chunk_plan)
+                    ),
                     "audio_present": clip_probe.audio_present,
                     "audio_copied": False,
                     "temporal_chunk_size": temporal_chunk_size,
                     "temporal_chunk_overlap": temporal_chunk_overlap,
                     "temporal_chunk_count": len(chunk_plan),
                     "temporal_chunk_plan": [
-                        {"start_frame": start, "end_frame": end, "frame_count": end - start}
-                        for start, end in chunk_plan
+                        {
+                            "input_start_frame": chunk.input_start_frame,
+                            "input_end_frame": chunk.input_end_frame,
+                            "input_frame_count": chunk.input_end_frame - chunk.input_start_frame,
+                            "target_input_frame_count": chunk.target_input_frame_count,
+                            "trim_leading_context_frames": chunk.trim_leading_context_frames,
+                            "output_frame_count": chunk.output_frame_count,
+                        }
+                        for chunk in chunk_plan
                     ],
                     "color_correction_mode": color_correction_mode,
                 },
@@ -437,17 +439,20 @@ class SeedVR2(nn.Module):
         resolution: int | ScaleFactor,
         softness: float,
         color_correction_mode: str,
+        enforce_memory_budget: bool = True,
+        noise_latents: mx.array | None = None,
     ) -> tuple[mx.array, int, int, int]:
         processed_video, true_height, true_width = SeedVR2Util.preprocess_video_frames(
             frames=frames,
             resolution=resolution,
             softness=softness,
         )
-        self._assert_video_restore_memory_budget(
-            frame_count=len(frames),
-            true_height=true_height,
-            true_width=true_width,
-        )
+        if enforce_memory_budget:
+            self._assert_video_restore_memory_budget(
+                frame_count=len(frames),
+                true_height=true_height,
+                true_width=true_width,
+            )
         processed_video, original_frame_count = SeedVR2Util.pad_video_frames(processed_video)
         padded_frame_count = int(processed_video.shape[2])
         tiling_config = self._effective_tiling_config(
@@ -475,13 +480,21 @@ class SeedVR2(nn.Module):
         static_condition = SeedVR2LatentCreator.create_condition(encoded_latent=initial_latent)
         mx.eval(static_condition)
         del processed_video
-        latents = SeedVR2LatentCreator.create_noise_latents(
-            seed=seed,
-            height=initial_latent.shape[-2],
-            width=initial_latent.shape[-1],
-            num_frames=initial_latent.shape[2],
-            latent_channels=initial_latent.shape[1],
-        )
+        if noise_latents is None:
+            latents = SeedVR2LatentCreator.create_noise_latents(
+                seed=seed,
+                height=initial_latent.shape[-2],
+                width=initial_latent.shape[-1],
+                num_frames=initial_latent.shape[2],
+                latent_channels=initial_latent.shape[1],
+            )
+        else:
+            if noise_latents.shape != initial_latent.shape:
+                raise ValueError(
+                    "SeedVR2 streamed video noise slice shape mismatch. "
+                    f"expected {tuple(initial_latent.shape)}, got {tuple(noise_latents.shape)}."
+                )
+            latents = noise_latents
         del initial_latent
 
         text_embedding = getattr(self, "text_embedding", None)
@@ -536,6 +549,61 @@ class SeedVR2(nn.Module):
         mx.clear_cache()
         gc.collect()
         return decoded, true_height, true_width, padded_frame_count
+
+    def _build_streamed_video_noise_latents(
+        self,
+        *,
+        seed: int,
+        requested_clip_frames: int,
+        source_width: int,
+        source_height: int,
+        resolution: int | ScaleFactor,
+    ) -> mx.array:
+        true_height, true_width = self._estimate_output_size(
+            source_width=source_width,
+            source_height=source_height,
+            resolution=resolution,
+        )
+        latent_height = max(1, true_height // SeedVR2Util.LATENT_SPATIAL_SCALE)
+        latent_width = max(1, true_width // SeedVR2Util.LATENT_SPATIAL_SCALE)
+        latent_channels = int(getattr(self.vae, "latent_channels", 16))
+        return SeedVR2LatentCreator.create_noise_latents(
+            seed=seed,
+            height=latent_height,
+            width=latent_width,
+            num_frames=SeedVR2Util.latent_video_frame_count(
+                SeedVR2Util.padded_video_frame_count(requested_clip_frames)
+            ),
+            latent_channels=latent_channels,
+        )
+
+    def _streamed_video_noise_slice(
+        self,
+        *,
+        global_noise: mx.array,
+        chunk_start_frame: int,
+        target_input_frame_count: int,
+    ) -> mx.array:
+        if chunk_start_frame % 4 != 0:
+            raise ValueError(
+                "SeedVR2 streamed video chunk start must be aligned to the latent temporal stride. "
+                f"Got start_frame={chunk_start_frame}."
+            )
+        latent_start_frame = chunk_start_frame // 4
+        latent_frame_count = SeedVR2Util.latent_video_frame_count(target_input_frame_count)
+        latent_end_frame = latent_start_frame + latent_frame_count
+        available_end = min(int(global_noise.shape[2]), latent_end_frame)
+        noise_slice = global_noise[:, :, latent_start_frame:available_end, :, :]
+        if int(noise_slice.shape[2]) == latent_frame_count:
+            return noise_slice
+
+        missing_frames = latent_frame_count - int(noise_slice.shape[2])
+        if missing_frames <= 0:
+            return noise_slice
+        if int(noise_slice.shape[2]) == 0:
+            raise ValueError("SeedVR2 streamed video noise slice resolved to zero frames.")
+        padding = mx.repeat(noise_slice[:, :, -1:, :, :], missing_frames, axis=2)
+        return mx.concatenate([noise_slice, padding], axis=2)
 
     def _seedvr2_metadata(self) -> dict[str, str | None]:
         return {
@@ -602,15 +670,15 @@ class SeedVR2(nn.Module):
         overrides = self.model_config.transformer_overrides or {}
         inner_dim = int(overrides.get("vid_dim", 2560))
         text_attention_mode = str(overrides.get("text_attention_mode", "window_pool"))
-        estimated_bytes = SeedVR2Util.estimate_video_restore_total_bytes(
+        resident_weight_bytes = int(getattr(self, "seedvr2_resident_weight_bytes", 0))
+        estimated_bytes = SeedVR2Util.estimate_video_restore_working_set_bytes(
             frame_count=SeedVR2Util.padded_video_frame_count(frame_count),
             height=true_height,
             width=true_width,
             inner_dim=inner_dim,
             text_attention_mode=text_attention_mode,
-            resident_weight_bytes=int(getattr(self, "seedvr2_resident_weight_bytes", 0)),
         )
-        budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes()
+        budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes(reserve_bytes=resident_weight_bytes)
         if estimated_bytes > budget_bytes:
             raise ValueError(
                 "SeedVR2 video restore chunk exceeds the supported host-safe memory budget. "
@@ -619,16 +687,25 @@ class SeedVR2(nn.Module):
                 "Use a smaller chunk, a smaller output size, or an explicit unsafe memory profile."
             )
 
-    def _assert_post_chunk_memory_health(self, *, true_height: int, true_width: int, frame_count: int) -> None:
-        budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes()
-        peak_bytes = SeedVR2Util.mlx_peak_memory_bytes()
-        if peak_bytes is not None and peak_bytes > budget_bytes:
-            raise RuntimeError(
-                "SeedVR2 video restore chunk exceeded the supported host-safe MLX peak memory budget. "
-                f"peak={peak_bytes / (1000**3):.2f} GB, budget={budget_bytes / (1000**3):.2f} GB."
-            )
-
+    def _assert_post_chunk_memory_health(
+        self,
+        *,
+        true_height: int,
+        true_width: int,
+        frame_count: int,
+        enforce_peak_budget: bool = True,
+    ) -> None:
         resident_weight_bytes = int(getattr(self, "seedvr2_resident_weight_bytes", 0))
+        if enforce_peak_budget:
+            budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes(reserve_bytes=resident_weight_bytes)
+            peak_bytes = SeedVR2Util.mlx_peak_memory_bytes()
+            working_peak_bytes = None if peak_bytes is None else max(0, peak_bytes - resident_weight_bytes)
+            if working_peak_bytes is not None and working_peak_bytes > budget_bytes:
+                raise RuntimeError(
+                    "SeedVR2 video restore chunk exceeded the supported host-safe MLX peak memory budget. "
+                    f"peak={working_peak_bytes / (1000**3):.2f} GB, budget={budget_bytes / (1000**3):.2f} GB."
+                )
+
         active_bytes = SeedVR2Util.mlx_active_memory_bytes()
         if active_bytes is not None and active_bytes > resident_weight_bytes + SeedVR2Util.VIDEO_RUNTIME_SLACK_BYTES:
             raise RuntimeError(

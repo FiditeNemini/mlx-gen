@@ -1,6 +1,7 @@
 import mlx.core as mx
 from mlx import nn
 
+from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import MemoryState
 from mflux.models.seedvr2.model.seedvr2_vae.encoder.downsample_3d import Downsample3D
 from mflux.models.seedvr2.model.seedvr2_vae.encoder.resnet_block_3d import ResnetBlock3D
 
@@ -24,9 +25,9 @@ class DownBlock3D(nn.Module):
         if add_downsample:
             self.downsamplers.append(Downsample3D(channels=out_channels, spatial_only=not temporal_down))
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
         for resnet in self.resnets:
-            x = resnet(x)
+            x = resnet(x, memory_state=memory_state)
         for downsampler in self.downsamplers:
-            x = downsampler(x)
+            x = downsampler(x, memory_state=memory_state)
         return x

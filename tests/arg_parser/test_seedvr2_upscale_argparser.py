@@ -249,6 +249,7 @@ def test_seedvr2_main_routes_video_inputs_to_restore_video_to_path(monkeypatch, 
             temporal_chunk_overlap,
             color_correction_mode,
             restore_metadata,
+            enforce_memory_budget,
         ):
             saved["seed"] = seed
             saved["video_path"] = video_path
@@ -344,6 +345,7 @@ def test_seedvr2_main_routes_small_video_inputs_to_restore_video_to_path(monkeyp
             temporal_chunk_overlap,
             color_correction_mode,
             restore_metadata,
+            enforce_memory_budget,
         ):
             saved["seed"] = seed
             saved["video_path"] = video_path
@@ -406,6 +408,196 @@ def test_seedvr2_main_routes_small_video_inputs_to_restore_video_to_path(monkeyp
 
 
 @pytest.mark.fast
+def test_seedvr2_main_disables_runtime_budget_enforcement_for_unsafe_video_override(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+    output_path = tmp_path / "restored.mp4"
+    saved: dict[str, object] = {}
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            self.tiling_config = None
+
+        def restore_video_to_path(
+            self,
+            *,
+            seed,
+            video_path,
+            resolution,
+            softness,
+            start_seconds,
+            max_frames,
+            output_path,
+            export_json_metadata,
+            overwrite,
+            temporal_chunk_size,
+            temporal_chunk_overlap,
+            color_correction_mode,
+            restore_metadata,
+            enforce_memory_budget,
+        ):
+            saved["enforce_memory_budget"] = enforce_memory_budget
+            saved["temporal_chunk_size"] = temporal_chunk_size
+            saved["temporal_chunk_overlap"] = temporal_chunk_overlap
+            return output_path
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        seedvr2_upscale.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=29.97,
+                source_width=64,
+                source_height=48,
+                source_frame_count=14,
+                source_duration_seconds=14 / 29.97,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--max-frames",
+            "14",
+            "--temporal-chunk-size",
+            "9",
+            "--temporal-chunk-overlap",
+            "4",
+            "--force-unsafe-video-memory",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saved["enforce_memory_budget"] is False
+    assert saved["temporal_chunk_size"] == 9
+    assert saved["temporal_chunk_overlap"] == 3
+
+
+@pytest.mark.fast
+def test_seedvr2_main_preserves_zero_effective_overlap(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+    output_path = tmp_path / "restored.mp4"
+    saved: dict[str, object] = {}
+
+    class FakeSeedVR2:
+        def __init__(self, *, quantize, model_path, model_config):
+            self.tiling_config = None
+
+        def restore_video_to_path(
+            self,
+            *,
+            seed,
+            video_path,
+            resolution,
+            softness,
+            start_seconds,
+            max_frames,
+            output_path,
+            export_json_metadata,
+            overwrite,
+            temporal_chunk_size,
+            temporal_chunk_overlap,
+            color_correction_mode,
+            restore_metadata,
+            enforce_memory_budget,
+        ):
+            saved["temporal_chunk_size"] = temporal_chunk_size
+            saved["temporal_chunk_overlap"] = temporal_chunk_overlap
+            return output_path
+
+    monkeypatch.setattr(seedvr2_upscale, "SeedVR2", FakeSeedVR2)
+    monkeypatch.setattr(seedvr2_upscale.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        seedvr2_upscale.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=29.97,
+                source_width=64,
+                source_height=48,
+                source_frame_count=13,
+                source_duration_seconds=13 / 29.97,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--max-frames",
+            "13",
+            "--force-unsafe-video-memory",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    seedvr2_upscale.main()
+
+    assert saved["temporal_chunk_size"] == 13
+    assert saved["temporal_chunk_overlap"] == 0
+
+
+@pytest.mark.fast
+def test_seedvr2_main_rejects_tiny_unsafe_streaming_chunk_profiles(monkeypatch, tmp_path):
+    video_path = tmp_path / "source.mp4"
+    video_path.touch()
+
+    monkeypatch.setattr(
+        seedvr2_upscale.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=29.97,
+                source_width=64,
+                source_height=48,
+                source_frame_count=400,
+                source_duration_seconds=400 / 29.97,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "mflux-upscale-seedvr2",
+            "--video-path",
+            str(video_path),
+            "--temporal-chunk-size",
+            "5",
+            "--temporal-chunk-overlap",
+            "1",
+            "--force-unsafe-video-memory",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        seedvr2_upscale.main()
+
+
+@pytest.mark.fast
 def test_seedvr2_main_rejects_vae_tiling_for_video_input(monkeypatch, tmp_path):
     video_path = tmp_path / "source.mp4"
     video_path.touch()
@@ -451,6 +643,7 @@ def test_seedvr2_main_keeps_transformer_in_low_ram_for_video_input(monkeypatch, 
             temporal_chunk_overlap,
             color_correction_mode,
             restore_metadata,
+            enforce_memory_budget,
         ):
             return output_path
 
@@ -518,6 +711,7 @@ def test_seedvr2_main_writes_failure_manifest_for_video_errors(monkeypatch, tmp_
             temporal_chunk_overlap,
             color_correction_mode,
             restore_metadata,
+            enforce_memory_budget,
         ):
             raise RuntimeError("boom")
 
@@ -532,8 +726,8 @@ def test_seedvr2_main_writes_failure_manifest_for_video_errors(monkeypatch, tmp_
                 fps=29.97,
                 source_width=64,
                 source_height=48,
-                source_frame_count=6,
-                source_duration_seconds=0.2,
+                source_frame_count=14,
+                source_duration_seconds=14 / 29.97,
                 audio_present=False,
                 clip_start_frame=0,
                 clip_frame_count=1,
@@ -547,7 +741,7 @@ def test_seedvr2_main_writes_failure_manifest_for_video_errors(monkeypatch, tmp_
             "--video-path",
             str(video_path),
             "--max-frames",
-            "6",
+            "14",
             "--output",
             str(output_path),
         ],
@@ -746,6 +940,7 @@ def test_seedvr2_video_plan_rejects_safe_enlargement_profile():
         resolution=ScaleFactor(2),
         temporal_chunk_size=49,
         temporal_chunk_overlap=16,
+        chunk_size_was_explicit=True,
         low_ram_requested=True,
         cache_limit_gb=8.0,
         force_unsafe_memory_profile=False,
@@ -777,6 +972,7 @@ def test_seedvr2_video_plan_requires_low_ram_for_7b_video():
         resolution=720,
         temporal_chunk_size=49,
         temporal_chunk_overlap=16,
+        chunk_size_was_explicit=True,
         low_ram_requested=False,
         cache_limit_gb=8.0,
         force_unsafe_memory_profile=False,
@@ -812,24 +1008,56 @@ def test_seedvr2_video_plan_reserves_resident_weight_headroom_for_7b_chunks(monk
         resolution=ScaleFactor(1),
         temporal_chunk_size=49,
         temporal_chunk_overlap=16,
+        chunk_size_was_explicit=True,
         low_ram_requested=True,
         cache_limit_gb=8.0,
         force_unsafe_memory_profile=False,
     )
 
     inner_dim, text_attention_mode = _seedvr2_memory_profile(ModelConfig.seedvr2_7b())
-    estimated_bytes = SeedVR2Util.estimate_video_restore_total_bytes(
+    estimated_bytes = SeedVR2Util.estimate_video_restore_working_set_bytes(
         frame_count=SeedVR2Util.padded_video_frame_count(plan.effective_chunk_size or 1),
         height=240,
         width=320,
         inner_dim=inner_dim,
         text_attention_mode=text_attention_mode,
-        resident_weight_bytes=resident_weight_bytes,
     )
     budget_bytes = SeedVR2Util.host_safe_video_memory_budget_bytes(reserve_bytes=resident_weight_bytes)
 
-    assert plan.effective_chunk_size == 13
+    assert plan.effective_chunk_size == 49
+    assert plan.effective_chunk_overlap == 16
     assert estimated_bytes <= budget_bytes
+
+
+@pytest.mark.fast
+def test_seedvr2_video_plan_unsafe_default_prefers_whole_shot_when_chunk_size_is_implicit():
+    source_probe = DecodedVideoClip(
+        frames=[],
+        fps=29.97,
+        source_width=320,
+        source_height=240,
+        source_frame_count=149,
+        source_duration_seconds=149 / 29.97,
+        audio_present=False,
+        clip_start_frame=0,
+        clip_frame_count=1,
+    )
+
+    plan = _plan_seedvr2_video_restore(
+        model_config=ModelConfig.seedvr2_7b(),
+        source_probe=source_probe,
+        requested_frames=149,
+        resolution=ScaleFactor(1),
+        temporal_chunk_size=49,
+        temporal_chunk_overlap=16,
+        chunk_size_was_explicit=False,
+        low_ram_requested=True,
+        cache_limit_gb=8.0,
+        force_unsafe_memory_profile=True,
+    )
+
+    assert plan.effective_chunk_size == 149
+    assert plan.effective_chunk_overlap == 0
 
 
 @pytest.mark.fast
@@ -901,6 +1129,7 @@ def test_seedvr2_main_reloads_model_per_video_seed(monkeypatch, tmp_path):
             temporal_chunk_overlap,
             color_correction_mode,
             restore_metadata,
+            enforce_memory_budget,
         ):
             return output_path
 
@@ -915,8 +1144,8 @@ def test_seedvr2_main_reloads_model_per_video_seed(monkeypatch, tmp_path):
                 fps=29.97,
                 source_width=64,
                 source_height=48,
-                source_frame_count=6,
-                source_duration_seconds=0.2,
+                source_frame_count=14,
+                source_duration_seconds=14 / 29.97,
                 audio_present=False,
                 clip_start_frame=0,
                 clip_frame_count=1,

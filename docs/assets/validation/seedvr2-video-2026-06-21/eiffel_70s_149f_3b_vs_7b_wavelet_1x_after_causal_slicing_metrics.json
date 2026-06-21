@@ -1,0 +1,68 @@
+{
+  "source": {
+    "video_path": "/Users/albou/Downloads/Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+    "start_seconds": 70.0,
+    "frames": 149,
+    "fps": 29.97002997002997,
+    "width": 320,
+    "height": 240,
+    "audio_present": true
+  },
+  "metrics_method": {
+    "comparison_space": "Restored clips are downscaled back to the original source resolution before scoring.",
+    "metrics": {
+      "sharpness": "Mean absolute horizontal/vertical luminance gradient.",
+      "contrast": "Luminance standard deviation.",
+      "drift_mae": "Mean absolute luma difference between source and downscaled restore.",
+      "temporal_delta": "Mean absolute luma delta between adjacent frames.",
+      "temporal_ratio": "restore_temporal_delta / source_temporal_delta",
+      "heuristic_score": "Clip-local heuristic score for ranking candidates on the same source clip only."
+    }
+  },
+  "candidates": [
+    {
+      "label": "3B 1x 29/8 + Wavelet reconstruction",
+      "video_path": "validation_outputs/seedvr2_video_2026_06_21_pass2/eiffel_70s_149f_3b_chunk29_overlap8_wavelet_1x_after_causal_slicing.mp4",
+      "model": "ByteDance-Seed/SeedVR2-3B",
+      "generation_time_seconds": 71.33,
+      "restored_width": 320,
+      "restored_height": 240,
+      "source_resolution_metrics": {
+        "source_sharpness": 0.026248,
+        "restored_sharpness": 0.040003,
+        "sharpness_gain": 1.524,
+        "source_contrast": 0.283073,
+        "restored_contrast": 0.31268,
+        "contrast_gain": 1.1046,
+        "source_temporal_delta": 0.035236,
+        "restored_temporal_delta": 0.053196,
+        "temporal_ratio": 1.5097,
+        "drift_mae": 0.056926,
+        "heuristic_score": 58.65
+      },
+      "heuristic_read": "aggressive drift or flicker risk"
+    },
+    {
+      "label": "7B 1x 29/8 + Wavelet reconstruction",
+      "video_path": "validation_outputs/seedvr2_video_2026_06_21_pass2/eiffel_70s_149f_7b_chunk29_overlap8_wavelet_1x_after_causal_slicing.mp4",
+      "model": "ByteDance-Seed/SeedVR2-7B",
+      "generation_time_seconds": 107.44,
+      "restored_width": 320,
+      "restored_height": 240,
+      "source_resolution_metrics": {
+        "source_sharpness": 0.026248,
+        "restored_sharpness": 0.032174,
+        "sharpness_gain": 1.2258,
+        "source_contrast": 0.283073,
+        "restored_contrast": 0.302373,
+        "contrast_gain": 1.0682,
+        "source_temporal_delta": 0.035236,
+        "restored_temporal_delta": 0.045362,
+        "temporal_ratio": 1.2874,
+        "drift_mae": 0.041031,
+        "heuristic_score": 60.72
+      },
+      "heuristic_read": "balanced restore candidate"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.common.config import ModelConfig
-from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d
+from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d, MemoryState
 
 
 class ResnetBlock3D(nn.Module):
@@ -21,23 +21,23 @@ class ResnetBlock3D(nn.Module):
         else:
             self.conv_shortcut = None
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
         residual = x
 
         x = x.transpose(0, 2, 3, 4, 1)
         x = self.norm1(x.astype(mx.float32)).astype(ModelConfig.precision)
         x = x.transpose(0, 4, 1, 2, 3)
         x = nn.silu(x)
-        x = self.conv1(x)
+        x = self.conv1(x, memory_state=memory_state)
 
         x = x.transpose(0, 2, 3, 4, 1)
         x = self.norm2(x.astype(mx.float32)).astype(ModelConfig.precision)
         x = x.transpose(0, 4, 1, 2, 3)
         x = nn.silu(x)
-        x = self.conv2(x)
+        x = self.conv2(x, memory_state=memory_state)
 
         if self.conv_shortcut is not None:
-            residual = self.conv_shortcut(residual)
+            residual = self.conv_shortcut(residual, memory_state=memory_state)
 
         output = x + residual
         return output

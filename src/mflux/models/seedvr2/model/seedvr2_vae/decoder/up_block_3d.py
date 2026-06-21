@@ -1,6 +1,7 @@
 import mlx.core as mx
 from mlx import nn
 
+from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import MemoryState
 from mflux.models.seedvr2.model.seedvr2_vae.decoder.decoder_resnet_block_3d import ResnetBlock3D
 from mflux.models.seedvr2.model.seedvr2_vae.decoder.upsample_3d import Upsample3D
 
@@ -29,9 +30,9 @@ class UpBlock3D(nn.Module):
         if add_upsample:
             self.upsamplers.append(Upsample3D(channels=out_channels, temporal_up=temporal_up))
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
         for resnet in self.resnets:
-            x = resnet(x)
+            x = resnet(x, memory_state=memory_state)
         for upsampler in self.upsamplers:
-            x = upsampler(x)
+            x = upsampler(x, memory_state=memory_state)
         return x

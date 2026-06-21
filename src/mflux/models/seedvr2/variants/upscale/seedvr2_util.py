@@ -1,6 +1,7 @@
 import os
 import platform
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import mlx.core as mx
@@ -8,6 +9,15 @@ import numpy as np
 from PIL import Image
 
 from mflux.utils.scale_factor import ScaleFactor
+
+
+@dataclass(frozen=True)
+class StreamedVideoChunk:
+    input_start_frame: int
+    input_end_frame: int
+    trim_leading_context_frames: int
+    output_frame_count: int
+    target_input_frame_count: int
 
 
 class SeedVR2Util:
@@ -152,7 +162,19 @@ class SeedVR2Util:
         return frame_count + (4 - ((frame_count - 1) % 4))
 
     @staticmethod
-    def plan_video_chunks(frame_count: int, chunk_size: int, overlap: int) -> list[tuple[int, int]]:
+    def latent_video_frame_count(frame_count: int) -> int:
+        if frame_count <= 0:
+            raise ValueError("frame_count must be greater than zero.")
+        if frame_count == 1:
+            return 1
+        return ((frame_count - 1) // 4) + 1
+
+    @staticmethod
+    def plan_streamed_video_chunks(
+        frame_count: int,
+        chunk_size: int,
+        overlap: int,
+    ) -> list[StreamedVideoChunk]:
         if frame_count <= 0:
             raise ValueError("frame_count must be greater than zero.")
         if chunk_size <= 0:
@@ -161,16 +183,36 @@ class SeedVR2Util:
             raise ValueError("overlap must be greater than or equal to zero.")
         if overlap >= chunk_size:
             raise ValueError("overlap must be smaller than chunk_size.")
+        if chunk_size > 1 and (chunk_size - 1) % 4 != 0:
+            raise ValueError("chunk_size must satisfy 4n+1 for streamed SeedVR2 video restore.")
+        if overlap % 4 != 0:
+            raise ValueError("overlap must be a multiple of 4 for streamed SeedVR2 video restore.")
 
-        chunks: list[tuple[int, int]] = []
-        start = 0
-        step = chunk_size - overlap
-        while start < frame_count:
-            end = min(start + chunk_size, frame_count)
-            chunks.append((start, end))
-            if end >= frame_count:
-                break
-            start += step
+        chunks: list[StreamedVideoChunk] = []
+        input_frame_count = min(chunk_size, frame_count)
+        output_stride = input_frame_count if input_frame_count >= frame_count else input_frame_count - overlap - 1
+        if output_stride <= 0:
+            raise ValueError("overlap must leave at least one output frame per streamed SeedVR2 video chunk.")
+        output_start = 0
+        while output_start < frame_count:
+            remaining_output_frames = frame_count - output_start
+            input_start_frame = max(0, output_start - overlap)
+            input_end_frame = min(frame_count, input_start_frame + input_frame_count)
+            if input_end_frame - input_start_frame < input_frame_count:
+                input_start_frame = max(0, input_end_frame - input_frame_count)
+            output_count = remaining_output_frames if input_end_frame >= frame_count else min(output_stride, remaining_output_frames)
+            trim_leading_context_frames = output_start - input_start_frame
+            target_input_frame_count = SeedVR2Util.padded_video_frame_count(input_end_frame - input_start_frame)
+            chunks.append(
+                StreamedVideoChunk(
+                    input_start_frame=input_start_frame,
+                    input_end_frame=input_end_frame,
+                    trim_leading_context_frames=trim_leading_context_frames,
+                    output_frame_count=output_count,
+                    target_input_frame_count=target_input_frame_count,
+                )
+            )
+            output_start += output_count
         return chunks
 
     @staticmethod
@@ -185,15 +227,15 @@ class SeedVR2Util:
         if frame_count <= 0 or height <= 0 or width <= 0 or inner_dim <= 0:
             raise ValueError("frame_count, height, width, and inner_dim must be greater than zero.")
 
-        tokens_per_frame = (height // 2) * (width // 2)
-        video_tokens = frame_count * tokens_per_frame
+        latent_height = max(1, height // SeedVR2Util.LATENT_SPATIAL_SCALE)
+        latent_width = max(1, width // SeedVR2Util.LATENT_SPATIAL_SCALE)
+        patch_tokens_per_frame = max(1, (latent_height // 2) * (latent_width // 2))
+        video_tokens = frame_count * patch_tokens_per_frame
         qkv_bytes = video_tokens * 3 * inner_dim * 2
         attention_multiplier = 2.75 if text_attention_mode == "global_text" else 2.0
 
         processed_video_bytes = frame_count * height * width * 3 * 4
         decoded_video_bytes = frame_count * height * width * 3 * 2
-        latent_height = max(1, height // SeedVR2Util.LATENT_SPATIAL_SCALE)
-        latent_width = max(1, width // SeedVR2Util.LATENT_SPATIAL_SCALE)
         latent_bytes = frame_count * latent_height * latent_width * 16 * 2
 
         return int((qkv_bytes * attention_multiplier) + processed_video_bytes + decoded_video_bytes + (latent_bytes * 4))
@@ -309,26 +351,6 @@ class SeedVR2Util:
             return int(mx.get_cache_memory())
         except (AttributeError, RuntimeError, TypeError, ValueError):
             return None
-
-    @staticmethod
-    def blend_overlapping_frames(
-        existing_tail: list[Image.Image],
-        incoming_head: list[Image.Image],
-    ) -> list[Image.Image]:
-        if len(existing_tail) != len(incoming_head):
-            raise ValueError("SeedVR2 overlap blending requires equal-length frame lists.")
-        if not existing_tail:
-            return []
-
-        blended: list[Image.Image] = []
-        total = len(existing_tail)
-        for index, (left, right) in enumerate(zip(existing_tail, incoming_head)):
-            alpha = float(index + 1) / float(total + 1)
-            left_np = np.array(left.convert("RGB"), dtype=np.float32)
-            right_np = np.array(right.convert("RGB"), dtype=np.float32)
-            merged = ((1.0 - alpha) * left_np) + (alpha * right_np)
-            blended.append(Image.fromarray(np.clip(merged, 0.0, 255.0).round().astype(np.uint8), mode="RGB"))
-        return blended
 
     @staticmethod
     def _lab_color_transfer_exact(content: mx.array, style: mx.array, luminance_weight: float = 0.8) -> mx.array:

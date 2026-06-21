@@ -1,7 +1,7 @@
 import mlx.core as mx
 from mlx import nn
 
-from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d
+from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d, MemoryState
 
 
 class Upsample3D(nn.Module):
@@ -34,15 +34,18 @@ class Upsample3D(nn.Module):
         self.spatial_factor = spatial_factor
         self.temporal_factor = temporal_factor
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
         B, C, T, H, W = x.shape
-        x = self.upscale_conv(x)
+        x = self.upscale_conv(x, memory_state=memory_state)
         sf = self.spatial_factor
         tf = self.temporal_factor
         x = x.reshape(B, sf, sf, tf, C, T, H, W)
         x = x.transpose(0, 4, 5, 3, 6, 1, 7, 2)
         x = x.reshape(B, C, T * tf, H * sf, W * sf)
-        if T == 1 and tf > 1:
-            x = x[:, :, :1, :, :]
-        x = self.conv(x)
+        if tf > 1 and memory_state != MemoryState.ACTIVE:
+            if T == 1:
+                x = x[:, :, :1, :, :]
+            else:
+                x = mx.concatenate([x[:, :, :1, :, :], x[:, :, 2:, :, :]], axis=2)
+        x = self.conv(x, memory_state=memory_state)
         return x

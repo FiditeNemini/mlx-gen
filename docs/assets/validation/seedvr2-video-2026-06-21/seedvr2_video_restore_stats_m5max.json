@@ -1,0 +1,76 @@
+{
+  "machine": {
+    "name": "Apple M5 Max",
+    "unified_memory_gb": 128
+  },
+  "source": {
+    "video": "Panorama of the Eiffel Tower in 1900 Thomas Edison Vintage Video.mp4",
+    "start_seconds": 70.0,
+    "max_frames": 149,
+    "fps": 29.97002997002997,
+    "source_width": 320,
+    "source_height": 240
+  },
+  "profiles": [
+    {
+      "label": "3B 1x 29/8 + Wavelet reconstruction",
+      "model": "ByteDance-Seed/SeedVR2-3B",
+      "resolution": "1x",
+      "chunk_size": 29,
+      "chunk_overlap": 8,
+      "safe_profile": true,
+      "frames": 149,
+      "width": 320,
+      "height": 240,
+      "generation_time_seconds": 71.33,
+      "wall_time_seconds": 74.54,
+      "peak_mlx_memory_gb": 14.55,
+      "max_rss_gb": 27.40
+    },
+    {
+      "label": "7B 1x 29/8 + Wavelet reconstruction",
+      "model": "ByteDance-Seed/SeedVR2-7B",
+      "resolution": "1x",
+      "chunk_size": 29,
+      "chunk_overlap": 8,
+      "safe_profile": true,
+      "frames": 149,
+      "width": 320,
+      "height": 240,
+      "generation_time_seconds": 107.44,
+      "wall_time_seconds": 112.93,
+      "peak_mlx_memory_gb": 24.54,
+      "max_rss_gb": 66.18
+    },
+    {
+      "label": "3B 2x 29/8 + Wavelet reconstruction",
+      "model": "ByteDance-Seed/SeedVR2-3B",
+      "resolution": "2x",
+      "chunk_size": 29,
+      "chunk_overlap": 8,
+      "safe_profile": false,
+      "frames": 149,
+      "width": 640,
+      "height": 480,
+      "generation_time_seconds": 539.03,
+      "wall_time_seconds": 542.30,
+      "peak_mlx_memory_gb": 34.40,
+      "max_rss_gb": 27.40
+    },
+    {
+      "label": "7B 2x 29/8 + Wavelet reconstruction",
+      "model": "ByteDance-Seed/SeedVR2-7B",
+      "resolution": "2x",
+      "chunk_size": 29,
+      "chunk_overlap": 8,
+      "safe_profile": false,
+      "frames": 149,
+      "width": 640,
+      "height": 480,
+      "generation_time_seconds": 454.46,
+      "wall_time_seconds": 460.61,
+      "peak_mlx_memory_gb": 44.27,
+      "max_rss_gb": 66.18
+    }
+  ]
+}

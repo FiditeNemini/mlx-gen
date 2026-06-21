@@ -2,7 +2,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.common.config import ModelConfig
-from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d
+from mflux.models.seedvr2.model.seedvr2_vae.common.conv3d import CausalConv3d, MemoryState
 from mflux.models.seedvr2.model.seedvr2_vae.encoder.down_block_3d import DownBlock3D
 from mflux.models.seedvr2.model.seedvr2_vae.encoder.mid_block_3d import MidBlock3D
 
@@ -61,14 +61,14 @@ class Encoder3D(nn.Module):
             padding=1,
         )
 
-    def __call__(self, x: mx.array) -> mx.array:
-        x = self.conv_in(x)
+    def __call__(self, x: mx.array, memory_state: str = MemoryState.DISABLED) -> mx.array:
+        x = self.conv_in(x, memory_state=memory_state)
         for down_block in self.down_blocks:
-            x = down_block(x)
-        x = self.mid_block(x)
+            x = down_block(x, memory_state=memory_state)
+        x = self.mid_block(x, memory_state=memory_state)
         x = x.transpose(0, 2, 3, 4, 1)
         x = self.conv_norm_out(x.astype(mx.float32)).astype(ModelConfig.precision)
         x = x.transpose(0, 4, 1, 2, 3)
         x = nn.silu(x)
-        x = self.conv_out(x)
+        x = self.conv_out(x, memory_state=memory_state)
         return x
