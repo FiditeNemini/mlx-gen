@@ -12,7 +12,7 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 14 |
-| Proposed | 11 |
+| Proposed | 12 |
 | Completed | 21 |
 | Deprecated | 1 |
 | Recurrent | 1 |
@@ -130,7 +130,11 @@ outside chat history.
 22. Keep the image/edit watchlist honest. Proposed
    [next-generation image/edit watchlist](proposed/0011_next_generation_image_edit_watchlist.md)
    now includes Ideogram 4, Ovis-Image, PRXPixel, and DreamLite, but those remain watchlist-only
-   until license, runtime shape, or direct MLX value becomes clearer.
+   until license, runtime shape, or direct MLX value becomes clearer. Proposed
+   [Boogu image family support](proposed/0049_boogu_image_family_support.md) is now the focused
+   version of that watch state: interesting enough to preserve because of bilingual text and
+   unified generation/editing, but not yet strong enough to outrank the active Qwen, Z-Image, and
+   Wan items.
 23. Continue ERNIE-Image/Turbo after completed
    [ERNIE Image Turbo LoRA runtime support](completed/0037_ernie_image_turbo_lora_runtime_support.md):
    add latent img2img proof, stronger Diffusers parity tests, and non-turbo validation.
@@ -176,6 +180,7 @@ outside chat history.
 | 0044 | [HunyuanVideo-1.5 second-family spike](proposed/0044_hunyuanvideo15_second_family_spike.md) | Video, HunyuanVideo, second-family selection | Promote after a bounded upstream Diffusers smoke and a license/value comparison against Wan, SeedVR2, and LTX. |
 | 0045 | [Z-Image ControlNet follow-up](proposed/0045_zimage_controlnet_followup.md) | Image edit, Z-Image, ControlNet | Promote after planned item 0043 proves native Z-Image inpaint and one public ControlNet weight family is audited cleanly. |
 | 0048 | [SeedVR2 enlarged-video safe-profile certification](proposed/0048_seedvr2_enlarged_video_safe_profile_certification.md) | Video restoration, SeedVR2, validation | Promote after the accepted `0.18.20` proof bundle is stable, completed item 0046 is no longer the blocking follow-up, and there is a concrete reason to revisit the safe enlarged-video boundary. |
+| 0049 | [Boogu image family support](proposed/0049_boogu_image_family_support.md) | Image model roadmap, Boogu, text rendering, editing | Promote only if independent evidence or repeatable local proof shows a meaningful win over current Qwen/Z-Image/FLUX routes and the non-fp8 Boogu path looks credible on Apple Silicon. |
 
 ## Completed ledger
 
@@ -297,6 +302,9 @@ outside chat history.
   next concrete delivery task; deprecated mixed-scope item 0047 because the bounded 7B-quality
   revalidation was complete; and added proposed item 0048 for the narrower question of whether
   enlarged SeedVR2 video should ever become a safe documented public profile.
+- Added 2026-06-21 Boogu watch follow-up: created proposed item 0049 after a focused public-source
+  audit found Boogu interesting for bilingual text rendering and unified generation/editing, but
+  still too early and too custom to outrank the active Qwen, Z-Image, and Wan work.
 - Added 2026-06-21 audio-copy closure: completed item 0046 after the shared post-write SeedVR2
   audio copy-through path, focused automated coverage, and the published Air France `25s–35s`
   proof bundle landed.
