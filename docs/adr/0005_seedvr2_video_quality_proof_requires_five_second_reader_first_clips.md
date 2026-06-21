@@ -83,7 +83,7 @@ Compliance is validated by:
 ## Backlog links
 
 - Route implementation: [0032 SeedVR2 video restoration and upscaling](../backlog/completed/0032_seedvr2_video_restoration_upscaling.md)
-- Follow-up audio work: [0046 SeedVR2 video audio copy-through](../backlog/proposed/0046_seedvr2_video_audio_copythrough.md)
+- Follow-up audio work: [0046 SeedVR2 video audio copy-through](../backlog/completed/0046_seedvr2_video_audio_copythrough.md)
 
 ## Related
 

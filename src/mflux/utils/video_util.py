@@ -1,4 +1,6 @@
 import logging
+import shutil
+import subprocess
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from fractions import Fraction
@@ -40,6 +42,14 @@ class SourceVideoInfo:
     source_frame_count: int | None
     source_duration_seconds: float | None
     audio_present: bool
+
+
+@dataclass(frozen=True)
+class AudioCopyResult:
+    audio_present: bool
+    audio_copied: bool
+    copy_mode: str | None
+    reason: str | None
 
 
 class VideoStreamWriter:
@@ -87,6 +97,17 @@ class VideoStreamWriter:
             for packet in self.stream.encode(video_frame):
                 self.container.mux(packet)
 
+    def write_frame_arrays(self, frames: np.ndarray) -> None:
+        import av
+
+        for frame in frames:
+            if frame.shape[1] != self.width or frame.shape[0] != self.height:
+                rgb = PIL.Image.fromarray(frame, mode="RGB").resize((self.width, self.height), PIL.Image.Resampling.LANCZOS)
+                frame = np.array(rgb, dtype=np.uint8)
+            video_frame = av.VideoFrame.from_ndarray(frame, format="rgb24")
+            for packet in self.stream.encode(video_frame):
+                self.container.mux(packet)
+
     def close(self) -> Path:
         if self._closed:
             return self.file_path
@@ -123,6 +144,126 @@ class VideoStreamWriter:
 
 
 class VideoUtil:
+    @staticmethod
+    def copy_source_audio_to_video(
+        *,
+        source_video_path: str | Path,
+        restored_video_path: str | Path,
+        clip_start_seconds: float,
+        clip_duration_seconds: float,
+    ) -> AudioCopyResult:
+        if clip_start_seconds < 0:
+            raise ValueError("clip_start_seconds must be greater than or equal to zero.")
+        if clip_duration_seconds <= 0:
+            raise ValueError("clip_duration_seconds must be greater than zero.")
+
+        source_info = VideoUtil.inspect_video(source_video_path)
+        if not source_info.audio_present:
+            return AudioCopyResult(
+                audio_present=False,
+                audio_copied=False,
+                copy_mode=None,
+                reason="no_source_audio",
+            )
+
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            return AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason="ffmpeg_not_found",
+            )
+
+        restored_path = Path(restored_video_path)
+        restored_info = VideoUtil.inspect_video(restored_path)
+        alignment_tolerance = VideoUtil._media_alignment_tolerance_seconds(restored_info.fps)
+        if restored_info.source_duration_seconds is None:
+            return AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason="restored_duration_unknown",
+            )
+        if abs(restored_info.source_duration_seconds - clip_duration_seconds) > alignment_tolerance:
+            return AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason="restored_duration_mismatch",
+            )
+        if (
+            source_info.source_duration_seconds is not None
+            and clip_start_seconds + clip_duration_seconds > source_info.source_duration_seconds + alignment_tolerance
+        ):
+            return AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason="source_clip_out_of_range",
+            )
+
+        with NamedTemporaryFile(
+            suffix=restored_path.suffix or ".mp4",
+            prefix=f".{restored_path.stem}-audio-",
+            dir=restored_path.parent,
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+
+        command = VideoUtil._build_audio_copy_command(
+            ffmpeg_path=ffmpeg_path,
+            restored_video_path=restored_path,
+            source_video_path=Path(source_video_path),
+            clip_start_seconds=clip_start_seconds,
+            clip_duration_seconds=clip_duration_seconds,
+            output_path=temp_path,
+        )
+
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            with suppress(FileNotFoundError):
+                temp_path.unlink()
+            stderr = (error.stderr or "").strip()
+            if stderr:
+                log.warning("Audio copy-through failed for %s: %s", restored_path, stderr.splitlines()[-1])
+            return AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason="ffmpeg_mux_failed",
+            )
+
+        validation_error = VideoUtil._validate_copied_audio_output(
+            output_path=temp_path,
+            expected_video=restored_info,
+            expected_audio_duration_seconds=clip_duration_seconds,
+        )
+        if validation_error is not None:
+            with suppress(FileNotFoundError):
+                temp_path.unlink()
+            log.warning("Audio copy-through rejected for %s: %s", restored_path, validation_error)
+            return AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason=validation_error,
+            )
+
+        temp_path.replace(restored_path)
+        return AudioCopyResult(
+            audio_present=True,
+            audio_copied=True,
+            copy_mode="ffmpeg_copy_video_aac_audio",
+            reason=None,
+        )
+
     @staticmethod
     def to_video(
         decoded_latents: mx.array,
@@ -528,24 +669,26 @@ class VideoUtil:
 
     @staticmethod
     def _latents_to_frames(decoded_latents: mx.array) -> list[PIL.Image.Image]:
+        video_np = VideoUtil._latents_to_frame_arrays(decoded_latents)
+        return [PIL.Image.fromarray(frame) for frame in video_np]
+
+    @staticmethod
+    def _latents_to_frame_arrays(decoded_latents: mx.array) -> np.ndarray:
         if decoded_latents.ndim != 5:
             raise ValueError(f"Expected decoded video latents with shape [B, C, F, H, W], got {decoded_latents.shape}")
         video = decoded_latents[0]
-        video = mx.transpose(video, (1, 2, 3, 0))
-        frames = []
-        for frame_index in range(video.shape[0]):
-            frame = mx.array.astype(video[frame_index], mx.float32)
-            frame_np = np.array(frame)
+        video = mx.transpose(video, (1, 2, 3, 0)).astype(mx.float32)
+        video_np = np.array(video, dtype=np.float32)
+        for frame_index in range(video_np.shape[0]):
+            frame_np = video_np[frame_index]
             TensorHealth.ensure_finite(
                 frame_np,
                 name="decoded_video_frame",
                 phase="video-frame-conversion",
                 frame=frame_index + 1,
-                total_frames=video.shape[0],
+                total_frames=video_np.shape[0],
             )
-            frame_np = (np.clip(frame_np / 2 + 0.5, 0, 1) * 255).round().astype("uint8")
-            frames.append(PIL.Image.fromarray(frame_np))
-        return frames
+        return (np.clip(video_np / 2 + 0.5, 0, 1) * 255).round().astype("uint8")
 
     @staticmethod
     def _save_video_with_pyav(
@@ -642,6 +785,83 @@ class VideoUtil:
             GeneratedVideo.save_metadata(file_path, metadata)
 
     @staticmethod
+    def _build_audio_copy_command(
+        *,
+        ffmpeg_path: str,
+        restored_video_path: Path,
+        source_video_path: Path,
+        clip_start_seconds: float,
+        clip_duration_seconds: float,
+        output_path: Path,
+    ) -> list[str]:
+        return [
+            ffmpeg_path,
+            "-y",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-i",
+            str(restored_video_path),
+            "-ss",
+            f"{clip_start_seconds:.6f}",
+            "-t",
+            f"{clip_duration_seconds:.6f}",
+            "-i",
+            str(source_video_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-af",
+            "aresample=async=1:first_pts=0",
+            "-movflags",
+            "+faststart",
+            "-shortest",
+            str(output_path),
+        ]
+
+    @staticmethod
+    def _validate_copied_audio_output(
+        *,
+        output_path: Path,
+        expected_video: SourceVideoInfo,
+        expected_audio_duration_seconds: float,
+    ) -> str | None:
+        output_info = VideoUtil.inspect_video(output_path)
+        if not output_info.audio_present:
+            return "output_missing_audio"
+        if output_info.source_width != expected_video.source_width or output_info.source_height != expected_video.source_height:
+            return "output_video_dimensions_mismatch"
+        if abs(output_info.fps - expected_video.fps) > 1e-6:
+            return "output_video_fps_mismatch"
+        if (
+            expected_video.source_frame_count is not None
+            and output_info.source_frame_count is not None
+            and output_info.source_frame_count != expected_video.source_frame_count
+        ):
+            return "output_video_frame_count_mismatch"
+        if (
+            expected_video.source_duration_seconds is not None
+            and output_info.source_duration_seconds is not None
+            and abs(output_info.source_duration_seconds - expected_video.source_duration_seconds)
+            > VideoUtil._media_alignment_tolerance_seconds(expected_video.fps)
+        ):
+            return "output_video_duration_mismatch"
+
+        audio_duration_seconds = VideoUtil._audio_duration_seconds(output_path)
+        if audio_duration_seconds is None:
+            return "output_audio_duration_unknown"
+        if abs(audio_duration_seconds - expected_audio_duration_seconds) > VideoUtil._media_alignment_tolerance_seconds(expected_video.fps):
+            return "output_audio_duration_mismatch"
+        return None
+
+    @staticmethod
     def _duration_seconds(
         *,
         container,
@@ -668,3 +888,21 @@ class VideoUtil:
         if rate is None:
             return None
         return float(rate)
+
+    @staticmethod
+    def _audio_duration_seconds(path: str | Path) -> float | None:
+        import av
+
+        with av.open(str(path)) as container:
+            if len(container.streams.audio) == 0:
+                return None
+            audio_stream = container.streams.audio[0]
+            if audio_stream.duration is not None and audio_stream.time_base is not None:
+                return float(audio_stream.duration * audio_stream.time_base)
+            if container.duration is not None:
+                return float(container.duration) / 1_000_000.0
+        return None
+
+    @staticmethod
+    def _media_alignment_tolerance_seconds(fps: float) -> float:
+        return max(1.0 / max(float(fps), 1.0), 0.05)

@@ -1,0 +1,36 @@
+{
+  "copy_result": {
+    "audio_present": true,
+    "audio_copied": true,
+    "copy_mode": "ffmpeg_copy_video_aac_audio",
+    "reason": null
+  },
+  "source_excerpt": {
+    "path": "validation_outputs/seedvr2_video_2026_06_21_audio/air_france_25s_10s_source_excerpt.mp4",
+    "video_fps": 25.0,
+    "video_width": 854,
+    "video_height": 480,
+    "video_frames": 250,
+    "video_duration_seconds": 10.0,
+    "audio_present": true,
+    "audio_codec": "aac",
+    "audio_duration_seconds": 10.0,
+    "audio_start_time": 0.0,
+    "audio_streams": 1,
+    "video_streams": 1
+  },
+  "silent_video": {
+    "path": "validation_outputs/seedvr2_video_2026_06_21_audio/air_france_25s_10s_audio_copied.mp4",
+    "video_fps": 25.0,
+    "video_width": 854,
+    "video_height": 480,
+    "video_frames": 250,
+    "video_duration_seconds": 10.0,
+    "audio_present": true,
+    "audio_codec": "aac",
+    "audio_duration_seconds": 10.0,
+    "audio_start_time": 0.0,
+    "audio_streams": 1,
+    "video_streams": 1
+  }
+}

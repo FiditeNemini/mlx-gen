@@ -24,7 +24,7 @@ from mflux.utils.image_util import ImageUtil
 from mflux.utils.metadata_reader import MetadataReader
 from mflux.utils.scale_factor import ScaleFactor
 from mflux.utils.video_health import VideoHealth
-from mflux.utils.video_util import VideoStreamWriter, VideoUtil
+from mflux.utils.video_util import AudioCopyResult, VideoStreamWriter, VideoUtil
 
 
 class SeedVR2(nn.Module):
@@ -218,10 +218,13 @@ class SeedVR2(nn.Module):
                 ),
                 "source_clip_start_frame": video_clip.clip_start_frame,
                 "source_clip_start_seconds": round(float(start_seconds), 3),
+                "source_clip_actual_start_seconds": round(float(video_clip.clip_start_frame / video_clip.fps), 6),
                 "source_clip_frames": video_clip.clip_frame_count,
                 "padded_input_frames": padded_input_frames,
                 "audio_present": video_clip.audio_present,
                 "audio_copied": False,
+                "audio_copy_mode": None,
+                "audio_copy_reason": "in_memory_output",
                 "temporal_chunk_size": None,
                 "temporal_chunk_overlap": None,
                 "color_correction_mode": color_correction_mode,
@@ -248,6 +251,7 @@ class SeedVR2(nn.Module):
         temporal_chunk_size: int = 49,
         temporal_chunk_overlap: int = 16,
         color_correction_mode: str = "wavelet",
+        drop_audio: bool = False,
         restore_metadata: dict | None = None,
         enforce_memory_budget: bool = True,
     ) -> Path:
@@ -264,6 +268,7 @@ class SeedVR2(nn.Module):
         else:
             raise RuntimeError("SeedVR2 video restore requires a finite source frame count or duration.")
         requested_clip_frames = min(max_frames, available_frames) if max_frames is not None else available_frames
+        actual_clip_start_seconds = clip_probe.clip_start_frame / clip_probe.fps
         chunk_plan = SeedVR2Util.plan_streamed_video_chunks(
             frame_count=requested_clip_frames,
             chunk_size=temporal_chunk_size,
@@ -281,6 +286,7 @@ class SeedVR2(nn.Module):
         final_height: int | None = None
         writer = None
         file_path: Path | None = None
+        audio_copy_result = None
         try:
             chunk_clips = VideoUtil.iter_video_frame_windows(
                 video_path,
@@ -314,29 +320,39 @@ class SeedVR2(nn.Module):
                     enforce_memory_budget=enforce_memory_budget,
                     noise_latents=noise_slice,
                 )
-                restored_frames = VideoUtil._latents_to_frames(decoded)
                 final_width = true_width
                 final_height = true_height
 
                 body_start = chunk_info.trim_leading_context_frames
                 body_end = body_start + chunk_info.output_frame_count
-                batch_to_write = restored_frames[body_start:body_end]
-                if batch_to_write:
+                batch_to_write = []
+                frame_arrays_to_write = None
+                if body_end > body_start:
+                    if isinstance(decoded, list):
+                        batch_to_write = decoded[body_start:body_end]
+                    else:
+                        frame_arrays_to_write = VideoUtil._latents_to_frame_arrays(decoded[:, :, body_start:body_end, :, :])
+                if batch_to_write or frame_arrays_to_write is not None:
+                    first_width = batch_to_write[0].width if batch_to_write else int(frame_arrays_to_write.shape[2])
+                    first_height = batch_to_write[0].height if batch_to_write else int(frame_arrays_to_write.shape[1])
                     if writer is None:
                         writer = VideoStreamWriter(
                             path=output_path,
                             fps=clip_probe.fps,
-                            width=batch_to_write[0].width,
-                            height=batch_to_write[0].height,
+                            width=first_width,
+                            height=first_height,
                             overwrite=overwrite,
                         )
-                    writer.write_frames(batch_to_write)
+                    if batch_to_write:
+                        writer.write_frames(batch_to_write)
+                    else:
+                        writer.write_frame_arrays(frame_arrays_to_write)
 
                 del chunk_frames
                 del batch_to_write
+                del frame_arrays_to_write
                 del noise_slice
                 del decoded
-                del restored_frames
                 mx.clear_cache()
                 gc.collect()
                 self._assert_post_chunk_memory_health(
@@ -349,9 +365,38 @@ class SeedVR2(nn.Module):
             if writer is None:
                 raise ValueError("SeedVR2 video restore did not produce any frames.")
             file_path = writer.close()
+            audio_copy_result = AudioCopyResult(
+                audio_present=False,
+                audio_copied=False,
+                copy_mode=None,
+                reason="no_source_audio",
+            )
+            if clip_probe.audio_present:
+                if drop_audio:
+                    audio_copy_result = AudioCopyResult(
+                        audio_present=True,
+                        audio_copied=False,
+                        copy_mode=None,
+                        reason="drop_audio_requested",
+                    )
+                else:
+                    audio_copy_result = VideoUtil.copy_source_audio_to_video(
+                        source_video_path=video_path,
+                        restored_video_path=file_path,
+                        clip_start_seconds=actual_clip_start_seconds,
+                        clip_duration_seconds=requested_clip_frames / clip_probe.fps,
+                    )
+                    if not audio_copy_result.audio_copied:
+                        raise RuntimeError(
+                            "Source audio was present but MLX-Gen could not preserve it safely "
+                            f"({audio_copy_result.reason}). Re-run with drop_audio=True or --drop-audio "
+                            "to allow a silent restored MP4 intentionally."
+                        )
         except Exception:
             if writer is not None:
                 writer.abort()
+            if file_path is not None:
+                SeedVR2._cleanup_video_artifacts(file_path)
             raise
 
         try:
@@ -390,13 +435,16 @@ class SeedVR2(nn.Module):
                     ),
                     "source_clip_start_frame": clip_probe.clip_start_frame,
                     "source_clip_start_seconds": round(float(start_seconds), 3),
+                    "source_clip_actual_start_seconds": round(float(actual_clip_start_seconds), 6),
                     "source_clip_frames": requested_clip_frames,
                     "padded_input_frames": SeedVR2Util.padded_video_frame_count(requested_clip_frames),
                     "processed_chunk_input_frames_total": int(
                         sum(chunk.target_input_frame_count for chunk in chunk_plan)
                     ),
                     "audio_present": clip_probe.audio_present,
-                    "audio_copied": False,
+                    "audio_copied": bool(audio_copy_result.audio_copied) if audio_copy_result else False,
+                    "audio_copy_mode": audio_copy_result.copy_mode if audio_copy_result else None,
+                    "audio_copy_reason": audio_copy_result.reason if audio_copy_result else "not_attempted",
                     "temporal_chunk_size": temporal_chunk_size,
                     "temporal_chunk_overlap": temporal_chunk_overlap,
                     "temporal_chunk_count": len(chunk_plan),

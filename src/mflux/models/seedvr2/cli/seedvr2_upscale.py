@@ -342,7 +342,6 @@ def _safe_chunk_frame_limit(
 
     max_safe = 0
     for candidate in range(1, requested_frames + 1):
-        overlap = _aligned_chunk_overlap(candidate, requested_overlap)
         estimate = SeedVR2Util.estimate_video_restore_working_set_bytes(
             frame_count=SeedVR2Util.padded_video_frame_count(candidate),
             height=height,
@@ -485,6 +484,7 @@ def _write_seedvr2_failure_manifest(
     resolution: int | ScaleFactor,
     softness: float,
     color_correction_mode: str,
+    drop_audio: bool,
     start_seconds: float,
     max_frames: int | None,
     plan: SeedVR2VideoRestorePlan,
@@ -508,6 +508,7 @@ def _write_seedvr2_failure_manifest(
                     "resolution": str(resolution),
                     "softness": round(float(softness), 3),
                     "color_correction_mode": color_correction_mode,
+                    "drop_audio": drop_audio,
                     "start_seconds": round(float(start_seconds), 3),
                     "max_frames": max_frames,
                     "restore_plan": asdict(plan),
@@ -561,7 +562,13 @@ def _run_seedvr2_video_restore(
     output_path = output_pattern.format(seed=seed, image_name=video_path.stem)
     _print_seedvr2_video_preflight(video_path, source_probe, plan)
     if source_probe.audio_present:
-        print("SeedVR2 warning: source audio will not be copied; output will be a silent MP4.")
+        if args.drop_audio:
+            print("SeedVR2 note: source audio detected; --drop-audio was requested, so the restored MP4 will stay silent.")
+        else:
+            print(
+                "SeedVR2 note: source audio detected; the CLI will preserve the matching source audio segment. "
+                "If that cannot be proven safe, the run fails. Pass --drop-audio to allow a silent output intentionally."
+            )
     runtime_metadata = {
         "restore_mode": plan.restore_mode,
         "restore_mode_reason": plan.route_reason,
@@ -575,6 +582,7 @@ def _run_seedvr2_video_restore(
         "seedvr2_risk_level": plan.risk_level,
         "seedvr2_target_height": plan.target_height,
         "seedvr2_target_width": plan.target_width,
+        "drop_audio_requested": bool(args.drop_audio),
     }
     try:
         result_path = model.restore_video_to_path(
@@ -596,6 +604,7 @@ def _run_seedvr2_video_restore(
                 else args.temporal_chunk_overlap
             ),
             color_correction_mode=args.color_correction,
+            drop_audio=args.drop_audio,
             restore_metadata=runtime_metadata,
             enforce_memory_budget=plan.route_reason != "unsafe_override",
         )
@@ -608,6 +617,7 @@ def _run_seedvr2_video_restore(
             resolution=args.resolution,
             softness=args.softness,
             color_correction_mode=args.color_correction,
+            drop_audio=args.drop_audio,
             start_seconds=args.start_seconds,
             max_frames=args.max_frames,
             plan=plan,

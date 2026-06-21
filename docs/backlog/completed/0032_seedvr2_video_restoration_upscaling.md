@@ -38,8 +38,6 @@ MLX-Gen now supports:
 
 Current explicit limitation:
 
-- output is a silent MP4 even when the source clip contains audio; this is tracked separately in
-  proposed item [0046](../proposed/0046_seedvr2_video_audio_copythrough.md).
 - the host-safe public CLI profile is source-size-oriented and keeps enlarged video output behind
   explicit unsafe override.
 
@@ -86,8 +84,8 @@ Sources checked:
 - Video save goes through the shared `GeneratedVideo`/MP4 path and existing video-health
   validation, even for chunked full-video restore.
 - The public restore contract is explicit: preserve source FPS, trim temporary temporal padding
-  back to the requested clip length, and record `audio_copied=false` when the input stream had
-  audio but the current output path does not remux it.
+  back to the requested clip length, and record copied-vs-skipped audio state through
+  `audio_present`, `audio_copied`, `audio_copy_mode`, and `audio_copy_reason`.
 - Existing q4/q7B SeedVR2 package work remains image-only evidence. This item closes on bounded
   official `3B` and `7B` source proof plus the earlier q8 3B package smoke.
 
@@ -120,7 +118,8 @@ video-support claim.
   - streams longer clips through sequential frame windows instead of keeping the full decoded
     source in memory at once;
   - cleans up partial output files on failure.
-- SeedVR2 CLI now warns explicitly when a source video had audio and the restored output is silent.
+- SeedVR2 CLI now treats source audio as part of the default restore contract, with explicit
+  `drop_audio=True` / `--drop-audio` opt-out handled later by completed item 0046.
 - Video restore rejects `--vae-tiling`; the public low-memory path for long clips is
   `--low-ram --mlx-cache-limit-gb 8` plus temporal chunking, with enlarged video output kept
   behind explicit unsafe override.
@@ -147,8 +146,8 @@ video-support claim.
     in this item.
 11. Do not reuse existing image-only SeedVR2 evidence as video-readiness proof.
 
-All criteria are met for the full-video v1 scope except audio copy-through, which is now explicit
-and split into follow-up item 0046 instead of blocking completion of the restore path itself.
+All criteria are met for the full-video v1 scope. Audio copy-through is now closed by completed
+item 0046 instead of remaining as a follow-up blocker.
 
 ## Validation
 
@@ -287,7 +286,8 @@ Observed timings on `M5 Max` for the accepted five-second proof:
 - official `ByteDance-Seed/SeedVR2-7B` at `2x 29/8`: `454.46s` generation, `460.61s` wall time,
   peak MLX memory `44.27 GB`, max RSS `66.18 GB`
 
-All accepted proof clips preserved source FPS and wrote `audio_copied=false`.
+All accepted visual-quality proof clips preserved source FPS. The shipped audio contract is now
+validated separately by completed item 0046 on the published Air France `25s–35s` proof bundle.
 
 Supporting sampled metrics on the accepted public proofs, after downscaling each candidate back to
 the original `320x240` source resolution before scoring:
@@ -343,6 +343,6 @@ Completed:
 
 ## Follow-ups
 
-- [0046 SeedVR2 video audio copy-through](../proposed/0046_seedvr2_video_audio_copythrough.md)
+- [0046 SeedVR2 video audio copy-through](0046_seedvr2_video_audio_copythrough.md)
 - Broader q4 / 7B / longer-clip public proof should stay separate until those rows are actually
   generated and reviewed.

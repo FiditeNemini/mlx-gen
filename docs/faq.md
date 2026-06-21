@@ -525,7 +525,9 @@ Current behavior:
 
 - source FPS is preserved by default;
 - temporary SeedVR2 padding is trimmed back to the requested clip length before save;
-- output is currently a silent MP4, even when the source clip contains audio.
+- by default, MLX-Gen preserves the matching source audio segment when the source clip has audio;
+- if copied audio cannot be proven safe, the run fails instead of silently dropping it;
+- use `--drop-audio` only when you intentionally want a silent restored MP4;
 - the public CLI safe profile defaults to `1x`, enables `--low-ram` automatically, uses
   `--mlx-cache-limit-gb 8` as part of the MLX cache policy, and rejects enlarged video output
   unless you explicitly pass `--force-unsafe-video-memory`;

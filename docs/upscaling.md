@@ -11,7 +11,10 @@ The older `mflux-upscale-seedvr2` entry point remains available for compatibilit
 
 Video restoration uses the same command with `--video-path` instead of `--image-path`. MLX-Gen
 preserves the source clip FPS by default, trims temporary SeedVR2 padding back to the requested
-clip length, and currently writes a silent MP4 even when the source video contains audio.
+clip length, and preserves the matching source audio segment by default when the source clip has
+audio. If MLX-Gen cannot prove that copied audio is still aligned safely, the run fails instead of
+publishing a silent output unexpectedly. Use `--drop-audio` only when you intentionally want a
+silent restored MP4.
 
 The public safe video profile is conservative by design:
 
@@ -23,6 +26,34 @@ The public safe video profile is conservative by design:
   `--force-unsafe-video-memory`.
 
 `--vae-tiling` is for image runs only and is rejected on video input.
+
+### Audio Copy-Through
+
+SeedVR2 video restore uses one shared post-write audio path for bounded and streamed outputs.
+
+- `audio_present` records whether the source clip had audio.
+- `audio_copied` records whether MLX-Gen kept the matching source segment.
+- `audio_copy_mode` records the successful mux path.
+- `audio_copy_reason` records why a saved output has no copied audio, for example
+  `drop_audio_requested`, `no_source_audio`, or `in_memory_output`.
+
+The shipped route uses `ffmpeg` for sync-safe muxing. If `ffmpeg` is not available on `PATH`, or if
+the written MP4 duration no longer matches the bounded source window closely enough, MLX-Gen fails
+the run instead of silently dropping audio. Pass `--drop-audio` when a silent MP4 is the intended
+output.
+
+Accepted published proof bundle:
+
+- [Air France source excerpt](assets/validation/seedvr2-video-audio-2026-06-21/air_france_25s_10s_source_excerpt.mp4)
+- [Air France copied-audio output](assets/validation/seedvr2-video-audio-2026-06-21/air_france_25s_10s_audio_copied.mp4)
+- [Air France stream report](assets/validation/seedvr2-video-audio-2026-06-21/air_france_25s_10s_stream_report.json)
+- [Air France audio-copy report](assets/validation/seedvr2-video-audio-2026-06-21/air_france_25s_10s_audio_copythrough_report.md)
+- [Air France command log](assets/validation/seedvr2-video-audio-2026-06-21/seedvr2_audio_copythrough_command_log.md)
+
+Useful option:
+
+- `--drop-audio`: opt out of the default audio-preservation contract and publish a silent restored
+  MP4 intentionally.
 
 ### Reader-First Validation Rule
 

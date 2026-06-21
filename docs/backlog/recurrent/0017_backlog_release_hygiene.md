@@ -76,3 +76,9 @@ The backlog is useful only when planned work names what remains rather than what
 - 2026-06-14: PR `#6` completed the remaining Node 24 cleanup by replacing
   `softprops/action-gh-release@v2` with a GitHub CLI step, then restored item 0042 to
   `completed/` after PR checks and branch release rehearsal `27464789730` passed.
+- 2026-06-21: Post-0.18.20 hygiene first promoted SeedVR2 audio copy-through from proposed item
+  0046 to planned work, deprecated mixed-scope item 0047 because the bounded 7B quality
+  revalidation now lives in completed item 0032 and the public June 21 proof bundle, split the
+  remaining enlarged-profile question into proposed item 0048, and later closed 0046 after the
+  shared audio-copy path, fail-closed metadata, focused tests, and the published Air France
+  `25s–35s` proof bundle landed.

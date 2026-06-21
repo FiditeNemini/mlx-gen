@@ -615,6 +615,7 @@ Useful options:
 | `--max-frames` | For video inputs, decode at most this many frames after `--start-seconds`. |
 | `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. Streamed SeedVR2 video profiles below `9` frames are rejected because they can preserve frame count while still breaking temporal continuity. |
 | `--temporal-chunk-overlap` | Reuse this many source frames as context between adjacent chunks. This is context overlap, not an output crossfade. |
+| `--drop-audio` | Opt out of the default audio-preservation contract and publish a silent restored MP4 intentionally. |
 | `--force-unsafe-video-memory` | Bypass the conservative SeedVR2 safe-video profile. Use only when you are intentionally accepting the risk of a high-memory run. |
 | `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
 
@@ -622,7 +623,9 @@ For video inputs:
 
 - SeedVR2 preserves the source FPS by default;
 - MLX-Gen trims temporary SeedVR2 padding frames back to the requested clip length before saving;
-- current output is always a silent MP4, even when the source clip contains audio;
+- by default, MLX-Gen preserves the matching source audio segment when the source clip has audio;
+- if copied audio cannot be proven safe, the run fails instead of silently dropping it;
+- use `--drop-audio` when you intentionally want a silent restored MP4;
 - the public CLI safe profile uses sequential temporal chunking, defaults video restore to `1x`,
   enables `--low-ram` automatically, and rejects enlarged video output unless you explicitly pass
   `--force-unsafe-video-memory`;
@@ -631,6 +634,10 @@ For video inputs:
 - the public Eiffel proof in [upscaling.md](upscaling.md) keeps the accepted `70s` to `75s`
   comparison MP4s, motion strips, detail crops, and readable report as the primary quality
   evidence.
+
+Python callers using `SeedVR2.restore_video_to_path(...)` follow the same contract. Source audio is
+preserved by default, and `drop_audio=True` is the explicit opt-out for intentionally silent saved
+output.
 
 ## Model Management Commands
 

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.21] - 2026-06-21
+
+### Changed
+
+- **SeedVR2 video audio contract**: SeedVR2 restored MP4s now preserve the matching source audio
+  segment by default when the source clip has audio. If copied audio cannot be proven safe,
+  MLX-Gen fails the run instead of silently publishing a muted output. `mlxgen upscale` now
+  exposes `--drop-audio` as the explicit opt-out for intentionally silent restored MP4s. The
+  shared post-write path records `audio_copied`, `audio_copy_mode`, and `audio_copy_reason`, and
+  the published Air France `25s–35s` proof bundle remains the release evidence for the copied-audio
+  path.
+
 ## [0.18.20] - 2026-06-21
 
 ### Changed

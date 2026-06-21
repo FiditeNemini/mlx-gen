@@ -162,12 +162,14 @@ mlxgen upscale \
   --output restored.mp4
 ```
 
-For video inputs, SeedVR2 preserves the source FPS by default and currently writes a silent MP4
-even when the source clip contains audio. The safe public video profile defaults to `1x`, enables
-`--low-ram` automatically, and rejects enlarged video output unless you explicitly pass
-`--force-unsafe-video-memory`. See [docs/upscaling.md](docs/upscaling.md) for the accepted
-five-second Eiffel `1x` and `2x` source/3B/7B proof videos, readable tone-correction labels,
-reproduction commands, timings, memory measurements, and direct motion/crop review sheets.
+For video inputs, SeedVR2 preserves the source FPS by default and preserves the matching source
+audio segment by default as well. If MLX-Gen cannot prove that copied audio is still aligned
+safely, the run fails instead of publishing a silent output unexpectedly. Use `--drop-audio` only
+when you intentionally want a silent restored MP4. The safe public video profile defaults to `1x`,
+enables `--low-ram` automatically, and rejects enlarged video output unless you explicitly pass
+`--force-unsafe-video-memory`. See
+[docs/upscaling.md](docs/upscaling.md) for the accepted five-second Eiffel quality proof bundle and
+the published Air France audio-copy proof bundle.
 
 Inspect model capabilities before a run:
 

@@ -23,7 +23,7 @@
 - `docs/quantization.md`: complete published package matrix, q8/q4/BF16 policies, model-family compatibility, Wan TI2V/A14B package status, A14B q8 generated-output records, and the distinction between MLX-Gen q8 packages and third-party FP8 checkpoint guidance.
 - `docs/huggingface-publishing.md`: generated model cards and AbstractFramework Hugging Face upload guidance.
 - `docs/python-integration.md`: embedding MLX-Gen, capability checks, negative prompts, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
-- `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 image/video sizing and audio behavior, Qwen edit variants, negative prompts, experimental generative reframe, experimental canvas outpaint, Wan resolutions, prompting guidance, usage limits, and why MLX-Gen q8 Lightning guidance should not be generalized to arbitrary FP8 checkpoints.
+- `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 image/video sizing and default audio-preservation behavior, Qwen edit variants, negative prompts, experimental generative reframe, experimental canvas outpaint, Wan resolutions, prompting guidance, usage limits, and why MLX-Gen q8 Lightning guidance should not be generalized to arbitrary FP8 checkpoints.
 - `docs/troubleshooting.md`: user-facing failure symptoms, diagnostics, fixes, and legacy `mflux-generate-*` migration guidance.
 - `docs/release.md`: release and publishing process.
 - `ACKNOWLEDGEMENTS.md`: upstream mflux credit and model/community acknowledgements.

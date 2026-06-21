@@ -13,7 +13,7 @@ from mflux.models.seedvr2.variants.upscale import seedvr2 as seedvr2_module
 from mflux.models.seedvr2.variants.upscale.seedvr2 import SeedVR2
 from mflux.models.seedvr2.variants.upscale.seedvr2_util import SeedVR2Util, StreamedVideoChunk
 from mflux.utils.scale_factor import ScaleFactor
-from mflux.utils.video_util import DecodedVideoClip, VideoUtil
+from mflux.utils.video_util import AudioCopyResult, DecodedVideoClip, VideoUtil
 
 
 def _solid_frame(color: tuple[int, int, int]) -> Image.Image:
@@ -165,6 +165,18 @@ def test_seedvr2_restore_video_to_path_records_chunk_metadata(monkeypatch, tmp_p
 
     monkeypatch.setattr(seedvr2_module.SeedVR2, "_restore_video_frames", fake_restore_video_frames)
     monkeypatch.setattr(seedvr2_module.VideoUtil, "_latents_to_frames", staticmethod(lambda decoded: decoded))
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "copy_source_audio_to_video",
+        staticmethod(
+            lambda **kwargs: AudioCopyResult(
+                audio_present=True,
+                audio_copied=True,
+                copy_mode="ffmpeg_copy_video_aac_audio",
+                reason=None,
+            )
+        ),
+    )
 
     model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
     file_path = model.restore_video_to_path(
@@ -183,8 +195,11 @@ def test_seedvr2_restore_video_to_path_records_chunk_metadata(monkeypatch, tmp_p
     metadata = json.loads(file_path.with_suffix(".metadata.json").read_text())
     assert metadata["frames"] == 13
     assert metadata["audio_present"] is True
-    assert metadata["audio_copied"] is False
+    assert metadata["audio_copied"] is True
+    assert metadata["audio_copy_mode"] == "ffmpeg_copy_video_aac_audio"
+    assert metadata["audio_copy_reason"] is None
     assert metadata["source_video_fps"] == 12.0
+    assert metadata["source_clip_actual_start_seconds"] == 0.0
     assert metadata["video_health"]["file"]["fps"] == pytest.approx(12.0, abs=0.1)
     assert metadata["temporal_chunk_size"] == 9
     assert metadata["temporal_chunk_overlap"] == 4
@@ -369,6 +384,144 @@ def test_seedvr2_restore_video_to_path_saved_mp4_keeps_expected_frame_count(monk
     assert len(means) == len(expected)
     for observed, target in zip(means, expected):
         assert observed == pytest.approx(target, abs=3.0)
+
+
+@pytest.mark.fast
+def test_seedvr2_restore_video_to_path_requires_audio_copy_by_default(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.touch()
+    output = tmp_path / "restored.mp4"
+
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = object()
+
+    frames = [_solid_frame((index * 20, index * 20, index * 20)) for index in range(13)]
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=frames[:1],
+                fps=12.0,
+                source_width=16,
+                source_height=16,
+                source_frame_count=13,
+                source_duration_seconds=13 / 12.0,
+                audio_present=True,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "iter_video_frame_windows",
+        staticmethod(lambda path, start_frame=0, windows=None: _iter_fake_chunk_clips(frames, windows or [], True)),
+    )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_restore_video_frames", lambda self, **kwargs: (list(kwargs["frames"]), 16, 16, len(kwargs["frames"])))
+    monkeypatch.setattr(seedvr2_module.VideoUtil, "_latents_to_frames", staticmethod(lambda decoded: decoded))
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "copy_source_audio_to_video",
+        staticmethod(
+            lambda **kwargs: AudioCopyResult(
+                audio_present=True,
+                audio_copied=False,
+                copy_mode=None,
+                reason="ffmpeg_not_found",
+            )
+        ),
+    )
+
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
+    with pytest.raises(RuntimeError, match="could not preserve it safely"):
+        model.restore_video_to_path(
+            seed=42,
+            video_path=source,
+            resolution=256,
+            softness=0.0,
+            output_path=output,
+            export_json_metadata=True,
+            temporal_chunk_size=9,
+            temporal_chunk_overlap=4,
+        )
+
+    assert not output.exists()
+    assert not output.with_suffix(".metadata.json").exists()
+
+
+@pytest.mark.fast
+def test_seedvr2_restore_video_to_path_allows_drop_audio_opt_out(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.touch()
+    output = tmp_path / "restored.mp4"
+
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = object()
+
+    frames = [_solid_frame((index * 20, index * 20, index * 20)) for index in range(13)]
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=frames[:1],
+                fps=12.0,
+                source_width=16,
+                source_height=16,
+                source_frame_count=13,
+                source_duration_seconds=13 / 12.0,
+                audio_present=True,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "iter_video_frame_windows",
+        staticmethod(lambda path, start_frame=0, windows=None: _iter_fake_chunk_clips(frames, windows or [], True)),
+    )
+    monkeypatch.setattr(seedvr2_module.SeedVR2, "_restore_video_frames", lambda self, **kwargs: (list(kwargs["frames"]), 16, 16, len(kwargs["frames"])))
+    monkeypatch.setattr(seedvr2_module.VideoUtil, "_latents_to_frames", staticmethod(lambda decoded: decoded))
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "copy_source_audio_to_video",
+        staticmethod(lambda **kwargs: (_ for _ in ()).throw(AssertionError("audio helper should not run when drop_audio=True"))),
+    )
+
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_3b())
+    file_path = model.restore_video_to_path(
+        seed=42,
+        video_path=source,
+        resolution=256,
+        softness=0.0,
+        output_path=output,
+        export_json_metadata=True,
+        temporal_chunk_size=9,
+        temporal_chunk_overlap=4,
+        drop_audio=True,
+    )
+
+    metadata = json.loads(file_path.with_suffix(".metadata.json").read_text())
+    assert metadata["audio_present"] is True
+    assert metadata["audio_copied"] is False
+    assert metadata["audio_copy_mode"] is None
+    assert metadata["audio_copy_reason"] == "drop_audio_requested"
 
 
 @pytest.mark.fast

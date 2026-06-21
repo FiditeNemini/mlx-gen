@@ -157,6 +157,11 @@ class CommandLineParser(argparse.ArgumentParser):
         seedvr2_group.add_argument("--start-seconds", type=float, default=0.0, help="For video inputs, skip frames before this source timestamp in seconds.")
         seedvr2_group.add_argument("--max-frames", type=int, default=None, help="For video inputs, decode at most this many frames after --start-seconds.")
         seedvr2_group.add_argument(
+            "--drop-audio",
+            action="store_true",
+            help="For video inputs with source audio, opt out of the default audio-preservation contract and publish a silent restored MP4 intentionally.",
+        )
+        seedvr2_group.add_argument(
             "--temporal-chunk-size",
             type=int,
             default=49,

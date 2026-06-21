@@ -238,7 +238,10 @@ def test_seedvr2_generate_video_records_source_video_metadata(monkeypatch, tmp_p
     assert result["extra_metadata"]["source_video_frames"] == 120
     assert result["extra_metadata"]["audio_present"] is True
     assert result["extra_metadata"]["audio_copied"] is False
+    assert result["extra_metadata"]["audio_copy_mode"] is None
+    assert result["extra_metadata"]["audio_copy_reason"] == "in_memory_output"
     assert result["extra_metadata"]["seedvr2_checkpoint_variant"] == "7b"
     assert result["extra_metadata"]["seedvr2_source_layout"] == "prepared"
     assert result["extra_metadata"]["source_clip_start_seconds"] == 1.5
+    assert result["extra_metadata"]["source_clip_actual_start_seconds"] == pytest.approx(12 / 29.97, abs=1e-6)
     assert result["extra_metadata"]["source_clip_frames"] == 1
