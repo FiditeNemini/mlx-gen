@@ -30,6 +30,8 @@ def main():
         redux_image_strengths=args.redux_image_strengths,
     )
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1Redux(
         model_config=ModelConfig.dev_redux(),

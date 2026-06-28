@@ -91,8 +91,8 @@ Compliance is validated by:
 
 ## Backlog links
 
-- Related runtime expansion: [0008 Qwen edit parity expansion](../backlog/planned/0008_qwen_edit_parity_expansion.md)
-- Related runtime validation: [0007 LoRA capability matrix and strict application](../backlog/planned/0007_lora_capability_matrix_and_strict_application.md)
+- Related runtime expansion: [0008 Qwen edit parity expansion](../backlog/completed/0008_qwen_edit_parity_expansion.md)
+- Related runtime validation: [0007 LoRA capability matrix and strict application](../backlog/completed/0007_lora_capability_matrix_and_strict_application.md)
 - Recurrent hygiene: [0017 Backlog release-state hygiene](../backlog/recurrent/0017_backlog_release_hygiene.md)
 
 ## Related

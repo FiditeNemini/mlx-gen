@@ -8,6 +8,9 @@ MLX-Gen now ships three different Qwen workflows that are easy to confuse:
 
 This page explains the practical difference between them.
 
+If you need the broader Qwen route surface, including `qwen.edit`, `qwen.multi-reference`,
+`qwen.reframe`, and `qwen.outpaint`, use [Qwen route matrix](qwen-route-matrix.md).
+
 ## Current Status
 
 Current exact public proof rows:
@@ -154,6 +157,7 @@ Use `qwen.control-inpaint` when:
 
 ## Related Docs
 
+- [Qwen route matrix](qwen-route-matrix.md)
 - [Image edit modes](image-edit-modes.md)
 - [Image edit capabilities](edit-capabilities.md)
 - [FAQ](faq.md)

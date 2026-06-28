@@ -22,6 +22,8 @@ from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_memory import RuntimeMemory
+from mflux.utils.runtime_timer import RuntimeTimer
 from mflux.utils.scale_factor import ScaleFactor
 
 
@@ -71,6 +73,7 @@ class QwenImageEdit(nn.Module):
         negative_prompt: str | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        timer = RuntimeTimer()
         num_inference_steps = self._default_num_inference_steps(num_inference_steps, image_paths=image_paths)
         config, vl_width, vl_height, _, _ = self._compute_dimensions(
             width=width,
@@ -136,7 +139,6 @@ class QwenImageEdit(nn.Module):
             try:
                 # 5.t Concatenate the updated latents with the static image latents
                 hidden_states = mx.concatenate([latents, static_image_latents], axis=1)
-                hidden_states_neg = mx.concatenate([latents, static_image_latents], axis=1)
 
                 # 6.t Predict the noise
                 noise = self.transformer(
@@ -152,7 +154,7 @@ class QwenImageEdit(nn.Module):
                     noise_negative = self.transformer(
                         t=t,
                         config=config,
-                        hidden_states=hidden_states_neg,
+                        hidden_states=hidden_states,
                         encoder_hidden_states=negative_prompt_embeds,
                         encoder_hidden_states_mask=negative_prompt_mask,
                         qwen_image_ids=qwen_image_ids,
@@ -201,7 +203,7 @@ class QwenImageEdit(nn.Module):
             image_path=config.image_path,
             image_paths=image_paths,
             masked_image_path=mask_path,
-            generation_time=time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             negative_prompt=negative_prompt,
             extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
@@ -236,7 +238,7 @@ class QwenImageEdit(nn.Module):
         final_prompt_embeds = pos_hidden_states[0].astype(mx.float16)
         final_prompt_mask = pos_hidden_states[1].astype(mx.float16)
         if not encode_negative:
-            return final_prompt_embeds, final_prompt_mask, None, None
+            return RuntimeMemory.materialize_inference_tree((final_prompt_embeds, final_prompt_mask, None, None))
 
         neg_prompt = negative_prompt if negative_prompt is not None else ""
         neg_input_ids, neg_attention_mask, neg_pixel_values, neg_image_grid_thw = tokenizer.tokenize_with_image(
@@ -254,12 +256,12 @@ class QwenImageEdit(nn.Module):
             image_grid_thw=neg_image_grid_thw,
         )
 
-        return (
+        return RuntimeMemory.materialize_inference_tree((
             final_prompt_embeds,  # prompt_embeds
             final_prompt_mask,  # prompt_mask
             neg_hidden_states[0].astype(mx.float16),  # negative_prompt_embeds
             neg_hidden_states[1].astype(mx.float16),  # negative_prompt_mask
-        )
+        ))
 
     @staticmethod
     def _should_use_true_cfg(guidance: float, negative_prompt: str | None) -> bool:
@@ -267,6 +269,8 @@ class QwenImageEdit(nn.Module):
 
     @staticmethod
     def _resolve_negative_prompt(guidance: float, negative_prompt: str | None) -> str | None:
+        if guidance > 1.0 and negative_prompt is None:
+            return " "
         return negative_prompt
 
     def _should_use_edit_plus_prompt(self, image_paths: list[str]) -> bool:
@@ -336,11 +340,8 @@ class QwenImageEdit(nn.Module):
         negative_prompt: str | None,
         image_paths: list[str],
     ) -> str | None:
-        if negative_prompt is not None:
-            return negative_prompt
-        if guidance <= 1.0:
-            return None
-        return " "
+        del image_paths
+        return QwenImageEdit._resolve_negative_prompt(guidance=guidance, negative_prompt=negative_prompt)
 
     def _default_num_inference_steps(self, num_inference_steps: int | None, image_paths: list[str]) -> int:
         if num_inference_steps is not None:

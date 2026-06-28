@@ -44,6 +44,8 @@ def main():
         except TaskInferenceError as exc:
             parser.error(str(exc))
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     model = ZImage(
         model_config=model_config,

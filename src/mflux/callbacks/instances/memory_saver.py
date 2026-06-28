@@ -1,5 +1,3 @@
-import gc
-
 import mlx.core as mx
 import PIL.Image
 from tqdm import tqdm
@@ -7,6 +5,7 @@ from tqdm import tqdm
 from mflux.callbacks.callback import AfterLoopCallback, BeforeLoopCallback, InLoopCallback
 from mflux.models.common.config.config import Config
 from mflux.models.common.vae.tiling_config import TilingConfig
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class MemorySaver(BeforeLoopCallback, InLoopCallback, AfterLoopCallback):
@@ -14,6 +13,7 @@ class MemorySaver(BeforeLoopCallback, InLoopCallback, AfterLoopCallback):
         self.model = model
         self.keep_transformer = keep_transformer
         self.peak_memory: int = 0
+        self.latest_snapshot = None
         self.model.tiling_config = TilingConfig()
         mx.set_cache_limit(cache_limit_bytes)
         mx.clear_cache()
@@ -29,6 +29,7 @@ class MemorySaver(BeforeLoopCallback, InLoopCallback, AfterLoopCallback):
         depth_image: PIL.Image.Image | None = None,
     ) -> None:
         self.peak_memory = mx.get_peak_memory()
+        self.latest_snapshot = RuntimeMemory.snapshot("low-ram-before-loop", tensors=(latents,), synchronize=True)
         self._delete_text_encoders()
 
     def call_in_loop(
@@ -52,6 +53,7 @@ class MemorySaver(BeforeLoopCallback, InLoopCallback, AfterLoopCallback):
         self.peak_memory = mx.get_peak_memory()
         if not self.keep_transformer:
             self._delete_transformer()
+        self.latest_snapshot = RuntimeMemory.snapshot("low-ram-after-loop", tensors=(latents,), synchronize=True)
 
     def _delete_text_encoders(self) -> None:
         # repeated image generation only works with the same prompt (cache)
@@ -72,16 +74,21 @@ class MemorySaver(BeforeLoopCallback, InLoopCallback, AfterLoopCallback):
         # Clear VLM tokenizers from the tokenizers dict if present
         if hasattr(self.model, "tokenizers") and "qwen_vl" in self.model.tokenizers:
             self.model.tokenizers["qwen_vl"] = None
-        gc.collect()
         mx.clear_cache()
 
     def _delete_transformer(self) -> None:
         self.model.transformer = None
         if hasattr(self.model, "transformer_controlnet"):
             self.model.transformer_controlnet = None
-        gc.collect()
         mx.clear_cache()
 
     def memory_stats(self) -> str:
-        self.peak_memory = mx.get_peak_memory()
-        return f"Peak MLX memory: {self.peak_memory / 10**9:.2f} GB"
+        snapshot = RuntimeMemory.snapshot("low-ram-summary", synchronize=True)
+        self.latest_snapshot = snapshot
+        self.peak_memory = snapshot.mlx_peak_memory_bytes or 0
+        parts = [f"Peak MLX memory: {self.peak_memory / 10**9:.2f} GB"]
+        if snapshot.process_peak_rss_bytes is not None:
+            parts.append(f"Peak RSS: {snapshot.process_peak_rss_bytes / 10**9:.2f} GB")
+        if snapshot.darwin_physical_footprint_bytes is not None:
+            parts.append(f"Physical footprint: {snapshot.darwin_physical_footprint_bytes / 10**9:.2f} GB")
+        return "; ".join(parts)

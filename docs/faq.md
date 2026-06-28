@@ -149,10 +149,10 @@ allow more transformation, while lower positive values stay closer to the encode
 
 ERNIE q8/q4 MLX-Gen packages do not bundle Prompt Enhancer files; use the full source snapshot path or the Hugging Face repo after `mlxgen download --all-files` when you need `--use-prompt-enhancer`.
 
-ERNIE LoRA support is experimental and route-specific. `AbstractFramework/ernie-image-turbo-8bit`
-now has an exact validated text-to-image LoRA row; ERNIE latent img2img remains
-`mapped-unvalidated`. Use `mlxgen capabilities --model AbstractFramework/ernie-image-turbo-8bit`
-to inspect the current status before relying on a specific adapter workflow.
+ERNIE LoRA support is route-specific. `AbstractFramework/ernie-image-turbo-8bit` now has exact
+validated text-to-image and latent img2img LoRA rows. Use
+`mlxgen capabilities --model AbstractFramework/ernie-image-turbo-8bit` to inspect the exact
+current status before relying on a specific adapter workflow.
 
 ## Does Bonsai Image Support LoRA?
 
@@ -637,7 +637,7 @@ steps to run from pure noise.
 
 ## Can MLX-Gen Outpaint Or Reframe An Image?
 
-MLX-Gen supports experimental generative reframe for edit models that advertise
+MLX-Gen supports generative reframe for edit models that advertise
 `supports_reframe=true` in `mlxgen capabilities`. Use `--reframe-padding` with one input image to
 ask the edit model for a larger view:
 
@@ -657,7 +657,7 @@ reconstruction of missing object boundaries, but the model may redraw source con
 remains important, especially when the source object is cropped and the missing parts must be
 inferred.
 
-Use experimental `--outpaint-padding` when you want MLX-Gen to create a larger canvas and guide a
+Use `--outpaint-padding` when you want MLX-Gen to create a larger canvas and guide a
 supported edit model to fill the expanded view:
 
 ```sh
@@ -682,8 +682,9 @@ and [Reframe and Outpaint](reframe-outpaint.md).
 This is not a native fill/inpaint backend with an explicit diffusion mask, and it is not an exact
 pixel-lock guarantee. Latent I2I models, Z-Image, ERNIE, FIBO, base Qwen Image, Qwen Image 2512,
 distilled FLUX.2 Klein, Wan, SeedVR2, and unsupported edit models reject `--outpaint-padding`
-before loading weights. Prepared base FLUX.2 Klein q8/q4 packages also need separate visual proof
-before they should be treated as release-validated outpaint packages.
+before loading weights. Exact current prepared-package outpaint proof exists for
+`AbstractFramework/flux.2-klein-base-4b-8bit`; broader package claims should still follow the
+published validation rows.
 
 For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
 to the first source image. That prevents accidental stretching, but it does not expand the original

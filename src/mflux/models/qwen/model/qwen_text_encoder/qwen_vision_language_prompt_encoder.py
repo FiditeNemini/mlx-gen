@@ -9,6 +9,7 @@ from mflux.models.qwen.model.qwen_text_encoder.qwen_prompt_encoder import QwenPr
 from mflux.models.qwen.model.qwen_text_encoder.qwen_text_encoder import QwenTextEncoder
 from mflux.models.qwen.model.qwen_text_encoder.qwen_vision_language_encoder import QwenVisionLanguageEncoder
 from mflux.models.qwen.tokenizer.qwen_vision_language_tokenizer import QwenVisionLanguageTokenizer
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class QwenVisionLanguagePromptEncoder:
@@ -52,7 +53,7 @@ class QwenVisionLanguagePromptEncoder:
 
         # 3. Return the result including image_grid_thw for conditioning
         result = (prompt_embeds, prompt_mask, neg_prompt_embeds, neg_prompt_mask, image_grid_thw)
-        return result
+        return RuntimeMemory.materialize_inference_tree(result)
 
     @staticmethod
     def encode_prompt_auto(

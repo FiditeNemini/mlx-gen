@@ -4,6 +4,7 @@ from mlx import nn
 from mflux.models.common.config import ModelConfig
 from mflux.models.z_image.model.z_image_text_encoder.encoder_layer import EncoderLayer
 from mflux.models.z_image.model.z_image_text_encoder.rope import RotaryEmbedding
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class TextEncoder(nn.Module):
@@ -45,17 +46,22 @@ class TextEncoder(nn.Module):
         # Causal mask
         causal_mask = TextEncoder._get_causal_mask(attention_mask, batch_size, hidden_states, seq_len)
 
-        # Forward through layers
-        all_hidden_states = [hidden_states]
+        legacy_hidden_retention = RuntimeMemory._internal_benchmark_flag_enabled("legacy_hidden_state_retention")
+        all_hidden_states = [hidden_states] if legacy_hidden_retention else None
+        previous_hidden_states = hidden_states
         for layer in self.layers:
+            previous_hidden_states = hidden_states
             hidden_states = layer(
                 hidden_states=hidden_states,
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
             )
-            all_hidden_states.append(hidden_states)
+            if all_hidden_states is not None:
+                all_hidden_states.append(hidden_states)
 
-        return all_hidden_states[-2].astype(ModelConfig.precision)
+        if all_hidden_states is not None:
+            return all_hidden_states[-2].astype(ModelConfig.precision)
+        return previous_hidden_states.astype(ModelConfig.precision)
 
     @staticmethod
     def _get_causal_mask(attention_mask, batch_size, hidden_states, seq_len):

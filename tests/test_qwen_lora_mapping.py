@@ -112,3 +112,33 @@ def test_qwen_diffusion_model_modulation_lora_keys_apply(tmp_path: Path):
     report = result.reports[0]
     assert report.matched_key_count == 4
     assert report.unmatched_key_count == 0
+
+
+@pytest.mark.fast
+def test_qwen_kohya_modulation_lora_keys_apply(tmp_path: Path):
+    lora_path = tmp_path / "qwen-kohya-modulation-lora.safetensors"
+    mx.save_safetensors(
+        str(lora_path),
+        {
+            "lora_unet_transformer_blocks_0_img_mod_1.lora_down.weight": mx.zeros((2, 4)),
+            "lora_unet_transformer_blocks_0_img_mod_1.lora_up.weight": mx.zeros((6, 2)),
+            "lora_unet_transformer_blocks_0_img_mod_1.alpha": mx.array(2.0),
+            "lora_unet_transformer_blocks_0_txt_mod_1.lora_down.weight": mx.zeros((2, 4)),
+            "lora_unet_transformer_blocks_0_txt_mod_1.lora_up.weight": mx.zeros((6, 2)),
+            "lora_unet_transformer_blocks_0_txt_mod_1.alpha": mx.array(2.0),
+        },
+    )
+    transformer = _TinyQwenTransformer()
+
+    result = LoRALoader.load_and_apply_lora_detailed(
+        lora_mapping=QwenLoRAMapping.get_mapping(),
+        transformer=transformer,
+        lora_paths=[str(lora_path)],
+        lora_scales=[1.0],
+    )
+
+    assert isinstance(transformer.transformer_blocks[0].img_mod_linear, LoRALinear)
+    assert isinstance(transformer.transformer_blocks[0].txt_mod_linear, LoRALinear)
+    report = result.reports[0]
+    assert report.matched_key_count == 6
+    assert report.unmatched_key_count == 0

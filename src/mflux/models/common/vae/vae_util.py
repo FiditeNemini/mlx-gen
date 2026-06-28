@@ -12,7 +12,12 @@ class VAEUtil:
         image: mx.array,
         tiling_config: TilingConfig | None = None,
         preserve_temporal_axis: bool = False,
+        sample_posterior: bool = False,
+        seed: int | None = None,
     ) -> mx.array:
+        if sample_posterior and tiling_config is not None and tiling_config.vae_encode_tiled:
+            raise ValueError("Posterior-sampled VAE encode does not currently support tiled encoding.")
+
         # 1. Tiled encoding if enabled
         if tiling_config is not None and tiling_config.vae_encode_tiled:
             # VAETiler.encode_image_tiled always returns 5D (B, C, 1, H_lat, W_lat)
@@ -27,7 +32,10 @@ class VAEUtil:
             )
 
         # 2. Standard encoding (fallback)
-        encoded = vae.encode(image)
+        if sample_posterior and hasattr(vae, "encode_sampled"):
+            encoded = vae.encode_sampled(image, seed=seed)
+        else:
+            encoded = vae.encode(image)
 
         # 3. Handle dimension fixups (5D -> 4D if needed)
         # Most of our latent processing utilities expect (B, C, H, W) for non-tiled encoding

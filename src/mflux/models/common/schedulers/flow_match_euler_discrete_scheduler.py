@@ -25,6 +25,7 @@ class FlowMatchEulerDiscreteScheduler(BaseScheduler):
         self.model_config = config.model_config
         self.num_train_timesteps = 1000
         self.shift_terminal = 0.02
+        FlowMatchEulerDiscreteScheduler._validate_num_inference_steps(config.num_inference_steps)
         self._sigmas, self._timesteps = self._compute_timesteps_and_sigmas()
 
     @property
@@ -55,6 +56,11 @@ class FlowMatchEulerDiscreteScheduler(BaseScheduler):
         self._sigmas = sigmas
 
     @staticmethod
+    def _validate_num_inference_steps(num_inference_steps: int) -> None:
+        if num_inference_steps < 2:
+            raise ValueError("FlowMatchEulerDiscreteScheduler requires at least 2 inference steps.")
+
+    @staticmethod
     def _compute_linear_mu(
         image_seq_len: int,
         base_seq_len: int = 256,
@@ -77,6 +83,7 @@ class FlowMatchEulerDiscreteScheduler(BaseScheduler):
         max_shift: float = 1.15,
         shift_terminal: float | None = None,
     ) -> tuple[mx.array, mx.array]:
+        FlowMatchEulerDiscreteScheduler._validate_num_inference_steps(num_inference_steps)
         sigmas = mx.linspace(1.0, 1.0 / num_inference_steps, num_inference_steps, dtype=mx.float32)
         mu = FlowMatchEulerDiscreteScheduler._compute_linear_mu(
             image_seq_len=image_seq_len,

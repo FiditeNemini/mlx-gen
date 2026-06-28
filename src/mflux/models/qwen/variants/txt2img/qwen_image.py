@@ -20,6 +20,7 @@ from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_timer import RuntimeTimer
 from mflux.utils.scale_factor import ScaleFactor
 
 
@@ -50,7 +51,7 @@ class QwenImage(nn.Module):
         self,
         seed: int,
         prompt: str,
-        num_inference_steps: int = 4,
+        num_inference_steps: int = 20,
         height: int | ScaleFactor | None = None,
         width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
@@ -60,6 +61,7 @@ class QwenImage(nn.Module):
         negative_prompt: str | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        timer = RuntimeTimer()
         # 0. Create a new config based on the model type and input parameters
         config = Config(
             width=width,
@@ -91,6 +93,7 @@ class QwenImage(nn.Module):
         )
 
         # 2. Encode the prompt (using native MLX encoding)
+        negative_prompt = self._resolve_negative_prompt(guidance=guidance, negative_prompt=negative_prompt)
         prompt_embeds, prompt_mask, negative_prompt_embeds, negative_prompt_mask = QwenPromptEncoder.encode_prompt(
             prompt=prompt,
             negative_prompt=negative_prompt,
@@ -98,6 +101,7 @@ class QwenImage(nn.Module):
             qwen_tokenizer=self.tokenizers["qwen"],
             qwen_text_encoder=self.text_encoder,
         )
+        do_true_cfg = guidance > 1.0 and negative_prompt_embeds is not None and negative_prompt_mask is not None
 
         # 3. Create callback context and call before_loop
         ctx = self.callbacks.start(seed=seed, prompt=prompt, config=config)
@@ -116,14 +120,17 @@ class QwenImage(nn.Module):
                     encoder_hidden_states=prompt_embeds,
                     encoder_hidden_states_mask=prompt_mask,
                 )
-                noise_negative = self.transformer(
-                    t=t,
-                    config=config,
-                    hidden_states=latents,
-                    encoder_hidden_states=negative_prompt_embeds,
-                    encoder_hidden_states_mask=negative_prompt_mask,
-                )
-                guided_noise = QwenImage.compute_guided_noise(noise, noise_negative, config.guidance)
+                if do_true_cfg:
+                    noise_negative = self.transformer(
+                        t=t,
+                        config=config,
+                        hidden_states=latents,
+                        encoder_hidden_states=negative_prompt_embeds,
+                        encoder_hidden_states_mask=negative_prompt_mask,
+                    )
+                    guided_noise = QwenImage.compute_guided_noise(noise, noise_negative, config.guidance)
+                else:
+                    guided_noise = noise
 
                 # 5.t Take one denoise step
                 latents = config.scheduler.step(noise=guided_noise, timestep=t, latents=latents)
@@ -156,7 +163,7 @@ class QwenImage(nn.Module):
             lora_scales=self.lora_scales,
             image_path=config.image_path,
             image_strength=config.image_strength,
-            generation_time=config.time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             negative_prompt=negative_prompt,
             extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
@@ -180,3 +187,9 @@ class QwenImage(nn.Module):
         noise_norm = mx.sqrt(mx.sum(combined * combined, axis=-1, keepdims=True) + 1e-12)
         noise = combined * (cond_norm / noise_norm)
         return noise
+
+    @staticmethod
+    def _resolve_negative_prompt(guidance: float, negative_prompt: str | None) -> str | None:
+        if guidance > 1.0 and negative_prompt is None:
+            return " "
+        return negative_prompt

@@ -40,6 +40,7 @@ def main():
 
     # 1. Load the model
     model_config = ModelConfig.from_name(model_name=args.model or "qwen-image", base_model=args.base_model)
+    CallbackManager.apply_runtime_memory_options(args)
     if args.mask_path is not None:
         if args.image_path is None:
             parser.error("--mask-path requires --image-path.")

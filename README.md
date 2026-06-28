@@ -46,7 +46,7 @@ The main capabilities are:
   edits, masked edit/inpaint where the selected model supports `--mask-path`, base-Qwen
   control-inpaint on the exact validated `AbstractFramework/qwen-image-8bit` row, Qwen structured
   control where the selected model supports `--controlnet-image-path`, Z-Image Turbo native
-  inpaint on the exact validated `AbstractFramework/z-image-turbo-8bit` row, and experimental
+  inpaint on the exact validated `AbstractFramework/z-image-turbo-8bit` row, and route-specific
   reframe/outpaint workflows where the selected model supports them;
 - Wan2.2 text-to-video and image-to-video, including TI2V-5B BF16/q8 packages plus A14B
   T2V/I2V BF16 and mixed q8/BF16 packages; Wan I2V resolves output size from the source
@@ -58,18 +58,18 @@ The main capabilities are:
   validated five-second `1x` and `2x` proof bundles for the current 3B/7B video path;
 - explicit `download` and `prepare` workflows for local MLX-Gen model packages;
 - JSON model capability inspection before starting a heavy run;
-- experimental LoRA routing and strict adapter application checks, with model-card compatibility
-  preflight when cached adapter metadata is available and exact q8 proof rows for Qwen Image Edit
-  original/2509/2511, Qwen Image 2512, the base Qwen Image q8 structured-control row, the base
-  Qwen Image q8 control-inpaint row, Z-Image Turbo, FLUX.2 Klein 9B edit, ERNIE Image Turbo
-  text-to-image, and all current Wan q8 video routes; the LoRA guide now includes the documented
-  `720p` Wan q8-vs-BF16 LightX2V keyframe comparison, readable `41`-frame M5 Max progress
-  matrices, same-seed no-LoRA-versus-Lightning A/B sheets, a `240p`-versus-`480p` T2V sweep,
-  time/RSS tables for T2V and I2V, a Qwen Image Edit 2511 q8 masked-edit proof using the
-  dedicated Lightning adapter, and the exact base Qwen q8 structured-control plus
-  control-inpaint proofs using the InstantX sidecars plus Qwen Lightning. Those Lightning examples
-  are documented against MLX-Gen q8 packages, not arbitrary external FP8 checkpoints. Base Qwen
-  Image text generation remains experimental, and Bonsai LoRA stays fail-closed;
+- strict route-specific LoRA routing and adapter application checks, with model-card compatibility
+  preflight when cached adapter metadata is available and exact public proof rows for Qwen Image
+  Edit original/2509/2511, base Qwen Image text and latent, Qwen Image 2512 text, the base Qwen
+  Image q8 structured-control and control-inpaint rows, the exact
+  `AbstractFramework/z-image-turbo-8bit` text and latent img2img rows, FLUX.2 Klein 9B edit and
+  multi-reference, FLUX.2 Klein base 4B outpaint, ERNIE Image Turbo text and latent img2img, and
+  all current Wan q8 video routes; the LoRA guide now includes the
+  documented `720p` Wan q8-vs-BF16 LightX2V keyframe comparison, readable `41`-frame M5 Max
+  progress matrices, same-seed no-LoRA-versus-Lightning A/B sheets, a `240p`-versus-`480p` T2V
+  sweep, time/RSS tables for T2V and I2V, and the exact Qwen/FLUX route-completion contact
+  sheets. Those Lightning examples are documented against MLX-Gen q8 packages, not arbitrary
+  external FP8 checkpoints. Bonsai LoRA stays fail-closed;
 - shared progress events for applications embedding MLX-Gen.
 
 Use `mlxgen capabilities --model ...` before long image-edit runs. Capability output describes the
@@ -186,16 +186,18 @@ selected model can dispatch. For release QA evidence on exact packages, use:
 mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit
 ```
 
-LoRA support is experimental. For LoRA work, inspect `supports_lora` and `lora_status` in
-`mlxgen capabilities`, download the adapter explicitly with `mlxgen download`, and use an adapter
-trained for the selected model family. Current exact proof rows cover original Qwen Image Edit,
-Qwen Image Edit 2509/2511, Qwen Image 2512, Z-Image Turbo, FLUX.2 Klein 9B edit, and ERNIE Image
-Turbo text-to-image, plus the current Wan q8 public video routes. The LoRA guide also includes the
-current LightX2V `4`-step A14B timing comparison against the practical original Wan profiles,
-same-seed no-LoRA-versus-Lightning A/B sheets, recommended `4`-step Qwen 2512 and Qwen Edit 2511
-Lightning examples, a `240p`-versus-`480p` T2V sweep, and copy-paste download and T2V/I2V
-commands for `lightx2v/Wan2.2-Lightning`, including the stable `repo:subdir/file.safetensors`
-form and equivalent absolute local-file usage after download.
+LoRA support is route-specific. For LoRA work, inspect `supports_lora`, `lora_status`, and
+`lora_validation_profile` in `mlxgen capabilities`, download the adapter explicitly with
+`mlxgen download`, and use an adapter trained for the selected model family and route. Current
+exact proof rows cover original Qwen Image Edit, Qwen Image Edit 2509/2511, base Qwen Image text
+and latent, Qwen Image 2512 text, the exact `AbstractFramework/z-image-turbo-8bit` text and latent rows, FLUX.2 Klein 9B edit and
+multi-reference, FLUX.2 Klein base 4B outpaint, ERNIE Image Turbo text and latent, plus the
+current Wan q8 public video routes. The LoRA guide also includes the current LightX2V `4`-step
+A14B timing comparison against the practical original Wan profiles, same-seed
+no-LoRA-versus-Lightning A/B sheets, recommended `4`-step Qwen 2512 and Qwen Edit 2511 Lightning
+examples, a `240p`-versus-`480p` T2V sweep, and copy-paste download and T2V/I2V commands for
+`lightx2v/Wan2.2-Lightning`, including the stable `repo:subdir/file.safetensors` form and
+equivalent absolute local-file usage after download.
 For example, a FLUX.2-dev LoRA is not accepted for FLUX.2 Klein. See [docs/lora.md](docs/lora.md)
 for the A/B validation method.
 
@@ -235,6 +237,9 @@ Edit, Qwen Image Edit 2509/2511, FLUX.2 Klein, and latent I2I models, see
 That guide now also includes the exact base Qwen q8 structured-control proof route, the exact
 base Qwen q8 control-inpaint proof route, and the exact Z-Image Turbo q8 native-inpaint proof
 route.
+For the full Qwen route map, including how `mlxgen` capability ids line up with upstream Diffusers
+Qwen pipelines and where the current proof surfaces live, see
+[docs/qwen-route-matrix.md](docs/qwen-route-matrix.md).
 For a plain-language guide to latent img2img, instruction edit, masked edit/inpaint, multi-reference composition,
 Qwen structured control, generative reframe, and outpaint, see
 [docs/image-edit-modes.md](docs/image-edit-modes.md).
@@ -354,17 +359,17 @@ progress callbacks make long runs observable.
 ## Documentation
 
 - [Getting started](docs/getting-started.md): installation, first runs, SeedVR2 upscaling, and Wan video.
-- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, experimental generative reframe, backend-specific outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
+- [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, generative reframe, backend-specific outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
 - [Image edit modes](docs/image-edit-modes.md): what latent img2img, edit-reference, multi-reference, generative reframe, and outpaint mean in practice, with examples.
 - [Wan video](docs/wan-video.md): practical Wan2.2 T2V/I2V sizing, broader A14B target size families, and 5-second M5 Max comparison clips.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
 - [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, the host-safe video restore profile, the accepted June 21 five-second Eiffel `1x` and `2x` 3B/7B proof bundles, readable tone-correction labels, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.
-- [Reframe and outpaint](docs/reframe-outpaint.md): experimental `--reframe-padding` and `--outpaint-padding` routes with the mixed June 8 profile plus the current FLUX.2 Klein base source-model proof.
+- [Reframe and outpaint](docs/reframe-outpaint.md): `--reframe-padding` and `--outpaint-padding` routes with the mixed June 8 profile, the current FLUX.2 Klein base source-model proof, and links to the exact current Qwen/FLUX route proofs.
 - [Model management](docs/model-management.md): download, prepare, and run from local model files.
 - [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
 - [Python integration](docs/python-integration.md): embedding, progress callbacks, and AbstractVision/AbstractCore notes.
-- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, SeedVR2 sizing, Qwen edit variants, negative prompts, experimental generative reframe, experimental canvas outpaint, Wan resolutions, and usage limits.
+- [FAQ](docs/faq.md): recurring questions, image-to-image mode selection, SeedVR2 sizing, Qwen edit variants, negative prompts, reframe/outpaint, Wan resolutions, and usage limits.
 - [Troubleshooting](docs/troubleshooting.md): common setup and runtime failures.
 - [Acknowledgements](ACKNOWLEDGEMENTS.md): upstream mflux and model-community credits.
 

@@ -4,6 +4,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.common.config.config import Config
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import LatentCreator
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
@@ -21,6 +22,7 @@ from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_timer import RuntimeTimer
 from mflux.utils.scale_factor import ScaleFactor
 
 
@@ -51,7 +53,7 @@ class Flux2Klein(nn.Module):
         self,
         seed: int,
         prompt: str,
-        num_inference_steps: int = 4,
+        num_inference_steps: int | None = None,
         height: int | ScaleFactor | None = None,
         width: int | ScaleFactor | None = None,
         guidance: float = 1.0,
@@ -60,6 +62,10 @@ class Flux2Klein(nn.Module):
         scheduler: str = "flow_match_euler_discrete",
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        timer = RuntimeTimer()
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(self.model_config, fallback=4)
+        self._validate_guidance(guidance)
         # 0. Create a new config based on the model type and input parameters
         config = Config(
             model_config=self.model_config,
@@ -77,7 +83,7 @@ class Flux2Klein(nn.Module):
         # 1. Encode prompt(s)
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(
             prompt=prompt,
-            negative_prompt=" ",
+            negative_prompt="",
             guidance=guidance,
         )
 
@@ -134,7 +140,7 @@ class Flux2Klein(nn.Module):
             lora_scales=self.lora_scales,
             image_path=config.image_path,
             image_strength=config.image_strength,
-            generation_time=config.time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
 
@@ -289,6 +295,18 @@ class Flux2Klein(nn.Module):
         if AppleSiliconUtil.is_m1_or_m2():
             return predict
         return mx.compile(predict)
+
+    def _validate_guidance(self, guidance: float) -> None:
+        if guidance == 1.0:
+            return
+        if self._is_base_model():
+            return
+        raise ValueError("guidance > 1.0 is only supported for FLUX.2 Klein base models.")
+
+    def _is_base_model(self) -> bool:
+        model_name_lower = self.model_config.model_name.lower()
+        base_model_lower = (self.model_config.base_model or "").lower()
+        return "klein-base" in model_name_lower or "klein-base" in base_model_lower
 
     def _configure_generation_scheduler(self, config: Config) -> None:
         del config

@@ -13,7 +13,9 @@ PyPI trusted publishing must be configured for:
 
 The workflow uses OpenID Connect through `pypa/gh-action-pypi-publish`; it does not require a long-lived PyPI API token.
 
-The workflow also uses a `github-release` environment before PyPI publishing. Configure environment protection rules in GitHub if releases should require manual approval.
+The workflow uses the `pypi` environment for trusted publishing, then uses the `github-release`
+environment only after PyPI publication succeeds. Configure environment protection rules in GitHub
+if releases should require manual approval.
 
 ## Release Checks
 
@@ -24,8 +26,8 @@ The release workflow:
 - builds distributions with `uv build`;
 - validates distributions with `twine check`;
 - uploads build artifacts;
-- creates a GitHub Release with the wheel and source distribution when publishing;
-- publishes the same artifacts to PyPI through trusted publishing.
+- publishes the built artifacts to PyPI through trusted publishing;
+- creates a GitHub Release with the same wheel and source distribution only after PyPI succeeds.
 
 ## Rehearsal
 

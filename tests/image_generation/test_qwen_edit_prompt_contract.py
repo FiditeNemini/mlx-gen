@@ -12,6 +12,7 @@ from mflux.models.qwen.model.qwen_transformer.qwen_transformer_block import Qwen
 from mflux.models.qwen.qwen_initializer import QwenImageInitializer
 from mflux.models.qwen.tokenizer.qwen_vision_language_tokenizer import QwenVisionLanguageTokenizer
 from mflux.models.qwen.variants.edit.qwen_image_edit import QwenImageEdit
+from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
 
 
 class _CapturingProcessor:
@@ -139,38 +140,29 @@ def test_qwen_edit_true_cfg_requires_negative_prompt():
     assert not QwenImageEdit._should_use_true_cfg(guidance=1.0, negative_prompt="")
 
 
-def test_qwen_edit_models_use_official_blank_negative_prompt_for_true_cfg():
+def test_qwen_edit_models_auto_enable_blank_negative_for_guidance():
     edit_regular = SimpleNamespace(model_config=ModelConfig.qwen_image_edit())
     edit_2509 = SimpleNamespace(model_config=ModelConfig.qwen_image_edit_2509())
     edit_2511 = SimpleNamespace(model_config=ModelConfig.from_name("qwen-image-edit-2511"))
 
-    assert (
-        QwenImageEdit._resolve_negative_prompt_for_model(
-            edit_regular,
-            guidance=4.0,
-            negative_prompt=None,
-            image_paths=["source.png"],
-        )
-        == " "
-    )
-    assert (
-        QwenImageEdit._resolve_negative_prompt_for_model(
-            edit_2509,
-            guidance=4.0,
-            negative_prompt=None,
-            image_paths=["source.png"],
-        )
-        == " "
-    )
-    assert (
-        QwenImageEdit._resolve_negative_prompt_for_model(
-            edit_2511,
-            guidance=4.0,
-            negative_prompt=None,
-            image_paths=["source.png"],
-        )
-        == " "
-    )
+    assert QwenImageEdit._resolve_negative_prompt_for_model(
+        edit_regular,
+        guidance=4.0,
+        negative_prompt=None,
+        image_paths=["source.png"],
+    ) == " "
+    assert QwenImageEdit._resolve_negative_prompt_for_model(
+        edit_2509,
+        guidance=4.0,
+        negative_prompt=None,
+        image_paths=["source.png"],
+    ) == " "
+    assert QwenImageEdit._resolve_negative_prompt_for_model(
+        edit_2511,
+        guidance=4.0,
+        negative_prompt=None,
+        image_paths=["source.png"],
+    ) == " "
     assert (
         QwenImageEdit._resolve_negative_prompt_for_model(
             edit_2511,
@@ -183,12 +175,27 @@ def test_qwen_edit_models_use_official_blank_negative_prompt_for_true_cfg():
     assert (
         QwenImageEdit._resolve_negative_prompt_for_model(
             edit_2511,
+            guidance=4.0,
+            negative_prompt="",
+            image_paths=["source.png"],
+        )
+        == ""
+    )
+    assert (
+        QwenImageEdit._resolve_negative_prompt_for_model(
+            edit_2511,
             guidance=1.0,
             negative_prompt=None,
             image_paths=["source.png"],
         )
         is None
     )
+
+
+def test_base_qwen_auto_enables_blank_negative_for_guidance():
+    assert QwenImage._resolve_negative_prompt(guidance=4.0, negative_prompt=None) == " "
+    assert QwenImage._resolve_negative_prompt(guidance=4.0, negative_prompt="low quality") == "low quality"
+    assert QwenImage._resolve_negative_prompt(guidance=1.0, negative_prompt=None) is None
 
 
 def test_qwen_edit_plus_python_default_steps_match_model_card():

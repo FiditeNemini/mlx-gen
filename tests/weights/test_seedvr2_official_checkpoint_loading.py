@@ -22,6 +22,28 @@ from mflux.models.seedvr2.weights.seedvr2_weight_definition import (
 
 
 @pytest.mark.fast
+def test_torch_checkpoint_loader_uses_weights_only(tmp_path, monkeypatch):
+    observed = {}
+
+    def fake_load(file_path, *, map_location, weights_only):
+        observed["file_path"] = file_path
+        observed["map_location"] = map_location
+        observed["weights_only"] = weights_only
+        return {"state_dict": {"linear.weight": torch.ones((1,), dtype=torch.float32)}}
+
+    monkeypatch.setattr(torch, "load", fake_load)
+
+    weights = WeightLoader._load_torch_checkpoint(tmp_path / "model.pth")
+
+    assert observed == {
+        "file_path": tmp_path / "model.pth",
+        "map_location": "cpu",
+        "weights_only": True,
+    }
+    assert weights["linear.weight"].shape == (1,)
+
+
+@pytest.mark.fast
 def test_weight_loader_loads_torch_checkpoint_directory(tmp_path):
     torch.save(
         {
@@ -36,7 +58,7 @@ def test_weight_loader_loads_torch_checkpoint_directory(tmp_path):
     weights = WeightLoader._load_safetensors(tmp_path, "torch_checkpoint", ["model.pth"])
 
     assert weights["linear.weight"].shape == (2, 3)
-    assert weights["linear.bias"].dtype == mx.float16
+    assert weights["linear.bias"].dtype == mx.bfloat16
 
 
 @pytest.mark.fast
@@ -47,7 +69,29 @@ def test_weight_loader_loads_torch_tensor_directory(tmp_path):
 
     assert set(weights) == {"embedding"}
     assert weights["embedding"].shape == (58, 5120)
-    assert weights["embedding"].dtype == mx.float16
+    assert weights["embedding"].dtype == mx.bfloat16
+
+
+@pytest.mark.fast
+def test_torch_checkpoint_loader_rejects_empty_tensor_map(tmp_path, monkeypatch):
+    def fake_load(file_path, *, map_location, weights_only):
+        return {"state_dict": {"epoch": 1}}
+
+    monkeypatch.setattr(torch, "load", fake_load)
+
+    with pytest.raises(ValueError, match="Unsupported Torch checkpoint payload"):
+        WeightLoader._load_torch_checkpoint(tmp_path / "model.pth")
+
+
+@pytest.mark.fast
+def test_torch_checkpoint_loader_rejects_mixed_tensor_and_metadata_dict(tmp_path, monkeypatch):
+    def fake_load(file_path, *, map_location, weights_only):
+        return {"state_dict": {"linear.weight": torch.ones((1,), dtype=torch.float32), "epoch": 1}}
+
+    monkeypatch.setattr(torch, "load", fake_load)
+
+    with pytest.raises(ValueError, match="Unsupported Torch checkpoint payload"):
+        WeightLoader._load_torch_checkpoint(tmp_path / "model.pth")
 
 
 @pytest.mark.fast

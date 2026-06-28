@@ -23,6 +23,8 @@ def main():
     if args.guidance is None:
         args.guidance = ui_defaults.DEFAULT_DEPTH_GUIDANCE
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     memory_saver = None
     try:
         # 1. Load the model

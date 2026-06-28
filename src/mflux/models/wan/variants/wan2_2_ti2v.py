@@ -26,6 +26,7 @@ from mflux.models.wan.weights import WanWeightDefinition
 from mflux.utils.exceptions import ModelConfigError
 from mflux.utils.generated_video import GeneratedVideo
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.tensor_health import TensorHealth
 from mflux.utils.video_util import VideoUtil
 
@@ -352,14 +353,93 @@ class Wan2_2_TI2V(nn.Module):
             task=task,
             registry=progress_registry,
         )
-        decoded = self.vae.decode_normalized_latents(
-            latents.astype(ModelConfig.precision),
-            clear_cache_each_slice=release_denoisers_before_decode,
-        )
-        mx.eval(decoded)
-        mx.synchronize()
-        mx.clear_cache()
-        self._require_tensor_health(decoded, phase="vae-decode", name="decoded")
+        decode_latents = RuntimeMemory.materialize_inference_tree(latents.astype(ModelConfig.precision))
+        extra_metadata = {
+            **(LoRALoader.extra_metadata_for_model(self) or {}),
+            "lora_target_roles": getattr(self, "lora_target_roles", None) or None,
+        }
+        if release_denoisers_before_decode:
+            del latents
+            gc.collect()
+            mx.synchronize()
+            mx.clear_cache()
+
+            def frame_batches_factory():
+                decoded_slices = self.vae.iter_decode_normalized_latent_slices(
+                    decode_latents,
+                    clear_cache_each_slice=True,
+                )
+                return VideoUtil.decoded_latent_slices_to_frame_batches(
+                    decoded_slices,
+                    batch_size=8,
+                    total_frames=num_frames,
+                )
+
+            video = VideoUtil.to_video_from_frame_batches(
+                frame_batches_factory=frame_batches_factory,
+                fps=fps,
+                model_config=self.model_config,
+                seed=seed,
+                prompt=prompt,
+                steps=num_inference_steps,
+                guidance=guidance,
+                guidance_2=guidance_2,
+                flow_shift=flow_shift,
+                solver=solver,
+                quantization=self.bits,
+                generation_time=time.time() - start_time,
+                height=height,
+                width=width,
+                frame_count=num_frames,
+                task=task,
+                image_path=image_path,
+                negative_prompt=negative_prompt,
+                source_width=spatial_metadata.get("source_width"),
+                source_height=spatial_metadata.get("source_height"),
+                requested_width=spatial_metadata.get("requested_width"),
+                requested_height=spatial_metadata.get("requested_height"),
+                lora_paths=getattr(self, "lora_paths", None),
+                lora_scales=getattr(self, "lora_scales", None),
+                extra_metadata={
+                    **extra_metadata,
+                    "wan_decode_mode": "streamed_vae_slices",
+                    "generation_time_scope": "pre-save",
+                },
+            )
+        else:
+            decoded = self.vae.decode_normalized_latents(
+                decode_latents,
+                clear_cache_each_slice=False,
+            )
+            mx.eval(decoded)
+            mx.synchronize()
+            mx.clear_cache()
+            self._require_tensor_health(decoded, phase="vae-decode", name="decoded")
+            video = VideoUtil.to_video(
+                decoded_latents=decoded,
+                fps=fps,
+                model_config=self.model_config,
+                seed=seed,
+                prompt=prompt,
+                steps=num_inference_steps,
+                guidance=guidance,
+                guidance_2=guidance_2,
+                flow_shift=flow_shift,
+                solver=solver,
+                quantization=self.bits,
+                generation_time=time.time() - start_time,
+                task=task,
+                image_path=image_path,
+                negative_prompt=negative_prompt,
+                source_width=spatial_metadata.get("source_width"),
+                source_height=spatial_metadata.get("source_height"),
+                requested_width=spatial_metadata.get("requested_width"),
+                requested_height=spatial_metadata.get("requested_height"),
+                lora_paths=getattr(self, "lora_paths", None),
+                lora_scales=getattr(self, "lora_scales", None),
+                extra_metadata=extra_metadata,
+                materialize_frames=False,
+            )
         self._emit_progress(
             progress_callback,
             phase="convert",
@@ -369,33 +449,6 @@ class Wan2_2_TI2V(nn.Module):
             total_steps=total_steps,
             task=task,
             registry=progress_registry,
-        )
-        video = VideoUtil.to_video(
-            decoded_latents=decoded,
-            fps=fps,
-            model_config=self.model_config,
-            seed=seed,
-            prompt=prompt,
-            steps=num_inference_steps,
-            guidance=guidance,
-            guidance_2=guidance_2,
-            flow_shift=flow_shift,
-            solver=solver,
-            quantization=self.bits,
-            generation_time=time.time() - start_time,
-            task=task,
-            image_path=image_path,
-            negative_prompt=negative_prompt,
-            source_width=spatial_metadata.get("source_width"),
-            source_height=spatial_metadata.get("source_height"),
-            requested_width=spatial_metadata.get("requested_width"),
-            requested_height=spatial_metadata.get("requested_height"),
-            lora_paths=getattr(self, "lora_paths", None),
-            lora_scales=getattr(self, "lora_scales", None),
-            extra_metadata={
-                **(LoRALoader.extra_metadata_for_model(self) or {}),
-                "lora_target_roles": getattr(self, "lora_target_roles", None) or None,
-            },
         )
         self._emit_progress(
             progress_callback,

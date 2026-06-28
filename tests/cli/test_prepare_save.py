@@ -43,6 +43,78 @@ def test_prepare_wan_does_not_pass_lora_kwargs_to_non_lora_model(tmp_path, monke
     }
 
 
+def test_prepare_custom_path_uses_explicit_qwen_base_model_class(tmp_path, monkeypatch):
+    observed = {}
+
+    class FakeQwen:
+        def __init__(self, *, quantize, model_config):
+            observed["init"] = {
+                "quantize": quantize,
+                "model_config": model_config.model_name,
+                "base_model": model_config.base_model,
+            }
+
+        def save_model(self, path):
+            observed["path"] = path
+
+    monkeypatch.setattr(save, "QwenImage", FakeQwen)
+
+    with patch(
+        "sys.argv",
+        [
+            "mlxgen prepare",
+            "--model",
+            str(tmp_path / "custom-qwen-folder"),
+            "--base-model",
+            "qwen-image",
+            "--path",
+            str(tmp_path / "prepared-qwen"),
+            "--quantize",
+            "8",
+        ],
+    ):
+        save.main()
+
+    assert observed == {
+        "init": {
+            "quantize": 8,
+            "model_config": str(tmp_path / "custom-qwen-folder"),
+            "base_model": "Qwen/Qwen-Image",
+        },
+        "path": str(tmp_path / "prepared-qwen"),
+    }
+
+
+def test_prepare_rejects_ambiguous_custom_path_without_base_model(tmp_path, monkeypatch, capsys):
+    custom_model = tmp_path / "custom-model"
+    custom_model.mkdir()
+
+    class FakeFlux:
+        def __init__(self, **kwargs):
+            raise AssertionError("ambiguous prepare should fail before selecting Flux")
+
+    monkeypatch.setattr(save, "Flux1", FakeFlux)
+
+    with patch(
+        "sys.argv",
+        [
+            "mlxgen prepare",
+            "--model",
+            str(custom_model),
+            "--path",
+            str(tmp_path / "prepared-model"),
+            "--quantize",
+            "8",
+        ],
+    ):
+        with pytest.raises(SystemExit):
+            save.main()
+
+    captured = capsys.readouterr()
+    assert "Cannot infer base_model" in captured.err
+    assert "--base-model" in captured.err
+
+
 def test_prepare_rejects_lora_bake_until_save_reload_is_proven(tmp_path, monkeypatch, capsys):
     lora_path = tmp_path / "lora-a.safetensors"
     lora_path.write_bytes(b"")

@@ -1,6 +1,7 @@
 import gc
+import os
 import time
-from dataclasses import asdict, replace
+from dataclasses import replace
 from pathlib import Path
 
 import mlx.core as mx
@@ -10,7 +11,6 @@ from mflux.models.common.config.config import Config
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.vae.tiling_config import TilingConfig
 from mflux.models.common.vae.vae_util import VAEUtil
-from mflux.models.common.weights.saving.model_saver import ModelSaver
 from mflux.models.seedvr2.latent_creator.seedvr2_latent_creator import SeedVR2LatentCreator
 from mflux.models.seedvr2.model.seedvr2_text_encoder.text_embeddings import SeedVR2TextEmbeddings
 from mflux.models.seedvr2.model.seedvr2_transformer.transformer import SeedVR2Transformer
@@ -22,9 +22,133 @@ from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.generated_video import GeneratedVideo
 from mflux.utils.image_util import ImageUtil
 from mflux.utils.metadata_reader import MetadataReader
+from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.scale_factor import ScaleFactor
 from mflux.utils.video_health import VideoHealth
 from mflux.utils.video_util import AudioCopyResult, VideoStreamWriter, VideoUtil
+
+
+class SeedVR2StreamedVideoNoiseProvider:
+    DETERMINISTIC_VERSION = "absolute-latent-frame-v1"
+
+    def __init__(
+        self,
+        *,
+        seed: int,
+        latent_height: int,
+        latent_width: int,
+        latent_channels: int,
+        total_latent_frames: int,
+        estimated_global_noise_bytes: int,
+        max_global_noise_bytes: int | None,
+        global_noise: mx.array | None,
+    ):
+        self.seed = seed
+        self.latent_height = latent_height
+        self.latent_width = latent_width
+        self.latent_channels = latent_channels
+        self.total_latent_frames = total_latent_frames
+        self.estimated_global_noise_bytes = estimated_global_noise_bytes
+        self.max_global_noise_bytes = max_global_noise_bytes
+        self.global_noise = global_noise
+        self.mode = "global" if global_noise is not None else "absolute_latent_frame"
+        if self.global_noise is not None:
+            mx.eval(self.global_noise)
+
+    def slice(self, *, chunk_start_frame: int, target_input_frame_count: int) -> mx.array:
+        if self.global_noise is not None:
+            return self._global_slice(
+                global_noise=self.global_noise,
+                chunk_start_frame=chunk_start_frame,
+                target_input_frame_count=target_input_frame_count,
+            )
+        return self._deterministic_slice(
+            chunk_start_frame=chunk_start_frame,
+            target_input_frame_count=target_input_frame_count,
+        )
+
+    def metadata(self) -> dict:
+        return {
+            "seedvr2_noise_mode": self.mode,
+            "seedvr2_noise_version": self.DETERMINISTIC_VERSION if self.global_noise is None else "clip-global",
+            "seedvr2_noise_estimated_global_bytes": self.estimated_global_noise_bytes,
+            "seedvr2_noise_max_global_bytes": self.max_global_noise_bytes,
+            "seedvr2_noise_total_latent_frames": self.total_latent_frames,
+        }
+
+    def _deterministic_slice(self, *, chunk_start_frame: int, target_input_frame_count: int) -> mx.array:
+        latent_start_frame = self._latent_start_frame(chunk_start_frame)
+        latent_frame_count = SeedVR2Util.latent_video_frame_count(target_input_frame_count)
+        frames = [
+            self._absolute_latent_frame(absolute_frame=min(latent_start_frame + offset, self.total_latent_frames - 1))
+            for offset in range(latent_frame_count)
+        ]
+        noise_slice = mx.concatenate(frames, axis=2)
+        mx.eval(noise_slice)
+        return noise_slice
+
+    def _absolute_latent_frame(self, *, absolute_frame: int) -> mx.array:
+        return SeedVR2LatentCreator.create_noise_latents(
+            seed=self._frame_seed(absolute_frame),
+            height=self.latent_height,
+            width=self.latent_width,
+            num_frames=1,
+            latent_channels=self.latent_channels,
+        )
+
+    def _frame_seed(self, absolute_frame: int) -> int:
+        return (int(self.seed) + (absolute_frame + 1) * 0x9E3779B1) % (2**32)
+
+    @staticmethod
+    def max_global_noise_bytes() -> int | None:
+        if not RuntimeMemory._internal_benchmark_flag_enabled("seedvr2_max_global_noise_bytes"):
+            return None
+        override = os.environ.get("MFLUX_INTERNAL_SEEDVR2_MAX_GLOBAL_NOISE_BYTES")
+        if override is None:
+            return None
+        try:
+            value = int(override)
+        except ValueError as exc:
+            raise ValueError("MFLUX_INTERNAL_SEEDVR2_MAX_GLOBAL_NOISE_BYTES must be an integer byte count.") from exc
+        if value < 0:
+            raise ValueError("MFLUX_INTERNAL_SEEDVR2_MAX_GLOBAL_NOISE_BYTES must be non-negative.")
+        return value
+
+    @staticmethod
+    def _global_slice(
+        *,
+        global_noise: mx.array,
+        chunk_start_frame: int,
+        target_input_frame_count: int,
+    ) -> mx.array:
+        latent_start_frame = SeedVR2StreamedVideoNoiseProvider._latent_start_frame(chunk_start_frame)
+        latent_frame_count = SeedVR2Util.latent_video_frame_count(target_input_frame_count)
+        latent_end_frame = latent_start_frame + latent_frame_count
+        available_end = min(int(global_noise.shape[2]), latent_end_frame)
+        noise_slice = global_noise[:, :, latent_start_frame:available_end, :, :]
+        if int(noise_slice.shape[2]) == latent_frame_count:
+            mx.eval(noise_slice)
+            return noise_slice
+
+        missing_frames = latent_frame_count - int(noise_slice.shape[2])
+        if missing_frames <= 0:
+            mx.eval(noise_slice)
+            return noise_slice
+        if int(noise_slice.shape[2]) == 0:
+            raise ValueError("SeedVR2 streamed video noise slice resolved to zero frames.")
+        padding = mx.repeat(noise_slice[:, :, -1:, :, :], missing_frames, axis=2)
+        noise_slice = mx.concatenate([noise_slice, padding], axis=2)
+        mx.eval(noise_slice)
+        return noise_slice
+
+    @staticmethod
+    def _latent_start_frame(chunk_start_frame: int) -> int:
+        if chunk_start_frame % 4 != 0:
+            raise ValueError(
+                "SeedVR2 streamed video chunk start must be aligned to the latent temporal stride. "
+                f"Got start_frame={chunk_start_frame}."
+            )
+        return chunk_start_frame // 4
 
 
 class SeedVR2(nn.Module):
@@ -269,12 +393,19 @@ class SeedVR2(nn.Module):
             raise RuntimeError("SeedVR2 video restore requires a finite source frame count or duration.")
         requested_clip_frames = min(max_frames, available_frames) if max_frames is not None else available_frames
         actual_clip_start_seconds = clip_probe.clip_start_frame / clip_probe.fps
+        temporal_quality_error = SeedVR2Util.streamed_video_temporal_quality_error(
+            frame_count=requested_clip_frames,
+            chunk_size=temporal_chunk_size,
+            overlap=0 if temporal_chunk_size >= requested_clip_frames else temporal_chunk_overlap,
+        )
+        if temporal_quality_error is not None:
+            raise ValueError(temporal_quality_error)
         chunk_plan = SeedVR2Util.plan_streamed_video_chunks(
             frame_count=requested_clip_frames,
             chunk_size=temporal_chunk_size,
             overlap=temporal_chunk_overlap,
         )
-        global_noise = self._build_streamed_video_noise_latents(
+        noise_provider = self._build_streamed_video_noise_provider(
             seed=seed,
             requested_clip_frames=requested_clip_frames,
             source_width=clip_probe.source_width,
@@ -306,8 +437,7 @@ class SeedVR2(nn.Module):
                     pad_frame = chunk_frames[-1]
                     while len(chunk_frames) < chunk_info.target_input_frame_count:
                         chunk_frames.append(pad_frame.copy())
-                noise_slice = self._streamed_video_noise_slice(
-                    global_noise=global_noise,
+                noise_slice = noise_provider.slice(
                     chunk_start_frame=chunk_info.input_start_frame,
                     target_input_frame_count=chunk_info.target_input_frame_count,
                 )
@@ -354,7 +484,6 @@ class SeedVR2(nn.Module):
                 del noise_slice
                 del decoded
                 mx.clear_cache()
-                gc.collect()
                 self._assert_post_chunk_memory_health(
                     true_height=true_height,
                     true_width=true_width,
@@ -400,6 +529,9 @@ class SeedVR2(nn.Module):
             raise
 
         try:
+            noise_metadata = noise_provider.metadata()
+            del noise_provider
+            mx.clear_cache()
             generation_time = time.perf_counter() - start_time
             metadata = GeneratedVideo.build_metadata(
                 model_config=self.model_config,
@@ -423,6 +555,7 @@ class SeedVR2(nn.Module):
                     "resolution": str(resolution),
                     "softness": round(float(softness), 3),
                     **self._seedvr2_metadata(),
+                    **noise_metadata,
                     **(restore_metadata or {}),
                     "source_video_width": clip_probe.source_width,
                     "source_video_height": clip_probe.source_height,
@@ -462,17 +595,24 @@ class SeedVR2(nn.Module):
                     "color_correction_mode": color_correction_mode,
                 },
             )
-            if validate_health:
-                file_health = VideoHealth.validate_file(
-                    file_path,
-                    expected_width=final_width,
-                    expected_height=final_height,
-                    expected_frames=requested_clip_frames,
-                    expected_fps=clip_probe.fps,
-                )
-                metadata["video_health"] = {"file": asdict(file_health)}
-            if export_json_metadata:
-                GeneratedVideo.save_metadata(file_path, metadata)
+            gc_was_enabled = gc.isenabled()
+            if gc_was_enabled:
+                gc.disable()
+            try:
+                if validate_health:
+                    file_health = VideoHealth.validate_file(
+                        file_path,
+                        expected_width=final_width,
+                        expected_height=final_height,
+                        expected_frames=requested_clip_frames,
+                        expected_fps=clip_probe.fps,
+                    )
+                    metadata["video_health"] = {"file": file_health.to_metadata()}
+                if export_json_metadata:
+                    GeneratedVideo.save_metadata(file_path, metadata)
+            finally:
+                if gc_was_enabled:
+                    gc.enable()
             return file_path
         except Exception:
             if file_path is not None:
@@ -595,10 +735,9 @@ class SeedVR2(nn.Module):
         mx.eval(decoded)
         del static_condition
         mx.clear_cache()
-        gc.collect()
         return decoded, true_height, true_width, padded_frame_count
 
-    def _build_streamed_video_noise_latents(
+    def _build_streamed_video_noise_provider(
         self,
         *,
         seed: int,
@@ -606,7 +745,7 @@ class SeedVR2(nn.Module):
         source_width: int,
         source_height: int,
         resolution: int | ScaleFactor,
-    ) -> mx.array:
+    ) -> SeedVR2StreamedVideoNoiseProvider:
         true_height, true_width = self._estimate_output_size(
             source_width=source_width,
             source_height=source_height,
@@ -615,14 +754,34 @@ class SeedVR2(nn.Module):
         latent_height = max(1, true_height // SeedVR2Util.LATENT_SPATIAL_SCALE)
         latent_width = max(1, true_width // SeedVR2Util.LATENT_SPATIAL_SCALE)
         latent_channels = int(getattr(self.vae, "latent_channels", 16))
-        return SeedVR2LatentCreator.create_noise_latents(
-            seed=seed,
-            height=latent_height,
-            width=latent_width,
-            num_frames=SeedVR2Util.latent_video_frame_count(
-                SeedVR2Util.padded_video_frame_count(requested_clip_frames)
-            ),
+        total_latent_frames = SeedVR2Util.latent_video_frame_count(
+            SeedVR2Util.padded_video_frame_count(requested_clip_frames)
+        )
+        estimated_global_noise_bytes = self._streamed_video_noise_bytes(
             latent_channels=latent_channels,
+            latent_frames=total_latent_frames,
+            latent_height=latent_height,
+            latent_width=latent_width,
+        )
+        max_global_noise_bytes = SeedVR2StreamedVideoNoiseProvider.max_global_noise_bytes()
+        global_noise = None
+        if max_global_noise_bytes is None or estimated_global_noise_bytes <= max_global_noise_bytes:
+            global_noise = SeedVR2LatentCreator.create_noise_latents(
+                seed=seed,
+                height=latent_height,
+                width=latent_width,
+                num_frames=total_latent_frames,
+                latent_channels=latent_channels,
+            )
+        return SeedVR2StreamedVideoNoiseProvider(
+            seed=seed,
+            latent_height=latent_height,
+            latent_width=latent_width,
+            latent_channels=latent_channels,
+            total_latent_frames=total_latent_frames,
+            estimated_global_noise_bytes=estimated_global_noise_bytes,
+            max_global_noise_bytes=max_global_noise_bytes,
+            global_noise=global_noise,
         )
 
     def _streamed_video_noise_slice(
@@ -652,6 +811,16 @@ class SeedVR2(nn.Module):
             raise ValueError("SeedVR2 streamed video noise slice resolved to zero frames.")
         padding = mx.repeat(noise_slice[:, :, -1:, :, :], missing_frames, axis=2)
         return mx.concatenate([noise_slice, padding], axis=2)
+
+    @staticmethod
+    def _streamed_video_noise_bytes(
+        *,
+        latent_channels: int,
+        latent_frames: int,
+        latent_height: int,
+        latent_width: int,
+    ) -> int:
+        return int(latent_channels * latent_frames * latent_height * latent_width * 4)
 
     def _seedvr2_metadata(self) -> dict[str, str | None]:
         return {
@@ -796,6 +965,8 @@ class SeedVR2(nn.Module):
             file_path.unlink()
 
     def save_model(self, path: str) -> None:
+        from mflux.models.common.weights.saving.model_saver import ModelSaver
+
         ModelSaver.save_model(
             model=self,
             bits=self.bits,

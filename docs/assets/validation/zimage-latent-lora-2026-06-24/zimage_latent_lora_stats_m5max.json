@@ -1,0 +1,28 @@
+{
+  "date": "2026-06-24",
+  "machine": "Apple M5 Max",
+  "accepted_rows": [
+    {
+      "profile_id": "lora_zimage_q8_childrens_drawings_latent_2026_06_24",
+      "model": "AbstractFramework/z-image-turbo-8bit",
+      "capability_id": "z-image.latent",
+      "adapter": "ostris/z_image_turbo_childrens_drawings:z_image_turbo_childrens_drawings.safetensors",
+      "source_image": "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png",
+      "no_lora": {
+        "generation_time_seconds": 98.9,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 84.14,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 480,
+        "unmatched_key_count": 0,
+        "applied_target_count": 240
+      }
+    }
+  ]
+}

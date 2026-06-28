@@ -23,6 +23,8 @@ def main():
     if args.guidance is None:
         args.guidance = ui_defaults.GUIDANCE_SCALE
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1Controlnet(
         model_config=_get_controlnet_model_config(args.model),

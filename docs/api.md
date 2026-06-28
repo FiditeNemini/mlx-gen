@@ -66,10 +66,10 @@ The current exact public proof row is `AbstractFramework/qwen-image-8bit` on `qw
 row also reports the exact sidecar through `control_model`, and the unified `mlxgen generate`
 router injects that sidecar automatically.
 
-LoRA support is experimental and route-specific. Capability rows include `supports_lora`, `lora_status`,
-`lora_target_roles`, and `lora_validation_profile`. `mapped-unvalidated` means the route has a
-mapping and strict loader path, but the exact model/package has not yet passed a visible A/B
-validation with an accepted adapter.
+LoRA support is route-specific. Capability rows include `supports_lora`, `lora_status`,
+`lora_target_roles`, and `lora_validation_profile`. Treat only `lora_status="validated"` rows as
+production-supported. `mapped-unvalidated` means the route has a mapping and strict loader path,
+but the exact model/package has not yet passed a visible A/B validation with an accepted adapter.
 
 Generation does not download LoRA files. Download LoRA repositories explicitly, then pass a local
 `.safetensors` file or a cached Hugging Face adapter id. The file part can include a subdirectory
@@ -139,7 +139,8 @@ mlxgen validation \
 specific path.
 
 For a plain-language guide to what each mode is good at, see
-[Image Edit Modes](image-edit-modes.md).
+[Image Edit Modes](image-edit-modes.md). For the current Qwen route map, see
+[Qwen route matrix](qwen-route-matrix.md).
 
 | Goal | Internal mode | Inputs | Selection rule | Uses `--image-strength`? |
 | --- | --- | --- | --- | --- |
@@ -147,8 +148,8 @@ For a plain-language guide to what each mode is good at, see
 | Instruction edit, object/layout change, or composition-preserving style edit | `edit-reference` | one image | default for FLUX.2 and dedicated edit checkpoints when one image is supplied without `--image-strength`; or pass `--i2i-mode edit` | No |
 | Localized masked edit / inpaint | `edit-reference` with mask support | one image + one mask | pass `--mask-path` on a model that supports masked edit or inpaint | No |
 | Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
-| Experimental generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
-| Experimental backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
+| Generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
+| Backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
 
 ### Structured Control Images
 
@@ -170,8 +171,8 @@ Important workflow boundary:
 The structured-control route still does not combine `--controlnet-image-path` with `--image`. If
 you need source-image editing on the exact base-Qwen row, use `--image + --mask-path` instead so
 the router can select `qwen.control-inpaint` and inject the exact inpainting sidecar. For the
-accepted proof artifacts for these Qwen rows, see [Image Edit Capabilities](edit-capabilities.md)
-and [Qwen localized editing](qwen-localized-editing.md).
+accepted proof artifacts for these Qwen rows, see [Image Edit Capabilities](edit-capabilities.md),
+[Qwen localized editing](qwen-localized-editing.md), and [Qwen route matrix](qwen-route-matrix.md).
 
 On the exact base-Qwen control routes, unified `mlxgen generate` also accepts
 `--controlnet-strength`. On `qwen.control-inpaint`, `--controlnet-model` is only accepted when it
@@ -282,7 +283,7 @@ mlxgen generate \
 `--task image-to-image --i2i-mode edit`, but new commands and integrations should prefer
 `--i2i-mode`.
 
-Generative reframe is experimental and available through `--reframe-padding` for edit models that advertise
+Generative reframe is available through `--reframe-padding` for edit models that advertise
 `supports_reframe=true` in `mlxgen capabilities`. It asks the edit model to generate a larger view
 from one source image. Padding accepts CSS-style values in `top,right,bottom,left` order. MLX-Gen
 builds a larger conditioning canvas with the source pasted at that offset, then asks the edit model
@@ -303,8 +304,9 @@ This is a generative edit workflow. It may redraw source content, and the prompt
 where the model places or reconstructs the subject. Use it for zoom-out, background extension, or
 revealing plausible missing object boundaries.
 
-Backend-specific outpaint is experimental. Use `--outpaint-padding` when you want MLX-Gen to build
-an expanded canvas and guide an edit model to fill the larger view:
+Backend-specific outpaint is available for routes that advertise `supports_outpaint=true`. Use
+`--outpaint-padding` when you want MLX-Gen to build an expanded canvas and guide an edit model to
+fill the larger view:
 
 ```sh
 mlxgen generate \
@@ -430,10 +432,10 @@ source layout matters, and use FLUX.2 when the workflow needs validated multi-re
 
 ERNIE's optional Prompt Enhancer is available with `--use-prompt-enhancer` when the full source snapshot is present. The default `mlxgen download --model baidu/ERNIE-Image-Turbo` command downloads only generation components; run `mlxgen download --model baidu/ERNIE-Image-Turbo --all-files` before using Prompt Enhancer. ERNIE q8/q4 MLX-Gen packages created by `mlxgen prepare` do not include Prompt Enhancer files.
 
-ERNIE LoRA support is experimental and route-specific. The public q8 text-to-image route
-`AbstractFramework/ernie-image-turbo-8bit` now has an exact validated anime-style LoRA proof;
-ERNIE latent img2img still remains `mapped-unvalidated`. Check `mlxgen capabilities --model ...`
-before relying on a specific ERNIE LoRA workflow.
+ERNIE LoRA support is route-specific. The public q8 route
+`AbstractFramework/ernie-image-turbo-8bit` now has exact validated anime-style text-to-image and
+latent img2img LoRA rows. Check `mlxgen capabilities --model ...` before relying on a specific
+ERNIE LoRA workflow.
 
 Wan LoRA support is also route-specific. Exact validated q8 rows now exist for TI2V-5B
 text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, and I2V-A14B
@@ -628,8 +630,8 @@ Useful options:
 | `--color-correction` | Tone/color post-process after restoration. `wavelet` = wavelet tone reconstruction, `lab` = LAB tone matching, `off` = raw model output. |
 | `--start-seconds` | For video inputs, skip frames before this source timestamp in seconds. |
 | `--max-frames` | For video inputs, decode at most this many frames after `--start-seconds`. |
-| `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. Streamed SeedVR2 video profiles below `9` frames are rejected because they can preserve frame count while still breaking temporal continuity. |
-| `--temporal-chunk-overlap` | Reuse this many source frames as context between adjacent chunks. This is context overlap, not an output crossfade. |
+| `--temporal-chunk-size` | For longer video inputs, restore this many source frames per temporal chunk. Streamed SeedVR2 video profiles below `29` frames are rejected when they would create multiple chunks because they can preserve frame count while breaking temporal continuity. |
+| `--temporal-chunk-overlap` | Reuse this many source frames as context between adjacent chunks. Multi-chunk SeedVR2 video profiles require at least `8` frames of overlap. This is context overlap, not an output crossfade. |
 | `--drop-audio` | Opt out of the default audio-preservation contract and publish a silent restored MP4 intentionally. |
 | `--force-unsafe-video-memory` | Bypass the conservative SeedVR2 safe-video profile. Use only when you are intentionally accepting the risk of a high-memory run. |
 | `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
@@ -650,9 +652,10 @@ For video inputs:
   comparison MP4s, motion strips, detail crops, and readable report as the primary quality
   evidence.
 
-Python callers using `SeedVR2.restore_video_to_path(...)` follow the same contract. Source audio is
-preserved by default, and `drop_audio=True` is the explicit opt-out for intentionally silent saved
-output.
+Python callers using `SeedVR2.restore_video_to_path(...)` follow the same contract. The Python API
+rejects multi-chunk video profiles below 29 source frames or 8 overlap frames for the same
+temporal-continuity reason as the CLI. Source audio is preserved by default, and `drop_audio=True`
+is the explicit opt-out for intentionally silent saved output.
 
 ## Model Management Commands
 

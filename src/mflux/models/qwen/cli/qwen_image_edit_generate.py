@@ -81,6 +81,8 @@ def main():
     ):
         args.steps = 40
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     qwen = QwenImageEdit(
         quantize=args.quantize,
         model_config=model_config,

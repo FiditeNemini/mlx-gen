@@ -155,11 +155,13 @@ class PyPIPublisher:
                 else:
                     print("   This might be a partial upload where some files succeeded.")
                 print(f"   Check {display_name} manually to verify which files were uploaded.")
-                print(f"   {display_name} failures are non-critical, continuing with release process")
-                return
+                raise RuntimeError(
+                    f"{display_name} upload failed; git tag and GitHub release were not created by this local release."
+                ) from e
         except (OSError, ValueError, RuntimeError) as e:
             print(f"⚠️  Unexpected error during {display_name} upload: {e}")
             print("   This might be a partial upload where some files succeeded.")
             print(f"   Check {display_name} manually to verify which files were uploaded.")
-            print(f"   {display_name} failures are non-critical, continuing with release process")
-            return
+            raise RuntimeError(
+                f"{display_name} upload failed; git tag and GitHub release were not created by this local release."
+            ) from e

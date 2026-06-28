@@ -37,6 +37,8 @@ def main():
         lora_paths.extend(args.lora_paths)
         lora_scales.extend(args.lora_scales or [1.0] * len(args.lora_paths))
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model with IC-Edit LoRA
     flux = Flux1InContextFill(
         model_config=ModelConfig.dev_fill(),

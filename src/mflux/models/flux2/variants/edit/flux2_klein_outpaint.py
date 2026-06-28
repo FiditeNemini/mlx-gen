@@ -4,6 +4,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.common.config.config import Config
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import LatentCreator
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
@@ -19,6 +20,7 @@ from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
 from mflux.utils.outpaint_util import OutpaintCanvas
+from mflux.utils.runtime_timer import RuntimeTimer
 
 
 class Flux2KleinOutpaint(nn.Module):
@@ -50,12 +52,15 @@ class Flux2KleinOutpaint(nn.Module):
         seed: int,
         prompt: str,
         canvas: OutpaintCanvas,
-        num_inference_steps: int = 20,
+        num_inference_steps: int | None = None,
         guidance: float = 4.0,
         scheduler: str = "flow_match_euler_discrete",
         image_strength: float = 1.0,
         reference_image_paths: list[Path | str] | None = None,
     ) -> GeneratedImage:
+        timer = RuntimeTimer()
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(self.model_config, fallback=20)
         reference_image_paths = [canvas.canvas_path] if reference_image_paths is None else reference_image_paths
         config = Config(
             model_config=self.model_config,
@@ -70,7 +75,7 @@ class Flux2KleinOutpaint(nn.Module):
         )
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(
             prompt=prompt,
-            negative_prompt=" ",
+            negative_prompt="",
             guidance=guidance,
         )
 
@@ -156,7 +161,7 @@ class Flux2KleinOutpaint(nn.Module):
             lora_scales=self.lora_scales,
             image_paths=[canvas.source_path],
             image_path=canvas.source_path,
-            generation_time=config.time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )
 

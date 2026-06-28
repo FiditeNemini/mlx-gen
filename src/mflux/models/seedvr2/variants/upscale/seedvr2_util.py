@@ -26,6 +26,8 @@ class SeedVR2Util:
     VIDEO_SAFE_MEMORY_FRACTION = 0.5
     VIDEO_SAFE_MEMORY_CEILING_BYTES = 48 * (1000**3)
     VIDEO_RUNTIME_SLACK_BYTES = 6 * (1000**3)
+    VIDEO_MIN_PRODUCTION_STREAMING_CHUNK_FRAMES = 29
+    VIDEO_MIN_PRODUCTION_STREAMING_OVERLAP_FRAMES = 8
 
     @staticmethod
     def preprocess_image(
@@ -168,6 +170,35 @@ class SeedVR2Util:
         if frame_count == 1:
             return 1
         return ((frame_count - 1) // 4) + 1
+
+    @staticmethod
+    def streamed_video_temporal_quality_error(
+        *,
+        frame_count: int,
+        chunk_size: int,
+        overlap: int,
+    ) -> str | None:
+        if frame_count <= 0 or chunk_size <= 0:
+            raise ValueError("frame_count and chunk_size must be greater than zero.")
+        if overlap < 0:
+            raise ValueError("overlap must be greater than or equal to zero.")
+        if chunk_size >= frame_count:
+            return None
+        if chunk_size < SeedVR2Util.VIDEO_MIN_PRODUCTION_STREAMING_CHUNK_FRAMES:
+            return (
+                "SeedVR2 video restore refuses temporal chunks smaller than "
+                f"{SeedVR2Util.VIDEO_MIN_PRODUCTION_STREAMING_CHUNK_FRAMES} frames because short "
+                "independent chunks can distort object continuity. Use whole-shot restore, reduce "
+                "the clip/resolution, or use a larger --temporal-chunk-size."
+            )
+        if overlap < SeedVR2Util.VIDEO_MIN_PRODUCTION_STREAMING_OVERLAP_FRAMES:
+            return (
+                "SeedVR2 video restore refuses chunked overlap smaller than "
+                f"{SeedVR2Util.VIDEO_MIN_PRODUCTION_STREAMING_OVERLAP_FRAMES} frames because "
+                "insufficient context can distort object continuity. Use whole-shot restore, "
+                "reduce the clip/resolution, or increase --temporal-chunk-overlap."
+            )
+        return None
 
     @staticmethod
     def plan_streamed_video_chunks(

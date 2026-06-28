@@ -1,17 +1,16 @@
 import json
 import logging
+import pickle
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import mlx.core as mx
-import torch
 from huggingface_hub import snapshot_download
 from huggingface_hub.utils import LocalEntryNotFoundError
 from mlx.utils import tree_unflatten
 from safetensors import safe_open
-from safetensors.torch import load_file as torch_load_file
 
 from mflux.cli.defaults.defaults import MFLUX_CACHE_DIR
 from mflux.models.common.download_policy import (
@@ -231,8 +230,23 @@ class WeightLoader:
 
     @staticmethod
     def _load_torch_checkpoint(file_path: Path) -> dict[str, mx.array]:
-        pt_weights = torch.load(file_path, map_location="cpu", weights_only=False)
-        return WeightLoader._torch_object_to_mx_weights(pt_weights)
+        torch = WeightLoader._torch_module()
+        try:
+            pt_weights = torch.load(file_path, map_location="cpu", weights_only=True)
+        except pickle.UnpicklingError as exc:
+            raise ValueError(
+                f"Unsafe or unsupported Torch checkpoint at {file_path}. "
+                "MLX-Gen only loads tensor/state-dict checkpoints with torch weights_only=True; "
+                "convert legacy pickle checkpoints to safetensors or an MLX-Gen prepared package."
+            ) from exc
+        try:
+            return WeightLoader._torch_object_to_mx_weights(pt_weights)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Unsupported Torch checkpoint payload at {file_path}. "
+                "MLX-Gen only loads plain tensors or tensor-only state dictionaries; "
+                "use safetensors, an official supported checkpoint, or an MLX-Gen prepared package."
+            ) from exc
 
     @staticmethod
     def _load_safetensors(path: Path, loading_mode: str, weight_files: list[str] | None = None) -> dict[str, mx.array]:
@@ -288,6 +302,7 @@ class WeightLoader:
 
     @staticmethod
     def _torch_object_to_mx_weights(obj) -> dict[str, mx.array]:
+        torch = WeightLoader._torch_module()
         if isinstance(obj, torch.Tensor):
             return {"embedding": WeightLoader._torch_tensor_to_mx(obj)}
 
@@ -297,18 +312,27 @@ class WeightLoader:
                 if isinstance(nested, dict):
                     obj = nested
                     break
-            return {
+            tensor_weights = {
                 str(k): WeightLoader._torch_tensor_to_mx(v)
                 for k, v in obj.items()
                 if isinstance(v, torch.Tensor)
             }
+            if not tensor_weights:
+                raise ValueError("Torch checkpoint does not contain tensor weights.")
+            non_tensor_keys = [str(k) for k, v in obj.items() if not isinstance(v, torch.Tensor)]
+            if non_tensor_keys:
+                preview = ", ".join(non_tensor_keys[:5])
+                suffix = "..." if len(non_tensor_keys) > 5 else ""
+                raise ValueError(f"Torch checkpoint contains non-tensor entries: {preview}{suffix}")
+            return tensor_weights
 
         raise TypeError(f"Unsupported torch checkpoint object: {type(obj).__name__}")
 
     @staticmethod
-    def _torch_tensor_to_mx(tensor: torch.Tensor) -> mx.array:
+    def _torch_tensor_to_mx(tensor) -> mx.array:
+        torch = WeightLoader._torch_module()
         if tensor.dtype == torch.bfloat16:
-            tensor = tensor.to(torch.float16)
+            return mx.array(tensor.detach().cpu().to(torch.float32).numpy()).astype(mx.bfloat16)
         return mx.array(tensor.detach().cpu().numpy())
 
     @staticmethod
@@ -348,11 +372,9 @@ class WeightLoader:
 
         all_weights: dict[str, mx.array] = {}
         for shard in shard_files:
-            torch_weights = torch_load_file(str(shard))
+            torch_weights = WeightLoader._torch_load_file(str(shard))
             for key, tensor in torch_weights.items():
-                if tensor.dtype == torch.bfloat16:
-                    tensor = tensor.to(torch.float16)
-                all_weights[key] = mx.array(tensor.numpy())
+                all_weights[key] = WeightLoader._torch_tensor_to_mx(tensor)
 
         return all_weights
 
@@ -393,12 +415,9 @@ class WeightLoader:
         all_weights: dict[str, mx.array] = {}
         for wf in weight_files:
             file_path = path / wf
-            data = torch_load_file(str(file_path))
+            data = WeightLoader._torch_load_file(str(file_path))
             for k, v in data.items():
-                if v.dtype == torch.bfloat16:
-                    v = v.to(torch.float16)
-                np_arr = v.detach().cpu().numpy()
-                all_weights[k] = mx.array(np_arr)
+                all_weights[k] = WeightLoader._torch_tensor_to_mx(v)
 
         return all_weights
 
@@ -428,3 +447,15 @@ class WeightLoader:
     @staticmethod
     def _convert_precision(weights: dict[str, mx.array], precision: mx.Dtype) -> dict[str, mx.array]:
         return {k: v if v.dtype == precision else v.astype(precision) for k, v in weights.items()}
+
+    @staticmethod
+    def _torch_module() -> Any:
+        import torch
+
+        return torch
+
+    @staticmethod
+    def _torch_load_file(path: str) -> dict:
+        from safetensors.torch import load_file as torch_load_file
+
+        return torch_load_file(path)

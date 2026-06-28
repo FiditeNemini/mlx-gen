@@ -84,7 +84,7 @@ same-prompt same-seed comparison against the old latent route.
 
 ## Related backlog items
 
-- [0008 Qwen edit parity expansion](../planned/0008_qwen_edit_parity_expansion.md)
+- [0008 Qwen edit parity expansion](../completed/0008_qwen_edit_parity_expansion.md)
 - [0045 Z-Image ControlNet follow-up](../proposed/0045_zimage_controlnet_followup.md)
 
 ## Follow-ups

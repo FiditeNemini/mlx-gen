@@ -10,15 +10,16 @@ model/package status for MLX-Gen. It separates these related concepts:
 - `structured control`: text-to-image generation guided by a control image. This is separate from
   source-image edit/inpaint.
 - `multi-reference`: two or more images are supplied as references for one composition.
-- `generative reframe`: experimental larger-view generation with `--reframe-padding`. This is a
+- `generative reframe`: larger-view generation with `--reframe-padding`. This is a
   zoom-out style edit, not source-preserving outpaint.
-- `canvas outpaint`: experimental canvas extension with `--outpaint-padding`. Qwen Image Edit
+- `canvas outpaint`: canvas extension with `--outpaint-padding`. Qwen Image Edit
   variants still use generative canvas expansion plus adaptive source restoration. FLUX.2 Klein
   base variants now use source-locked denoising and a narrow latent transition band instead of
   post-generation source pasting.
 
 If you need a plain-language guide to choosing between these modes, see
-[Image Edit Modes](image-edit-modes.md).
+[Image Edit Modes](image-edit-modes.md). For the current Qwen-specific route map and upstream
+pipeline correspondence, see [Qwen route matrix](qwen-route-matrix.md).
 
 Use `mlxgen capabilities --model <model>` to inspect route support before a run. Use the contact
 sheets and status tables below when you need visual release evidence for exact source handles or
@@ -176,10 +177,18 @@ reframe.
 
 ## Reframe And Outpaint
 
-`--reframe-padding` and `--outpaint-padding` are experimental single-image edit-reference routes.
-Reframe is a generative zoom-out workflow. Outpaint now splits by backend: Qwen Image Edit still
+`--reframe-padding` and `--outpaint-padding` are single-image edit-reference routes. Reframe is a
+generative zoom-out workflow. Outpaint now splits by backend: Qwen Image Edit still
 uses generative canvas expansion plus adaptive source restoration, while FLUX.2 strict outpaint is
 limited to base Klein models and uses source-locked denoising with an interior transition band.
+
+Exact LoRA-backed public proof now exists for:
+
+- `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.reframe`
+- `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.outpaint`
+- `AbstractFramework/flux.2-klein-base-4b-8bit` on `flux2.outpaint`
+
+See [LoRA](lora.md) for those exact route-level A/B sheets.
 
 ![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
 

@@ -40,9 +40,12 @@ For true scale-factor upscaling, use `--resolution 2x` or `--resolution 3x`. For
 
 You can also adjust the `--softness` parameter (0.0 to 1.0) to control input pre-downsampling, which can help achieve smoother upscaling results. A value of 0.0 (default) disables pre-downsampling, while higher values up to 1.0 increase the downsampling factor (up to 8x internally) before upscaling.
 
-SeedVR2 defaults to untiled VAE encode/decode for image quality. Add `--vae-tiling` only for very
-large upscales that need lower peak memory. For visibly noisy sources, start with
-`--softness 0.25`; increase toward `0.5` if smooth backgrounds still retain source grain.
+SeedVR2 defaults to quality-preserving VAE encode behavior and automatically tiles large VAE decode
+when needed. Add `--low-ram` to apply cache control without changing generated pixels. Add
+`--vae-tiling` only for very large upscales that need lower peak MLX memory; it uses larger
+SeedVR2-tuned encode tiles, but it can still change pixels slightly. For visibly noisy sources,
+start with `--softness 0.25`; increase toward `0.5` if smooth backgrounds still retain source
+grain.
 
 > [!NOTE]
 > Upscaling to very large resolutions can require a lot of memory. If you run into memory pressure, try `--low-ram` or set an MLX cache limit with `--mlx-cache-limit-gb 16` (replace `16` with a value that fits your machine).
@@ -51,8 +54,9 @@ large upscales that need lower peak memory. For visibly noisy sources, start wit
 
 Pass a directory to `--image-path` to upscale every image inside.
 
-> [!WARNING]
-> `--low-ram` is not supported when upscaling a directory. That mode offloads the transformer after each image, which conflicts with the folder-processing flow.
+> [!NOTE]
+> `--low-ram` is safe for SeedVR2 image directory runs. In this path it applies cache control and
+> keeps the transformer resident through decode for native runtime stability.
 
 ```sh
 mflux-upscale-seedvr2 \

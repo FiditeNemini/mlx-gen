@@ -20,6 +20,8 @@ from mflux.models.ernie_image.weights.ernie_image_weight_definition import Ernie
 from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_memory import RuntimeMemory
+from mflux.utils.runtime_timer import RuntimeTimer
 from mflux.utils.scale_factor import ScaleFactor
 
 
@@ -69,6 +71,7 @@ class ErnieImageTurbo(nn.Module):
         lora_scales: list[float] | None = None,
         extra_metadata: dict | None = None,
     ) -> Image.Image:
+        timer = RuntimeTimer()
         del scheduler
         if image_path is None:
             image_strength = None
@@ -156,7 +159,7 @@ class ErnieImageTurbo(nn.Module):
             lora_scales=self.lora_scales if lora_scales is None else lora_scales,
             image_path=config.image_path,
             image_strength=config.image_strength,
-            generation_time=config.time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             negative_prompt=negative_prompt,
             extra_metadata=extra_metadata or LoRALoader.extra_metadata_for_model(self),
         )
@@ -175,7 +178,7 @@ class ErnieImageTurbo(nn.Module):
             output = self.tokenizers["ernie"].tokenize(prompt)
             hidden = self.text_encoder(output.input_ids, output.attention_mask)
             num_valid = int(mx.sum(output.attention_mask[0]).item())
-            text_hiddens.append(hidden[0, :num_valid, :])
+            text_hiddens.append(RuntimeMemory.materialize_inference_tree(hidden[0, :num_valid, :]))
         return text_hiddens
 
     def _enhance_prompt(
@@ -273,7 +276,7 @@ class ErnieImageTurbo(nn.Module):
             mx.pad(hidden, [(0, max_len - hidden.shape[0]), (0, 0)]).astype(ModelConfig.precision)
             for hidden in text_hiddens
         ]
-        return mx.stack(padded, axis=0), mx.array(lengths, dtype=mx.int32)
+        return RuntimeMemory.materialize_inference_tree((mx.stack(padded, axis=0), mx.array(lengths, dtype=mx.int32)))
 
     @staticmethod
     def _ensure_4d_latents(latents: mx.array) -> mx.array:

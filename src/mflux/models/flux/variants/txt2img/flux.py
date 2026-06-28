@@ -4,6 +4,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.common.config.config import Config
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import Img2Img, LatentCreator
 from mflux.models.common.vae.vae_util import VAEUtil
@@ -51,7 +52,7 @@ class Flux1(nn.Module):
         self,
         seed: int,
         prompt: str,
-        num_inference_steps: int = 4,
+        num_inference_steps: int | None = None,
         height: int | ScaleFactor | None = None,
         width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
@@ -61,6 +62,8 @@ class Flux1(nn.Module):
         negative_prompt: str | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(self.model_config, fallback=4)
         # 0. Create a new config based on the model type and input parameters
         config = Config(
             width=width,

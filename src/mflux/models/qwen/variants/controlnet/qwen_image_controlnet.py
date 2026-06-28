@@ -5,6 +5,7 @@ from mlx import nn
 
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.config.config import Config
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.vae.vae_util import VAEUtil
 from mflux.models.common.weights.saving.model_saver import ModelSaver
@@ -21,6 +22,7 @@ from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_timer import RuntimeTimer
 from mflux.utils.scale_factor import ScaleFactor
 
 
@@ -58,7 +60,7 @@ class QwenImageControlNet(nn.Module):
         prompt: str,
         controlnet_image_path: str | None = None,
         controlnet_strength: float = 0.85,
-        num_inference_steps: int = 4,
+        num_inference_steps: int | None = None,
         height: int | ScaleFactor | None = None,
         width: int | ScaleFactor | None = None,
         guidance: float = 4.0,
@@ -68,12 +70,15 @@ class QwenImageControlNet(nn.Module):
         mask_path: Path | str | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> GeneratedImage:
+        timer = RuntimeTimer()
         if mask_path is not None and image_path is None:
             raise ValueError("mask_path requires image_path for Qwen control-inpaint.")
         if mask_path is not None and controlnet_image_path is not None:
             raise ValueError("Qwen control-inpaint uses image_path + mask_path and cannot be combined with controlnet_image_path.")
         if mask_path is None and controlnet_image_path is None:
             raise ValueError("Qwen ControlNet generation requires either controlnet_image_path or image_path + mask_path.")
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(self.model_config, fallback=4)
         config = Config(
             width=width,
             height=height,
@@ -86,7 +91,10 @@ class QwenImageControlNet(nn.Module):
             canvas_policy=canvas_policy,
             preserve_image_aspect_ratio=image_path is not None and canvas_policy == CANVAS_POLICY_SOURCE_ASPECT,
         )
-        use_cfg = QwenImageControlNet._use_classifier_free_guidance(config.guidance)
+        use_cfg = QwenImageControlNet._use_classifier_free_guidance(
+            guidance=config.guidance,
+            negative_prompt=negative_prompt,
+        )
         controlnet_condition = self._resolve_controlnet_condition(
             controlnet_image_path=controlnet_image_path,
             image_path=image_path,
@@ -170,7 +178,7 @@ class QwenImageControlNet(nn.Module):
             image_path=image_path,
             controlnet_image_path=controlnet_image_path,
             masked_image_path=mask_path,
-            generation_time=config.time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             negative_prompt=effective_negative_prompt,
             extra_metadata={
                 **LoRALoader.extra_metadata_for_model(self),
@@ -198,8 +206,8 @@ class QwenImageControlNet(nn.Module):
         return combined * (cond_norm / noise_norm)
 
     @staticmethod
-    def _use_classifier_free_guidance(guidance: float) -> bool:
-        return guidance > 1.0
+    def _use_classifier_free_guidance(guidance: float, negative_prompt: str | None) -> bool:
+        return guidance > 1.0 and negative_prompt is not None
 
     def _resolve_controlnet_condition(
         self,

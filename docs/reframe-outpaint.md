@@ -1,6 +1,6 @@
 # Reframe And Outpaint
 
-MLX-Gen exposes two experimental single-image canvas expansion workflows through `mlxgen generate`:
+MLX-Gen exposes two single-image canvas expansion workflows through `mlxgen generate`:
 
 - `--reframe-padding` asks an edit model to generate a wider view from the source image. The model
   can redraw the source while changing the crop, viewpoint, or visible subject boundary.
@@ -19,17 +19,16 @@ pipeline, so review the output visually.
 
 ## Supported Models
 
-The published experimental validation profile is `reframe_outpaint_2026_06_08`. It uses one
-cropped starship source image. Treat the distilled FLUX.2 outpaint rows in that profile as
-historical artifacts only; they are no longer the current FLUX.2 outpaint contract. Current
-source-model FLUX.2 Klein base proof is published separately as
-`flux2_klein_base_starship_2026_06_10`.
+The historical mixed validation profile is `reframe_outpaint_2026_06_08`. It uses one cropped
+starship source image. Treat the distilled FLUX.2 outpaint rows in that profile as historical
+artifacts only; they are no longer the current FLUX.2 outpaint contract. Current source-model
+FLUX.2 Klein base proof is published separately as `flux2_klein_base_starship_2026_06_10`.
 
 | Family | Reframe | Outpaint | Notes |
 | --- | --- | --- | --- |
-| Qwen Image Edit / 2509 / 2511 | current | current | Published `reframe_outpaint_2026_06_08` profile remains representative. |
+| Qwen Image Edit / 2509 / 2511 | current | current | Published `reframe_outpaint_2026_06_08` profile remains representative for the base route. Exact 2511 q8 LoRA-backed reframe and outpaint rows are published separately in [LoRA](lora.md). |
 | FLUX.2 Klein 4B / 9B distilled | current | historical only | Reframe remains supported. Historical outpaint rows are stale and are no longer exposed as strict outpaint. |
-| FLUX.2 Klein Base 4B / 9B | not exposed | current | Strict FLUX.2 outpaint now requires a base Klein model. Source-model contact sheets are published; prepared base q8/q4 proof is still pending. |
+| FLUX.2 Klein Base 4B / 9B | not exposed | current | Strict FLUX.2 outpaint now requires a base Klein model. Source-model contact sheets are published, and the exact `AbstractFramework/flux.2-klein-base-4b-8bit` q8 LoRA-backed outpaint row is published separately in [LoRA](lora.md). |
 
 These options are intentionally not exposed for base Qwen Image, Qwen Image 2512, ERNIE Image
 Turbo, Z-Image, FIBO, Bonsai, Wan, or SeedVR2. Those families are text generation, latent I2I,

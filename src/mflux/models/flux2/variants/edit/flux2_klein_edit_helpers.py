@@ -13,6 +13,8 @@ from mflux.utils.outpaint_util import OutpaintCanvas
 
 
 class _Flux2KleinEditHelpers:
+    CONDITION_TARGET_AREA = 1024 * 1024
+
     @staticmethod
     def encode_text(
         prompt: str,
@@ -126,12 +128,14 @@ class _Flux2KleinEditHelpers:
         packed_latents_list: list[mx.array] = []
         ids_list: list[mx.array] = []
         for i, p in enumerate(image_paths):
+            encode_width, encode_height = _Flux2KleinEditHelpers.reference_condition_dimensions(image_path=p)
             encoded = LatentCreator.encode_image(
                 vae=vae,
                 image_path=p,
-                height=height,
-                width=width,
+                height=encode_height,
+                width=encode_width,
                 tiling_config=tiling_config,
+                resize_mode="crop",
             )
             encoded = _Flux2KleinEditHelpers.ensure_4d_latents(encoded)
             encoded = _Flux2KleinEditHelpers.crop_to_even_spatial(encoded)
@@ -190,3 +194,19 @@ class _Flux2KleinEditHelpers:
         if batch_size > 1:
             mask_array = mx.broadcast_to(mask_array, (batch_size, mask_array.shape[1], mask_array.shape[2]))
         return mask_array
+
+    @staticmethod
+    def reference_condition_dimensions(*, image_path: Path | str) -> tuple[int, int]:
+        with Image.open(image_path) as image:
+            width, height = image.size
+        area = width * height
+        if area > _Flux2KleinEditHelpers.CONDITION_TARGET_AREA:
+            ratio = width / height
+            target_width = (_Flux2KleinEditHelpers.CONDITION_TARGET_AREA * ratio) ** 0.5
+            target_height = target_width / ratio
+            width = int(round(target_width))
+            height = int(round(target_height))
+        multiple = 16
+        width = max(multiple, (width // multiple) * multiple)
+        height = max(multiple, (height // multiple) * multiple)
+        return width, height

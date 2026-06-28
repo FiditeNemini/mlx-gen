@@ -4,6 +4,7 @@ from mlx import nn
 from mflux.models.common_models.qwen3_vl.qwen3_vl_decoder_layer import Qwen3VLDecoderLayer
 from mflux.models.common_models.qwen3_vl.qwen3_vl_rms_norm import Qwen3VLRMSNorm
 from mflux.models.flux2.model.flux2_text_encoder.qwen3_text_rotary_embedding import Qwen3TextRotaryEmbedding
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class Qwen3TextEncoder(nn.Module):
@@ -56,6 +57,7 @@ class Qwen3TextEncoder(nn.Module):
         input_ids: mx.array,
         attention_mask: mx.array | None = None,
         output_hidden_states: bool = False,
+        selected_hidden_state_layers: tuple[int, ...] | None = None,
     ) -> tuple[mx.array, list[mx.array] | None]:
         batch_size, seq_len = input_ids.shape
         hidden_states = self.embed_tokens(input_ids)
@@ -90,19 +92,32 @@ class Qwen3TextEncoder(nn.Module):
         position_ids = mx.broadcast_to(position_ids, (batch_size, seq_len))
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # Match HF behavior: include embedding output as the first hidden state.
-        hidden_states_list = [hidden_states] if output_hidden_states else None
-        for layer in self.layers:
+        legacy_hidden_retention = RuntimeMemory._internal_benchmark_flag_enabled("legacy_hidden_state_retention")
+        selected_layers = (
+            None
+            if legacy_hidden_retention
+            else set(selected_hidden_state_layers)
+            if selected_hidden_state_layers is not None
+            else None
+        )
+        hidden_states_list = None
+        if output_hidden_states:
+            hidden_states_list = []
+            if selected_layers is None or 0 in selected_layers:
+                hidden_states_list.append(hidden_states)
+        for layer_index, layer in enumerate(self.layers, start=1):
             hidden_states, _ = layer(
                 hidden_states,
                 attention_mask_4d,
                 position_embeddings,
                 past_key_value=None,
             )
-            if output_hidden_states:
+            if output_hidden_states and (selected_layers is None or layer_index in selected_layers):
                 hidden_states_list.append(hidden_states)
 
         hidden_states = self.norm(hidden_states)
+        if legacy_hidden_retention and hidden_states_list is not None and selected_hidden_state_layers is not None:
+            hidden_states_list = [hidden_states_list[index] for index in selected_hidden_state_layers]
         return hidden_states, hidden_states_list
 
     def get_prompt_embeds(
@@ -115,10 +130,13 @@ class Qwen3TextEncoder(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
+            selected_hidden_state_layers=hidden_state_layers,
         )
         if hidden_states_list is None:
             raise RuntimeError("Hidden states not available for prompt embedding.")
-        stacked = mx.stack([hidden_states_list[i] for i in hidden_state_layers], axis=1)
+        if len(hidden_states_list) != len(hidden_state_layers):
+            raise RuntimeError("Selected hidden states were not available for prompt embedding.")
+        stacked = mx.stack(hidden_states_list, axis=1)
         batch_size, num_layers, seq_len, hidden_dim = stacked.shape
         prompt_embeds = mx.transpose(stacked, (0, 2, 1, 3)).reshape(batch_size, seq_len, num_layers * hidden_dim)
         return prompt_embeds

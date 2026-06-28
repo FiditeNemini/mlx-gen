@@ -89,6 +89,35 @@ def test_qwen_2511_lora_is_rejected_for_qwen_2509(monkeypatch):
         )
 
 
+def test_flux2_klein_9b_lora_is_accepted_for_flux2_klein_base_9b(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(lambda repo_id: ("black-forest-labs/FLUX.2-klein-9B",)),
+    )
+
+    LoRACompatibility.validate_for_model_config(
+        model_config=ModelConfig.flux2_klein_base_9b(),
+        selected_model="AbstractFramework/flux.2-klein-base-9b-8bit",
+        lora_paths=["dx8152/Flux2-Klein-9B-Consistency:Flux2-Klein-9B-consistency-V2.safetensors"],
+    )
+
+
+def test_flux2_klein_9b_lora_is_rejected_for_flux2_klein_base_4b(monkeypatch):
+    monkeypatch.setattr(
+        LoRACompatibility,
+        "_cached_base_models",
+        staticmethod(lambda repo_id: ("black-forest-labs/FLUX.2-klein-9B",)),
+    )
+
+    with pytest.raises(LoRAApplicationError, match="not compatible"):
+        LoRACompatibility.validate_for_model_config(
+            model_config=ModelConfig.flux2_klein_base_4b(),
+            selected_model="AbstractFramework/flux.2-klein-base-4b-8bit",
+            lora_paths=["dx8152/Flux2-Klein-9B-Consistency:Flux2-Klein-9B-consistency-V2.safetensors"],
+        )
+
+
 def test_ernie_image_lora_is_accepted_for_ernie_turbo(monkeypatch):
     monkeypatch.setattr(
         LoRACompatibility,

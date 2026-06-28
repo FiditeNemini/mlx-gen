@@ -16,6 +16,7 @@ from mflux.release.validation_registry import get_model_validation, get_validati
 from mflux.task_inference import TaskInferenceError, get_model_capabilities, normalize_task, resolve_generation_plan
 from mflux.utils.box_values import BoxValueError, BoxValues
 from mflux.utils.exceptions import ModelConfigError
+from mflux.utils.version_util import VersionUtil
 
 
 @dataclass(frozen=True)
@@ -197,7 +198,10 @@ def _top_level_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlxgen",
         usage="mlxgen [generate|upscale|capabilities|validation|download|prepare] ...",
-        description="Prepare local model assets and generate images or videos with MLX-Gen.",
+        description=(
+            f"{VersionUtil.format_cli_release_label()}\n\n"
+            "Prepare local model assets and generate images or videos with MLX-Gen."
+        ),
         epilog=(
             "Commands:\n"
             "  generate    Generate or edit images and videos from a prepared or cached model.\n"

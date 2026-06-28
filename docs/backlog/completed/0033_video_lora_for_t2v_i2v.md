@@ -14,7 +14,7 @@
 
 ## Context
 
-Planned item [0007](../planned/0007_lora_capability_matrix_and_strict_application.md) covers
+Completed item [0007](../completed/0007_lora_capability_matrix_and_strict_application.md) covers
 strict LoRA resolution/application and current image-family LoRA support. Video LoRA is a separate
 problem: T2V and I2V adapters must be applied to video transformers, must preserve temporal
 behavior, and must be validated with MP4 outputs rather than still images.

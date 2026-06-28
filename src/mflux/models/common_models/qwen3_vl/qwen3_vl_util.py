@@ -1,5 +1,4 @@
 import mlx.core as mx
-import numpy as np
 
 from mflux.models.common_models.qwen3_vl.qwen3_vl_decoder import Qwen3VLDecoder
 
@@ -14,17 +13,15 @@ class Qwen3VLUtil:
         if temperature != 1.0:
             logits = logits / temperature
         probs = mx.softmax(logits.astype(mx.float32), axis=-1)
-        probs_np = np.array(probs)
-        sorted_indices_np = np.argsort(probs_np)[::-1]
-        sorted_probs_np = probs_np[sorted_indices_np]
-        cumulative_probs_np = np.cumsum(sorted_probs_np)
-        sorted_indices_to_remove_np = cumulative_probs_np > top_p
-        sorted_indices_to_remove_np[0] = False
-        indices_to_remove_np = sorted_indices_np[sorted_indices_to_remove_np]
-        probs_np[indices_to_remove_np] = 0.0
-        probs_np = probs_np / np.sum(probs_np)
-        token_id = np.random.choice(len(probs_np), p=probs_np)
-        return mx.array(token_id, dtype=mx.int32)
+        sorted_indices = mx.argsort(-probs, axis=-1)
+        sorted_probs = mx.take_along_axis(probs, sorted_indices, axis=-1)
+        cumulative_probs = mx.cumsum(sorted_probs, axis=-1)
+        force_keep_first = mx.arange(probs.shape[-1]) == 0
+        sorted_keep = (cumulative_probs <= top_p) | force_keep_first
+        filtered_probs = mx.where(sorted_keep, sorted_probs, mx.zeros_like(sorted_probs))
+        filtered_probs = filtered_probs / mx.sum(filtered_probs, axis=-1, keepdims=True)
+        sorted_token_id = mx.random.categorical(mx.log(filtered_probs), axis=-1)
+        return sorted_indices[sorted_token_id].astype(mx.int32)
 
     @staticmethod
     def generate_text(
@@ -58,7 +55,7 @@ class Qwen3VLUtil:
 
         # Set random seed for deterministic generation if provided
         if seed is not None:
-            np.random.seed(seed)
+            mx.random.seed(seed)
 
         # Pre-compute max stop sequence length (constant, don't recompute every iteration)
         max_stop_len = 0
@@ -128,7 +125,7 @@ class Qwen3VLUtil:
             next_tokens = mx.expand_dims(next_tokens, axis=1)
             generated_token_columns.append(next_tokens)
             current_input_ids = next_tokens
-            sampled_token_ids = np.array(next_tokens[:, 0]).tolist()
+            sampled_token_ids = next_tokens[:, 0].tolist()
             for i, token_id in enumerate(sampled_token_ids):
                 generated_token_history[i].append(int(token_id))
 

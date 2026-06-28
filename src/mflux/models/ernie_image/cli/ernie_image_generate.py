@@ -52,6 +52,8 @@ def main():
 
     model_config = ModelConfig.from_name(args.model or "ernie-image-turbo", base_model=args.base_model)
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     model = ErnieImageTurbo(
         model_config=model_config,
         quantize=args.quantize,

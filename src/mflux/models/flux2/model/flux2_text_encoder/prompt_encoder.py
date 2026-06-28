@@ -2,6 +2,7 @@ import mlx.core as mx
 
 from mflux.models.common.tokenizer import Tokenizer
 from mflux.models.flux2.model.flux2_text_encoder.qwen3_text_encoder import Qwen3TextEncoder
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class Flux2PromptEncoder:
@@ -24,6 +25,7 @@ class Flux2PromptEncoder:
         if num_images_per_prompt > 1:
             prompt_embeds = mx.repeat(prompt_embeds, num_images_per_prompt, axis=0)
         text_ids = Flux2PromptEncoder.prepare_text_ids(prompt_embeds)
+        prompt_embeds, text_ids = RuntimeMemory.materialize_tensors(prompt_embeds, text_ids)
         return prompt_embeds, text_ids
 
     @staticmethod

@@ -67,6 +67,12 @@ class LoRAApplicationResult:
 
 class LoRALoader:
     _debug_enabled = False
+    _KNOWN_STATE_DICT_PREFIXES = (
+        "base_model.model.model.",
+        "base_model.model.",
+        "lora_unet.",
+        "lora_transformer.",
+    )
 
     @staticmethod
     def set_debug_enabled(debug_enabled: bool) -> None:
@@ -167,20 +173,7 @@ class LoRALoader:
             raise LoRAApplicationError(f"Failed to load LoRA file {resolved_path}: {e}") from e
 
         # Clean PEFT/Diffusers prefixes from weight keys
-        cleaned_weights = {}
-        for k, v in weights.items():
-            cleaned_key = k
-            for prefix in [
-                "base_model.model.model.",
-                "base_model.model.",
-                "lora_unet.",
-                "lora_transformer.",
-            ]:
-                if cleaned_key.startswith(prefix):
-                    cleaned_key = cleaned_key[len(prefix):]
-                    break
-            cleaned_weights[cleaned_key] = v
-        weights = cleaned_weights
+        weights = {LoRALoader._normalize_state_dict_key(key): value for key, value in weights.items()}
 
         if state_dict_transform is not None:
             weights = state_dict_transform(weights, transformer)
@@ -225,42 +218,59 @@ class LoRALoader:
 
         for target in targets:
             # Add up weight patterns (lora_B)
-            mappings.extend(
-                PatternMatch(
-                    source_pattern=pattern,
-                    target_path=target.model_path,
-                    matrix_name="lora_B",
-                    transpose=True,
-                    transform=target.up_transform,
+            for pattern in target.possible_up_patterns:
+                mappings.extend(
+                    PatternMatch(
+                        source_pattern=alias,
+                        target_path=target.model_path,
+                        matrix_name="lora_B",
+                        transpose=True,
+                        transform=target.up_transform,
+                    )
+                    for alias in LoRALoader._pattern_aliases(pattern)
                 )
-                for pattern in target.possible_up_patterns
-            )
 
             # Add down weight patterns (lora_A)
-            mappings.extend(
-                PatternMatch(
-                    source_pattern=pattern,
-                    target_path=target.model_path,
-                    matrix_name="lora_A",
-                    transpose=True,
-                    transform=target.down_transform,
+            for pattern in target.possible_down_patterns:
+                mappings.extend(
+                    PatternMatch(
+                        source_pattern=alias,
+                        target_path=target.model_path,
+                        matrix_name="lora_A",
+                        transpose=True,
+                        transform=target.down_transform,
+                    )
+                    for alias in LoRALoader._pattern_aliases(pattern)
                 )
-                for pattern in target.possible_down_patterns
-            )
 
             # Add alpha patterns (no transpose, no transform)
-            mappings.extend(
-                PatternMatch(
-                    source_pattern=pattern,
-                    target_path=target.model_path,
-                    matrix_name="alpha",
-                    transpose=False,
-                    transform=None,
+            for pattern in target.possible_alpha_patterns:
+                mappings.extend(
+                    PatternMatch(
+                        source_pattern=alias,
+                        target_path=target.model_path,
+                        matrix_name="alpha",
+                        transpose=False,
+                        transform=None,
+                    )
+                    for alias in LoRALoader._pattern_aliases(pattern)
                 )
-                for pattern in target.possible_alpha_patterns
-            )
 
         return mappings
+
+    @staticmethod
+    def _normalize_state_dict_key(key: str) -> str:
+        for prefix in LoRALoader._KNOWN_STATE_DICT_PREFIXES:
+            if key.startswith(prefix):
+                return key[len(prefix) :]
+        return key
+
+    @staticmethod
+    def _pattern_aliases(pattern: str) -> tuple[str, ...]:
+        normalized_pattern = LoRALoader._normalize_state_dict_key(pattern)
+        if normalized_pattern == pattern:
+            return (pattern,)
+        return tuple(dict.fromkeys((pattern, normalized_pattern)))
 
     @staticmethod
     def _apply_lora_with_mapping(

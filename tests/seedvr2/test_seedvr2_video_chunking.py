@@ -20,6 +20,20 @@ def _solid_frame(color: tuple[int, int, int]) -> Image.Image:
     return Image.new("RGB", (16, 16), color)
 
 
+@pytest.mark.fast
+def test_seedvr2_noise_byte_override_is_internal_benchmark_only(monkeypatch):
+    monkeypatch.setenv("MFLUX_INTERNAL_SEEDVR2_MAX_GLOBAL_NOISE_BYTES", "0")
+    monkeypatch.delenv("MFLUX_INTERNAL_MEMORY_BENCHMARK_MODE", raising=False)
+    monkeypatch.delenv("MFLUX_INTERNAL_MEMORY_BENCHMARK_FLAGS", raising=False)
+
+    assert seedvr2_module.SeedVR2StreamedVideoNoiseProvider.max_global_noise_bytes() is None
+
+    monkeypatch.setenv("MFLUX_INTERNAL_MEMORY_BENCHMARK_MODE", "1")
+    monkeypatch.setenv("MFLUX_INTERNAL_MEMORY_BENCHMARK_FLAGS", "seedvr2_max_global_noise_bytes")
+
+    assert seedvr2_module.SeedVR2StreamedVideoNoiseProvider.max_global_noise_bytes() == 0
+
+
 def _iter_fake_chunk_clips(frames: list[Image.Image], windows: list[tuple[int, int]], audio_present: bool):
     frame_count = len(frames)
     for start_frame, end_frame in windows:
@@ -122,7 +136,7 @@ def test_seedvr2_restore_video_to_path_records_chunk_metadata(monkeypatch, tmp_p
         model.vae = object()
         model.transformer = object()
 
-    frames = [_solid_frame((index * 15, index * 15, index * 15)) for index in range(13)]
+    frames = [_solid_frame(((index * 5) % 256, (index * 5) % 256, (index * 5) % 256)) for index in range(49)]
     chunk_calls: list[int] = []
 
     monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
@@ -135,8 +149,8 @@ def test_seedvr2_restore_video_to_path_records_chunk_metadata(monkeypatch, tmp_p
                 fps=12.0,
                 source_width=16,
                 source_height=16,
-                source_frame_count=13,
-                source_duration_seconds=13 / 12.0,
+                source_frame_count=len(frames),
+                source_duration_seconds=len(frames) / 12.0,
                 audio_present=True,
                 clip_start_frame=0,
                 clip_frame_count=1,
@@ -186,14 +200,14 @@ def test_seedvr2_restore_video_to_path_records_chunk_metadata(monkeypatch, tmp_p
         softness=0.0,
         output_path=output,
         export_json_metadata=True,
-        temporal_chunk_size=9,
-        temporal_chunk_overlap=4,
+        temporal_chunk_size=29,
+        temporal_chunk_overlap=8,
         color_correction_mode="wavelet",
     )
 
     assert file_path.exists()
     metadata = json.loads(file_path.with_suffix(".metadata.json").read_text())
-    assert metadata["frames"] == 13
+    assert metadata["frames"] == 49
     assert metadata["audio_present"] is True
     assert metadata["audio_copied"] is True
     assert metadata["audio_copy_mode"] == "ffmpeg_copy_video_aac_audio"
@@ -201,38 +215,38 @@ def test_seedvr2_restore_video_to_path_records_chunk_metadata(monkeypatch, tmp_p
     assert metadata["source_video_fps"] == 12.0
     assert metadata["source_clip_actual_start_seconds"] == 0.0
     assert metadata["video_health"]["file"]["fps"] == pytest.approx(12.0, abs=0.1)
-    assert metadata["temporal_chunk_size"] == 9
-    assert metadata["temporal_chunk_overlap"] == 4
+    assert metadata["temporal_chunk_size"] == 29
+    assert metadata["temporal_chunk_overlap"] == 8
     assert metadata["temporal_chunk_count"] == 3
     assert metadata["temporal_chunk_plan"] == [
         {
             "input_start_frame": 0,
-            "input_end_frame": 9,
-            "input_frame_count": 9,
-            "target_input_frame_count": 9,
+            "input_end_frame": 29,
+            "input_frame_count": 29,
+            "target_input_frame_count": 29,
             "trim_leading_context_frames": 0,
-            "output_frame_count": 4,
+            "output_frame_count": 20,
         },
         {
-            "input_start_frame": 0,
-            "input_end_frame": 9,
-            "input_frame_count": 9,
-            "target_input_frame_count": 9,
-            "trim_leading_context_frames": 4,
-            "output_frame_count": 4,
+            "input_start_frame": 12,
+            "input_end_frame": 41,
+            "input_frame_count": 29,
+            "target_input_frame_count": 29,
+            "trim_leading_context_frames": 8,
+            "output_frame_count": 20,
         },
         {
-            "input_start_frame": 4,
-            "input_end_frame": 13,
-            "input_frame_count": 9,
-            "target_input_frame_count": 9,
-            "trim_leading_context_frames": 4,
-            "output_frame_count": 5,
+            "input_start_frame": 20,
+            "input_end_frame": 49,
+            "input_frame_count": 29,
+            "target_input_frame_count": 29,
+            "trim_leading_context_frames": 20,
+            "output_frame_count": 9,
         },
     ]
     assert metadata["color_correction_mode"] == "wavelet"
-    assert metadata["processed_chunk_input_frames_total"] == 27
-    assert chunk_calls == [9, 9, 9]
+    assert metadata["processed_chunk_input_frames_total"] == 87
+    assert chunk_calls == [29, 29, 29]
 
 
 @pytest.mark.fast
@@ -249,7 +263,7 @@ def test_seedvr2_restore_video_to_path_uses_clip_global_noise_slices(monkeypatch
         model.vae = object()
         model.transformer = object()
 
-    frames = [_solid_frame((index * 15, index * 15, index * 15)) for index in range(13)]
+    frames = [_solid_frame(((index * 5) % 256, (index * 5) % 256, (index * 5) % 256)) for index in range(49)]
     seen_noise_frames: list[list[float]] = []
 
     monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
@@ -262,8 +276,8 @@ def test_seedvr2_restore_video_to_path_uses_clip_global_noise_slices(monkeypatch
                 fps=12.0,
                 source_width=16,
                 source_height=16,
-                source_frame_count=13,
-                source_duration_seconds=13 / 12.0,
+                source_frame_count=len(frames),
+                source_duration_seconds=len(frames) / 12.0,
                 audio_present=False,
                 clip_start_frame=0,
                 clip_frame_count=1,
@@ -309,15 +323,67 @@ def test_seedvr2_restore_video_to_path_uses_clip_global_noise_slices(monkeypatch
         softness=0.0,
         output_path=output,
         export_json_metadata=False,
-        temporal_chunk_size=9,
-        temporal_chunk_overlap=4,
+        temporal_chunk_size=29,
+        temporal_chunk_overlap=8,
     )
 
     assert seen_noise_frames == [
-        [0.0, 1.0, 2.0],
-        [0.0, 1.0, 2.0],
-        [1.0, 2.0, 3.0],
+        [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+        [5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
     ]
+
+
+@pytest.mark.fast
+def test_seedvr2_restore_video_to_path_rejects_unsafe_tiny_temporal_chunks(monkeypatch, tmp_path):
+    source = tmp_path / "source.mp4"
+    source.touch()
+    output = tmp_path / "restored.mp4"
+
+    def fake_init(model, model_config, quantize=None, model_path=None):
+        model.model_config = model_config
+        model.callbacks = CallbackRegistry()
+        model.tiling_config = TilingConfig()
+        model.bits = quantize
+        model.vae = object()
+        model.transformer = object()
+
+    monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
+    monkeypatch.setattr(
+        seedvr2_module.VideoUtil,
+        "read_video_clip",
+        staticmethod(
+            lambda path, start_seconds=0.0, max_frames=None: DecodedVideoClip(
+                frames=[],
+                fps=12.0,
+                source_width=16,
+                source_height=16,
+                source_frame_count=149,
+                source_duration_seconds=149 / 12.0,
+                audio_present=False,
+                clip_start_frame=0,
+                clip_frame_count=1,
+            )
+        ),
+    )
+
+    monkeypatch.setenv("MFLUX_INTERNAL_MEMORY_BENCHMARK_MODE", "1")
+    monkeypatch.setenv("MFLUX_INTERNAL_MEMORY_BENCHMARK_FLAGS", "seedvr2_tiny_temporal_chunks")
+
+    model = SeedVR2(quantize=8, model_config=ModelConfig.seedvr2_7b())
+    with pytest.raises(ValueError, match="refuses temporal chunks smaller"):
+        model.restore_video_to_path(
+            seed=42,
+            video_path=source,
+            resolution=256,
+            softness=0.0,
+            output_path=output,
+            export_json_metadata=False,
+            temporal_chunk_size=13,
+            temporal_chunk_overlap=4,
+        )
+
+    assert not output.exists()
 
 
 @pytest.mark.fast
@@ -371,8 +437,8 @@ def test_seedvr2_restore_video_to_path_saved_mp4_keeps_expected_frame_count(monk
         softness=0.0,
         output_path=output,
         export_json_metadata=False,
-        temporal_chunk_size=9,
-        temporal_chunk_overlap=4,
+        temporal_chunk_size=13,
+        temporal_chunk_overlap=0,
     )
 
     clip = original_read_video_clip(file_path)
@@ -449,8 +515,8 @@ def test_seedvr2_restore_video_to_path_requires_audio_copy_by_default(monkeypatc
             softness=0.0,
             output_path=output,
             export_json_metadata=True,
-            temporal_chunk_size=9,
-            temporal_chunk_overlap=4,
+            temporal_chunk_size=13,
+            temporal_chunk_overlap=0,
         )
 
     assert not output.exists()
@@ -512,8 +578,8 @@ def test_seedvr2_restore_video_to_path_allows_drop_audio_opt_out(monkeypatch, tm
         softness=0.0,
         output_path=output,
         export_json_metadata=True,
-        temporal_chunk_size=9,
-        temporal_chunk_overlap=4,
+        temporal_chunk_size=13,
+        temporal_chunk_overlap=0,
         drop_audio=True,
     )
 
@@ -538,7 +604,7 @@ def test_seedvr2_restore_video_to_path_cleans_temp_file_on_failure(monkeypatch, 
         model.vae = object()
         model.transformer = object()
 
-    frames = [_solid_frame((index * 20, index * 20, index * 20)) for index in range(13)]
+    frames = [_solid_frame(((index * 5) % 256, (index * 5) % 256, (index * 5) % 256)) for index in range(49)]
     call_count = {"count": 0}
 
     monkeypatch.setattr(seedvr2_module.SeedVR2Initializer, "init", fake_init)
@@ -551,8 +617,8 @@ def test_seedvr2_restore_video_to_path_cleans_temp_file_on_failure(monkeypatch, 
                 fps=12.0,
                 source_width=16,
                 source_height=16,
-                source_frame_count=13,
-                source_duration_seconds=13 / 12.0,
+                source_frame_count=len(frames),
+                source_duration_seconds=len(frames) / 12.0,
                 audio_present=False,
                 clip_start_frame=0,
                 clip_frame_count=1,
@@ -583,8 +649,8 @@ def test_seedvr2_restore_video_to_path_cleans_temp_file_on_failure(monkeypatch, 
             softness=0.0,
             output_path=output,
             export_json_metadata=False,
-            temporal_chunk_size=9,
-            temporal_chunk_overlap=4,
+            temporal_chunk_size=29,
+            temporal_chunk_overlap=8,
         )
 
     assert not output.exists()
@@ -643,8 +709,8 @@ def test_seedvr2_restore_video_to_path_cleans_final_file_on_postwrite_validation
             softness=0.0,
             output_path=output,
             export_json_metadata=True,
-            temporal_chunk_size=9,
-            temporal_chunk_overlap=4,
+            temporal_chunk_size=13,
+            temporal_chunk_overlap=0,
         )
 
     assert not output.exists()

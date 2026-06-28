@@ -3,6 +3,7 @@ import gc
 import json
 import sys
 import traceback
+from copy import copy
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ from mflux.models.seedvr2.seedvr2_initializer import SeedVR2Initializer
 from mflux.models.seedvr2.variants.upscale.seedvr2 import SeedVR2
 from mflux.models.seedvr2.variants.upscale.seedvr2_util import SeedVR2Util
 from mflux.utils.exceptions import StopImageGenerationException
+from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.scale_factor import ScaleFactor
 from mflux.utils.video_util import VideoUtil
 
@@ -46,7 +48,6 @@ SUPPORTED_VIDEO_SUFFIXES = {
 }
 
 DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB = 8.0
-SEEDVR2_MIN_STREAMING_CHUNK_FRAMES = 9
 SEEDVR2_OFFICIAL_BOUNDED_FRAME_LIMIT = 121
 
 
@@ -310,9 +311,73 @@ def _aligned_chunk_overlap(chunk_size: int, requested_overlap: int) -> int:
         raise ValueError("chunk_size must be greater than zero.")
     overlap_cap = max(0, chunk_size // 3)
     overlap = min(requested_overlap, overlap_cap)
-    if overlap >= 4:
-        overlap -= overlap % 4
+    overlap -= overlap % 4
     return max(0, overlap)
+
+
+def _explicit_chunk_size_error(*, requested_frames: int, temporal_chunk_size: int) -> str | None:
+    if temporal_chunk_size <= 1:
+        return None
+    if (temporal_chunk_size - 1) % 4 != 0:
+        return (
+            "--temporal-chunk-size must satisfy 4n+1 for SeedVR2 video restore. "
+            f"Got {temporal_chunk_size}; use an explicit aligned value such as "
+            f"{SeedVR2Util.padded_video_frame_count(min(temporal_chunk_size, requested_frames))}."
+        )
+    return None
+
+
+def _explicit_chunk_overlap(chunk_size: int, requested_overlap: int) -> int:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero.")
+    if requested_overlap < 0:
+        raise ValueError("--temporal-chunk-overlap must be greater than or equal to zero.")
+    if requested_overlap >= chunk_size:
+        raise ValueError("--temporal-chunk-overlap must be smaller than the effective temporal chunk size.")
+    if requested_overlap % 4 != 0:
+        raise ValueError("--temporal-chunk-overlap must be a multiple of 4 for SeedVR2 video restore.")
+    return requested_overlap
+
+
+def _effective_chunk_overlap(
+    *,
+    chunk_size: int,
+    requested_frames: int,
+    requested_overlap: int,
+    overlap_was_explicit: bool,
+) -> int:
+    if chunk_size >= requested_frames:
+        return 0
+    if overlap_was_explicit:
+        return _explicit_chunk_overlap(chunk_size, requested_overlap)
+    return _aligned_chunk_overlap(chunk_size, requested_overlap)
+
+
+def _streaming_temporal_quality_error(*, frame_count: int, chunk_size: int, overlap: int) -> str | None:
+    return SeedVR2Util.streamed_video_temporal_quality_error(
+        frame_count=frame_count,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+
+
+def _requested_streaming_chunk_size(
+    *,
+    requested_frames: int,
+    temporal_chunk_size: int,
+    chunk_size_was_explicit: bool,
+    safe_chunk_limit: int,
+    force_unsafe_memory_profile: bool,
+) -> int:
+    if requested_frames <= 0:
+        raise ValueError("requested_frames must be greater than zero.")
+    if chunk_size_was_explicit:
+        if temporal_chunk_size >= requested_frames:
+            return SeedVR2Util.padded_video_frame_count(requested_frames)
+        return temporal_chunk_size
+    if force_unsafe_memory_profile or safe_chunk_limit >= requested_frames:
+        return SeedVR2Util.padded_video_frame_count(requested_frames)
+    return max(safe_chunk_limit, 1)
 
 
 def _seedvr2_memory_profile(model_config: ModelConfig) -> tuple[int, str]:
@@ -366,6 +431,7 @@ def _plan_seedvr2_video_restore(
     temporal_chunk_size: int,
     temporal_chunk_overlap: int,
     chunk_size_was_explicit: bool,
+    chunk_overlap_was_explicit: bool,
     low_ram_requested: bool,
     cache_limit_gb: float | None,
     force_unsafe_memory_profile: bool,
@@ -393,39 +459,66 @@ def _plan_seedvr2_video_restore(
         warnings.append("SeedVR2 video restore requires --low-ram on the supported safe profile.")
 
     if chunk_size_was_explicit:
-        requested_chunk_size = min(temporal_chunk_size, requested_frames)
-    else:
-        if force_unsafe_memory_profile:
-            requested_chunk_size = requested_frames
-        else:
-            requested_chunk_size = min(requested_frames, max(safe_chunk_limit, 1))
+        chunk_size_error = _explicit_chunk_size_error(
+            requested_frames=requested_frames,
+            temporal_chunk_size=temporal_chunk_size,
+        )
+        if chunk_size_error is not None:
+            raise ValueError(chunk_size_error)
+
+    requested_chunk_size = _requested_streaming_chunk_size(
+        requested_frames=requested_frames,
+        temporal_chunk_size=temporal_chunk_size,
+        chunk_size_was_explicit=chunk_size_was_explicit,
+        safe_chunk_limit=safe_chunk_limit,
+        force_unsafe_memory_profile=force_unsafe_memory_profile,
+    )
     if force_unsafe_memory_profile:
         restore_mode = "streaming"
         route_reason = "unsafe_override"
         effective_chunk_size = _aligned_chunk_size(requested_chunk_size)
-        if effective_chunk_size < SEEDVR2_MIN_STREAMING_CHUNK_FRAMES:
-            raise ValueError(
-                f"SeedVR2 streamed video restore requires --temporal-chunk-size >= "
-                f"{SEEDVR2_MIN_STREAMING_CHUNK_FRAMES}. Smaller chunks break temporal continuity."
-            )
-        effective_chunk_overlap = 0 if effective_chunk_size >= requested_frames else _aligned_chunk_overlap(effective_chunk_size, temporal_chunk_overlap)
+        effective_chunk_overlap = _effective_chunk_overlap(
+            chunk_size=effective_chunk_size,
+            requested_frames=requested_frames,
+            requested_overlap=temporal_chunk_overlap,
+            overlap_was_explicit=chunk_overlap_was_explicit,
+        )
+        temporal_quality_error = _streaming_temporal_quality_error(
+            frame_count=requested_frames,
+            chunk_size=effective_chunk_size,
+            overlap=effective_chunk_overlap,
+        )
+        if temporal_quality_error is not None:
+            raise ValueError(temporal_quality_error)
         chunk_pixel_volume = effective_chunk_size * area
     else:
         restore_mode = "streaming"
         route_reason = "safe_streaming"
-        effective_chunk_size = _aligned_chunk_size(min(requested_chunk_size, max(safe_chunk_limit, 1)))
+        effective_chunk_size = _aligned_chunk_size(requested_chunk_size)
         if scale > 1.0:
             warnings.append(
                 "SeedVR2 safe video mode only supports source-size restoration or smaller output. "
                 "Use 1x or override with --force-unsafe-video-memory."
             )
-        if effective_chunk_size < SEEDVR2_MIN_STREAMING_CHUNK_FRAMES:
+        if safe_chunk_limit < requested_frames and effective_chunk_size > safe_chunk_limit:
             warnings.append(
-                "This SeedVR2 video request exceeds the supported safe memory profile. "
-                "Reduce source size or resolution, use a shorter clip, or override with "
-                "--force-unsafe-video-memory."
+                "This SeedVR2 video chunk request exceeds the supported safe memory profile. "
+                "Use --force-unsafe-video-memory to run it explicitly, or reduce source size, resolution, "
+                "or clip length."
             )
-        effective_chunk_overlap = 0 if effective_chunk_size >= requested_frames else _aligned_chunk_overlap(effective_chunk_size, temporal_chunk_overlap)
+        effective_chunk_overlap = _effective_chunk_overlap(
+            chunk_size=effective_chunk_size,
+            requested_frames=requested_frames,
+            requested_overlap=temporal_chunk_overlap,
+            overlap_was_explicit=chunk_overlap_was_explicit,
+        )
+        temporal_quality_error = _streaming_temporal_quality_error(
+            frame_count=requested_frames,
+            chunk_size=effective_chunk_size,
+            overlap=effective_chunk_overlap,
+        )
+        if temporal_quality_error is not None:
+            warnings.append(temporal_quality_error)
         chunk_pixel_volume = effective_chunk_size * area
 
     risk_level = "low"
@@ -453,26 +546,12 @@ def _plan_seedvr2_video_restore(
     )
 
 
-def _apply_cache_limit_if_needed(mlx_cache_limit_gb: float | None) -> None:
-    if mlx_cache_limit_gb is None:
-        return
-    mx.set_cache_limit(int(mlx_cache_limit_gb * (1000**3)))
-    mx.clear_cache()
-    mx.reset_peak_memory()
+def _apply_cache_limit_if_needed(args) -> None:
+    CallbackManager.apply_runtime_memory_options(args)
 
 
-def _seedvr2_video_runtime_diagnostics() -> dict[str, int | None]:
-    def _mlx_memory(name: str) -> int | None:
-        try:
-            return int(getattr(mx, name)())
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            return None
-
-    return {
-        "mlx_active_memory_bytes": _mlx_memory("get_active_memory"),
-        "mlx_peak_memory_bytes": _mlx_memory("get_peak_memory"),
-        "mlx_cache_memory_bytes": _mlx_memory("get_cache_memory"),
-    }
+def _seedvr2_video_runtime_diagnostics() -> dict:
+    return RuntimeMemory.snapshot("seedvr2-failure", synchronize=True).to_metadata()
 
 
 def _write_seedvr2_failure_manifest(
@@ -559,73 +638,80 @@ def _run_seedvr2_video_restore(
     output_pattern: str,
     seed: int,
 ) -> None:
-    output_path = output_pattern.format(seed=seed, image_name=video_path.stem)
-    _print_seedvr2_video_preflight(video_path, source_probe, plan)
-    if source_probe.audio_present:
-        if args.drop_audio:
-            print("SeedVR2 note: source audio detected; --drop-audio was requested, so the restored MP4 will stay silent.")
-        else:
-            print(
-                "SeedVR2 note: source audio detected; the CLI will preserve the matching source audio segment. "
-                "If that cannot be proven safe, the run fails. Pass --drop-audio to allow a silent output intentionally."
-            )
-    runtime_metadata = {
-        "restore_mode": plan.restore_mode,
-        "restore_mode_reason": plan.route_reason,
-        "low_ram_requested": bool(args.low_ram),
-        "low_ram_effective": bool(plan.low_ram_effective),
-        "mlx_cache_limit_gb": args.mlx_cache_limit_gb,
-        "requested_temporal_chunk_size": args.temporal_chunk_size,
-        "requested_temporal_chunk_overlap": args.temporal_chunk_overlap,
-        "effective_temporal_chunk_size": plan.effective_chunk_size,
-        "effective_temporal_chunk_overlap": plan.effective_chunk_overlap,
-        "seedvr2_risk_level": plan.risk_level,
-        "seedvr2_target_height": plan.target_height,
-        "seedvr2_target_width": plan.target_width,
-        "drop_audio_requested": bool(args.drop_audio),
-    }
+    gc_was_enabled = gc.isenabled()
+    if gc_was_enabled:
+        gc.disable()
     try:
-        result_path = model.restore_video_to_path(
-            seed=seed,
-            video_path=video_path,
-            resolution=args.resolution,
-            softness=args.softness,
-            start_seconds=args.start_seconds,
-            max_frames=args.max_frames,
-            output_path=output_path,
-            export_json_metadata=args.metadata,
-            overwrite=args.replace,
-            temporal_chunk_size=(
-                plan.effective_chunk_size if plan.effective_chunk_size is not None else args.temporal_chunk_size
-            ),
-            temporal_chunk_overlap=(
-                plan.effective_chunk_overlap
-                if plan.effective_chunk_overlap is not None
-                else args.temporal_chunk_overlap
-            ),
-            color_correction_mode=args.color_correction,
-            drop_audio=args.drop_audio,
-            restore_metadata=runtime_metadata,
-            enforce_memory_budget=plan.route_reason != "unsafe_override",
-        )
-    except Exception as exc:
-        failure_path = _write_seedvr2_failure_manifest(
-            output_path=output_path,
-            video_path=video_path,
-            model=args.model,
-            seed=seed,
-            resolution=args.resolution,
-            softness=args.softness,
-            color_correction_mode=args.color_correction,
-            drop_audio=args.drop_audio,
-            start_seconds=args.start_seconds,
-            max_frames=args.max_frames,
-            plan=plan,
-            error=exc,
-        )
-        print(f"SeedVR2 failure manifest saved at: {failure_path}")
-        raise
-    print(f"Video saved successfully at: {result_path}")
+        output_path = output_pattern.format(seed=seed, image_name=video_path.stem)
+        _print_seedvr2_video_preflight(video_path, source_probe, plan)
+        if source_probe.audio_present:
+            if args.drop_audio:
+                print("SeedVR2 note: source audio detected; --drop-audio was requested, so the restored MP4 will stay silent.")
+            else:
+                print(
+                    "SeedVR2 note: source audio detected; the CLI will preserve the matching source audio segment. "
+                    "If that cannot be proven safe, the run fails. Pass --drop-audio to allow a silent output intentionally."
+                )
+        runtime_metadata = {
+            "restore_mode": plan.restore_mode,
+            "restore_mode_reason": plan.route_reason,
+            "low_ram_requested": bool(args.low_ram),
+            "low_ram_effective": bool(plan.low_ram_effective),
+            "mlx_cache_limit_gb": args.mlx_cache_limit_gb,
+            "requested_temporal_chunk_size": args.temporal_chunk_size,
+            "requested_temporal_chunk_overlap": args.temporal_chunk_overlap,
+            "effective_temporal_chunk_size": plan.effective_chunk_size,
+            "effective_temporal_chunk_overlap": plan.effective_chunk_overlap,
+            "seedvr2_risk_level": plan.risk_level,
+            "seedvr2_target_height": plan.target_height,
+            "seedvr2_target_width": plan.target_width,
+            "drop_audio_requested": bool(args.drop_audio),
+        }
+        try:
+            result_path = model.restore_video_to_path(
+                seed=seed,
+                video_path=video_path,
+                resolution=args.resolution,
+                softness=args.softness,
+                start_seconds=args.start_seconds,
+                max_frames=args.max_frames,
+                output_path=output_path,
+                export_json_metadata=args.metadata,
+                overwrite=args.replace,
+                temporal_chunk_size=(
+                    plan.effective_chunk_size if plan.effective_chunk_size is not None else args.temporal_chunk_size
+                ),
+                temporal_chunk_overlap=(
+                    plan.effective_chunk_overlap
+                    if plan.effective_chunk_overlap is not None
+                    else args.temporal_chunk_overlap
+                ),
+                color_correction_mode=args.color_correction,
+                drop_audio=args.drop_audio,
+                restore_metadata=runtime_metadata,
+                enforce_memory_budget=plan.route_reason != "unsafe_override",
+            )
+        except Exception as exc:
+            failure_path = _write_seedvr2_failure_manifest(
+                output_path=output_path,
+                video_path=video_path,
+                model=args.model,
+                seed=seed,
+                resolution=args.resolution,
+                softness=args.softness,
+                color_correction_mode=args.color_correction,
+                drop_audio=args.drop_audio,
+                start_seconds=args.start_seconds,
+                max_frames=args.max_frames,
+                plan=plan,
+                error=exc,
+            )
+            print(f"SeedVR2 failure manifest saved at: {failure_path}")
+            raise
+        print(f"Video saved successfully at: {result_path}")
+    finally:
+        if gc_was_enabled:
+            gc.enable()
 
 
 def _load_seedvr2_model(
@@ -685,7 +771,6 @@ def _run_video_with_fresh_model(
         if memory_saver:
             print(memory_saver.memory_stats())
         del model
-        gc.collect()
         mx.clear_cache()
 
 
@@ -724,7 +809,8 @@ def main():
     try:
         model_config, resolved_model_path = _resolve_seedvr2_model(args.model, args.model_path)
     except ValueError as exc:
-        parser.error(str(exc))
+        print(f"{parser.prog}: error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
     video_probes: dict[Path, object] = {}
     video_restore_plans: dict[Path, SeedVR2VideoRestorePlan] = {}
@@ -756,6 +842,7 @@ def main():
                     temporal_chunk_size=args.temporal_chunk_size,
                     temporal_chunk_overlap=args.temporal_chunk_overlap,
                     chunk_size_was_explicit="--temporal-chunk-size" in provided_options,
+                    chunk_overlap_was_explicit="--temporal-chunk-overlap" in provided_options,
                     low_ram_requested=args.low_ram,
                     cache_limit_gb=cache_limit_gb,
                     force_unsafe_memory_profile=args.force_unsafe_video_memory,
@@ -763,12 +850,14 @@ def main():
                 if plan.warnings and not args.force_unsafe_video_memory:
                     parser.error(plan.warnings[0])
                 video_restore_plans[video_path] = plan
-            _apply_cache_limit_if_needed(args.mlx_cache_limit_gb)
+            _apply_cache_limit_if_needed(args)
     except ValueError as exc:
         parser.error(str(exc))
 
     try:
         output_pattern = _default_output_for_inputs(args.output, is_video=bool(video_paths))
+        if image_paths and not video_paths:
+            _apply_cache_limit_if_needed(args)
         if image_paths:
             model = _load_seedvr2_model(
                 parser=parser,
@@ -776,13 +865,21 @@ def main():
                 resolved_model_path=resolved_model_path,
                 model_config=model_config,
             )
+            image_tiling_config = model.tiling_config
             if args.vae_tiling:
-                model.tiling_config = TilingConfig()
+                model.tiling_config = TilingConfig(vae_encode_tile_size=768, vae_encode_tile_overlap=128)
+            callback_args = args
+            if args.low_ram:
+                callback_args = copy(args)
+                callback_args.low_ram = False
             memory_saver = CallbackManager.register_callbacks(
-                args=args,
+                args=callback_args,
                 model=model,
                 latent_creator=SeedVR2LatentCreator,
             )
+            if args.low_ram and not args.vae_tiling:
+                # Keep SeedVR2 image --low-ram to cache control without silently changing VAE encode behavior.
+                model.tiling_config = image_tiling_config
             try:
                 for image_path in image_paths:
                     for seed in args.seed:

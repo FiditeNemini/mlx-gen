@@ -57,12 +57,15 @@ class LatentCreator:
                 raise ValueError("latent image-to-image requires image_strength > 0.")
             # img2img: blend encoded image with noise
             pure_noise = latent_creator.create_noise(seed, height, width)
+            sample_posterior = latent_creator.__name__ == "QwenLatentCreator" and hasattr(img2img.vae, "encode_sampled")
             encoded = LatentCreator.encode_image(
                 width=width,
                 height=height,
                 vae=img2img.vae,
                 image_path=img2img.image_path,
                 tiling_config=img2img.tiling_config,
+                sample_posterior=sample_posterior,
+                seed=seed,
             )
             latents = latent_creator.pack_latents(encoded, height, width)
             sigma = img2img.sigmas[img2img.init_time_step]
@@ -75,14 +78,24 @@ class LatentCreator:
         height: int,
         width: int,
         tiling_config: "TilingConfig" | None = None,
+        sample_posterior: bool = False,
+        seed: int | None = None,
+        resize_mode: str = "resize",
     ) -> mx.array:
         scaled_user_image = ImageUtil.scale_to_dimensions(
             image=ImageUtil.load_image(image_path).convert("RGB"),
             target_width=width,
             target_height=height,
+            resize_mode=resize_mode,
         )
         image_array = ImageUtil.to_array(scaled_user_image)
-        return VAEUtil.encode(vae=vae, image=image_array, tiling_config=tiling_config)
+        return VAEUtil.encode(
+            vae=vae,
+            image=image_array,
+            tiling_config=tiling_config,
+            sample_posterior=sample_posterior,
+            seed=seed,
+        )
 
     @staticmethod
     def add_noise_by_interpolation(clean: mx.array, noise: mx.array, sigma: float) -> mx.array:

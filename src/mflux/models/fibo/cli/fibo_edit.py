@@ -111,6 +111,8 @@ def main():
     except (PromptFileReadError, ValueError) as exc:
         parser.error(str(exc))
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     fibo_edit = FIBOEdit(
         quantize=args.quantize,
         model_path=args.model_path,

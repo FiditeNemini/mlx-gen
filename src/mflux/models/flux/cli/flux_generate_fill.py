@@ -22,6 +22,8 @@ def main():
     if args.guidance is None:
         args.guidance = ui_defaults.DEFAULT_DEV_FILL_GUIDANCE
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1Fill(
         quantize=args.quantize,

@@ -52,6 +52,8 @@ def main():
     if args.guidance != 1.0 and is_distilled:
         parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     model = Flux2Klein(
         model_config=model_config,
         quantize=args.quantize,

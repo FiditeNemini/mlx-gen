@@ -1,9 +1,11 @@
 import logging
+import time
 from pathlib import Path
 
 import mlx.core as mx
 from tqdm import tqdm
 
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.schedulers import SCHEDULER_REGISTRY, try_import_external_scheduler
 from mflux.models.common.schedulers.linear_scheduler import LinearScheduler
@@ -18,10 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 class Config:
+    _progress_enabled = True
+
     def __init__(
         self,
         model_config: ModelConfig,
-        num_inference_steps: int = 4,
+        num_inference_steps: int | None = None,
         height: int | ScaleFactor | None = 1024,
         width: int | ScaleFactor | None = 1024,
         guidance: float = 4.0,
@@ -39,6 +43,10 @@ class Config:
     ):
         if dimension_multiple <= 0:
             raise ValueError("Dimension multiple must be positive.")
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(model_config, fallback=4)
+        if num_inference_steps < 1:
+            raise ValueError("Number of inference steps must be greater than zero.")
         effective_canvas_policy = CANVAS_POLICY_SOURCE_ASPECT if preserve_image_aspect_ratio else canvas_policy
         resolved_dimensions = DimensionResolver.resolve_image_canvas(
             width=ScaleFactor.parse("1x") if width is None else width,
@@ -97,6 +105,10 @@ class Config:
         self._requested_height = resolved_dimensions.requested_height
         self._source_image_width = resolved_dimensions.source_width
         self._source_image_height = resolved_dimensions.source_height
+
+    @staticmethod
+    def set_progress_enabled(enabled: bool) -> None:
+        Config._progress_enabled = bool(enabled)
 
     @property
     def height(self) -> int:
@@ -192,7 +204,8 @@ class Config:
     @property
     def time_steps(self) -> tqdm:
         if self._time_steps is None:
-            self._time_steps = tqdm(range(self.init_time_step, self.num_inference_steps))
+            steps = range(self.init_time_step, self.num_inference_steps)
+            self._time_steps = tqdm(steps) if Config._progress_enabled else _PlainTimeSteps(steps)
         return self._time_steps
 
     @property
@@ -219,3 +232,16 @@ class Config:
             self._scheduler.set_image_seq_len(self.image_seq_len)
 
         return self._scheduler
+
+
+class _PlainTimeSteps:
+    def __init__(self, steps: range):
+        self._steps = steps
+        self._started = time.perf_counter()
+
+    def __iter__(self):
+        return iter(self._steps)
+
+    @property
+    def format_dict(self) -> dict[str, float]:
+        return {"elapsed": time.perf_counter() - self._started}

@@ -7,6 +7,8 @@ from mflux.callbacks.instances.canny_saver import CannyImageSaver
 from mflux.callbacks.instances.depth_saver import DepthImageSaver
 from mflux.callbacks.instances.memory_saver import MemorySaver
 from mflux.callbacks.instances.stepwise_handler import StepwiseHandler
+from mflux.models.common.config.config import Config
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class CallbackManager:
@@ -33,6 +35,17 @@ class CallbackManager:
 
         # Memory saver (if requested)
         return CallbackManager._register_memory_saver(args, model)
+
+    @staticmethod
+    def apply_runtime_memory_options(args: Namespace) -> int | None:
+        Config.set_progress_enabled(bool(getattr(args, "progress", True)))
+        cache_limit_bytes = RuntimeMemory.apply_mlx_cache_limit(
+            getattr(args, "mlx_cache_limit_gb", None),
+            low_ram=bool(getattr(args, "low_ram", False)),
+        )
+        if cache_limit_bytes is not None:
+            setattr(args, "_mlx_cache_limit_applied", True)
+        return cache_limit_bytes
 
     @staticmethod
     def _register_battery_saver(args: Namespace, model) -> None:
@@ -78,7 +91,7 @@ class CallbackManager:
                 args=args,
             )
             model.callbacks.register(memory_saver)
-        elif cache_limit_bytes is not None:
+        elif cache_limit_bytes is not None and not getattr(args, "_mlx_cache_limit_applied", False):
             mx.set_cache_limit(cache_limit_bytes)
             mx.clear_cache()
             mx.reset_peak_memory()

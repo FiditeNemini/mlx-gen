@@ -6,7 +6,9 @@ import tqdm
 
 from mflux.callbacks.callback import BeforeLoopCallback, InLoopCallback, InterruptCallback
 from mflux.models.common.config.config import Config
+from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class StepwiseHandler(BeforeLoopCallback, InLoopCallback, InterruptCallback):
@@ -19,7 +21,7 @@ class StepwiseHandler(BeforeLoopCallback, InLoopCallback, InterruptCallback):
         self.model = model
         self.output_dir = Path(output_dir)
         self.latent_creator = latent_creator
-        self.step_wise_images = []
+        self.step_wise_images: list[PIL.Image.Image | GeneratedImage] = []
 
         if self.output_dir:
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -100,10 +102,20 @@ class StepwiseHandler(BeforeLoopCallback, InLoopCallback, InterruptCallback):
             path=self.output_dir / f"seed_{seed}_step{step}of{config.num_inference_steps}.png",
             export_json_metadata=False,
         )
-        self.step_wise_images.append(stepwise_img)
+        if self._benchmark_legacy_retention():
+            self.step_wise_images.append(stepwise_img)
+        else:
+            self.step_wise_images.append(stepwise_img.image.copy())
         self._save_composite(seed=seed)
 
     def _save_composite(self, seed: int) -> None:
         if self.step_wise_images:
-            composite_img = ImageUtil.to_composite_image(self.step_wise_images)
+            if self._benchmark_legacy_retention():
+                composite_img = ImageUtil.to_composite_image(self.step_wise_images)
+            else:
+                composite_img = ImageUtil.to_composite_pil_images(self.step_wise_images)
             composite_img.save(self.output_dir / f"seed_{seed}_composite.png")
+
+    @staticmethod
+    def _benchmark_legacy_retention() -> bool:
+        return RuntimeMemory._internal_benchmark_flag_enabled("legacy_stepwise_retention")

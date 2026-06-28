@@ -29,6 +29,17 @@ def test_generate_help_renders_padding_examples(monkeypatch, capsys):
     assert "localized masked edit or inpaint" in help_output
 
 
+def test_top_level_help_reports_version_and_release_date(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["mlxgen", "--help"])
+    monkeypatch.setattr(mlx_gen.VersionUtil, "format_cli_release_label", staticmethod(lambda: "MLX-Gen 9.9.9 (2099-01-01)"))
+
+    mlx_gen.main()
+
+    help_output = capsys.readouterr().out
+    assert "MLX-Gen 9.9.9 (2099-01-01)" in help_output
+    assert "Prepare local model assets and generate images or videos with MLX-Gen." in help_output
+
+
 @pytest.mark.parametrize(
     "module_name,argv0",
     [
@@ -745,6 +756,7 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
 
         def save(self, **kwargs):
             observed["save"] = kwargs
+            observed["extra_metadata"] = dict(getattr(self, "extra_metadata", {}))
             self.image.save(kwargs["path"])
 
     class FakeFlux2Outpaint:
@@ -753,10 +765,27 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
 
         def generate_image(self, **kwargs):
             observed["generate"] = kwargs
+            observed["canvas_background"] = Image.open(kwargs["canvas"].canvas_path).convert("RGB").getpixel((1, 1))
             return FakeImage(Image.open(kwargs["canvas"].canvas_path).convert("RGB"))
+
+    original_composite_source_region = flux2_edit_generate.OutpaintUtil.composite_source_region
+
+    def capturing_composite_source_region(*, generated_image, canvas, feather_px=None, restore_threshold=12.0):
+        observed["restore_threshold"] = restore_threshold
+        return original_composite_source_region(
+            generated_image=generated_image,
+            canvas=canvas,
+            feather_px=feather_px,
+            restore_threshold=restore_threshold,
+        )
 
     monkeypatch.setattr(flux2_edit_generate, "Flux2KleinOutpaint", FakeFlux2Outpaint)
     monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        flux2_edit_generate.OutpaintUtil,
+        "composite_source_region",
+        staticmethod(capturing_composite_source_region),
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -780,10 +809,68 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
     assert observed["generate"]["canvas"].target_width == 32
     assert observed["generate"]["canvas"].target_height == 16
     assert Path(observed["generate"]["canvas"].canvas_path).name == "outpaint_canvas.png"
+    assert observed["restore_threshold"] == -1.0
+    assert observed["extra_metadata"]["outpaint_preservation"] == "latent-locked-transition-band-no-postblend"
+    assert observed["extra_metadata"]["outpaint_source_restore_applied"] is False
     generated = Image.open(output).convert("RGB")
     source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
     output_interior = generated.crop((5, 3, 15, 9))
     assert ImageChops.difference(output_interior, source_interior).getbbox() is None
+
+
+def test_flux2_edit_backend_outpaint_uses_green_border_canvas_for_exact_outpaint_lora(monkeypatch, tmp_path):
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (12, 8), color=(80, 20, 10)).save(source)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_path = None
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            self.image.save(kwargs["path"])
+
+    class FakeFlux2Outpaint:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            observed["canvas_background"] = Image.open(kwargs["canvas"].canvas_path).convert("RGB").getpixel((1, 1))
+            return FakeImage(Image.open(kwargs["canvas"].canvas_path).convert("RGB"))
+
+    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinOutpaint", FakeFlux2Outpaint)
+    monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-base-4b",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "2,4,2,4",
+            "--prompt",
+            "fill the green spaces according to the image",
+            "--lora-paths",
+            "fal/flux-2-klein-4B-outpaint-lora:flux-outpaint-lora.safetensors",
+            "--output",
+            str(output),
+        ],
+    )
+
+    flux2_edit_generate.main()
+
+    assert observed["canvas_background"] == (0, 255, 0)
+    assert Path(observed["init"]["lora_paths"][0]).name == "flux-outpaint-lora.safetensors"
 
 
 def test_flux2_edit_backend_reframe_uses_expanded_canvas(monkeypatch, tmp_path):

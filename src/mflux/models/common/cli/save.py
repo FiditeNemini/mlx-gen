@@ -11,6 +11,53 @@ from mflux.models.qwen.variants.txt2img.qwen_image import QwenImage
 from mflux.models.seedvr2 import SeedVR2
 from mflux.models.wan import Wan2_2_TI2V
 from mflux.models.z_image import ZImage, ZImageTurbo
+from mflux.utils.exceptions import ModelConfigError
+
+
+def _model_class_for_config(model_config: ModelConfig):
+    family_tokens = {
+        token.lower()
+        for token in (
+            *model_config.aliases,
+            model_config.model_name,
+            model_config.base_model,
+        )
+        if token is not None
+    }
+
+    def has(value: str) -> bool:
+        return any(value in token for token in family_tokens)
+
+    if has("bonsai"):
+        return None
+    if has("qwen-image-edit") or has("qwen-edit"):
+        return QwenImageEdit
+    if has("qwen"):
+        return QwenImage
+    if has("fibo-edit") or has("fiboedit"):
+        return FIBOEdit
+    if has("fibo"):
+        return FIBO
+    if has("z-image-turbo") or has("zimage-turbo"):
+        return ZImageTurbo
+    if has("z-image") or has("zimage"):
+        return ZImage
+    if has("ernie"):
+        return ErnieImageTurbo
+    if has("seedvr2"):
+        return SeedVR2
+    if has("wan"):
+        return Wan2_2_TI2V
+    if has("flux2") or has("flux.2"):
+        return Flux2Klein
+    if has("flux.1") or has("flux"):
+        return Flux1
+    raise ValueError(
+        "Cannot infer prepare backend for "
+        f"{model_config.model_name!r}. Add --base-model with a supported family such as "
+        "dev, schnell, krea-dev, qwen-image, qwen-image-edit, fibo, fibo-edit, "
+        "z-image, z-image-turbo, ernie-image-turbo, seedvr2, wan2.2-ti2v-5b, or flux2-klein-4b."
+    )
 
 
 def main():
@@ -26,40 +73,26 @@ def main():
         parser.add_lora_arguments()
         args = parser.parse_args()
 
-        # 1. Determine model class based on model name
-        model_name_lower = args.model.lower()
-        if "bonsai" in model_name_lower:
+        # 1. Resolve config once and select the prepare backend from its family
+        try:
+            model_config = ModelConfig.from_name(args.model, base_model=args.base_model)
+            model_class = _model_class_for_config(model_config)
+        except ModelConfigError as exc:
+            parser.error(
+                f"{exc}. For local or custom model sources, add --base-model with the closest supported family."
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        if model_class is None:
             parser.error(
                 "Bonsai checkpoints are already MLX-packed low-bit artifacts. "
                 "Use `mlxgen download --model ...` to cache Bonsai locally; `mlxgen prepare` is not needed."
             )
-        if "qwen" in model_name_lower and "edit" in model_name_lower:
-            model_class = QwenImageEdit
-        elif "qwen" in model_name_lower:
-            model_class = QwenImage
-        elif "fibo" in model_name_lower and ("edit" in model_name_lower or "rmbg" in model_name_lower):
-            model_class = FIBOEdit
-        elif "fibo" in model_name_lower:
-            model_class = FIBO
-        elif "z-image-turbo" in model_name_lower or "zimage-turbo" in model_name_lower:
-            model_class = ZImageTurbo
-        elif "z-image" in model_name_lower or "zimage" in model_name_lower:
-            model_class = ZImage
-        elif "ernie" in model_name_lower:
-            model_class = ErnieImageTurbo
-        elif "seedvr2" in model_name_lower:
-            model_class = SeedVR2
-        elif "wan" in model_name_lower:
-            model_class = Wan2_2_TI2V
-        elif "flux2" in model_name_lower or "flux.2" in model_name_lower:
-            model_class = Flux2Klein
-        else:
-            model_class = Flux1
 
         # 2. Load, quantize and save the model
         model_kwargs = {
             "quantize": args.quantize,
-            "model_config": ModelConfig.from_name(args.model, base_model=args.base_model),
+            "model_config": model_config,
         }
         if args.lora_paths or args.lora_scales:
             parser.error(

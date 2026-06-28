@@ -58,7 +58,7 @@ def test_generated_video_saves_mp4_and_metadata(tmp_path):
 
     first_frame = VideoUtil.extract_frame(output_path)
     assert first_frame.size == (32, 24)
-    first_frame_rgb = np.array(first_frame)
+    first_frame_rgb = VideoUtil._pil_rgb_to_array(first_frame)
     assert first_frame_rgb[..., 0].mean() > first_frame_rgb[..., 1].mean()
     assert first_frame_rgb[..., 0].mean() > first_frame_rgb[..., 2].mean()
     assert _video_codec_name(output_path) in (None, "h264")
@@ -278,6 +278,49 @@ def test_video_util_converts_decoded_latents_to_video(tmp_path):
     assert video.num_frames == 2
     assert video.first_frame().size == (16, 16)
     assert output_path.exists()
+
+
+def test_video_util_lazy_decoded_latents_save_uses_batches(tmp_path, monkeypatch):
+    decoded = mx.array(np.zeros((1, 3, 3, 16, 16), dtype=np.float32))
+    output_path = tmp_path / "latents-batched.mp4"
+    observed = {}
+
+    def fake_save_video_batches(
+        frame_batches,
+        path,
+        fps,
+        metadata=None,
+        export_json_metadata=False,
+        overwrite=True,
+        validate_health=True,
+    ):
+        batches = list(frame_batches)
+        observed["batch_lengths"] = [len(batch) for batch in batches]
+        observed["metadata_frames"] = metadata["frames"]
+        return path
+
+    monkeypatch.setattr(VideoUtil, "save_video_batches", fake_save_video_batches)
+
+    video = VideoUtil.to_video(
+        decoded_latents=decoded,
+        fps=4,
+        model_config=ModelConfig.wan2_2_ti2v_5b(),
+        seed=7,
+        prompt="latent smoke",
+        steps=1,
+        guidance=5.0,
+        quantization=0,
+        generation_time=0.2,
+        materialize_frames=False,
+    )
+
+    assert video.num_frames == 3
+    assert video._frames is None
+
+    video.save(output_path)
+
+    assert observed == {"batch_lengths": [3], "metadata_frames": 3}
+    assert video._frames is None
 
 
 def test_video_util_reads_bounded_clip(tmp_path):

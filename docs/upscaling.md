@@ -207,10 +207,9 @@ Accepted public profiles for this exact archival slice:
 - safe bounded `1x 29/8 wavelet` for `3B` and `7B`
 - explicit enlarged `2x 29/8 wavelet` for `3B` and `7B`
 
-Direct current conclusion:
+Current guidance:
 
-- the streamed video path is working correctly for both `3B` and `7B`;
-- `1x 29/8` is the right public proof surface to show route correctness, frame integrity, and
+- `1x 29/8` is the default public video proof surface for route correctness, frame integrity, and
   motion continuity;
 - `3B 1x 29/8` is crisper on this native archival slice, while `7B 1x 29/8` is smoother and less
   drift-prone;
@@ -455,7 +454,7 @@ Useful options:
 | `--softness 0.25` to `0.5` | Smooth noisy low-resolution conditioning before reconstruction. |
 | `--vae-tiling` | Force tiled VAE encode/decode for image runs. Video restore rejects it. |
 | `--color-correction wavelet` | Preferred long-video restore color mode on the checked-in Eiffel archival proof. |
-| `--temporal-chunk-size` / `--temporal-chunk-overlap` | Tune long-video memory use and overlap blending. The checked-in Eiffel proof used `49` and `16`. |
+| `--temporal-chunk-size` / `--temporal-chunk-overlap` | Tune long-video memory use and overlap context. The checked-in Eiffel production proof used `29` and `8`; smaller multi-chunk profiles are rejected to protect temporal continuity. |
 | `--low-ram --mlx-cache-limit-gb 8` | Recommended long-video restore profile when memory pressure matters. |
 | `--metadata` | Save a `.metadata.json` sidecar with source/output dimensions and generation settings. |
 | `--start-seconds` / `--max-frames` | For video inputs, bound the decoded source clip before restoration. |

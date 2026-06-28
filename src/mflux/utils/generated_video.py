@@ -1,12 +1,15 @@
 import json
 import logging
+from collections.abc import Callable, Iterable
 from datetime import datetime
+from itertools import chain
 from pathlib import Path
 
 import mlx.core as mx
 import PIL.Image
 
 from mflux.models.common.config import ModelConfig
+from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.version_util import VersionUtil
 
 log = logging.getLogger(__name__)
@@ -15,7 +18,7 @@ log = logging.getLogger(__name__)
 class GeneratedVideo:
     def __init__(
         self,
-        frames: list[PIL.Image.Image],
+        frames: list[PIL.Image.Image] | None,
         fps: int | float,
         model_config: ModelConfig,
         seed: int,
@@ -41,10 +44,18 @@ class GeneratedVideo:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         extra_metadata: dict | None = None,
+        frame_batches_factory: Callable[[], Iterable[list[PIL.Image.Image]]] | None = None,
+        frame_count: int | None = None,
     ):
-        if not frames:
+        if not frames and frame_batches_factory is None:
+            raise ValueError("GeneratedVideo requires frames or a frame batch factory.")
+        if frames:
+            frame_count = len(frames)
+        if frame_count is None or frame_count <= 0:
             raise ValueError("GeneratedVideo requires at least one frame.")
-        self.frames = frames
+        self._frames = frames
+        self._frame_batches_factory = frame_batches_factory
+        self._frame_count = frame_count
         self.fps = fps
         self.model_config = model_config
         self.seed = seed
@@ -73,7 +84,14 @@ class GeneratedVideo:
 
     @property
     def num_frames(self) -> int:
-        return len(self.frames)
+        return self._frame_count
+
+    @property
+    def frames(self) -> list[PIL.Image.Image]:
+        if self._frames is None:
+            assert self._frame_batches_factory is not None
+            self._frames = list(chain.from_iterable(self._frame_batches_factory()))
+        return self._frames
 
     @property
     def duration_seconds(self) -> float:
@@ -88,6 +106,16 @@ class GeneratedVideo:
     ) -> Path:
         from mflux.utils.video_util import VideoUtil
 
+        if self._frames is None and self._frame_batches_factory is not None:
+            return VideoUtil.save_video_batches(
+                frame_batches=self._frame_batches_factory(),
+                path=path,
+                fps=self.fps,
+                metadata=self._get_metadata(),
+                export_json_metadata=export_json_metadata,
+                overwrite=overwrite,
+                validate_health=validate_health,
+            )
         return VideoUtil.save_video(
             frames=self.frames,
             path=path,
@@ -99,6 +127,11 @@ class GeneratedVideo:
         )
 
     def first_frame(self) -> PIL.Image.Image:
+        if self._frames is None and self._frame_batches_factory is not None:
+            first_batch = next(iter(self._frame_batches_factory()), None)
+            if not first_batch:
+                raise ValueError("GeneratedVideo frame batch factory returned no frames.")
+            return first_batch[0]
         return self.frames[0]
 
     def _get_metadata(self) -> dict:
@@ -191,6 +224,7 @@ class GeneratedVideo:
             "negative_prompt": negative_prompt if negative_prompt else None,
             "lora_paths": [str(path) for path in lora_paths] if lora_paths else None,
             "lora_scales": [round(scale, 2) for scale in lora_scales] if lora_scales else None,
+            "runtime_memory": RuntimeMemory.snapshot("video-metadata").to_metadata(),
         }
         if extra_metadata:
             metadata.update(extra_metadata)

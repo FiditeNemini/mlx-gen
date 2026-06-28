@@ -128,7 +128,7 @@ Related focused items:
 
 - [Bonsai ternary FLUX.2 support](../completed/0003_bonsai_ternary_flux2_support.md)
 - [Bonsai binary 1-bit runtime support](../proposed/0004_bonsai_binary_1bit_runtime_support.md)
-- [LoRA capability matrix and strict application](0007_lora_capability_matrix_and_strict_application.md)
+- [LoRA capability matrix and strict application](../completed/0007_lora_capability_matrix_and_strict_application.md)
 
 ## Requirements
 

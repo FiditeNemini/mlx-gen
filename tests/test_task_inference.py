@@ -281,7 +281,8 @@ def test_model_capabilities_are_publicly_inspectable():
     assert edit.lora_status == "mapped-unvalidated"
     assert edit.lora_target_roles == ("transformer",)
     assert reframe.supports_reframe is True
-    assert reframe.lora_status == "mapped-unvalidated"
+    assert reframe.supports_lora is False
+    assert reframe.lora_status == "unsupported"
 
     base_capabilities = mlxgen.get_model_capabilities(model="flux2-klein-base-4b")
     base_edit = next(capability for capability in base_capabilities.capabilities if capability.id == "flux2.edit")
@@ -308,9 +309,12 @@ def test_qwen_2511_q8_single_edit_lora_status_is_exact():
     assert inpaint.supports_mask is True
     assert inpaint.lora_status == "validated"
     assert inpaint.lora_validation_profile == "lora_qwen2511_q8_inpaint_lightning_2026_06_15"
-    assert reframe.lora_status == "mapped-unvalidated"
-    assert outpaint.lora_status == "mapped-unvalidated"
-    assert multi.lora_status == "mapped-unvalidated"
+    assert reframe.lora_status == "validated"
+    assert reframe.lora_validation_profile == "lora_qwen2511_q8_reframe_multi_angle_2026_06_22"
+    assert outpaint.lora_status == "validated"
+    assert outpaint.lora_validation_profile == "lora_qwen2511_q8_outpaint_multi_angle_2026_06_22"
+    assert multi.lora_status == "validated"
+    assert multi.lora_validation_profile == "lora_qwen2511_q8_multi_reference_multi_angle_2026_06_22"
 
 
 def test_qwen_2509_q8_single_edit_lora_status_is_exact():
@@ -318,12 +322,17 @@ def test_qwen_2509_q8_single_edit_lora_status_is_exact():
 
     edit = next(capability for capability in capabilities.capabilities if capability.id == "qwen.edit")
     reframe = next(capability for capability in capabilities.capabilities if capability.id == "qwen.reframe")
+    outpaint = next(capability for capability in capabilities.capabilities if capability.id == "qwen.outpaint")
     multi = next(capability for capability in capabilities.capabilities if capability.id == "qwen.multi-reference")
 
     assert edit.lora_status == "validated"
     assert edit.lora_validation_profile == "lora_qwen2509_q8_single_edit_multi_angle_2026_06_11"
-    assert reframe.lora_status == "mapped-unvalidated"
-    assert multi.lora_status == "mapped-unvalidated"
+    assert reframe.supports_lora is False
+    assert reframe.lora_status == "unsupported"
+    assert outpaint.supports_lora is False
+    assert outpaint.lora_status == "unsupported"
+    assert multi.supports_lora is False
+    assert multi.lora_status == "unsupported"
 
 
 def test_qwen_2512_q8_text_lora_status_is_exact():
@@ -334,7 +343,8 @@ def test_qwen_2512_q8_text_lora_status_is_exact():
 
     assert text.lora_status == "validated"
     assert text.lora_validation_profile == "lora_qwen2512_q8_pixel_art_t2i_2026_06_11"
-    assert latent.lora_status == "mapped-unvalidated"
+    assert latent.supports_lora is False
+    assert latent.lora_status == "unsupported"
     assert latent.lora_validation_profile is None
 
 
@@ -378,10 +388,10 @@ def test_base_qwen_route_validation_statuses_are_split_cleanly():
     base_latent = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.latent")
     base_control = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.control")
     base_control_inpaint = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.control-inpaint")
-    assert base_text.lora_status == "mapped-unvalidated"
-    assert base_text.lora_validation_profile is None
-    assert base_latent.lora_status == "mapped-unvalidated"
-    assert base_latent.lora_validation_profile is None
+    assert base_text.lora_status == "validated"
+    assert base_text.lora_validation_profile == "lora_qwen_q8_realism_t2i_2026_06_22"
+    assert base_latent.lora_status == "validated"
+    assert base_latent.lora_validation_profile == "lora_qwen_q8_latent_realism_2026_06_22"
     assert base_control.lora_status == "validated"
     assert base_control.lora_validation_profile == "lora_qwen_q8_control_lightning_2026_06_15"
     assert base_control_inpaint.lora_status == "validated"
@@ -397,7 +407,8 @@ def test_zimage_q8_text_lora_status_is_exact():
 
     assert text.lora_status == "validated"
     assert text.lora_validation_profile == "lora_zimage_q8_technically_color_t2i_2026_06_11"
-    assert latent.lora_status == "mapped-unvalidated"
+    assert latent.lora_status == "validated"
+    assert latent.lora_validation_profile == "lora_zimage_q8_childrens_drawings_latent_2026_06_24"
     assert inpaint.lora_status == "mapped-unvalidated"
 
 
@@ -405,11 +416,27 @@ def test_flux2_klein9b_q8_edit_lora_status_is_exact():
     capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/flux.2-klein-9b-8bit")
 
     edit = next(capability for capability in capabilities.capabilities if capability.id == "flux2.edit")
+    latent = next(capability for capability in capabilities.capabilities if capability.id == "flux2.latent")
+    reframe = next(capability for capability in capabilities.capabilities if capability.id == "flux2.reframe")
     multi = next(capability for capability in capabilities.capabilities if capability.id == "flux2.multi-reference")
 
     assert edit.lora_status == "validated"
     assert edit.lora_validation_profile == "lora_flux2_klein9b_q8_consistency_edit_2026_06_11"
-    assert multi.lora_status == "mapped-unvalidated"
+    assert latent.supports_lora is False
+    assert latent.lora_status == "unsupported"
+    assert reframe.supports_lora is False
+    assert reframe.lora_status == "unsupported"
+    assert multi.lora_status == "validated"
+    assert multi.lora_validation_profile == "lora_flux2_klein9b_q8_multi_reference_migration_2026_06_22"
+
+
+def test_flux2_klein_base4b_q8_outpaint_lora_status_is_exact():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/flux.2-klein-base-4b-8bit")
+
+    outpaint = next(capability for capability in capabilities.capabilities if capability.id == "flux2.outpaint")
+
+    assert outpaint.lora_status == "validated"
+    assert outpaint.lora_validation_profile == "lora_flux2_klein_base4b_q8_outpaint_2026_06_22"
 
 
 def test_ernie_turbo_q8_text_lora_status_is_exact():
@@ -422,8 +449,8 @@ def test_ernie_turbo_q8_text_lora_status_is_exact():
     assert text.lora_status == "validated"
     assert text.lora_validation_profile == "lora_ernie_turbo_q8_anime_style_t2i_2026_06_11"
     assert latent.supports_lora is True
-    assert latent.lora_status == "mapped-unvalidated"
-    assert latent.lora_validation_profile is None
+    assert latent.lora_status == "validated"
+    assert latent.lora_validation_profile == "lora_ernie_turbo_q8_anime_style_latent_2026_06_22"
 
 
 def test_lora_requests_are_checked_against_route_capabilities():
@@ -586,9 +613,54 @@ def test_lora_validation_profiles_are_resolvable():
             MODE_TEXT_ONLY,
         ),
         (
+            "AbstractFramework/qwen-image-8bit",
+            "lora_qwen_q8_realism_t2i_2026_06_22",
+            MODE_TEXT_ONLY,
+        ),
+        (
+            "AbstractFramework/qwen-image-8bit",
+            "lora_qwen_q8_latent_realism_2026_06_22",
+            MODE_LATENT_IMG2IMG,
+        ),
+        (
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "lora_qwen2511_q8_reframe_multi_angle_2026_06_22",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "lora_qwen2511_q8_outpaint_multi_angle_2026_06_22",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "lora_qwen2511_q8_multi_reference_multi_angle_2026_06_22",
+            MODE_MULTI_REFERENCE,
+        ),
+        (
+            "AbstractFramework/z-image-turbo-8bit",
+            "lora_zimage_q8_childrens_drawings_latent_2026_06_24",
+            MODE_LATENT_IMG2IMG,
+        ),
+        (
+            "AbstractFramework/flux.2-klein-9b-8bit",
+            "lora_flux2_klein9b_q8_multi_reference_migration_2026_06_22",
+            MODE_MULTI_REFERENCE,
+        ),
+        (
+            "AbstractFramework/flux.2-klein-base-4b-8bit",
+            "lora_flux2_klein_base4b_q8_outpaint_2026_06_22",
+            MODE_EDIT_REFERENCE,
+        ),
+        (
             "AbstractFramework/ernie-image-turbo-8bit",
             "lora_ernie_turbo_q8_anime_style_t2i_2026_06_11",
             MODE_TEXT_ONLY,
+        ),
+        (
+            "AbstractFramework/ernie-image-turbo-8bit",
+            "lora_ernie_turbo_q8_anime_style_latent_2026_06_22",
+            MODE_LATENT_IMG2IMG,
         ),
         (
             "AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit",
@@ -694,12 +766,26 @@ def test_flux2_klein_base_starship_profile_reports_source_model_statuses():
     assert base9b.status == "PASS"
     assert {record.step for record in base9b.records} == {"B", "C", "D", "E", "F"}
 
+    prepared_base9b = mlxgen.get_model_validation(
+        "AbstractFramework/flux.2-klein-base-9b-8bit",
+        profile_id=mlxgen.FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
+    )
+    assert prepared_base9b.status == "PASS"
+    assert {record.step for record in prepared_base9b.records} == {"B", "C", "D", "E", "F"}
+
     base4b = mlxgen.get_model_validation(
         "black-forest-labs/FLUX.2-klein-base-4B",
         profile_id=mlxgen.FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
     )
     assert base4b.status == "PARTIAL"
     assert next(record for record in base4b.records if record.step == "E").status == "PARTIAL"
+
+    prepared_base4b = mlxgen.get_model_validation(
+        "AbstractFramework/flux.2-klein-base-4b-8bit",
+        profile_id=mlxgen.FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID,
+    )
+    assert prepared_base4b.status == "PARTIAL"
+    assert next(record for record in prepared_base4b.records if record.step == "E").status == "PARTIAL"
 
 
 def test_multi_reference_validation_records_list_reference_inputs():

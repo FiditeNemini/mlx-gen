@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mflux.lora_validation_registry import get_lora_validation_status
+from mflux.lora_validation_registry import LORA_STATUS_UNSUPPORTED, get_lora_validation_status
 from mflux.models.common.config import ModelConfig
 from mflux.utils.dimension_resolver import CANVAS_POLICY_EXACT_RESIZE, CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import ModelConfigError
@@ -565,6 +565,13 @@ def _lora_capability_kwargs(
         model_config=identity.model_config,
         capability_id=capability_id,
     )
+    if status == LORA_STATUS_UNSUPPORTED:
+        return {
+            "supports_lora": False,
+            "lora_status": LORA_STATUS_UNSUPPORTED,
+            "lora_target_roles": (),
+            "lora_validation_profile": None,
+        }
     return {
         "supports_lora": True,
         "lora_status": status,

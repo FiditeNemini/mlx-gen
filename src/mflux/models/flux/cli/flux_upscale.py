@@ -19,6 +19,8 @@ def main():
     parser.add_output_arguments()
     args = parser.parse_args()
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1Controlnet(
         model_config=ModelConfig.dev_controlnet_upscaler(),

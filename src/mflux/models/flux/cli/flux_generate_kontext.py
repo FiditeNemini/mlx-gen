@@ -25,6 +25,8 @@ def main():
     if args.guidance is None:
         args.guidance = ui_defaults.GUIDANCE_SCALE_KONTEXT
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1Kontext(
         quantize=args.quantize,

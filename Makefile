@@ -117,16 +117,18 @@ test-slow: ensure-pytest
 # Run uv build and check dist sizes for optimized user installs
 .PHONY: build
 build:
-	rm -rf dist/mflux-*
+	rm -rf dist/mlx_gen-* dist/mlx-gen-*
 	# fresh build
 	uv build
 	# check the artifact sizes - we expect < 1MB
 	du -sh dist/*
 	# create a temp directory for extraction
 	# then find/list the largest 5 files - we should not see image artifacts
-	@TEMP_DIR=$$(mktemp -d -t mflux-dist) && \
+	@TEMP_DIR=$$(mktemp -d -t mlx-gen-dist) && \
+	SDIST=$$(find dist -maxdepth 1 \( -name 'mlx_gen-*.tar.gz' -o -name 'mlx-gen-*.tar.gz' \) | sort | head -n 1) && \
+	test -n "$$SDIST" || (echo "No mlx-gen source distribution found in dist/"; exit 1) && \
 	mkdir -p "$$TEMP_DIR/this-build" && \
-	tar -xzf dist/mflux-*.tar.gz -C "$$TEMP_DIR/this-build" && \
+	tar -xzf "$$SDIST" -C "$$TEMP_DIR/this-build" && \
 	find "$$TEMP_DIR/this-build" -type f -exec du -h {} \; | sort -rh | head -n 5
 
 # Clean up

@@ -61,9 +61,9 @@ class MetadataBuilder:
             # Save preserving ALL existing metadata + adding XMP/IPTC
             # Pass exif separately to preserve it correctly
             if existing_exif:
-                image.save(path, pnginfo=pnginfo, exif=existing_exif)
+                image.save(path, format="PNG", pnginfo=pnginfo, exif=existing_exif)
             else:
-                image.save(path, pnginfo=pnginfo)
+                image.save(path, format="PNG", pnginfo=pnginfo)
 
         except Exception as e:  # noqa: BLE001
             log.error(f"Error embedding XMP/IPTC metadata: {e}")

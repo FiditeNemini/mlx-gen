@@ -5,6 +5,7 @@ from mflux.models.common.config import ModelConfig
 from mflux.models.ernie_image.model.mistral3_text_encoder.decoder_layer import Mistral3DecoderLayer
 from mflux.models.ernie_image.model.mistral3_text_encoder.rms_norm import Mistral3RMSNorm
 from mflux.models.ernie_image.model.mistral3_text_encoder.rope import Mistral3YarnRotaryEmbedding
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class Mistral3TextEncoder(nn.Module):
@@ -53,17 +54,23 @@ class Mistral3TextEncoder(nn.Module):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         causal_mask = self._causal_mask(attention_mask, hidden_states, seq_len)
 
-        all_hidden_states = [hidden_states]
+        legacy_hidden_retention = RuntimeMemory._internal_benchmark_flag_enabled("legacy_hidden_state_retention")
+        hidden_state_history = [] if legacy_hidden_retention else None
+        previous_hidden_states = hidden_states
         for layer in self.layers:
+            previous_hidden_states = hidden_states
+            if hidden_state_history is not None:
+                hidden_state_history.append(hidden_states)
             hidden_states = layer(
                 hidden_states=hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 position_embeddings=position_embeddings,
             )
-            all_hidden_states.append(hidden_states)
 
-        return all_hidden_states[-2].astype(ModelConfig.precision)
+        if hidden_state_history is not None:
+            return hidden_state_history[-1].astype(ModelConfig.precision)
+        return previous_hidden_states.astype(ModelConfig.precision)
 
     @staticmethod
     def _causal_mask(attention_mask: mx.array | None, hidden_states: mx.array, seq_len: int) -> mx.array:

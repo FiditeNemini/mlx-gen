@@ -3,6 +3,7 @@ import mlx.core as mx
 from mflux.models.common.tokenizer import Tokenizer
 from mflux.models.flux.model.flux_text_encoder.clip_encoder.clip_encoder import CLIPEncoder
 from mflux.models.flux.model.flux_text_encoder.t5_encoder.t5_encoder import T5Encoder
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class PromptEncoder:
@@ -24,6 +25,10 @@ class PromptEncoder:
         clip_output = clip_tokenizer.tokenize(prompt)
         prompt_embeds = t5_text_encoder(t5_output.input_ids)
         pooled_prompt_embeds = clip_text_encoder(clip_output.input_ids)
+        prompt_embeds, pooled_prompt_embeds = RuntimeMemory.materialize_tensors(
+            prompt_embeds,
+            pooled_prompt_embeds,
+        )
 
         # 2. Cache the encoded prompt
         prompt_cache[prompt] = (prompt_embeds, pooled_prompt_embeds)

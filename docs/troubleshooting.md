@@ -203,7 +203,7 @@ To choose the generated image or video path, use `--output` with `mlxgen generat
 
 ## LoRA Is Missing
 
-LoRA support is experimental and route-specific. User-requested LoRAs are required: MLX-Gen no
+LoRA support is route-specific. User-requested LoRAs are required: MLX-Gen no
 longer ignores a missing LoRA and continues without it. Download the LoRA repository or use a local
 `.safetensors` file path.
 

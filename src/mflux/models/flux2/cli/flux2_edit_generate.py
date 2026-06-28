@@ -18,6 +18,12 @@ LEGACY_NOTICE = (
     "Use `mlxgen generate --model <model> --image <path> ...` for new integrations."
 )
 
+FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS = (
+    "fal/flux-2-klein-4b-outpaint-lora",
+    "ming3d/flux-2-klein-4b-outpaint-lora",
+    "flux-outpaint-lora.safetensors",
+)
+
 
 def _print_legacy_notice() -> None:
     print(LEGACY_NOTICE, file=sys.stderr)
@@ -92,6 +98,8 @@ def main():
         parser.error("--guidance is only supported for FLUX.2 models. Use --guidance 1.0.")
     if args.guidance != 1.0 and not is_base_model and args.outpaint_padding is None:
         parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
+
+    CallbackManager.apply_runtime_memory_options(args)
 
     uses_strict_outpaint = args.outpaint_padding is not None and is_base_model
     model = (
@@ -210,6 +218,8 @@ def _resolve_image_paths(
         padding_value=padding_value,
         output_path=temporary_directory / canvas_name,
         option_name=option_name,
+        fill_mode=_outpaint_fill_mode(args=args),
+        fill_color=_outpaint_fill_color(args=args),
     )
     args.width = canvas.target_width
     args.height = canvas.target_height
@@ -217,6 +227,28 @@ def _resolve_image_paths(
     if args.outpaint_padding is not None:
         return [canvas.canvas_path], canvas, None
     return [canvas.canvas_path], None, canvas
+
+
+def _outpaint_fill_mode(*, args) -> str:
+    if args.outpaint_padding is not None and _uses_green_border_outpaint_lora(args.lora_paths):
+        return "solid"
+    return "edge"
+
+
+def _outpaint_fill_color(*, args) -> tuple[int, int, int]:
+    if args.outpaint_padding is not None and _uses_green_border_outpaint_lora(args.lora_paths):
+        return (0, 255, 0)
+    return (255, 255, 255)
+
+
+def _uses_green_border_outpaint_lora(lora_paths: list[str] | None) -> bool:
+    if not lora_paths:
+        return False
+    for path in lora_paths:
+        normalized = path.lower()
+        if any(marker in normalized for marker in FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS):
+            return True
+    return False
 
 
 def _validate_canvas_args(*, parser: CommandLineParser, args, source_image_paths: list[Path]) -> None:

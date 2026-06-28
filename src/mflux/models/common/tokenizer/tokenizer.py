@@ -72,7 +72,7 @@ class LanguageTokenizer(BaseTokenizer):
             prompts = list(prompt)
 
         prompts = [p if p is not None else "" for p in prompts]
-        if all(p == "" for p in prompts):
+        if all(p == "" for p in prompts) and not self.template and not self.use_chat_template:
             batch_size = len(prompts)
             input_ids = mx.array(np.empty((batch_size, 0), dtype=np.int32))
             attention_mask = mx.array(np.empty((batch_size, 0), dtype=np.int32))

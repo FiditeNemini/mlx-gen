@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.23] - 2026-06-28
+
+### Added
+
+- **Runtime memory telemetry**: generated image/video metadata and video failure manifests now
+  include MLX allocator, process RSS, Darwin physical-footprint, cache-policy, and timing records
+  when available. Set `MFLUX_RUNTIME_MEMORY_TELEMETRY=0` to disable metadata collection.
+- **Generation memory benchmarks**: add repeatable local benchmark tooling and profiles for
+  prompt-materialization release, callback/output retention, telemetry overhead, Wan low-RAM
+  profiles, and SeedVR2 image/video memory behavior.
+- **Qwen route matrix**: add a first-class Qwen route matrix page that maps MLX-Gen capability ids
+  to the upstream Diffusers Qwen pipelines and to the exact accepted proof surfaces already
+  shipped in the docs.
+
+### Changed
+
+- **Low-RAM generation behavior**: `--low-ram` now applies a default MLX cache limit and clears
+  cache at more model-family denoise/decode boundaries while preserving the same generation
+  surfaces and documented quality profiles.
+- **CLI and prepare defaults**: centralize model inference-step defaults, reject non-positive
+  step counts before loading weights, and resolve `mlxgen prepare` backends from model
+  configuration instead of only from string matching.
+- **LoRA exact-row completion**: close the remaining production-support gaps for the current Qwen
+  and FLUX.2 image LoRA surface. The exact validated public rows now also include
+  `AbstractFramework/qwen-image-8bit` on `qwen.latent`,
+  `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.multi-reference`, `qwen.reframe`, and
+  `qwen.outpaint`,
+  `AbstractFramework/flux.2-klein-9b-8bit` on `flux2.multi-reference`, and
+  `AbstractFramework/flux.2-klein-base-4b-8bit` on `flux2.outpaint`. The route-expansion proof
+  bundle now covers the full accepted June 22 exact-row set with contact sheets, command logs, and
+  loader metrics.
+- **Public contract wording**: remove stale "experimental" wording from the exact validated
+  Qwen/FLUX.2 LoRA rows and from the shipped reframe/outpaint route documentation. The docs now
+  describe a narrower but honest production-supported surface: exact validated rows are public
+  support, `mapped-unvalidated` rows are not.
+- **LoRA proof bundle cleanup**: tighten the published June 22 route-expansion bundle after a
+  stricter review. The exploratory seed-sweep sheet was removed from `docs/assets/validation`,
+  the Qwen 2511 A/B sheets now use prompt-matched Lightning baselines, and every accepted contact
+  sheet now shows readable route/model labels plus the exact prompt and key generation parameters.
+- **Z-Image latent LoRA proof**: restore the exact `AbstractFramework/z-image-turbo-8bit`
+  `z-image.latent` row with a new same-source A/B proof bundle using
+  `ostris/z_image_turbo_childrens_drawings`. The published bundle now shows a readable source /
+  baseline / with-LoRA sheet, the exact reproduction commands, and the exact scope of the accepted
+  q8 latent style-transfer row.
+
+### Fixed
+
+- **SeedVR2 video temporal continuity**: SeedVR2 video restore now rejects multi-chunk profiles
+  below `29` source frames and `8` overlap frames on both the CLI and Python API, keeps restored
+  output frame count/FPS aligned with the requested source window, and preserves the current
+  quality-first `29/8` video profile for both 3B and 7B.
+- **Release publishing order**: the GitHub release workflow now publishes to PyPI first and only
+  creates or updates the GitHub Release after PyPI succeeds, so failed package publication does
+  not leave a misleading GitHub release.
+- **Distribution hygiene**: keep `twine` out of default user installs and in the `dev`/`release`
+  extras, and make the package build cleanup target match `mlx-gen` artifacts.
+
 ## [0.18.22] - 2026-06-22
 
 ### Added

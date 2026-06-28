@@ -5,6 +5,7 @@ import mlx.core as mx
 
 from mflux.models.common.tokenizer import Tokenizer
 from mflux.models.fibo.model.fibo_text_encoder.smol_lm3_3b_text_encoder import SmolLM3_3B_TextEncoder
+from mflux.utils.runtime_memory import RuntimeMemory
 
 
 class PromptEncoder:
@@ -47,6 +48,9 @@ class PromptEncoder:
                     prompt_attention_mask=prompt_attention_mask,
                     dtype=dtype,
                 )
+            encoder_hidden_states, prompt_layers, prompt_attention_mask = RuntimeMemory.materialize_inference_tree(
+                (encoder_hidden_states, prompt_layers, prompt_attention_mask)
+            )
             return json_prompt, encoder_hidden_states, prompt_layers, prompt_attention_mask
 
         if negative_prompt is None:
@@ -85,6 +89,9 @@ class PromptEncoder:
                 prompt_attention_mask=prompt_attention_mask,
                 dtype=dtype,
             )
+        encoder_hidden_states, prompt_layers, prompt_attention_mask = RuntimeMemory.materialize_inference_tree(
+            (encoder_hidden_states, prompt_layers, prompt_attention_mask)
+        )
         return json_prompt, encoder_hidden_states, prompt_layers, prompt_attention_mask
 
     @staticmethod

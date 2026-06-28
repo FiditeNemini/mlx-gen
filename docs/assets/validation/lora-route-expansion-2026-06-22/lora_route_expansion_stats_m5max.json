@@ -1,0 +1,176 @@
+{
+  "date": "2026-06-22",
+  "machine": "Apple M5 Max",
+  "accepted_rows": [
+    {
+      "profile_id": "lora_qwen_q8_realism_t2i_2026_06_22",
+      "model": "AbstractFramework/qwen-image-8bit",
+      "capability_id": "qwen.text",
+      "adapter": "flymy-ai/qwen-image-realism-lora:flymy_realism.safetensors",
+      "no_lora": {
+        "generation_time_seconds": 129.55,
+        "wall_time_seconds": 134.54,
+        "max_rss_bytes": 29730914304,
+        "peak_memory_footprint_bytes": 14746032
+      },
+      "with_lora": {
+        "generation_time_seconds": 49.94,
+        "wall_time_seconds": 57.01,
+        "max_rss_bytes": 29991665664,
+        "peak_memory_footprint_bytes": 14877104,
+        "matched_key_count": 480,
+        "unmatched_key_count": 0,
+        "applied_target_count": 240
+      }
+    },
+    {
+      "profile_id": "lora_qwen_q8_latent_realism_2026_06_22",
+      "model": "AbstractFramework/qwen-image-8bit",
+      "capability_id": "qwen.latent",
+      "adapter": "prithivMLmods/Qwen-Image-Studio-Realism:qwen-studio-realism.safetensors",
+      "source_image": "docs/assets/validation/lora-route-expansion-2026-06-22/qwen_q8_latent_source_portrait_illustration.png",
+      "no_lora": {
+        "generation_time_seconds": 23.3,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 29.25,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 2520,
+        "unmatched_key_count": 0,
+        "applied_target_count": 840
+      }
+    },
+    {
+      "profile_id": "lora_qwen2511_q8_reframe_multi_angle_2026_06_22",
+      "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+      "capability_id": "qwen.reframe",
+      "adapter": "lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors + fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA:qwen-image-edit-2511-multiple-angles-lora.safetensors",
+      "no_lora": {
+        "generation_time_seconds": 40.29,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 56.08,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 3840,
+        "unmatched_key_count": 0,
+        "applied_target_count": 1560
+      }
+    },
+    {
+      "profile_id": "lora_qwen2511_q8_outpaint_multi_angle_2026_06_22",
+      "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+      "capability_id": "qwen.outpaint",
+      "adapter": "lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors + fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA:qwen-image-edit-2511-multiple-angles-lora.safetensors",
+      "no_lora": {
+        "generation_time_seconds": 44.12,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 52.28,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 3840,
+        "unmatched_key_count": 0,
+        "applied_target_count": 1560
+      }
+    },
+    {
+      "profile_id": "lora_qwen2511_q8_multi_reference_multi_angle_2026_06_22",
+      "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+      "capability_id": "qwen.multi-reference",
+      "adapter": "lightx2v/Qwen-Image-Edit-2511-Lightning:Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors + fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA:qwen-image-edit-2511-multiple-angles-lora.safetensors",
+      "no_lora": {
+        "generation_time_seconds": 110.36,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 77.77,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 3840,
+        "unmatched_key_count": 0,
+        "applied_target_count": 1560
+      }
+    },
+    {
+      "profile_id": "lora_flux2_klein9b_q8_multi_reference_migration_2026_06_22",
+      "model": "AbstractFramework/flux.2-klein-9b-8bit",
+      "capability_id": "flux2.multi-reference",
+      "adapter": "dx8152/Flux2-Klein-9B-Migration:Klein-Migration.safetensors",
+      "no_lora": {
+        "generation_time_seconds": 42.04,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 40.04,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 224,
+        "unmatched_key_count": 0,
+        "applied_target_count": 144
+      }
+    },
+    {
+      "profile_id": "lora_flux2_klein_base4b_q8_outpaint_2026_06_22",
+      "model": "AbstractFramework/flux.2-klein-base-4b-8bit",
+      "capability_id": "flux2.outpaint",
+      "adapter": "fal/flux-2-klein-4B-outpaint-lora:flux-outpaint-lora.safetensors",
+      "no_lora": {
+        "generation_time_seconds": 57.74,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null
+      },
+      "with_lora": {
+        "generation_time_seconds": 74.84,
+        "wall_time_seconds": null,
+        "max_rss_bytes": null,
+        "peak_memory_footprint_bytes": null,
+        "matched_key_count": 136,
+        "unmatched_key_count": 0,
+        "applied_target_count": 88
+      }
+    },
+    {
+      "profile_id": "lora_ernie_turbo_q8_anime_style_latent_2026_06_22",
+      "model": "AbstractFramework/ernie-image-turbo-8bit",
+      "capability_id": "ernie-image.latent",
+      "adapter": "reverentelusarca/ernie-image-elusarca-anime-style-lora:ernie-anime-v1.safetensors",
+      "source_image": "docs/assets/validation/lora-route-expansion-2026-06-22/qwen_q8_text_realism_no_lora.png",
+      "no_lora": {
+        "generation_time_seconds": 4.72,
+        "wall_time_seconds": 7.97,
+        "max_rss_bytes": 12931203072,
+        "peak_memory_footprint_bytes": 14746032
+      },
+      "with_lora": {
+        "generation_time_seconds": 17.1,
+        "wall_time_seconds": 21.92,
+        "max_rss_bytes": 13123846144,
+        "peak_memory_footprint_bytes": 14877104,
+        "matched_key_count": 504,
+        "unmatched_key_count": 0,
+        "applied_target_count": 252
+      }
+    }
+  ]
+}

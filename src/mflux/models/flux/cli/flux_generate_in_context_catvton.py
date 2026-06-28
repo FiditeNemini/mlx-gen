@@ -30,6 +30,8 @@ def main():
     if not args.prompt and not args.prompt_file:
         args.prompt = "The pair of images highlights a clothing and its styling on a model, high resolution, 4K, 8K; [IMAGE1] Detailed product shot of a clothing; [IMAGE2] The same cloth is worn by a model in a lifestyle setting."
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1InContextFill(
         model_config=ModelConfig.dev_fill_catvton(),

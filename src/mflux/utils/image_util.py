@@ -7,6 +7,7 @@ import numpy as np
 import piexif
 import PIL.Image
 import PIL.ImageDraw
+import PIL.ImageOps
 from PIL._typing import StrOrBytesPath
 
 from mflux.models.common.config.config import Config
@@ -17,6 +18,7 @@ from mflux.utils.metadata_builder import MetadataBuilder
 from mflux.utils.tensor_health import TensorHealth
 
 log = logging.getLogger(__name__)
+PIL.Image.init()
 
 
 class ImageUtil:
@@ -98,14 +100,17 @@ class ImageUtil:
 
     @staticmethod
     def to_composite_image(generated_images: list[GeneratedImage]) -> PIL.Image.Image:
-        # stitch horizontally
-        total_width = sum(gen_img.image.width for gen_img in generated_images)
-        max_height = max(gen_img.image.height for gen_img in generated_images)
+        return ImageUtil.to_composite_pil_images([gen_img.image for gen_img in generated_images])
+
+    @staticmethod
+    def to_composite_pil_images(images: list[PIL.Image.Image]) -> PIL.Image.Image:
+        total_width = sum(image.width for image in images)
+        max_height = max(image.height for image in images)
         composite_img = PIL.Image.new("RGB", (total_width, max_height))
         current_x = 0
-        for index, gen_img in enumerate(generated_images):
-            composite_img.paste(gen_img.image, (current_x, 0))
-            current_x += gen_img.image.width
+        for image in images:
+            composite_img.paste(image, (current_x, 0))
+            current_x += image.width
         return composite_img
 
     @staticmethod
@@ -229,11 +234,20 @@ class ImageUtil:
         image: PIL.Image.Image,
         target_width: int,
         target_height: int,
+        resize_mode: str = "resize",
     ) -> PIL.Image.Image:
-        if (image.width, image.height) != (target_width, target_height):
-            return image.resize((target_width, target_height), PIL.Image.LANCZOS)
-        else:
+        if (image.width, image.height) == (target_width, target_height):
             return image
+        if resize_mode == "resize":
+            return image.resize((target_width, target_height), PIL.Image.LANCZOS)
+        if resize_mode == "crop":
+            return PIL.ImageOps.fit(
+                image,
+                (target_width, target_height),
+                method=PIL.Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+        raise ValueError("resize_mode must be 'resize' or 'crop'.")
 
     @staticmethod
     def save_image(
@@ -246,7 +260,13 @@ class ImageUtil:
         file_path = ImageUtil.resolve_output_path(path=path, overwrite=overwrite)
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        image.save(file_path)
+        saved_with_external_encoder = ImageUtil._save_image_with_ffmpeg(image=image, path=file_path)
+        if not saved_with_external_encoder:
+            image_format = ImageUtil._image_format_for_path(file_path)
+            if image_format is None:
+                image.save(file_path)
+            else:
+                image.save(file_path, format=image_format)
         log.info(f"Image saved successfully at: {file_path}")
 
         # Export metadata to a dedicated sidecar path so it never
@@ -257,13 +277,33 @@ class ImageUtil:
                 json.dump(metadata, json_file, indent=4)
 
         # Embedded metadata is useful but should not hide a successful primary image save.
-        if metadata is not None:
+        if metadata is not None and not saved_with_external_encoder:
             try:
                 ImageUtil._embed_metadata(metadata, file_path)
                 MetadataBuilder.embed_metadata(metadata, file_path)
                 log.info(f"Metadata embedded successfully at: {file_path}")
             except Exception as e:  # noqa: BLE001
                 log.warning(f"Could not embed image metadata at {file_path}: {e}")
+
+    @staticmethod
+    def _save_image_with_ffmpeg(*, image: PIL.Image.Image, path: Path) -> bool:
+        del image, path
+        return False
+
+    @staticmethod
+    def _image_format_for_path(path: Path) -> str | None:
+        suffix = path.suffix.lower()
+        if suffix in {".jpg", ".jpeg"}:
+            return "JPEG"
+        if suffix == ".png":
+            return "PNG"
+        if suffix == ".webp":
+            return "WEBP"
+        if suffix in {".tif", ".tiff"}:
+            return "TIFF"
+        if suffix == ".bmp":
+            return "BMP"
+        return None
 
     @staticmethod
     def _embed_metadata(metadata: dict, path: str | Path) -> None:
@@ -287,7 +327,11 @@ class ImageUtil:
             image.info["exif"] = exif_bytes
 
             # Save the image with metadata
-            image.save(path, exif=exif_bytes)
+            image_format = ImageUtil._image_format_for_path(Path(path))
+            if image_format is None:
+                image.save(path, exif=exif_bytes)
+            else:
+                image.save(path, format=image_format, exif=exif_bytes)
 
         except Exception as e:  # noqa: BLE001
             log.error(f"Error embedding EXIF metadata: {e}")

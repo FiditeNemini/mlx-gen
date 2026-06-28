@@ -178,7 +178,7 @@ def test_numpy_to_pil_rejects_non_finite_pixels(invalid_value):
 @pytest.mark.fast
 def test_save_image_raises_primary_save_failure(tmp_path):
     class FailingImage:
-        def save(self, path):
+        def save(self, path, **kwargs):
             raise OSError("disk full")
 
     with pytest.raises(OSError, match="disk full"):

@@ -5,6 +5,7 @@ from mlx import nn
 from mlx.utils import tree_flatten
 
 from mflux.models.common.config.config import Config
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.schedulers.flow_match_euler_discrete_scheduler import FlowMatchEulerDiscreteScheduler
 from mflux.models.common.vae.vae_util import VAEUtil
@@ -54,7 +55,7 @@ class FIBOEdit(nn.Module):
         prompt: str,
         image_path: Path | str,
         mask_path: Path | str | None = None,
-        num_inference_steps: int = 50,
+        num_inference_steps: int | None = None,
         height: int | ScaleFactor | None = None,
         width: int | ScaleFactor | None = None,
         guidance: float = 5.0,
@@ -69,6 +70,8 @@ class FIBOEdit(nn.Module):
             width=width,
             height=height,
         )
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(self.model_config, fallback=50)
         config_canvas_policy = CANVAS_POLICY_EXACT_RESIZE if auto_canvas else canvas_policy
 
         config = Config(

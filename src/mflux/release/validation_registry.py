@@ -3,21 +3,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mflux.lora_validation_registry import (
+    ERNIE_TURBO_Q8_ANIME_STYLE_LATENT_PROFILE_ID,
     ERNIE_TURBO_Q8_ANIME_STYLE_PROFILE_ID,
     FLUX2_KLEIN9B_Q8_CONSISTENCY_EDIT_PROFILE_ID,
+    FLUX2_KLEIN9B_Q8_MULTI_REFERENCE_MIGRATION_PROFILE_ID,
+    FLUX2_KLEIN_BASE4B_Q8_OUTPAINT_PROFILE_ID,
     QWEN2509_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
     QWEN2511_Q8_INPAINT_LIGHTNING_PROFILE_ID,
+    QWEN2511_Q8_MULTI_REFERENCE_MULTI_ANGLE_PROFILE_ID,
+    QWEN2511_Q8_OUTPAINT_MULTI_ANGLE_PROFILE_ID,
+    QWEN2511_Q8_REFRAME_MULTI_ANGLE_PROFILE_ID,
     QWEN2511_Q8_SINGLE_EDIT_MULTI_ANGLE_PROFILE_ID,
     QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
     QWEN_EDIT_Q8_GHIBLI_PROFILE_ID,
     QWEN_Q8_CONTROL_INPAINT_LIGHTNING_PROFILE_ID,
     QWEN_Q8_CONTROL_LIGHTNING_PROFILE_ID,
+    QWEN_Q8_LATENT_REALISM_PROFILE_ID,
+    QWEN_Q8_REALISM_PROFILE_ID,
     WAN_A14B_Q8_FOLLOWCAM_T2V_PROFILE_ID,
     WAN_A14B_Q8_LIGHTX2V_4STEP_I2V_PROFILE_ID,
     WAN_A14B_Q8_LIGHTX2V_4STEP_T2V_PROFILE_ID,
     WAN_A14B_Q8_ORBIT_I2V_PROFILE_ID,
     WAN_TI2V5B_Q8_CRUSHIT_I2V_PROFILE_ID,
     WAN_TI2V5B_Q8_HSTORIC_T2V_PROFILE_ID,
+    ZIMAGE_Q8_CHILDRENS_DRAWINGS_LATENT_PROFILE_ID,
     ZIMAGE_Q8_TECHNICALLYCOLOR_PROFILE_ID,
 )
 
@@ -56,6 +65,8 @@ QWEN_CONTROL_VALIDATION_DIR = "docs/assets/validation/qwen-control-2026-06-15"
 QWEN_CONTROL_INPAINT_VALIDATION_DIR = "docs/assets/validation/qwen-control-inpaint-2026-06-21"
 ZIMAGE_INPAINT_VALIDATION_DIR = "docs/assets/validation/zimage-inpaint-2026-06-21"
 ZIMAGE_INPAINT_PROFILE_ID = "zimage_inpaint_2026_06_21"
+ZIMAGE_LATENT_LORA_VALIDATION_DIR = "docs/assets/validation/zimage-latent-lora-2026-06-24"
+LORA_ROUTE_EXPANSION_VALIDATION_DIR = "docs/assets/validation/lora-route-expansion-2026-06-22"
 
 
 @dataclass(frozen=True)
@@ -184,8 +195,10 @@ def get_validation_profile(profile_id: str = I2I_EDIT_5X4_PROFILE_ID) -> Validat
 
 def get_model_validation(model: str, profile_id: str = I2I_EDIT_5X4_PROFILE_ID) -> ModelValidation:
     profile = get_validation_profile(profile_id)
-    model_keys = _candidate_model_keys(model)
-    records = tuple(record for record in profile.records if _normalize_model_key(record.model) in model_keys)
+    exact_keys, fallback_keys = _candidate_model_keys(model)
+    records = tuple(record for record in profile.records if _normalize_model_key(record.model) in exact_keys)
+    if not records and fallback_keys:
+        records = tuple(record for record in profile.records if _normalize_model_key(record.model) in fallback_keys)
     return ModelValidation(
         profile_id=profile.id,
         model=model,
@@ -204,18 +217,21 @@ def _normalize_model_key(model: str) -> str:
     return model.lower().replace("_", "-").rstrip("/")
 
 
-def _candidate_model_keys(model: str) -> set[str]:
-    keys = {_normalize_model_key(model)}
+def _candidate_model_keys(model: str) -> tuple[set[str], set[str]]:
+    exact_keys = {_normalize_model_key(model)}
+    fallback_keys: set[str] = set()
     try:
         from mflux.models.common.config import ModelConfig
         from mflux.utils.exceptions import ModelConfigError
 
         model_config = ModelConfig.from_name(model)
     except (ModelConfigError, ValueError):
-        return keys
+        return exact_keys, fallback_keys
 
-    keys.add(_normalize_model_key(model_config.model_name))
-    return keys
+    exact_keys.add(_normalize_model_key(model_config.model_name))
+    if model_config.base_model:
+        fallback_keys.add(_normalize_model_key(model_config.base_model))
+    return exact_keys, fallback_keys
 
 
 def _i2i_edit_profile() -> ValidationProfile:
@@ -417,6 +433,145 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
         ),
         _single_record_profile(
             _lora_record(
+                profile_id=QWEN_Q8_REALISM_PROFILE_ID,
+                model="AbstractFramework/qwen-image-8bit",
+                family="Qwen Image",
+                package_variant="q8 prepared",
+                public_task="text-to-image",
+                mode="text-only",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_text_realism_ab_contact_sheet.png",
+                source_images=(),
+                prompt=(
+                    "Realism portrait of a young woman of African descent standing in a sunlit park, arms crossed, "
+                    "dramatic natural lighting, three-quarter view, delicate jewelry, loose shoulder-length curls, "
+                    "natural skin texture, environmental portrait photography."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact base-Qwen q8 text-to-image proof. The same-seed realism adapter shifts the "
+                    "baseline into a tighter, more photographic portrait without route drift."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="Qwen Image q8 Realism LoRA Validation",
+            canonical_source=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_text_realism_ab_contact_sheet.png",
+            description="Exact text-to-image LoRA proof for base Qwen Image q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN_Q8_LATENT_REALISM_PROFILE_ID,
+                model="AbstractFramework/qwen-image-8bit",
+                family="Qwen Image",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="latent-img2img",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_latent_studio_cfg_auto_contact_sheet.png",
+                source_images=(f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_latent_source_portrait_illustration.png",),
+                prompt=(
+                    "Studio Realism, photorealistic portrait of the same young woman of African descent standing "
+                    "in the same sunlit park with arms crossed, the same loose shoulder-length curls, the same "
+                    "pendant necklace, and the same sleeveless taupe dress. Preserve the same pose, framing, and "
+                    "background layout. Natural skin texture, realistic hair strands, subtle outdoor depth of "
+                    "field, no text."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact base-Qwen q8 latent img2img proof. The accepted row uses "
+                    "prithivMLmods/Qwen-Image-Studio-Realism with the upstream-style blank negative-prompt CFG "
+                    "contract, preserves the same pose and park layout, and produces a visibly more photographic portrait."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="Qwen Image q8 Latent Studio Realism LoRA Validation",
+            canonical_source=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_latent_source_portrait_illustration.png",
+            description="Exact latent img2img LoRA proof for base Qwen Image q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2511_Q8_REFRAME_MULTI_ANGLE_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-2511-8bit",
+                family="Qwen Image Edit 2511",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen2511_q8_reframe_multi_angle_exact_contact_sheet.png",
+                source_images=("docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",),
+                prompt=(
+                    "Use the expanded canvas to reveal the same spaceship as a back view low-angle wide shot. "
+                    "<sks> back view low-angle shot wide shot. Keep the same silver starship identity, snowy canyon "
+                    "environment, and coherent wide framing. Show the rear engines and tail from behind, keep the "
+                    "scene sharp, and do not add a second ship, text, or border."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact q8 reframe A/B proof. The accepted row uses "
+                    "lightx2v/Qwen-Image-Edit-2511-Lightning plus fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA "
+                    "at scale 1.25, and it produces a materially stronger rear-view reframing than the Lightning-only baseline."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="Qwen Image Edit 2511 q8 Reframe Multi-Angle LoRA Validation",
+            canonical_source="docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",
+            description="Exact generative reframe LoRA proof for Qwen Image Edit 2511 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2511_Q8_OUTPAINT_MULTI_ANGLE_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-2511-8bit",
+                family="Qwen Image Edit 2511",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen2511_q8_outpaint_multiangle_exact_contact_sheet.png",
+                source_images=("docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",),
+                prompt=(
+                    "Outpaint this cropped starship image into a back view low-angle wide shot of the same spacecraft "
+                    "in the snowy canyon. <sks> back view low-angle shot wide shot. Keep the same silver starship "
+                    "identity, snowy canyon environment, and coherent wide framing. Reveal the rear engines and tail "
+                    "in the new space, keep it sharp, and do not add a second ship, text, or border."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact q8 outpaint A/B proof. The accepted row uses "
+                    "lightx2v/Qwen-Image-Edit-2511-Lightning plus fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA "
+                    "and produces a cleaner rear-view canvas extension than the Lightning-only baseline."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="Qwen Image Edit 2511 q8 Outpaint Multi-Angle LoRA Validation",
+            canonical_source="docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",
+            description="Exact canvas outpaint LoRA proof for Qwen Image Edit 2511 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=QWEN2511_Q8_MULTI_REFERENCE_MULTI_ANGLE_PROFILE_ID,
+                model="AbstractFramework/qwen-image-edit-2511-8bit",
+                family="Qwen Image Edit 2511",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="multi-reference",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen2511_q8_multi_reference_multiangle_exact_contact_sheet.png",
+                source_images=(
+                    "docs/assets/validation/qwen-edit-2511-parity-2026-06-06/qwen2511-source-pencil.png",
+                    "docs/assets/validation/qwen-edit-2511-parity-2026-06-06/qwen2511-source-crash.png",
+                ),
+                prompt=(
+                    "Use the first image as the graphite pencil sketch style reference and the second image as the "
+                    "hard-landing crash content reference. <sks> back view low-angle shot wide shot. Produce one "
+                    "coherent wide image of the same spaceship crashed in the snowy canyon from behind at a low "
+                    "camera angle: graphite pencil outlines on white paper, visible tilted hull, disturbed snow, "
+                    "broken ice chunks, scrape trail, and a thin smoke plume. Preserve the spaceship identity and "
+                    "canyon layout. No blur, no colored photo, no text."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact q8 multi-reference A/B proof. The accepted row uses "
+                    "lightx2v/Qwen-Image-Edit-2511-Lightning plus fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA "
+                    "and shifts the composition to a clearer rear-view while keeping the two-reference pencil-crash contract coherent."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="Qwen Image Edit 2511 q8 Multi-Reference Multi-Angle LoRA Validation",
+            canonical_source="docs/assets/validation/qwen-edit-2511-parity-2026-06-06/qwen2511-source-pencil.png",
+            description="Exact multi-reference LoRA proof for Qwen Image Edit 2511 q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
                 profile_id=QWEN2512_Q8_PIXEL_ART_PROFILE_ID,
                 model="AbstractFramework/qwen-image-2512-8bit",
                 family="Qwen Image 2512",
@@ -451,6 +606,32 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
         ),
         _single_record_profile(
             _lora_record(
+                profile_id=ZIMAGE_Q8_CHILDRENS_DRAWINGS_LATENT_PROFILE_ID,
+                model="AbstractFramework/z-image-turbo-8bit",
+                family="Z-Image Turbo",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="latent-img2img",
+                artifact_path=f"{ZIMAGE_LATENT_LORA_VALIDATION_DIR}/zimage_q8_latent_childdraw_contact_sheet.png",
+                source_images=(CANONICAL_SOURCE,),
+                prompt=(
+                    "Turn this same spaceship in the snow into a childs wax-crayon drawing on white paper. "
+                    "Preserve the exact camera angle, ship position, snowy canyon layout, and single ship "
+                    "silhouette. Use thick uneven crayon lines, simple childlike shapes, and flat hand-colored fills."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact q8 latent img2img A/B proof. The accepted row keeps the same snow-canyon "
+                    "layout and ship silhouette while the children's-drawing adapter adds a clear hand-drawn "
+                    "crayon treatment."
+                ),
+                evidence_date="2026-06-24",
+            ),
+            title="Z-Image Turbo q8 Latent Children's-Drawings LoRA Validation",
+            canonical_source=CANONICAL_SOURCE,
+            description="Exact latent img2img LoRA proof for Z-Image Turbo q8 with a same-source style-transfer A/B.",
+        ),
+        _single_record_profile(
+            _lora_record(
                 profile_id=FLUX2_KLEIN9B_Q8_CONSISTENCY_EDIT_PROFILE_ID,
                 model="AbstractFramework/flux.2-klein-9b-8bit",
                 family="FLUX.2 Klein 9B",
@@ -468,6 +649,56 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
         ),
         _single_record_profile(
             _lora_record(
+                profile_id=FLUX2_KLEIN9B_Q8_MULTI_REFERENCE_MIGRATION_PROFILE_ID,
+                model="AbstractFramework/flux.2-klein-9b-8bit",
+                family="FLUX.2 Klein 9B",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="multi-reference",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/flux2_klein9b_q8_multiref_exact_contact_sheet.png",
+                source_images=(
+                    "docs/assets/validation/i2i-edit-5x4-2026-06-05/reference-inputs/flux2_klein_9b_8bit_d_pencil_crash.png",
+                    "docs/assets/validation/i2i-edit-5x4-2026-06-05/reference-inputs/flux2_klein_9b_8bit_b_cinematic.png",
+                ),
+                prompt=(
+                    "Use the first image as the pencil-crash structure and the second image as the cinematic lighting "
+                    "and material reference. Produce one coherent image of the same hard-landed spaceship in the snow "
+                    "with graphite sketch lines, subtle metallic blue-hour shading, stable canyon layout, and visible "
+                    "crash debris. Preserve the same front-left crop and do not add extra ships or text."
+                ),
+                reviewer_notes=(
+                    "PASS on the exact FLUX.2 Klein 9B q8 multi-reference A/B proof. "
+                    "dx8152/Flux2-Klein-9B-Migration preserves the two-reference crash composition while producing a visibly stronger migration toward the intended sketched crash treatment."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="FLUX.2 Klein 9B q8 Multi-Reference Migration LoRA Validation",
+            canonical_source="docs/assets/validation/i2i-edit-5x4-2026-06-05/reference-inputs/flux2_klein_9b_8bit_d_pencil_crash.png",
+            description="Exact multi-reference LoRA proof for FLUX.2 Klein 9B q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=FLUX2_KLEIN_BASE4B_Q8_OUTPAINT_PROFILE_ID,
+                model="AbstractFramework/flux.2-klein-base-4b-8bit",
+                family="FLUX.2 Klein Base 4B",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="edit-reference",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/flux2_klein_base4b_q8_outpaint_route_exact_contact_sheet.png",
+                source_images=("docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",),
+                prompt="Fill the green spaces according to the image",
+                reviewer_notes=(
+                    "PASS on the exact FLUX.2 Klein base 4B q8 strict-outpaint proof. "
+                    "fal/flux-2-klein-4B-outpaint-lora applies cleanly after normalized key matching and improves the exact green-canvas outpaint route over the no-LoRA baseline at the accepted seed."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="FLUX.2 Klein Base 4B q8 Outpaint LoRA Validation",
+            canonical_source="docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",
+            description="Exact strict-outpaint LoRA proof for FLUX.2 Klein base 4B q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
                 profile_id=ERNIE_TURBO_Q8_ANIME_STYLE_PROFILE_ID,
                 model="AbstractFramework/ernie-image-turbo-8bit",
                 family="ERNIE Image Turbo",
@@ -482,6 +713,31 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
             title="ERNIE Image Turbo q8 Anime-Style LoRA Validation",
             canonical_source=f"{LORA_VALIDATION_DIR}/ernie_turbo_q8_anime_style_ab_contact_sheet.png",
             description="Exact text-to-image LoRA proof for ERNIE Image Turbo q8.",
+        ),
+        _single_record_profile(
+            _lora_record(
+                profile_id=ERNIE_TURBO_Q8_ANIME_STYLE_LATENT_PROFILE_ID,
+                model="AbstractFramework/ernie-image-turbo-8bit",
+                family="ERNIE Image Turbo",
+                package_variant="q8 prepared",
+                public_task="image-to-image",
+                mode="latent-img2img",
+                artifact_path=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/ernie_turbo_q8_latent_anime_style_ab_contact_sheet.png",
+                source_images=(f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_text_realism_no_lora.png",),
+                prompt=(
+                    "elusarca anime style, portrait of a young woman of African descent standing in a sunlit park, "
+                    "arms crossed, delicate jewelry, loose shoulder-length curls, preserve the same pose and park "
+                    "layout, polished anime illustration, crisp linework, soft luminous skin, cinematic outdoor light."
+                ),
+                reviewer_notes=(
+                    "PASS on the q8 latent img2img proof. The same-source same-seed pair preserves the portrait setup "
+                    "while the adapter pushes the face, hair, and shading into a clearly illustrated anime treatment."
+                ),
+                evidence_date="2026-06-22",
+            ),
+            title="ERNIE Image Turbo q8 Latent Anime-Style LoRA Validation",
+            canonical_source=f"{LORA_ROUTE_EXPANSION_VALIDATION_DIR}/qwen_q8_text_realism_no_lora.png",
+            description="Exact latent img2img LoRA proof for ERNIE Image Turbo q8.",
         ),
         _single_record_profile(
             _lora_record(

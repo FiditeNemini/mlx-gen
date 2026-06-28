@@ -34,3 +34,18 @@ class QwenVAE(nn.Module):
         latents = self.quant_conv(latents)
         latents = latents[:, :16, :, :, :]
         return (latents - QwenVAE.LATENTS_MEAN) / QwenVAE.LATENTS_STD
+
+    def encode_sampled(self, latents: mx.array, *, seed: int | None = None) -> mx.array:
+        if len(latents.shape) == 4:
+            latents = latents.reshape(latents.shape[0], latents.shape[1], 1, latents.shape[2], latents.shape[3])
+        moments = self.encoder(latents)
+        moments = self.quant_conv(moments)
+        mean = moments[:, :16, :, :, :]
+        logvar = mx.clip(moments[:, 16:, :, :, :], -30.0, 20.0)
+        std = mx.exp(0.5 * logvar)
+        if seed is None:
+            noise = mx.random.normal(shape=mean.shape).astype(mean.dtype)
+        else:
+            noise = mx.random.normal(shape=mean.shape, key=mx.random.key(seed)).astype(mean.dtype)
+        sampled = mean + std * noise
+        return (sampled - QwenVAE.LATENTS_MEAN) / QwenVAE.LATENTS_STD

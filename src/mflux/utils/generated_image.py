@@ -8,6 +8,7 @@ import PIL.Image
 
 from mflux.models.common.config import ModelConfig
 from mflux.models.flux.variants.concept_attention.attention_data import ConceptHeatmap
+from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.version_util import VersionUtil
 
 log = logging.getLogger(__name__)
@@ -257,6 +258,7 @@ class GeneratedImage:
             "redux_image_strengths": self._format_redux_strengths(),
             "prompt": self.prompt,
             "negative_prompt": self.negative_prompt if self.negative_prompt else None,
+            "runtime_memory": RuntimeMemory.snapshot("image-metadata").to_metadata(),
         }
         if self.extra_metadata:
             metadata.update(self.extra_metadata)

@@ -39,6 +39,32 @@ def test_linear_scheduler_initialization(test_config):
 
 
 @pytest.mark.fast
+def test_config_rejects_non_positive_steps():
+    with pytest.raises(ValueError, match="inference steps"):
+        Config(
+            model_config=ModelConfig.dev(),
+            num_inference_steps=0,
+            width=1024,
+            height=1024,
+            scheduler="linear",
+        )
+
+
+@pytest.mark.fast
+def test_flow_match_scheduler_rejects_single_step_config():
+    config = Config(
+        model_config=ModelConfig.from_name("qwen-image-edit-2511"),
+        num_inference_steps=1,
+        width=432,
+        height=240,
+        scheduler="flow_match_euler_discrete",
+    )
+
+    with pytest.raises(ValueError, match="at least 2"):
+        FlowMatchEulerDiscreteScheduler(config=config)
+
+
+@pytest.mark.fast
 def test_linear_scheduler_sigmas_property_no_shift(test_config):
     scheduler = LinearScheduler(config=test_config)
     expected_sigmas_from_mflux_0_9_0 = mx.array(

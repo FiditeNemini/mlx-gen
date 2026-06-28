@@ -45,9 +45,9 @@ full MLX port ahead of current Qwen, Z-Image, and Wan work.
 - MLX-Gen does not have a `BooguImagePipeline`, `BooguImageTurboPipeline`, or
   `BooguImageTransformer2DModel` route.
 - The current public image backlog already prefers finishing:
-  - planned item [0008](../planned/0008_qwen_edit_parity_expansion.md),
+  - completed item [0008](../completed/0008_qwen_edit_parity_expansion.md),
   - completed item [0043](../completed/0043_zimage_native_inpaint.md), and
-  - planned item [0007](../planned/0007_lora_capability_matrix_and_strict_application.md)
+  - completed item [0007](../completed/0007_lora_capability_matrix_and_strict_application.md)
     before adding another image family.
 - Proposed item [0011](0011_next_generation_image_edit_watchlist.md) preserves the broader
   next-generation image/edit watchlist; this item is the focused Boogu-specific follow-up.

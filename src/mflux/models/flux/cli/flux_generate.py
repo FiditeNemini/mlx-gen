@@ -23,6 +23,8 @@ def main():
     if args.guidance is None:
         args.guidance = ui_defaults.GUIDANCE_SCALE
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     flux = Flux1(
         model_config=ModelConfig.from_name(model_name=args.model, base_model=args.base_model),

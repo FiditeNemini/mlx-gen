@@ -69,6 +69,30 @@ class TestFlux2LoRAMapping:
 
         assert self._matched_keys(keys) == set(keys)
 
+    def test_matches_cleaned_base_model_double_block_keys_via_loader_aliases(self):
+        keys = [
+            "double_blocks.0.img_attn.qkv.lora_A.weight",
+            "double_blocks.0.img_attn.qkv.lora_B.weight",
+            "double_blocks.0.txt_attn.proj.lora_A.weight",
+            "double_blocks.0.txt_attn.proj.lora_B.weight",
+        ]
+
+        assert self._matched_keys_via_loader_mappings(keys) == set(keys)
+
+    def test_matches_cleaned_base_model_global_aliases_via_loader_aliases(self):
+        keys = [
+            "img_in.lora_A.weight",
+            "img_in.lora_B.weight",
+            "txt_in.lora_A.weight",
+            "txt_in.lora_B.weight",
+            "time_in.in_layer.lora_A.weight",
+            "time_in.in_layer.lora_B.weight",
+            "time_in.out_layer.lora_A.weight",
+            "time_in.out_layer.lora_B.weight",
+        ]
+
+        assert self._matched_keys_via_loader_mappings(keys) == set(keys)
+
     def test_matches_flux2_dev_diffusion_model_global_aliases(self):
         keys = [
             "diffusion_model.img_in.lora_A.weight",
@@ -101,5 +125,15 @@ class TestFlux2LoRAMapping:
                         break
                 if key in matched_keys:
                     break
+
+        return matched_keys
+
+    def _matched_keys_via_loader_mappings(self, keys: list[str]) -> set[str]:
+        matched_keys: set[str] = set()
+        mappings = LoRALoader._build_pattern_mappings(Flux2LoRAMapping.get_mapping())
+
+        for key in keys:
+            if any(LoRALoader._match_pattern(key, mapping.source_pattern) is not None for mapping in mappings):
+                matched_keys.add(key)
 
         return matched_keys

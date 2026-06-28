@@ -8,7 +8,8 @@ generative reframe, and outpaint.
 
 For the current model-by-model proof assets, use [Image Edit Capabilities](edit-capabilities.md).
 That page answers "which exact model or package passed visual QA?" This page answers "what kind of
-edit should I expect from each mode?"
+edit should I expect from each mode?" For the current Qwen-specific route map, use
+[Qwen route matrix](qwen-route-matrix.md).
 
 ## Quick Chooser
 
@@ -128,7 +129,8 @@ Current exact public proof exists for:
 
 See [Image Edit Capabilities](edit-capabilities.md) for the accepted contact sheets and command
 logs. For a direct comparison between Qwen masked edit, Qwen structured control, and Qwen
-base control-inpaint, see [Qwen localized editing](qwen-localized-editing.md).
+base control-inpaint, see [Qwen localized editing](qwen-localized-editing.md) and
+[Qwen route matrix](qwen-route-matrix.md).
 
 Example:
 
@@ -169,7 +171,8 @@ proof row is `AbstractFramework/qwen-image-8bit` on `qwen.control`, and the rout
 InstantX union ControlNet sidecar that `mlxgen generate` injects automatically for that row. See
 [Image Edit Capabilities](edit-capabilities.md) for the accepted contact sheet and command log. If
 you want the plain-language difference between Qwen masked edit, Qwen structured control, and Qwen
-base control-inpaint, see [Qwen localized editing](qwen-localized-editing.md).
+base control-inpaint, see [Qwen localized editing](qwen-localized-editing.md) and
+[Qwen route matrix](qwen-route-matrix.md).
 
 Example:
 

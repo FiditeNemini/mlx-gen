@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import gc
+import json
 import logging
+import shutil
+import subprocess
+import sys
+from contextlib import suppress
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -34,6 +40,19 @@ class VideoHealthReport:
     @property
     def is_temporally_static(self) -> bool:
         return self.mean_temporal_delta is not None and self.mean_temporal_delta <= VideoHealth.STATIC_DELTA_THRESHOLD
+
+    def to_metadata(self) -> dict:
+        return {
+            "source": self.source,
+            "frame_count": self.frame_count,
+            "width": self.width,
+            "height": self.height,
+            "fps": self.fps,
+            "luma_min": self.luma_min,
+            "luma_max": self.luma_max,
+            "luma_mean": self.luma_mean,
+            "mean_temporal_delta": self.mean_temporal_delta,
+        }
 
 
 class VideoHealthError(ValueError):
@@ -93,25 +112,48 @@ class VideoHealth:
         expected_fps: int | float | None = None,
         strict_visual: bool = True,
     ) -> VideoHealthReport:
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
+        try:
+            return VideoHealth._validate_file(
+                path,
+                expected_width=expected_width,
+                expected_height=expected_height,
+                expected_frames=expected_frames,
+                expected_fps=expected_fps,
+                strict_visual=strict_visual,
+            )
+        finally:
+            if gc_was_enabled:
+                gc.enable()
+
+    @staticmethod
+    def _validate_file(
+        path: str | Path,
+        *,
+        expected_width: int | None = None,
+        expected_height: int | None = None,
+        expected_frames: int | None = None,
+        expected_fps: int | float | None = None,
+        strict_visual: bool = True,
+    ) -> VideoHealthReport:
         file_path = Path(path)
         if not file_path.exists():
             raise VideoHealthError(f"Video health check failed: {file_path} does not exist.")
         if file_path.stat().st_size <= 0:
             raise VideoHealthError(f"Video health check failed: {file_path} is empty.")
 
-        import av
+        metadata = VideoHealth._inspect_file(file_path)
+        if metadata is None:
+            raise VideoHealthError(f"Video health check failed: could not inspect {file_path}.")
+        width, height, fps, stream_frame_count = metadata
 
-        with av.open(str(file_path)) as container:
-            if len(container.streams.video) == 0:
-                raise VideoHealthError(f"Video health check failed: {file_path} has no video stream.")
-            video_stream = container.streams.video[0]
-            width = int(video_stream.width)
-            height = int(video_stream.height)
-            fps = VideoHealth._rate_to_float(video_stream.average_rate or video_stream.base_rate)
-            stats = _LumaStats()
-            for frame in container.decode(video_stream):
-                stats.add(VideoHealth._luma_array(PIL.Image.fromarray(frame.to_ndarray(format="rgb24"))))
-
+        stats = VideoHealth._decode_file_luma_stats(file_path)
+        if stats is None:
+            raise VideoHealthError(
+                f"Video health check failed: could not decode frames safely in a child process for {file_path}."
+            )
         if stats.frame_count == 0:
             raise VideoHealthError(f"Video health check failed: {file_path} contains no decodable frames.")
         if expected_width is not None and width != expected_width:
@@ -158,14 +200,180 @@ class VideoHealth:
 
     @staticmethod
     def _luma_array(frame: PIL.Image.Image) -> np.ndarray:
-        rgb = np.array(frame.convert("RGB"), dtype=np.float32)
+        rgb_image = frame.convert("RGB")
+        rgb = np.asarray(rgb_image.getdata(), dtype=np.float32).reshape(rgb_image.height, rgb_image.width, 3)
+        return VideoHealth._luma_rgb_array(rgb)
+
+    @staticmethod
+    def _luma_rgb_array(rgb: np.ndarray) -> np.ndarray:
+        if rgb.dtype != np.float32:
+            rgb = np.asarray(rgb, dtype=np.float32)
         return 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+
+    @staticmethod
+    def _decode_file_luma_stats(file_path: Path) -> _LumaStats | None:
+        script = r"""
+import json
+import sys
+
+import av
+import numpy as np
+
+path = sys.argv[1]
+frame_count = 0
+luma_min = float("inf")
+luma_max = float("-inf")
+luma_mean_sum = 0.0
+temporal_delta_sum = 0.0
+temporal_delta_count = 0
+previous_luma = None
+with av.open(path) as container:
+    video_stream = container.streams.video[0]
+    try:
+        video_stream.thread_type = "NONE"
+    except Exception:
+        pass
+    for frame in container.decode(video_stream):
+        rgb = np.asarray(frame.to_ndarray(format="rgb24"), dtype=np.float32)
+        luma = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+        frame_count += 1
+        luma_min = min(luma_min, float(np.min(luma)))
+        luma_max = max(luma_max, float(np.max(luma)))
+        luma_mean_sum += float(np.mean(luma))
+        if previous_luma is not None:
+            temporal_delta_sum += float(np.mean(np.abs(luma - previous_luma)))
+            temporal_delta_count += 1
+        previous_luma = luma
+print(json.dumps({
+    "frame_count": frame_count,
+    "luma_min": luma_min,
+    "luma_max": luma_max,
+    "luma_mean_sum": luma_mean_sum,
+    "temporal_delta_sum": temporal_delta_sum,
+    "temporal_delta_count": temporal_delta_count,
+}))
+"""
+        try:
+            result = VideoHealth._run_subprocess_with_gc_suspended(
+                [sys.executable, "-c", script, str(file_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.warning("Video health child decoder failed for %s: %s", file_path, exc)
+            return None
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            if stderr:
+                log.warning("Video health child decoder exited with %s for %s: %s", result.returncode, file_path, stderr)
+            return None
+        try:
+            payload = json.loads(result.stdout)
+            return _LumaStats(
+                frame_count=int(payload["frame_count"]),
+                luma_min=float(payload["luma_min"]),
+                luma_max=float(payload["luma_max"]),
+                luma_mean_sum=float(payload["luma_mean_sum"]),
+                temporal_delta_sum=float(payload["temporal_delta_sum"]),
+                temporal_delta_count=int(payload["temporal_delta_count"]),
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            log.warning("Video health child decoder returned invalid stats for %s: %s", file_path, exc)
+            return None
+
+    @staticmethod
+    def _inspect_file(file_path: Path) -> tuple[int, int, float | None, int | None] | None:
+        ffprobe_path = shutil.which("ffprobe")
+        if ffprobe_path is not None:
+            command = [
+                ffprobe_path,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height,avg_frame_rate,r_frame_rate,nb_frames,duration",
+                "-of",
+                "json",
+                str(file_path),
+            ]
+            result = VideoHealth._run_subprocess_with_gc_suspended(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                with suppress(json.JSONDecodeError, KeyError, TypeError, ValueError, StopIteration):
+                    stream = json.loads(result.stdout)["streams"][0]
+                    fps = VideoHealth._rate_to_float(VideoHealth._fraction_from_string(stream.get("avg_frame_rate")))
+                    if fps is None or fps <= 0:
+                        fps = VideoHealth._rate_to_float(VideoHealth._fraction_from_string(stream.get("r_frame_rate")))
+                    frame_count = VideoHealth._optional_int(stream.get("nb_frames"))
+                    duration = VideoHealth._optional_float(stream.get("duration"))
+                    if frame_count is None and duration is not None and fps is not None:
+                        frame_count = max(1, int(round(duration * fps)))
+                    return int(stream["width"]), int(stream["height"]), fps, frame_count
+
+        return VideoHealth._inspect_file_pyav(file_path)
+
+    @staticmethod
+    def _inspect_file_pyav(file_path: Path) -> tuple[int, int, float | None, int | None] | None:
+        try:
+            import av
+
+            with av.open(str(file_path)) as container:
+                if len(container.streams.video) == 0:
+                    return None
+                video_stream = container.streams.video[0]
+                fps = VideoHealth._rate_to_float(video_stream.average_rate or video_stream.base_rate)
+                stream_frame_count = int(video_stream.frames) if video_stream.frames else None
+                return int(video_stream.width), int(video_stream.height), fps, stream_frame_count
+        except (ImportError, OSError, RuntimeError, TypeError, ValueError, AttributeError):
+            return None
+
+    @staticmethod
+    def _fraction_from_string(value: str | None) -> Fraction | None:
+        if not value or value == "0/0":
+            return None
+        with suppress(ZeroDivisionError, ValueError):
+            return Fraction(value)
+        return None
+
+    @staticmethod
+    def _optional_int(value) -> int | None:
+        if value in (None, "N/A"):
+            return None
+        with suppress(TypeError, ValueError):
+            return int(value)
+        return None
+
+    @staticmethod
+    def _optional_float(value) -> float | None:
+        if value in (None, "N/A"):
+            return None
+        with suppress(TypeError, ValueError):
+            return float(value)
+        return None
 
     @staticmethod
     def _rate_to_float(rate: Fraction | int | float | None) -> float | None:
         if rate is None:
             return None
         return float(rate)
+
+    @staticmethod
+    def _run_subprocess_with_gc_suspended(*args, **kwargs) -> subprocess.CompletedProcess:
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
+        try:
+            return subprocess.run(*args, **kwargs)
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
 
 @dataclass
@@ -177,6 +385,17 @@ class _LumaStats:
     temporal_delta_sum: float = 0.0
     temporal_delta_count: int = 0
     previous_luma: np.ndarray | None = None
+
+    @staticmethod
+    def neutral(frame_count: int) -> "_LumaStats":
+        return _LumaStats(
+            frame_count=frame_count,
+            luma_min=0.0,
+            luma_max=255.0,
+            luma_mean_sum=127.5 * frame_count,
+            temporal_delta_sum=0.0,
+            temporal_delta_count=0,
+        )
 
     def add(self, luma: np.ndarray) -> None:
         self.frame_count += 1

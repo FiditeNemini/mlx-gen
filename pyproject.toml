@@ -14,7 +14,7 @@ source-exclude = [
 
 [project]
 name = "mlx-gen"
-version = "0.18.22"
+version = "0.18.23"
 description = "Generative image and video model runtimes for MLX."
 readme = "README.md"
 keywords = ["flux", "ai", "ml", "transformers", "mlx", "huggingface", "apple-silicon", "diffusers", "qwen", "qwen-image", "seedvr2", "z-image"]
@@ -46,7 +46,6 @@ dependencies = [
     "torch>=2.8.0,<3.0; python_version>='3.13'",
     "tqdm>=4.66.5,<5.0",
     "transformers>=5.0.0,<6.0",
-    "twine>=6.1.0,<7.0",
     "urllib3>=2.6.0",
     "protobuf>=4.25.0,<8.0",
 ]
@@ -69,6 +68,10 @@ dev = [
     "pytest-timer>=1.0,<2.0",
     "mlx==0.31.0; sys_platform=='darwin'",
     "mlx[cuda13]==0.30.3; sys_platform=='linux'",
+    "twine>=6.1.0,<7.0",
+]
+release = [
+    "twine>=6.1.0,<7.0",
 ]
 
 [project.urls]

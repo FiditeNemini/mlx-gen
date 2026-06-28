@@ -443,6 +443,29 @@ def test_auto_seeds_arg(mflux_generate_parser, mflux_generate_minimal_model_argv
 
 
 @pytest.mark.fast
+def test_low_ram_multi_seed_prompt_file_rejected(mflux_generate_parser, temp_dir):
+    prompt_file = temp_dir / "prompt.txt"
+    prompt_file.write_text("meaning of life")
+
+    with patch(
+        "sys.argv",
+        [
+            "mflux-generate",
+            "--prompt-file",
+            str(prompt_file),
+            "--model",
+            "dev",
+            "--seed",
+            "1",
+            "2",
+            "--low-ram",
+        ],
+    ):
+        with pytest.raises(SystemExit):
+            mflux_generate_parser.parse_args()
+
+
+@pytest.mark.fast
 def test_steps_arg(mflux_generate_parser, mflux_generate_minimal_argv, base_metadata_dict, temp_dir):  # fmt: off
     metadata_file = temp_dir / "steps.json"
     with metadata_file.open("wt") as m:
@@ -468,6 +491,13 @@ def test_steps_arg(mflux_generate_parser, mflux_generate_minimal_argv, base_meta
     with patch('sys.argv', mflux_generate_minimal_argv + ['--steps', '12', '--config-from-metadata', metadata_file.as_posix()]):  # fmt: off
         args = mflux_generate_parser.parse_args()
         assert args.steps == 12
+
+
+@pytest.mark.fast
+def test_steps_arg_rejects_non_positive_value(mflux_generate_parser, mflux_generate_minimal_argv):
+    with patch("sys.argv", mflux_generate_minimal_argv + ["--steps", "0"]):
+        with pytest.raises(SystemExit):
+            mflux_generate_parser.parse_args()
 
 
 @pytest.mark.fast
@@ -1185,6 +1215,13 @@ def test_fibo_args(mflux_fibo_parser, mflux_fibo_minimal_argv):
     with patch("sys.argv", mflux_fibo_minimal_argv + ["--no-progress"]):
         args = mflux_fibo_parser.parse_args()
         assert args.progress is False
+
+
+@pytest.mark.fast
+def test_fibo_low_ram_multi_seed_rejected(mflux_fibo_parser, mflux_fibo_minimal_argv):
+    with patch("sys.argv", mflux_fibo_minimal_argv + ["--seed", "1", "2", "--low-ram"]):
+        with pytest.raises(SystemExit):
+            mflux_fibo_parser.parse_args()
 
 
 @pytest.mark.fast

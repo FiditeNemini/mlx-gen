@@ -1,13 +1,14 @@
+import json
 import logging
 import shutil
 import subprocess
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from fractions import Fraction
 from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 import mlx.core as mx
 import numpy as np
@@ -62,13 +63,15 @@ class VideoStreamWriter:
         height: int,
         overwrite: bool = True,
     ):
-        import av
-
         self.file_path = ImageUtil.resolve_output_path(path=path, overwrite=overwrite)
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.fps = fps
         self.width = width
         self.height = height
         self._should_replace = False
+        self._process = None
+        self.container = None
+        self.stream = None
 
         with NamedTemporaryFile(
             suffix=self.file_path.suffix or ".mp4",
@@ -78,43 +81,83 @@ class VideoStreamWriter:
         ) as temp_file:
             self.temp_path = Path(temp_file.name)
 
-        self.container = av.open(str(self.temp_path), mode="w", options={"movflags": "+faststart"})
-        self.stream = self.container.add_stream("libx264", rate=VideoUtil._fps_to_rate(fps))
-        self.stream.width = width
-        self.stream.height = height
-        self.stream.pix_fmt = "yuv420p"
-        self.stream.options = {"crf": "18", "preset": "medium"}
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is not None:
+            command = [
+                ffmpeg_path,
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-s",
+                f"{width}x{height}",
+                "-r",
+                str(float(fps)),
+                "-i",
+                "pipe:0",
+                "-an",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-crf",
+                "18",
+                "-preset",
+                "medium",
+                "-movflags",
+                "+faststart",
+                str(self.temp_path),
+            ]
+            self._process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        else:
+            import av
+
+            self.container = av.open(str(self.temp_path), mode="w", options={"movflags": "+faststart"})
+            self.stream = self.container.add_stream("libx264", rate=VideoUtil._fps_to_rate(fps))
+            self.stream.width = width
+            self.stream.height = height
+            self.stream.pix_fmt = "yuv420p"
+            self.stream.options = {"crf": "18", "preset": "medium"}
         self._closed = False
 
     def write_frames(self, frames: list[PIL.Image.Image]) -> None:
-        import av
-
         for frame in frames:
             rgb = frame.convert("RGB")
             if rgb.size != (self.width, self.height):
                 rgb = rgb.resize((self.width, self.height), PIL.Image.Resampling.LANCZOS)
-            video_frame = av.VideoFrame.from_ndarray(np.array(rgb), format="rgb24")
-            for packet in self.stream.encode(video_frame):
-                self.container.mux(packet)
+            self._write_rgb_array(VideoUtil._pil_rgb_to_array(rgb))
 
     def write_frame_arrays(self, frames: np.ndarray) -> None:
-        import av
-
         for frame in frames:
             if frame.shape[1] != self.width or frame.shape[0] != self.height:
                 rgb = PIL.Image.fromarray(frame, mode="RGB").resize((self.width, self.height), PIL.Image.Resampling.LANCZOS)
                 frame = np.array(rgb, dtype=np.uint8)
-            video_frame = av.VideoFrame.from_ndarray(frame, format="rgb24")
-            for packet in self.stream.encode(video_frame):
-                self.container.mux(packet)
+            self._write_rgb_array(frame)
 
     def close(self) -> Path:
         if self._closed:
             return self.file_path
         try:
-            for packet in self.stream.encode():
-                self.container.mux(packet)
-            self.container.close()
+            if self._process is not None:
+                process = self._process
+                self._process = None
+                assert process.stdin is not None
+                process.stdin.close()
+                stderr = process.stderr.read() if process.stderr is not None else b""
+                if process.stderr is not None:
+                    process.stderr.close()
+                return_code = process.wait()
+                if return_code != 0:
+                    message = stderr.decode("utf-8", errors="replace").strip()
+                    raise RuntimeError(f"ffmpeg video encode failed with code {return_code}: {message}")
+            else:
+                assert self.stream is not None and self.container is not None
+                for packet in self.stream.encode():
+                    self.container.mux(packet)
+                self.container.close()
             self._should_replace = True
             self._closed = True
         finally:
@@ -127,8 +170,19 @@ class VideoStreamWriter:
     def abort(self) -> None:
         if self._closed:
             return
-        with suppress(OSError, RuntimeError, ValueError):
-            self.container.close()
+        if self._process is not None:
+            process = self._process
+            self._process = None
+            with suppress(OSError, RuntimeError, ValueError):
+                if process.stdin is not None:
+                    process.stdin.close()
+                if process.stderr is not None:
+                    process.stderr.close()
+                process.kill()
+                process.wait()
+        elif self.container is not None:
+            with suppress(OSError, RuntimeError, ValueError):
+                self.container.close()
         self._closed = True
         if self.temp_path.exists():
             self.temp_path.unlink()
@@ -141,6 +195,20 @@ class VideoStreamWriter:
             self.close()
         else:
             self.abort()
+
+    def _write_rgb_array(self, frame: np.ndarray) -> None:
+        frame = np.ascontiguousarray(frame, dtype=np.uint8)
+        if self._process is not None:
+            assert self._process.stdin is not None
+            self._process.stdin.write(frame.tobytes())
+            return
+
+        import av
+
+        assert self.stream is not None and self.container is not None
+        video_frame = av.VideoFrame.from_ndarray(frame, format="rgb24")
+        for packet in self.stream.encode(video_frame):
+            self.container.mux(packet)
 
 
 class VideoUtil:
@@ -289,11 +357,25 @@ class VideoUtil:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         extra_metadata: dict | None = None,
+        materialize_frames: bool = True,
     ):
         from mflux.utils.generated_video import GeneratedVideo
 
-        frames = VideoUtil._latents_to_frames(decoded_latents)
-        first_frame = frames[0]
+        if materialize_frames:
+            frames = VideoUtil._latents_to_frames(decoded_latents)
+            height = frames[0].height
+            width = frames[0].width
+            frame_batches_factory = None
+            frame_count = len(frames)
+        else:
+            frames = None
+
+            def frame_batches_factory() -> Iterable[list[PIL.Image.Image]]:
+                return VideoUtil._latents_to_frame_batches(decoded_latents)
+
+            frame_count = int(decoded_latents.shape[2])
+            height = int(decoded_latents.shape[3])
+            width = int(decoded_latents.shape[4])
         return GeneratedVideo(
             frames=frames,
             fps=fps,
@@ -308,8 +390,8 @@ class VideoUtil:
             precision=ModelConfig.precision,
             quantization=quantization,
             generation_time=generation_time,
-            height=first_frame.height,
-            width=first_frame.width,
+            height=height,
+            width=width,
             task=task,
             image_path=image_path,
             video_path=video_path,
@@ -321,6 +403,70 @@ class VideoUtil:
             lora_paths=lora_paths,
             lora_scales=lora_scales,
             extra_metadata=extra_metadata,
+            frame_batches_factory=frame_batches_factory,
+            frame_count=frame_count,
+        )
+
+    @staticmethod
+    def to_video_from_frame_batches(
+        frame_batches_factory: Callable[[], Iterable[list[PIL.Image.Image]]],
+        fps: int | float,
+        model_config: ModelConfig,
+        seed: int,
+        prompt: str,
+        steps: int,
+        guidance: float | None,
+        quantization: int,
+        generation_time: float,
+        height: int,
+        width: int,
+        frame_count: int,
+        flow_shift: float | None = None,
+        solver: str | None = None,
+        guidance_2: float | None = None,
+        task: str = "text-to-video",
+        image_path: str | Path | None = None,
+        video_path: str | Path | None = None,
+        negative_prompt: str | None = None,
+        source_width: int | None = None,
+        source_height: int | None = None,
+        requested_width: int | None = None,
+        requested_height: int | None = None,
+        lora_paths: list[str] | None = None,
+        lora_scales: list[float] | None = None,
+        extra_metadata: dict | None = None,
+    ):
+        from mflux.utils.generated_video import GeneratedVideo
+
+        return GeneratedVideo(
+            frames=None,
+            fps=fps,
+            model_config=model_config,
+            seed=seed,
+            prompt=prompt,
+            steps=steps,
+            guidance=guidance,
+            flow_shift=flow_shift,
+            solver=solver,
+            guidance_2=guidance_2,
+            precision=ModelConfig.precision,
+            quantization=quantization,
+            generation_time=generation_time,
+            height=height,
+            width=width,
+            task=task,
+            image_path=image_path,
+            video_path=video_path,
+            negative_prompt=negative_prompt,
+            source_width=source_width,
+            source_height=source_height,
+            requested_width=requested_width,
+            requested_height=requested_height,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+            extra_metadata=extra_metadata,
+            frame_batches_factory=frame_batches_factory,
+            frame_count=frame_count,
         )
 
     @staticmethod
@@ -365,8 +511,8 @@ class VideoUtil:
         if metadata is not None and validate_health:
             metadata = dict(metadata)
             metadata["video_health"] = {
-                "frames": asdict(frame_health),
-                "file": asdict(file_health),
+                "frames": frame_health.to_metadata(),
+                "file": file_health.to_metadata(),
             }
 
         VideoUtil._save_metadata(
@@ -413,13 +559,14 @@ class VideoUtil:
                 file_path,
                 expected_width=width,
                 expected_height=height,
+                expected_frames=VideoUtil._metadata_frame_count(metadata),
                 expected_fps=fps,
                 strict_visual=True,
             )
             if metadata is not None:
                 metadata = dict(metadata)
                 metadata["video_health"] = {
-                    "file": asdict(file_health),
+                    "file": file_health.to_metadata(),
                 }
 
         VideoUtil._save_metadata(
@@ -435,6 +582,39 @@ class VideoUtil:
     def extract_frame(path: str | Path, index: int = 0) -> PIL.Image.Image:
         if index < 0:
             raise ValueError("Frame index must be greater than or equal to zero.")
+
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is not None:
+            source_info = VideoUtil.inspect_video(path)
+            command = [
+                ffmpeg_path,
+                "-v",
+                "error",
+                "-i",
+                str(path),
+                "-vf",
+                f"select=eq(n\\,{index})",
+                "-frames:v",
+                "1",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "pipe:1",
+            ]
+            result = subprocess.run(command, check=False, capture_output=True)
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace").strip()
+                raise RuntimeError(f"Could not read frame {index} from {path}: {stderr or result.returncode}")
+            frame_size = source_info.source_width * source_info.source_height * 3
+            if len(result.stdout) != frame_size:
+                raise RuntimeError(f"Could not read frame {index} from {path}")
+            frame = np.frombuffer(result.stdout, dtype=np.uint8).reshape(
+                source_info.source_height,
+                source_info.source_width,
+                3,
+            )
+            return PIL.Image.fromarray(frame.copy())
 
         import av
 
@@ -459,37 +639,24 @@ class VideoUtil:
         if max_frames is not None and max_frames <= 0:
             raise ValueError("max_frames must be greater than zero when provided.")
 
-        import av
-
         file_path = Path(path)
-        with av.open(str(file_path)) as container:
-            if len(container.streams.video) == 0:
-                raise RuntimeError(f"Could not find a video stream in {path}")
+        source_info = VideoUtil.inspect_video(file_path)
+        fps = source_info.fps
+        source_width = source_info.source_width
+        source_height = source_info.source_height
+        source_frame_count = source_info.source_frame_count
+        source_duration_seconds = source_info.source_duration_seconds
+        audio_present = source_info.audio_present
 
-            video_stream = container.streams.video[0]
-            fps = VideoUtil._rate_to_float(video_stream.average_rate or video_stream.base_rate)
-            if fps is None or fps <= 0:
-                raise RuntimeError(f"Could not determine a valid video fps for {path}")
-
-            source_width = int(video_stream.width)
-            source_height = int(video_stream.height)
-            source_frame_count = int(video_stream.frames) if video_stream.frames else None
-            source_duration_seconds = VideoUtil._duration_seconds(container=container, video_stream=video_stream, fps=fps, source_frame_count=source_frame_count)  # fmt: off
-            audio_present = len(container.streams.audio) > 0
-
-            frames: list[PIL.Image.Image] = []
-            clip_start_frame: int | None = None
-            for frame_index, frame in enumerate(container.decode(video_stream)):
-                frame_time = frame.time
-                if frame_time is None:
-                    frame_time = frame_index / fps
-                if frame_time + 1e-9 < start_seconds:
-                    continue
-                if clip_start_frame is None:
-                    clip_start_frame = frame_index
-                frames.append(PIL.Image.fromarray(frame.to_ndarray(format="rgb24")))
-                if max_frames is not None and len(frames) >= max_frames:
-                    break
+        frame_arrays, clip_start_frame = VideoUtil._read_video_clip_frame_arrays(
+            file_path=file_path,
+            start_seconds=start_seconds,
+            max_frames=max_frames,
+            fps=fps,
+            width=source_width,
+            height=source_height,
+        )
+        frames = [PIL.Image.fromarray(frame) for frame in frame_arrays]
 
         if not frames:
             raise RuntimeError(f"Could not decode any video frames from {path}")
@@ -502,12 +669,80 @@ class VideoUtil:
             source_frame_count=source_frame_count,
             source_duration_seconds=source_duration_seconds,
             audio_present=audio_present,
-            clip_start_frame=clip_start_frame or 0,
+            clip_start_frame=clip_start_frame,
             clip_frame_count=len(frames),
         )
 
     @staticmethod
+    def _read_video_clip_frame_arrays(
+        *,
+        file_path: Path,
+        start_seconds: float,
+        max_frames: int | None,
+        fps: float,
+        width: int,
+        height: int,
+    ) -> tuple[list[np.ndarray], int]:
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            return VideoUtil._read_video_clip_frame_arrays_pyav(
+                file_path=file_path,
+                start_seconds=start_seconds,
+                max_frames=max_frames,
+                fps=fps,
+            )
+
+        command = [ffmpeg_path, "-v", "error"]
+        if start_seconds > 0:
+            command.extend(["-ss", f"{start_seconds:.9f}"])
+        command.extend(["-i", str(file_path)])
+        if max_frames is not None:
+            command.extend(["-frames:v", str(max_frames)])
+        command.extend(["-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"])
+        result = subprocess.run(command, check=False, capture_output=True)
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"Could not decode video frames from {file_path}: {stderr or result.returncode}")
+        frame_size = width * height * 3
+        if frame_size <= 0 or len(result.stdout) % frame_size != 0:
+            raise RuntimeError(f"Decoded video frame payload from {file_path} has an unexpected size.")
+        video_np = np.frombuffer(result.stdout, dtype=np.uint8).reshape(-1, height, width, 3)
+        clip_start_frame = int(round(start_seconds * fps))
+        return [frame.copy() for frame in video_np], clip_start_frame
+
+    @staticmethod
+    def _read_video_clip_frame_arrays_pyav(
+        *,
+        file_path: Path,
+        start_seconds: float,
+        max_frames: int | None,
+        fps: float,
+    ) -> tuple[list[np.ndarray], int]:
+        import av
+
+        frames: list[np.ndarray] = []
+        clip_start_frame: int | None = None
+        with av.open(str(file_path)) as container:
+            video_stream = container.streams.video[0]
+            for frame_index, frame in enumerate(container.decode(video_stream)):
+                frame_time = frame.time
+                if frame_time is None:
+                    frame_time = frame_index / fps
+                if frame_time + 1e-9 < start_seconds:
+                    continue
+                if clip_start_frame is None:
+                    clip_start_frame = frame_index
+                frames.append(frame.to_ndarray(format="rgb24").copy())
+                if max_frames is not None and len(frames) >= max_frames:
+                    break
+        return frames, clip_start_frame or 0
+
+    @staticmethod
     def inspect_video(path: str | Path) -> SourceVideoInfo:
+        ffprobe_info = VideoUtil._inspect_video_ffprobe(Path(path))
+        if ffprobe_info is not None:
+            return ffprobe_info
+
         import av
 
         file_path = Path(path)
@@ -539,6 +774,77 @@ class VideoUtil:
             source_duration_seconds=source_duration_seconds,
             audio_present=audio_present,
         )
+
+    @staticmethod
+    def _inspect_video_ffprobe(path: Path) -> SourceVideoInfo | None:
+        ffprobe_path = shutil.which("ffprobe")
+        if ffprobe_path is None:
+            return None
+        command = [
+            ffprobe_path,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-show_entries",
+            "stream=index,codec_type,width,height,avg_frame_rate,r_frame_rate,nb_frames,duration",
+            "-of",
+            "json",
+            str(path),
+        ]
+        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        try:
+            payload = json.loads(result.stdout)
+            streams = payload.get("streams", [])
+            video_stream = next(stream for stream in streams if stream.get("codec_type") == "video")
+            audio_present = any(stream.get("codec_type") == "audio" for stream in streams)
+            fps = VideoUtil._rate_to_float(VideoUtil._fraction_from_string(video_stream.get("avg_frame_rate")))
+            if fps is None or fps <= 0:
+                fps = VideoUtil._rate_to_float(VideoUtil._fraction_from_string(video_stream.get("r_frame_rate")))
+            if fps is None or fps <= 0:
+                return None
+            source_frame_count = VideoUtil._optional_int(video_stream.get("nb_frames"))
+            duration = VideoUtil._optional_float(video_stream.get("duration"))
+            if duration is None:
+                duration = VideoUtil._optional_float((payload.get("format") or {}).get("duration"))
+            if source_frame_count is None and duration is not None:
+                source_frame_count = max(1, int(round(duration * fps)))
+            return SourceVideoInfo(
+                fps=fps,
+                source_width=int(video_stream["width"]),
+                source_height=int(video_stream["height"]),
+                source_frame_count=source_frame_count,
+                source_duration_seconds=duration,
+                audio_present=audio_present,
+            )
+        except (KeyError, StopIteration, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _fraction_from_string(value: str | None) -> Fraction | None:
+        if not value or value == "0/0":
+            return None
+        with suppress(ZeroDivisionError, ValueError):
+            return Fraction(value)
+        return None
+
+    @staticmethod
+    def _optional_int(value) -> int | None:
+        if value in (None, "N/A"):
+            return None
+        with suppress(TypeError, ValueError):
+            return int(value)
+        return None
+
+    @staticmethod
+    def _optional_float(value) -> float | None:
+        if value in (None, "N/A"):
+            return None
+        with suppress(TypeError, ValueError):
+            return float(value)
+        return None
 
     @staticmethod
     def read_video_frame_window(
@@ -605,15 +911,40 @@ class VideoUtil:
             normalized_windows.append((window_start, window_end))
             previous_start = window_start
 
+        ffmpeg_path = shutil.which("ffmpeg")
+        source_info = VideoUtil.inspect_video(path)
+        if ffmpeg_path is not None:
+            yield from VideoUtil._iter_video_frame_windows_ffmpeg(
+                path=Path(path),
+                ffmpeg_path=ffmpeg_path,
+                source_info=source_info,
+                start_frame=start_frame,
+                normalized_windows=normalized_windows,
+            )
+            return
+
+        yield from VideoUtil._iter_video_frame_windows_pyav(
+            path=Path(path),
+            source_info=source_info,
+            start_frame=start_frame,
+            normalized_windows=normalized_windows,
+        )
+
+    @staticmethod
+    def _iter_video_frame_windows_pyav(
+        *,
+        path: Path,
+        source_info: SourceVideoInfo,
+        start_frame: int,
+        normalized_windows: list[tuple[int, int]],
+    ) -> Iterator[DecodedVideoClip]:
         import av
 
-        source_info = VideoUtil.inspect_video(path)
         absolute_windows = [
             (start_frame + window_start, start_frame + window_end)
             for window_start, window_end in normalized_windows
         ]
-        file_path = Path(path)
-        with av.open(str(file_path)) as container:
+        with av.open(str(path)) as container:
             if len(container.streams.video) == 0:
                 raise RuntimeError(f"Could not find a video stream in {path}")
 
@@ -668,25 +999,185 @@ class VideoUtil:
             raise RuntimeError(f"Could not decode all requested video windows from {path}")
 
     @staticmethod
+    def _iter_video_frame_windows_ffmpeg(
+        *,
+        path: Path,
+        ffmpeg_path: str,
+        source_info: SourceVideoInfo,
+        start_frame: int,
+        normalized_windows: list[tuple[int, int]],
+    ) -> Iterator[DecodedVideoClip]:
+        absolute_windows = [
+            (start_frame + window_start, start_frame + window_end)
+            for window_start, window_end in normalized_windows
+        ]
+        first_frame = absolute_windows[0][0]
+        final_frame_exclusive = max(window_end for _, window_end in absolute_windows)
+        if final_frame_exclusive <= first_frame:
+            return
+
+        frame_size = source_info.source_width * source_info.source_height * 3
+        filter_expression = f"select=between(n\\,{first_frame}\\,{final_frame_exclusive - 1})"
+        command = [
+            ffmpeg_path,
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-vf",
+            filter_expression,
+            "-vsync",
+            "0",
+            "-an",
+            "-sn",
+            "-dn",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "pipe:1",
+        ]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        assert process.stdout is not None
+        active_windows: list[dict] = []
+        next_window_index = 0
+        frame_index = first_frame
+        try:
+            while True:
+                payload = process.stdout.read(frame_size)
+                if not payload:
+                    break
+                if len(payload) != frame_size:
+                    raise RuntimeError(f"Decoded video frame payload from {path} has an unexpected size.")
+
+                while (
+                    next_window_index < len(absolute_windows)
+                    and absolute_windows[next_window_index][0] == frame_index
+                ):
+                    absolute_start, absolute_end = absolute_windows[next_window_index]
+                    relative_start, _ = normalized_windows[next_window_index]
+                    active_windows.append(
+                        {
+                            "absolute_end": absolute_end,
+                            "relative_start": relative_start,
+                            "frames": [],
+                        }
+                    )
+                    next_window_index += 1
+
+                if active_windows:
+                    frame_array = np.frombuffer(payload, dtype=np.uint8).reshape(
+                        source_info.source_height,
+                        source_info.source_width,
+                        3,
+                    )
+                    pil_frame = PIL.Image.fromarray(frame_array.copy())
+                    for active_window in active_windows:
+                        if frame_index < active_window["absolute_end"]:
+                            active_window["frames"].append(pil_frame)
+
+                completed_windows: list[dict] = []
+                while active_windows and frame_index + 1 >= active_windows[0]["absolute_end"]:
+                    completed_windows.append(active_windows.pop(0))
+
+                for completed_window in completed_windows:
+                    yield DecodedVideoClip(
+                        frames=completed_window["frames"],
+                        fps=source_info.fps,
+                        source_width=source_info.source_width,
+                        source_height=source_info.source_height,
+                        source_frame_count=source_info.source_frame_count,
+                        source_duration_seconds=source_info.source_duration_seconds,
+                        audio_present=source_info.audio_present,
+                        clip_start_frame=completed_window["relative_start"],
+                        clip_frame_count=len(completed_window["frames"]),
+                    )
+                frame_index += 1
+        finally:
+            if process.stdout is not None:
+                process.stdout.close()
+            stderr = process.stderr.read() if process.stderr is not None else b""
+            return_code = process.wait()
+        if return_code != 0:
+            message = stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"Could not decode video frame windows from {path}: {message or return_code}")
+        if active_windows or next_window_index < len(absolute_windows):
+            raise RuntimeError(f"Could not decode all requested video windows from {path}")
+
+    @staticmethod
     def _latents_to_frames(decoded_latents: mx.array) -> list[PIL.Image.Image]:
         video_np = VideoUtil._latents_to_frame_arrays(decoded_latents)
         return [PIL.Image.fromarray(frame) for frame in video_np]
 
     @staticmethod
-    def _latents_to_frame_arrays(decoded_latents: mx.array) -> np.ndarray:
+    def _pil_rgb_to_array(image: PIL.Image.Image) -> np.ndarray:
+        rgb_image = image.convert("RGB")
+        return np.asarray(rgb_image.getdata(), dtype=np.uint8).reshape(rgb_image.height, rgb_image.width, 3)
+
+    @staticmethod
+    def _latents_to_frame_batches(decoded_latents: mx.array, batch_size: int = 8) -> Iterable[list[PIL.Image.Image]]:
+        total_frames = int(decoded_latents.shape[2])
+        for start in range(0, total_frames, batch_size):
+            end = min(start + batch_size, total_frames)
+            video_np = VideoUtil._latents_to_frame_arrays(
+                decoded_latents[:, :, start:end, :, :],
+                frame_offset=start,
+                total_frames=total_frames,
+            )
+            yield [PIL.Image.fromarray(frame) for frame in video_np]
+
+    @staticmethod
+    def decoded_latent_slices_to_frame_batches(
+        decoded_latent_slices: Iterable[mx.array],
+        batch_size: int = 8,
+        total_frames: int | None = None,
+    ) -> Iterable[list[PIL.Image.Image]]:
+        pending: list[PIL.Image.Image] = []
+        frame_offset = 0
+        for decoded_slice in decoded_latent_slices:
+            remaining_frames = None if total_frames is None else total_frames - frame_offset
+            if remaining_frames is not None and remaining_frames <= 0:
+                break
+            if remaining_frames is not None and int(decoded_slice.shape[2]) > remaining_frames:
+                decoded_slice = decoded_slice[:, :, :remaining_frames]
+            video_np = VideoUtil._latents_to_frame_arrays(
+                decoded_slice,
+                frame_offset=frame_offset,
+                total_frames=total_frames,
+            )
+            if remaining_frames is not None:
+                video_np = video_np[:remaining_frames]
+            for frame in video_np:
+                pending.append(PIL.Image.fromarray(frame))
+                frame_offset += 1
+                if len(pending) >= batch_size:
+                    yield pending
+                    pending = []
+        if pending:
+            yield pending
+        if total_frames is not None and frame_offset != total_frames:
+            raise ValueError(f"Expected {total_frames} decoded frames, got {frame_offset}.")
+
+    @staticmethod
+    def _latents_to_frame_arrays(
+        decoded_latents: mx.array,
+        frame_offset: int = 0,
+        total_frames: int | None = None,
+    ) -> np.ndarray:
         if decoded_latents.ndim != 5:
             raise ValueError(f"Expected decoded video latents with shape [B, C, F, H, W], got {decoded_latents.shape}")
         video = decoded_latents[0]
         video = mx.transpose(video, (1, 2, 3, 0)).astype(mx.float32)
         video_np = np.array(video, dtype=np.float32)
+        total_frames = total_frames or video_np.shape[0]
         for frame_index in range(video_np.shape[0]):
             frame_np = video_np[frame_index]
             TensorHealth.ensure_finite(
                 frame_np,
                 name="decoded_video_frame",
                 phase="video-frame-conversion",
-                frame=frame_index + 1,
-                total_frames=video_np.shape[0],
+                frame=frame_offset + frame_index + 1,
+                total_frames=total_frames,
             )
         return (np.clip(video_np / 2 + 0.5, 0, 1) * 255).round().astype("uint8")
 
@@ -698,40 +1189,8 @@ class VideoUtil:
         width: int,
         height: int,
     ) -> None:
-        import av
-
-        with NamedTemporaryFile(
-            suffix=file_path.suffix or ".mp4",
-            prefix=f".{file_path.stem}-",
-            dir=file_path.parent,
-            delete=False,
-        ) as temp_file:
-            temp_path = Path(temp_file.name)
-
-        should_replace = False
-        try:
-            container = av.open(str(temp_path), mode="w", options={"movflags": "+faststart"})
-            stream = container.add_stream("libx264", rate=VideoUtil._fps_to_rate(fps))
-            with container:
-                stream.width = width
-                stream.height = height
-                stream.pix_fmt = "yuv420p"
-                stream.options = {"crf": "18", "preset": "medium"}
-                for frame in frames:
-                    rgb = frame.convert("RGB")
-                    if rgb.size != (width, height):
-                        rgb = rgb.resize((width, height), PIL.Image.Resampling.LANCZOS)
-                    video_frame = av.VideoFrame.from_ndarray(np.array(rgb), format="rgb24")
-                    for packet in stream.encode(video_frame):
-                        container.mux(packet)
-                for packet in stream.encode():
-                    container.mux(packet)
-            should_replace = True
-        finally:
-            if should_replace:
-                temp_path.replace(file_path)
-            elif temp_path.exists():
-                temp_path.unlink()
+        with VideoStreamWriter(path=file_path, fps=fps, width=width, height=height, overwrite=True) as writer:
+            writer.write_frames(frames)
 
     @staticmethod
     def _save_video_batches_with_pyav(
@@ -741,41 +1200,9 @@ class VideoUtil:
         width: int,
         height: int,
     ) -> None:
-        import av
-
-        with NamedTemporaryFile(
-            suffix=file_path.suffix or ".mp4",
-            prefix=f".{file_path.stem}-",
-            dir=file_path.parent,
-            delete=False,
-        ) as temp_file:
-            temp_path = Path(temp_file.name)
-
-        should_replace = False
-        try:
-            container = av.open(str(temp_path), mode="w", options={"movflags": "+faststart"})
-            stream = container.add_stream("libx264", rate=VideoUtil._fps_to_rate(fps))
-            with container:
-                stream.width = width
-                stream.height = height
-                stream.pix_fmt = "yuv420p"
-                stream.options = {"crf": "18", "preset": "medium"}
-                for batch in frame_batches:
-                    for frame in batch:
-                        rgb = frame.convert("RGB")
-                        if rgb.size != (width, height):
-                            rgb = rgb.resize((width, height), PIL.Image.Resampling.LANCZOS)
-                        video_frame = av.VideoFrame.from_ndarray(np.array(rgb), format="rgb24")
-                        for packet in stream.encode(video_frame):
-                            container.mux(packet)
-                for packet in stream.encode():
-                    container.mux(packet)
-            should_replace = True
-        finally:
-            if should_replace:
-                temp_path.replace(file_path)
-            elif temp_path.exists():
-                temp_path.unlink()
+        with VideoStreamWriter(path=file_path, fps=fps, width=width, height=height, overwrite=True) as writer:
+            for batch in frame_batches:
+                writer.write_frames(batch)
 
     @staticmethod
     def _save_metadata(file_path: Path, metadata: dict | None, export_json_metadata: bool) -> None:
@@ -783,6 +1210,15 @@ class VideoUtil:
             from mflux.utils.generated_video import GeneratedVideo
 
             GeneratedVideo.save_metadata(file_path, metadata)
+
+    @staticmethod
+    def _metadata_frame_count(metadata: dict | None) -> int | None:
+        if metadata is None or metadata.get("frames") is None:
+            return None
+        try:
+            return int(metadata["frames"])
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _build_audio_copy_command(

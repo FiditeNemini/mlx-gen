@@ -288,8 +288,8 @@ same preservation guarantee as canvas outpaint.
 - Do not claim FLUX.2, Qwen, Z-Image, ERNIE, FIBO, or Kontext are reliable outpainting paths unless
   they pass model-backed validation for that exact route and docs state the preservation guarantee
   precisely.
-- Do not implement native Qwen inpaint/outpaint parity in this item unless proposed item 0008 is
-  promoted or a small, specific Qwen fill/inpaint backend becomes available.
+- Do not implement native Qwen inpaint/outpaint parity in this item unless a new bounded Qwen
+  follow-up is created or a small, specific Qwen fill/inpaint backend becomes available.
 - Do not remove legacy model-specific CLIs in the same change.
 - Do not silently choose another model family to satisfy reframe or outpaint.
 - Do not run large image models just to validate routing; use a minimal model-backed smoke only
@@ -305,7 +305,7 @@ same preservation guarantee as canvas outpaint.
   routing context.
 - [Completed item 0020](../completed/0020_generation_capability_contract.md) for the public
   task/internal mode/capability planning baseline.
-- [Planned item 0008](0008_qwen_edit_parity_expansion.md) for future Qwen
+- [Completed item 0008](../completed/0008_qwen_edit_parity_expansion.md) for current Qwen
   inpainting/outpainting parity.
 - [Planned item 0024](0024_fibo_edit_unified_i2i_validation.md) and
   [planned item 0027](0027_fibo_edit_diffusers_parity_release_quality.md) for deferred FIBO Edit

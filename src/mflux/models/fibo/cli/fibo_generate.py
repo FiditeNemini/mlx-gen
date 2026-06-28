@@ -54,6 +54,8 @@ def main():
 
     json_prompt = FiboUtil.get_json_prompt(args, quantize=args.quantize)
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the FIBO model
     fibo = FIBO(
         quantize=args.quantize,

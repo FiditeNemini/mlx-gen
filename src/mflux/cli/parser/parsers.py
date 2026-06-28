@@ -8,6 +8,7 @@ from pathlib import Path
 
 from mflux.cli.defaults import defaults as ui_defaults
 from mflux.models.common.config import ModelConfig
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
@@ -77,15 +78,7 @@ def _model_config_for_parser(model_name: str | None, base_model: str | None = No
 
 def _model_step_default(model_name: str | None, base_model: str | None = None) -> int:
     model_config = _model_config_for_parser(model_name, base_model=base_model)
-    for candidate in (
-        model_name,
-        *(model_config.aliases if model_config is not None else ()),
-        model_config.model_name if model_config is not None else None,
-        model_config.base_model if model_config is not None else None,
-    ):
-        if candidate in ui_defaults.MODEL_INFERENCE_STEPS:
-            return ui_defaults.MODEL_INFERENCE_STEPS[candidate]
-    return 25
+    return default_inference_steps(model_config, model_name=model_name, base_model=base_model)
 
 
 def _is_predefined_model_name(model_name: str | None, base_model: str | None = None) -> bool:
@@ -460,6 +453,30 @@ class CommandLineParser(argparse.ArgumentParser):
             # e.g. output.png -> output_seed_101.png output_seed_102.png, etc
             output_path = Path(namespace.output)
             namespace.output = str(output_path.with_stem(output_path.stem + "_seed_{seed}"))
+            if getattr(namespace, "low_ram", False):
+                if getattr(namespace, "prompt_file", None) is not None:
+                    self.error(
+                        "--low-ram cannot be combined with multiple seeds and --prompt-file because "
+                        "the prompt file is re-read between generations after encoders may be released."
+                    )
+                model_config = _model_config_for_parser(
+                    getattr(namespace, "model", None),
+                    getattr(namespace, "base_model", None),
+                )
+                model_tokens = {
+                    token.lower()
+                    for token in (
+                        *((model_config.aliases if model_config is not None else ()) or ()),
+                        model_config.model_name if model_config is not None else None,
+                        model_config.base_model if model_config is not None else None,
+                    )
+                    if token is not None
+                }
+                if any("fibo" in token for token in model_tokens):
+                    self.error(
+                        "--low-ram cannot be combined with multiple seeds for FIBO models because "
+                        "the text encoder is released after the first generation."
+                    )
 
         if hasattr(namespace, "image_path") and isinstance(namespace.image_path, list) and len(namespace.image_path) > 1:
             # auto append image-$name to output names for multi image generations
@@ -482,6 +499,8 @@ class CommandLineParser(argparse.ArgumentParser):
         if self.supports_image_generation and getattr(namespace, "steps", None) is None:
             model_name = getattr(namespace, "model", None)
             namespace.steps = _model_step_default(model_name, getattr(namespace, "base_model", None))
+        if self.supports_image_generation and getattr(namespace, "steps", None) is not None and namespace.steps < 1:
+            self.error("--steps must be greater than zero.")
 
         # In-context edit specific validations
         if getattr(self, 'supports_in_context_edit', False):

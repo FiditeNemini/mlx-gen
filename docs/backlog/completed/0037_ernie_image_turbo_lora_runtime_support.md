@@ -130,16 +130,17 @@ strict loader behavior, exact capability surfacing, and a model-backed q8 valida
 - `tests/test_lora_compatibility.py`
 - `tests/test_task_inference.py`
 - `docs/lora.md`
-- `docs/backlog/planned/0007_lora_capability_matrix_and_strict_application.md`
+- `docs/backlog/completed/0007_lora_capability_matrix_and_strict_application.md`
 - `docs/backlog/overview.md`
 
 ### Residual risk
 
-- Only `AbstractFramework/ernie-image-turbo-8bit` text-to-image is validated exactly.
-- ERNIE latent img2img now has a mapping path but still needs a separate source-preserving proof.
+- Current exact rows are `AbstractFramework/ernie-image-turbo-8bit` on `ernie-image.text` and
+  `ernie-image.latent` only.
 - Non-turbo ERNIE remains outside the current validation set.
 
 ### Follow-up
 
-- Keep ERNIE latent img2img under `0007` until it has its own proof row.
+- Keep future ERNIE work scoped to non-turbo packages or new adapter families rather than
+  reopening the base Turbo contract.
 - Track Bonsai separately because its packed runtime is a different architectural problem.

@@ -25,6 +25,8 @@ def main():
     if args.guidance != 1.0:
         parser.error("Bonsai Image is distilled and supports only --guidance 1.0.")
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     model_name = args.model or "bonsai-image-ternary"
     try:
         model = BonsaiImage(

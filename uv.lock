@@ -1144,7 +1144,7 @@ wheels = [
 
 [[package]]
 name = "mlx-gen"
-version = "0.18.22"
+version = "0.18.23"
 source = { editable = "." }
 dependencies = [
     { name = "av" },
@@ -1171,7 +1171,6 @@ dependencies = [
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
-    { name = "twine" },
     { name = "urllib3" },
 ]
 
@@ -1182,6 +1181,10 @@ dev = [
     { name = "mlx", version = "0.31.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
     { name = "pytest" },
     { name = "pytest-timer" },
+    { name = "twine" },
+]
+release = [
+    { name = "twine" },
 ]
 
 [package.metadata]
@@ -1215,10 +1218,11 @@ requires-dist = [
     { name = "torch", marker = "python_full_version >= '3.13'", specifier = ">=2.8.0,<3.0" },
     { name = "tqdm", specifier = ">=4.66.5,<5.0" },
     { name = "transformers", specifier = ">=5.0.0,<6.0" },
-    { name = "twine", specifier = ">=6.1.0,<7.0" },
+    { name = "twine", marker = "extra == 'dev'", specifier = ">=6.1.0,<7.0" },
+    { name = "twine", marker = "extra == 'release'", specifier = ">=6.1.0,<7.0" },
     { name = "urllib3", specifier = ">=2.6.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "release"]
 
 [[package]]
 name = "mlx-metal"

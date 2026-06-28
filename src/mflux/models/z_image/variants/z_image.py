@@ -6,6 +6,7 @@ from mlx import nn
 from PIL import Image
 
 from mflux.models.common.config.config import Config
+from mflux.models.common.config.inference_defaults import default_inference_steps
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.latent_creator.latent_creator import Img2Img, LatentCreator
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
@@ -22,6 +23,7 @@ from mflux.utils.apple_silicon import AppleSiliconUtil
 from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 from mflux.utils.exceptions import StopImageGenerationException
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_timer import RuntimeTimer
 from mflux.utils.scale_factor import ScaleFactor
 
 
@@ -52,7 +54,7 @@ class ZImage(nn.Module):
         self,
         seed: int,
         prompt: str,
-        num_inference_steps: int = 4,
+        num_inference_steps: int | None = None,
         height: int | ScaleFactor | None = None,
         width: int | ScaleFactor | None = None,
         guidance: float | None = None,
@@ -63,6 +65,7 @@ class ZImage(nn.Module):
         negative_prompt: str | None = None,
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
     ) -> Image.Image:
+        timer = RuntimeTimer()
         if mask_path is not None and image_path is None:
             raise ValueError("mask_path requires image_path for native Z-Image inpaint.")
         if mask_path is not None and image_strength is not None:
@@ -73,6 +76,8 @@ class ZImage(nn.Module):
 
         if scheduler is None:
             scheduler = "flow_match_euler_discrete" if supports_guidance else "linear"
+        if num_inference_steps is None:
+            num_inference_steps = default_inference_steps(self.model_config, fallback=4)
 
         # 0. Create a new config based on the model type and input parameters
         config = Config(
@@ -179,7 +184,7 @@ class ZImage(nn.Module):
             image_path=config.image_path,
             image_strength=config.image_strength,
             masked_image_path=mask_path,
-            generation_time=config.time_steps.format_dict["elapsed"],
+            generation_time=timer.elapsed_seconds(),
             negative_prompt=negative_prompt,
             extra_metadata=LoRALoader.extra_metadata_for_model(self),
         )

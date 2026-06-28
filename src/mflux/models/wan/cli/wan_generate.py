@@ -19,6 +19,7 @@ from mflux.models.common.config import ModelConfig
 from mflux.models.wan.variants import Wan2_2_TI2V
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError
 from mflux.utils.prompt_util import PromptUtil
+from mflux.utils.runtime_memory import RuntimeMemory
 
 WAN_DEFAULT_WIDTH = Wan2_2_TI2V.RECOMMENDED_WIDTH
 WAN_DEFAULT_HEIGHT = Wan2_2_TI2V.RECOMMENDED_HEIGHT
@@ -394,19 +395,7 @@ def _apply_model_defaults(args: argparse.Namespace, model_config: ModelConfig, p
 
 
 def _apply_runtime_memory_options(args: argparse.Namespace) -> None:
-    cache_limit_bytes = _resolve_cache_limit_bytes(args.mlx_cache_limit_gb)
-    if args.low_ram and cache_limit_bytes is None:
-        cache_limit_bytes = 1000**3
-    if cache_limit_bytes is not None:
-        mx.set_cache_limit(cache_limit_bytes)
-        mx.clear_cache()
-        mx.reset_peak_memory()
-
-
-def _resolve_cache_limit_bytes(mlx_cache_limit_gb: float | None) -> int | None:
-    if mlx_cache_limit_gb is None:
-        return None
-    return int(mlx_cache_limit_gb * (1000**3))
+    RuntimeMemory.apply_mlx_cache_limit(args.mlx_cache_limit_gb, low_ram=args.low_ram)
 
 
 def _positive_int(value: str) -> int:
@@ -496,17 +485,7 @@ def _write_failure_manifest(
 
 
 def _runtime_diagnostics() -> dict:
-    def _mlx_memory(name: str):
-        try:
-            return int(getattr(mx, name)())
-        except (AttributeError, RuntimeError, TypeError, ValueError):
-            return None
-
-    return {
-        "mlx_active_memory_bytes": _mlx_memory("get_active_memory"),
-        "mlx_peak_memory_bytes": _mlx_memory("get_peak_memory"),
-        "mlx_cache_memory_bytes": _mlx_memory("get_cache_memory"),
-    }
+    return RuntimeMemory.snapshot("wan-failure", synchronize=True).to_metadata()
 
 
 def _provided_options(argv: list[str]) -> set[str]:

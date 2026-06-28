@@ -76,18 +76,15 @@ class QwenEncoder(nn.Module):
             if n_image_tokens > 0:
                 image_positions_flat = image_positions.flatten()
                 inputs_embeds_flat = inputs_embeds.reshape(-1, inputs_embeds.shape[-1])
-
-                new_embeds_list = []
-                image_idx = 0
-                for i in range(len(image_positions_flat)):
-                    if image_positions_flat[i]:
-                        new_embeds_list.append(image_embeds[image_idx])
-                        image_idx += 1
-                    else:
-                        new_embeds_list.append(inputs_embeds_flat[i])
-
-                new_embeds = mx.stack(new_embeds_list, axis=0)
-                inputs_embeds = new_embeds.reshape(inputs_embeds.shape)
+                image_offsets = mx.cumsum(image_positions_flat.astype(mx.int32), axis=0) - 1
+                safe_offsets = mx.maximum(image_offsets, mx.zeros_like(image_offsets))
+                replacement_embeds = image_embeds[safe_offsets]
+                inputs_embeds_flat = mx.where(
+                    mx.expand_dims(image_positions_flat, axis=-1),
+                    replacement_embeds,
+                    inputs_embeds_flat,
+                )
+                inputs_embeds = inputs_embeds_flat.reshape(inputs_embeds.shape)
         position_ids = self._compute_position_ids(
             input_ids=input_ids,
             attention_mask=attention_mask,

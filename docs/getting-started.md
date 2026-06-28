@@ -120,9 +120,9 @@ img2img variation only; edit/reference models do not use it.
 If you are choosing between latent restyle, instruction edit, multi-reference composition,
 generative reframe, and outpaint, see [Image Edit Modes](image-edit-modes.md).
 
-LoRA support is experimental. Use the same capabilities command before LoRA runs. LoRA adapters
-must match the selected model family, and a visible source/no-LoRA/with-LoRA comparison is required
-before treating an adapter as validated. See [LoRA](lora.md) for the current contract.
+LoRA support is route-specific. Use the same capabilities command before LoRA runs. LoRA adapters
+must match the selected model family and route, and a visible source/no-LoRA/with-LoRA comparison
+is required before treating an adapter as validated. See [LoRA](lora.md) for the current contract.
 
 Use `qwen-image-edit` for the original single-reference edit checkpoint; use
 `qwen-image-edit-2509` or `qwen-image-edit-2511` when you need multi-reference editing.
@@ -136,8 +136,8 @@ Ordinary image-to-image preserves the first source image's aspect ratio by defau
 `--height` act as a size target under `--canvas-policy source-aspect`; pass
 `--canvas-policy exact-resize` only when you intentionally want the exact requested canvas.
 
-Reframe and outpaint are experimental generative edit workflows. Use `--reframe-padding` when you
-want an edit model to generate a wider view from one source image.
+Reframe and outpaint are route-specific generative edit workflows. Use `--reframe-padding` when you
+want a supported edit model to generate a wider view from one source image.
 This is a generative edit:
 
 ```sh
@@ -151,8 +151,8 @@ mlxgen generate \
   --output reframed.png
 ```
 
-Use experimental `--outpaint-padding` when you want MLX-Gen to expand the canvas and guide a
-supported edit model to fill the larger view:
+Use `--outpaint-padding` when you want MLX-Gen to expand the canvas and guide a supported edit
+model to fill the larger view:
 
 ```sh
 mlxgen generate \
@@ -172,7 +172,7 @@ uses source-locked denoising with a narrow latent transition band instead of pas
 crop back over the result. This is not a native fill/inpaint pipeline with an explicit diffusion
 mask, and it is not an exact pixel-lock guarantee.
 
-Current experimental reframe and outpaint proof assets are published in
+Current reframe and outpaint proof assets are published in
 [Image Edit Capabilities](edit-capabilities.md) and [Reframe and Outpaint](reframe-outpaint.md),
 including the 2026-06-10 FLUX.2 Klein base source-model starship proof.
 

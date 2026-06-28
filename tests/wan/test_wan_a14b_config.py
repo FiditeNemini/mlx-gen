@@ -675,11 +675,11 @@ def test_wan_generate_releases_denoisers_before_decode(monkeypatch):
         observed["transformer"] = model.transformer
         observed["transformer_2"] = model.transformer_2
         observed["clear_cache_each_slice"] = clear_cache_each_slice
-        return mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32)
+        yield mx.zeros((1, 3, 1, 8, 8), dtype=mx.float32)
 
-    model.vae.decode_normalized_latents = decode
+    model.vae.iter_decode_normalized_latent_slices = decode
 
-    model.generate_video(
+    video = model.generate_video(
         seed=1,
         prompt="a slow wave",
         width=64,
@@ -689,6 +689,7 @@ def test_wan_generate_releases_denoisers_before_decode(monkeypatch):
         guidance=1,
         release_denoisers_before_decode=True,
     )
+    video.first_frame()
 
     assert observed == {
         "transformer": None,

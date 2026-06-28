@@ -26,6 +26,8 @@ def main():
     model_name = args.model or "z-image"
     model_config = ModelConfig.from_name(model_name=model_name, base_model=args.base_model)
 
+    CallbackManager.apply_runtime_memory_options(args)
+
     # 1. Load the model
     model = ZImage(
         model_config=model_config,
