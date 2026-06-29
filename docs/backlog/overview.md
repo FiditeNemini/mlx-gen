@@ -12,7 +12,7 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 14 |
-| Proposed | 15 |
+| Proposed | 16 |
 | Completed | 34 |
 | Deprecated | 1 |
 | Recurrent | 1 |
@@ -115,6 +115,13 @@ profile now shows startup/first-step peak still dominates even when retained cac
 Do not promote it until one specific family has a measured startup peak that justifies the
 family-specific migration risk. The SeedVR2 1280px image profile points instead to VAE spatial
 encode peak, so 0065 should not be promoted solely for that case.
+
+Keep proposed
+[image finalization memory peak and metadata rewrite](proposed/0066_image_finalization_memory_peak_and_metadata_rewrite.md)
+as the immediate save-path memory follow-up. The current generated-image PNG path still does a
+primary write, an EXIF rewrite, and a second PNG metadata rewrite, while generated-image metadata
+also snapshots runtime memory at finalization time. Do not bury that cost inside broader runtime or
+retention items until it has its own measured before/after evidence.
 
 7. Finish the prepared-package residue in
    [FLUX.2 Klein base source validation and contact sheets](planned/0036_flux2_klein_base_source_validation_and_contact_sheets.md).
@@ -229,6 +236,7 @@ encode peak, so 0065 should not be promoted solely for that case.
 | 0050 | [Krea 2 Turbo integration](proposed/0050_krea2_turbo_integration.md) | Image model roadmap, Krea 2, licensing, fast text-to-image | Promote only if MLX-Gen explicitly accepts the restrictive Krea license class and a bounded upstream smoke shows clear value over current fast image routes. |
 | 0058 | [Model profile registry authority](proposed/0058_model_profile_registry_authority.md) | Architecture, model identity, defaults, loader policy | Promote after an ADR spike proves one lightweight registry can own model family identity/defaults without import-cycle or startup-cost regressions. |
 | 0065 | [Component-wise weight streaming migration](proposed/0065_componentwise_weight_streaming_migration.md) | Memory, startup, weight loading | Promote when profiling shows startup peak remains a practical blocker after remaining item 0063, or when one specific family needs the reduction for a supported profile. |
+| 0066 | [Image finalization memory peak and metadata rewrite](proposed/0066_image_finalization_memory_peak_and_metadata_rewrite.md) | Memory, image finalization, metadata embedding | Promote when process memory sampling confirms the end-of-run save pipeline is a meaningful peak source, or when a lower-risk one-pass metadata rewrite is ready to validate. |
 
 ## Completed ledger
 
