@@ -12,17 +12,21 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 14 |
-| Proposed | 24 |
+| Proposed | 28 |
 | Completed | 56 |
 | Deprecated | 1 |
 | Recurrent | 1 |
 
-Counts are item files (recounted 2026-07-23), including topic-track items under
+Counts are item files (recounted 2026-07-25), including topic-track items under
 `planned/memory/`; the completed `planned/runtime_contracts/` track holds only its index.
 Items 0086-0090 came from a 2026-07-22 adversarial performance audit of the
 BlackPixel embedding host traced end-to-end against the 0.23.1 release.
 Items 0093-0095 came from the 2026-07-23 follow-up audit of image-to-image
 latency in the same host (BlackPixel backlog 0069 holds the full record).
+Items 0097-0100 came from the 2026-07-25 storyboard cross-scene-consistency
+investigation (three agents; verification + fixed-seed generation A/Bs; the
+full record lives in BlackPixel backlog
+`proposed/storyboard_consistency_2026_07/`).
 
 ## Completed runtime contract hardening band
 
@@ -395,6 +399,10 @@ memory follow-up state.
 | 0094 | [Default MLX buffer-cache limit for Python API and CLI](proposed/0094_default_mlx_cache_limit.md) | Memory defaults, embedding hosts, system health | Promote when a benchmark shows same-shape repeats are not slowed by a machine-size-derived cap and the documented default satisfies ADR 0002. |
 | 0095 | [Wire flux2 prompt_cache + compiled-predict reuse](proposed/0095_flux2_prompt_cache_and_compile_reuse.md) | Fixed per-call costs, flux2, resident hosts | Promote the cache wiring opportunistically with any flux2 touch; promote compile reuse only with a 0090-harness measurement. |
 | 0096 | [Outpaint capability expansion beyond Qwen edit and Klein Base](proposed/0096_outpaint_capability_expansion.md) | Image edit, outpaint, capability registry, embedding hosts | Owner-requested (2026-07-23): survey which families can truthfully outpaint (existing mask routes + source-locked denoising math); evidence-gated per ADR 0001. |
+| 0097 | [Wan A14B i2v `last_image` bracket conditioning](proposed/0097_wan_last_image_bracket_conditioning.md) | Wan video, chained-scene identity, embedding hosts | Layout verified against the local diffusers reference (~30-line delta in `_load_video_condition`); promote with its fixed-seed A/B quality gate (2.2-A14B first+last quality is empirical, not officially trained). |
+| 0098 | [Warn on silent UMT5 prompt truncation](proposed/0098_wan_prompt_truncation_warning.md) | Wan video, prompt contract truthfulness | Verified silent right-truncation at 512 tokens; promote opportunistically with any Wan prompt-path touch (S). |
+| 0099 | [Wan step-distill scheduler mode (`denoising_step_list`)](proposed/0099_wan_step_distill_scheduler_mode.md) | Wan video, sampling parity, drift-vs-cost | Promotes the scheduler slice of 0041 (loader question stays there); prerequisite for honest Lightning-vs-base chain A/Bs. |
+| 0100 | [VACE identity-anchor recipe documentation](proposed/0100_wan_vace_identity_anchor_recipe.md) | Wan VACE, subject reference, draft/repair tier | Conditional: decide after 0097's A/B (supersession gate); recipe is wireable today with no code changes. |
 ## Completed ledger
 
 | ID | Item | Area | Completed | Outcome |
@@ -567,6 +575,18 @@ memory follow-up state.
 - Added 2026-06-12 post-0.18.17 hygiene: the release succeeded, LightX2V/Wan proof assets and
   public LoRA docs were refreshed, and planned item 0042 now tracks the GitHub Actions Node 20
   deprecation warning observed in release run `27440684820` before the Node 24 default switch.
+- Added 2026-07-25 storyboard consistency follow-ups (items 0097-0100) after
+  the three-agent cross-scene investigation of the BlackPixel storyboard film
+  (mountains washed out, ship identity lost, tone drifting cartoonish across
+  four chained Lightning i2v scenes). Source facts verified in this repo's
+  code: single-VAE-frame conditioning; negatives never encoded under
+  guidance==1.0 (both A14B experts) while still recorded in metadata;
+  silent 512-token truncation; diffusers-layout `last_image` bracket ~30
+  lines away. Fixed-seed chain A/Bs (BlackPixel side) measured a 33-token
+  world anchor keeping upper-band structure at 672 vs 62 Laplacian-variance
+  edge energy at the critical handoff, and a sharpest-of-last-24 handoff
+  frame carrying 5x sharper conditioning (149 vs 30) into the next scene.
+  Full record: BlackPixel backlog `proposed/storyboard_consistency_2026_07/`.
 - Added 2026-07-23 i2i latency audit follow-ups (items 0093-0095) after the
   three-agent BlackPixel image-to-image audit reconciled the owner's
   minutes-per-image report: the flux2 path itself was healthy (no Wan-style
