@@ -1,10 +1,14 @@
-# Proposed: Default MLX buffer-cache limit for Python API and CLI
+# Completed: Default MLX buffer-cache limit for Python API and CLI
 
 ## Metadata
 
 - Created: 2026-07-23
-- Status: Implemented (pending release) — 2026-07-23, cycle-1 implementation wave
-- Completed: N/A
+- Status: Completed
+- Completed: 2026-07-25 — released in 0.25.0 (tag `v0.25.0` from `2452f0c`,
+  workflow 30162410505 green; PyPI + GitHub Release verified). The default
+  announced itself exactly as documented in the 0101 smoke run ("Applying
+  default MLX cache limit: 8.0 GiB..."), output bitwise identical to 0.24.0;
+  evidence in [0101](0101_release_0_25_0.md).
 
 ## ADR status
 

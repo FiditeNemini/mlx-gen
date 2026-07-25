@@ -1,11 +1,13 @@
-# Proposed: Wan step-distill scheduler mode (`denoising_step_list` parity)
+# Completed: Wan step-distill scheduler mode (`denoising_step_list` parity)
 
 ## Metadata
 
 - Created: 2026-07-25
-- Status: Implemented (pending release) — 2026-07-25, cycle-1 implementation
-  wave (scheduler mode + CLI + parity audit; the chain A/B remains open)
-- Completed: N/A
+- Status: Completed (scheduler mode + CLI + parity audit; the grid-honest
+  Lightning-vs-base chain A/B remains an open follow-up recorded below)
+- Completed: 2026-07-25 — released in 0.25.0 (tag `v0.25.0` from `2452f0c`,
+  workflow 30162410505 green; PyPI + GitHub Release verified); release
+  checklist and gate evidence in [0101](0101_release_0_25_0.md).
 - Effort: S-M (scheduler mode + CLI surface + parity audit)
 
 ## ADR status

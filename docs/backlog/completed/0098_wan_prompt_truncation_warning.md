@@ -1,10 +1,13 @@
-# Proposed: warn on silent UMT5 prompt truncation (Wan routes)
+# Completed: warn on silent UMT5 prompt truncation (Wan routes)
 
 ## Metadata
 
 - Created: 2026-07-25
-- Status: Implemented (pending release) — 2026-07-25, cycle-1 implementation wave
-- Completed: N/A
+- Status: Completed
+- Completed: 2026-07-25 — released in 0.25.0 (tag `v0.25.0` from `2452f0c`,
+  workflow 30162410505 green; PyPI + GitHub Release verified). The 0101
+  smoke ran both 0.24.0 and 0.25.0 with `--no-prompt-cache` so the rewritten
+  encode-measurement path was exercised end to end; output bitwise identical.
 - Effort: S
 
 ## ADR status

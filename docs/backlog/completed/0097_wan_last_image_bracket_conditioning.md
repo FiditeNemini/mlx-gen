@@ -1,11 +1,14 @@
-# Proposed: Wan A14B i2v `last_image` bracket conditioning (first+last frame)
+# Completed: Wan A14B i2v `last_image` bracket conditioning (first+last frame)
 
 ## Metadata
 
 - Created: 2026-07-25
-- Status: Implemented (pending release) — 2026-07-25, cycle-1 implementation
-  wave; quality probe PASSED (measured below), shipped as EXPERIMENTAL
-- Completed: N/A
+- Status: Completed (shipped as EXPERIMENTAL; quality probe PASSED, measured
+  below — one Lightning 4-step probe pair, in-distribution target; broader
+  recipes remain unverified)
+- Completed: 2026-07-25 — released in 0.25.0 (tag `v0.25.0` from `2452f0c`,
+  workflow 30162410505 green; PyPI + GitHub Release verified); release
+  checklist and smoke evidence in [0101](0101_release_0_25_0.md).
 - Effort: S (code) + A/B gate (quality evidence)
 
 ## ADR status
