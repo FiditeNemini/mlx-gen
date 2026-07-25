@@ -40,8 +40,10 @@ class WanVace(Wan2_2_TI2V):
         guidance_2: float | None = None,
         flow_shift: float | None = None,
         solver: str | None = None,
+        denoising_step_list: list[int] | None = None,
         negative_prompt: str | None = None,
         image_path: Path | str | None = None,
+        last_image_path: Path | str | None = None,
         video_path: Path | str | None = None,
         video_strength: float | None = None,
         video_mask_path: Path | str | None = None,
@@ -62,6 +64,19 @@ class WanVace(Wan2_2_TI2V):
         start_time = time.time()
         if guidance_2 is not None:
             raise ValueError("Wan VACE uses a single transformer; guidance_2 is not supported.")
+        # Both flags bind on every Wan variant (shared CLI kwarg set) but are
+        # rejected here explicitly: VACE has neither the A14B bracket
+        # conditioning layout nor a validated distill-grid recipe (ADR 0002).
+        if last_image_path is not None:
+            raise ValueError(
+                "Wan VACE does not support last_image_path; first+last bracket conditioning "
+                "is a Wan A14B image-to-video feature."
+            )
+        if denoising_step_list is not None:
+            raise ValueError(
+                "Wan VACE does not support denoising_step_list; explicit step grids target "
+                "the Wan TI2V/A14B distill recipes."
+            )
         # VACE requires an exact, multiple-aligned canvas; there is no source-derived
         # canvas resolution to preserve, so a source-aspect request is a contradiction.
         if canvas_policy is not None and DimensionResolver.normalize_canvas_policy(canvas_policy) != "exact-resize":
@@ -255,13 +270,17 @@ class WanVace(Wan2_2_TI2V):
             resize_mode=resize_mode,
             lora_paths=getattr(self, "lora_paths", None),
             lora_scales=getattr(self, "lora_scales", None),
-            extra_metadata=self._vace_extra_metadata(
-                video_mask_path=video_mask_path,
-                masked_region_mode=masked_region_mode if video_mask_path is not None else None,
-                reference_image_paths=reference_image_paths,
-                conditioning_scale=conditioning_scale,
-                num_reference_images=num_reference_images,
-            ),
+            extra_metadata={
+                # Prompt-conditioning truth (0098), shared with the TI2V path.
+                **(getattr(self, "_last_prompt_truncation", None) or {}),
+                **self._vace_extra_metadata(
+                    video_mask_path=video_mask_path,
+                    masked_region_mode=masked_region_mode if video_mask_path is not None else None,
+                    reference_image_paths=reference_image_paths,
+                    conditioning_scale=conditioning_scale,
+                    num_reference_images=num_reference_images,
+                ),
+            },
             materialize_frames=False,
         )
         self._emit_progress(

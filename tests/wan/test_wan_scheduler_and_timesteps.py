@@ -1,5 +1,6 @@
 import mlx.core as mx
 import numpy as np
+import pytest
 
 from mflux.models.wan.latent_creator import WanTimestepPolicy
 from mflux.models.wan.scheduler import WanEulerScheduler, WanUniPCMultistepScheduler
@@ -202,3 +203,116 @@ def test_wan_euler_steps_match_lightx2v_reference():
             rtol=1e-5,
             atol=1e-5,
         )
+
+
+def test_wan_unipc_step_grid_matches_lightx2v_distill_contract():
+    # 0099: the lightx2v Wan22StepDistillScheduler contract is the explicit
+    # list [1000, 750, 500, 250]. The transformer must see EXACTLY these
+    # timesteps; sigma follows the flow-matching identity t / 1000 with the
+    # same leading 1e-6 guard the count path applies at sigma == 1 (the UniPC
+    # lambda term log(1 - sigma) is degenerate there).
+    scheduler = WanUniPCMultistepScheduler(flow_shift=5.0)
+    scheduler.set_timesteps(denoising_step_list=[1000, 750, 500, 250])
+
+    assert np.array(scheduler.timesteps).tolist() == [1000, 750, 500, 250]
+    np.testing.assert_allclose(
+        np.array(scheduler.sigmas),
+        np.array([1.0 - 1e-6, 0.75, 0.5, 0.25, 0.0], dtype=np.float32),
+        rtol=0,
+        atol=1e-9,
+    )
+    assert scheduler.num_inference_steps == 4
+
+
+def test_wan_euler_step_grid_matches_lightx2v_distill_contract():
+    # The euler update tolerates sigma == 1 exactly, matching its own count
+    # path (which also starts at sigma 1.0), so no leading clamp here.
+    scheduler = WanEulerScheduler(flow_shift=5.0)
+    scheduler.set_timesteps(denoising_step_list=[1000, 750, 500, 250])
+
+    np.testing.assert_array_equal(
+        np.array(scheduler.timesteps), np.array([1000.0, 750.0, 500.0, 250.0], dtype=np.float32)
+    )
+    np.testing.assert_array_equal(np.array(scheduler.sigmas), np.array([1.0, 0.75, 0.5, 0.25, 0.0], dtype=np.float32))
+
+
+def test_wan_step_grid_ignores_flow_shift():
+    # Grid entries are final (already-shifted) timesteps: two schedulers with
+    # different flow_shift values must produce identical grid schedules.
+    for scheduler_class in (WanUniPCMultistepScheduler, WanEulerScheduler):
+        low_shift = scheduler_class(flow_shift=1.0)
+        high_shift = scheduler_class(flow_shift=12.0)
+        low_shift.set_timesteps(denoising_step_list=[875, 500, 125])
+        high_shift.set_timesteps(denoising_step_list=[875, 500, 125])
+
+        np.testing.assert_array_equal(np.array(low_shift.timesteps), np.array(high_shift.timesteps))
+        np.testing.assert_array_equal(np.array(low_shift.sigmas), np.array(high_shift.sigmas))
+
+
+def test_wan_step_grid_sigma_relation_matches_count_path_where_they_coincide():
+    # The count path derives t = int(sigma * 1000); the grid inverts it as
+    # sigma = t / 1000. Where both schedules announce the same timesteps
+    # (count at flow_shift=1, steps=4 -> [999, 750, 500, 250]), the grid
+    # sigmas agree within the count path's own timestep quantization error
+    # (< 1/1000), and the clamped leading sigma is bitwise identical.
+    count = WanUniPCMultistepScheduler(flow_shift=1.0)
+    count.set_timesteps(4)
+    count_timesteps = np.array(count.timesteps).tolist()
+    assert count_timesteps == [999, 750, 500, 250]
+
+    grid = WanUniPCMultistepScheduler(flow_shift=1.0)
+    grid.set_timesteps(denoising_step_list=count_timesteps)
+
+    assert np.array(grid.timesteps).tolist() == count_timesteps
+    np.testing.assert_allclose(np.array(grid.sigmas), np.array(count.sigmas), rtol=0, atol=1.1e-3)
+    # Non-clamped grid sigmas invert the count path's int map exactly.
+    grid_sigmas = np.array(grid.sigmas)[:-1]
+    assert (grid_sigmas[1:] * 1000).astype(np.int64).tolist() == count_timesteps[1:]
+
+
+def test_wan_unipc_step_grid_uses_the_same_step_math_as_count_mode():
+    # step() consumes only self.sigmas/self.timesteps and reset state, so a
+    # count-mode scheduler forced onto the grid's schedule must reproduce the
+    # grid run exactly: grid mode introduces no separate solver path.
+    grid = WanUniPCMultistepScheduler()
+    grid.set_timesteps(denoising_step_list=[1000, 750, 500, 250])
+    forced = WanUniPCMultistepScheduler()
+    forced.set_timesteps(4)
+    forced.timesteps = grid.timesteps
+    forced.sigmas = grid.sigmas
+
+    sample_grid = mx.arange(24, dtype=mx.float32).reshape(1, 2, 3, 2, 2) / 10
+    sample_forced = mx.arange(24, dtype=mx.float32).reshape(1, 2, 3, 2, 2) / 10
+    for index, timestep in enumerate(np.array(grid.timesteps).tolist()):
+        model_output = mx.full(sample_grid.shape, 0.1 * (index + 1), dtype=mx.float32)
+        sample_grid = grid.step(model_output, timestep, sample_grid, return_dict=False)[0]
+        sample_forced = forced.step(model_output, timestep, sample_forced, return_dict=False)[0]
+        mx.eval(sample_grid, sample_forced)
+        np.testing.assert_array_equal(np.array(sample_grid), np.array(sample_forced))
+    assert bool(np.isfinite(np.array(sample_grid)).all())
+
+
+@pytest.mark.parametrize("scheduler_class", [WanUniPCMultistepScheduler, WanEulerScheduler])
+def test_wan_step_grid_rejects_malformed_grids(scheduler_class):
+    scheduler = scheduler_class()
+    for malformed in (
+        [],
+        [1000, 750, 800],  # not decreasing
+        [1000, 750, 750],  # duplicate
+        [1000, 0],  # below range
+        [1001, 500],  # above range
+        [1000, -5],  # negative
+        [1000.0, 750.0],  # floats
+        [True, False],  # bools
+    ):
+        with pytest.raises(ValueError):
+            scheduler.set_timesteps(denoising_step_list=malformed)
+
+
+@pytest.mark.parametrize("scheduler_class", [WanUniPCMultistepScheduler, WanEulerScheduler])
+def test_wan_set_timesteps_takes_exactly_one_schedule_source(scheduler_class):
+    scheduler = scheduler_class()
+    with pytest.raises(ValueError, match="exactly one"):
+        scheduler.set_timesteps()
+    with pytest.raises(ValueError, match="exactly one"):
+        scheduler.set_timesteps(4, denoising_step_list=[1000, 750])

@@ -202,8 +202,10 @@ def test_wan_video_condition_cache_reuses_same_source(monkeypatch, tmp_path):
     Image.new("RGB", (4, 4), color="white").save(image_path)
     expected = mx.array([2.0], dtype=mx.float32)
 
-    def fake_load(self, *, image_path, height, width, num_frames, batch_size, resize_mode="resize"):
-        observed.append((str(image_path), height, width, num_frames, batch_size, resize_mode))
+    def fake_load(
+        self, *, image_path, height, width, num_frames, batch_size, resize_mode="resize", last_image_path=None
+    ):
+        observed.append((str(image_path), height, width, num_frames, batch_size, resize_mode, last_image_path))
         return expected
 
     monkeypatch.setattr(Wan2_2_TI2V, "_load_video_condition", fake_load)
@@ -223,5 +225,5 @@ def test_wan_video_condition_cache_reuses_same_source(monkeypatch, tmp_path):
         batch_size=1,
     )
 
-    assert observed == [(str(image_path), 64, 96, 9, 1, "resize")]
+    assert observed == [(str(image_path), 64, 96, 9, 1, "resize", None)]
     np.testing.assert_array_equal(np.array(first), np.array(second))

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import mlx.core as mx
 import numpy as np
 
+from mflux.models.wan.scheduler.wan_timestep_grid import WanTimestepGrid
+
 
 @dataclass
 class WanUniPCSchedulerOutput:
@@ -40,14 +42,34 @@ class WanUniPCMultistepScheduler:
         self.begin_index: int | None = None
         self.this_order = 1
 
-    def set_timesteps(self, num_inference_steps: int) -> None:
-        if num_inference_steps <= 0:
-            raise ValueError("num_inference_steps must be greater than zero.")
-        sigmas = np.linspace(1, 1 / self.num_train_timesteps, num_inference_steps + 1)[:-1]
-        sigmas = self.flow_shift * sigmas / (1 + (self.flow_shift - 1) * sigmas)
-        if abs(sigmas[0] - 1) < 1e-6:
-            sigmas[0] -= 1e-6
-        timesteps = (sigmas * self.num_train_timesteps).astype(np.int64)
+    def set_timesteps(
+        self,
+        num_inference_steps: int | None = None,
+        *,
+        denoising_step_list: list[int] | None = None,
+    ) -> None:
+        if (num_inference_steps is None) == (denoising_step_list is None):
+            raise ValueError("set_timesteps takes exactly one of num_inference_steps or denoising_step_list.")
+        if denoising_step_list is not None:
+            # Grid mode (0099): the transformer sees the exact requested
+            # timesteps; sigma = t / num_train_timesteps (flow-matching
+            # identity, no flow_shift). The leading sigma gets the SAME
+            # 1e-6 guard as the count path: sigma == 1 makes the UniPC
+            # lambda = log(1 - sigma) - log(sigma) term degenerate.
+            grid = WanTimestepGrid.validate(denoising_step_list, self.num_train_timesteps)
+            sigmas = WanTimestepGrid.sigmas(grid, self.num_train_timesteps)
+            if abs(sigmas[0] - 1) < 1e-6:
+                sigmas[0] -= 1e-6
+            timesteps = np.asarray(grid, dtype=np.int64)
+            num_inference_steps = len(grid)
+        else:
+            if num_inference_steps <= 0:
+                raise ValueError("num_inference_steps must be greater than zero.")
+            sigmas = np.linspace(1, 1 / self.num_train_timesteps, num_inference_steps + 1)[:-1]
+            sigmas = self.flow_shift * sigmas / (1 + (self.flow_shift - 1) * sigmas)
+            if abs(sigmas[0] - 1) < 1e-6:
+                sigmas[0] -= 1e-6
+            timesteps = (sigmas * self.num_train_timesteps).astype(np.int64)
         sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
 
         self.timesteps = mx.array(timesteps, dtype=mx.int64)
@@ -263,13 +285,21 @@ class WanUniPCMultistepScheduler:
     def _noise_step_indices(self, timestep: int | mx.array) -> list[int]:
         batch_size = self._timestep_batch_size(timestep)
         if self.begin_index is None:
-            return [self._index_for_timestep(timestep)] if batch_size == 1 else [self._index_for_timestep(t) for t in timestep]
+            return (
+                [self._index_for_timestep(timestep)]
+                if batch_size == 1
+                else [self._index_for_timestep(t) for t in timestep]
+            )
         if self.step_index is not None:
             return [self.step_index] * batch_size
         return [self.begin_index] * batch_size
 
     def _sigma_for_step_indices(self, step_indices: list[int], *, sample_ndim: int) -> mx.array:
-        sigma = self.sigmas[step_indices[0]] if len(step_indices) == 1 else self.sigmas[mx.array(step_indices, dtype=mx.int32)]
+        sigma = (
+            self.sigmas[step_indices[0]]
+            if len(step_indices) == 1
+            else self.sigmas[mx.array(step_indices, dtype=mx.int32)]
+        )
         while sigma.ndim < sample_ndim:
             sigma = mx.expand_dims(sigma, axis=-1)
         return sigma

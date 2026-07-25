@@ -52,6 +52,7 @@ class WanVideoRequest:
         tensor_health_check_interval: int | None,
         canvas_policy: str | None = None,
         resize_mode: str = "resize",
+        last_image_path: Path | str | None = None,
     ) -> "WanVideoRequest":
         health_check_interval = model._validate_tensor_health_check_interval(tensor_health_check_interval)
         if (
@@ -69,6 +70,20 @@ class WanVideoRequest:
             raise ValueError(f"{model.model_config.model_name} does not support image-to-video input.")
         if video_path is not None and not model._supports_video_to_video():
             raise ValueError(f"{model.model_config.model_name} does not support video-to-video input.")
+        # last_image bracket conditioning (0097) exists only on the A14B i2v
+        # 36-channel concat path; every other route fails loudly (ADR 0002).
+        if last_image_path is not None:
+            if not is_image_to_video:
+                raise ValueError(
+                    "last_image_path requires image_path: Wan first+last bracket conditioning "
+                    "is an image-to-video feature."
+                )
+            if model._uses_expanded_timesteps():
+                raise ValueError(
+                    f"{model.model_config.model_name} does not support last_image_path: its first-frame "
+                    "conditioning (expand_timesteps) has no last-frame slot. Use a Wan A14B "
+                    "image-to-video model."
+                )
         # Validate the mapping mode up front, before any model work.
         resize_mode = DimensionResolver.normalize_resize_mode(resize_mode)
         resolved_canvas_policy = (
@@ -83,6 +98,10 @@ class WanVideoRequest:
             canvas_policy=canvas_policy,
         )
         num_frames = model._validated_frame_count(num_frames)
+        if last_image_path is not None and num_frames < 2:
+            raise ValueError(
+                "last_image_path requires at least 2 frames: the bracket needs distinct first and last frames."
+            )
         if video_strength is not None and not is_video_to_video:
             raise ValueError("video_strength requires video_path.")
         if video_mask_path is not None and not is_video_to_video:

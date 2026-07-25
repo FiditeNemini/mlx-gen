@@ -37,13 +37,17 @@ PUBLIC_TASKS = {*PUBLIC_IMAGE_TASKS, *PUBLIC_VIDEO_TASKS}
 IMAGE_TASKS = {*PUBLIC_IMAGE_TASKS, EDIT}
 VIDEO_TASKS = PUBLIC_VIDEO_TASKS
 VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
-CAPABILITIES_SCHEMA_VERSION = 4
+# v5: additive supports_last_image row field (0097), matching the v4 bump
+# convention for supports_video_mask.
+CAPABILITIES_SCHEMA_VERSION = 5
 QWEN_CONTROL_UNION_MODEL = "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
 QWEN_CONTROL_INPAINT_MODEL = "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
 # Untrusted inferred identities that earned native masked edit through an exact smoke proof.
-QWEN_BASE_NATIVE_INPAINT_EXACT_ROWS = frozenset({
-    "AbstractFramework/qwen-image-2512-8bit",
-})
+QWEN_BASE_NATIVE_INPAINT_EXACT_ROWS = frozenset(
+    {
+        "AbstractFramework/qwen-image-2512-8bit",
+    }
+)
 
 I2I_MODE_AUTO = "auto"
 MODE_TEXT_ONLY = "text-only"
@@ -87,6 +91,8 @@ class GenerationCapability:
     supports_image_strength: bool = False
     supports_video_strength: bool = False
     supports_video_mask: bool = False
+    # Wan A14B i2v first+last bracket conditioning (--last-image, 0097).
+    supports_last_image: bool = False
     supports_mask: bool = False
     supports_control_image: bool = False
     supports_control_mask: bool = False
@@ -133,6 +139,7 @@ class GenerationCapability:
             "supports_image_strength": self.supports_image_strength,
             "supports_video_strength": self.supports_video_strength,
             "supports_video_mask": self.supports_video_mask,
+            "supports_last_image": self.supports_last_image,
             "supports_mask": self.supports_mask,
             "supports_control_image": self.supports_control_image,
             "supports_control_mask": self.supports_control_mask,
@@ -1198,6 +1205,10 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 )
             )
     if (declared_task in {IMAGE_TO_VIDEO, "text-image-to-video", None}) and supports_image_to_video:
+        # First+last bracket conditioning (0097) exists only on the A14B
+        # 36-channel concat i2v path; the 5B expand-timesteps path has no
+        # last-frame slot.
+        uses_expanded_timesteps = bool(identity.model_config.transformer_overrides.get("expand_timesteps", True))
         capabilities.append(
             GenerationCapability(
                 id="wan.first-frame",
@@ -1208,6 +1219,7 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 max_images=1,
                 supports_frames=True,
                 supports_fps=True,
+                supports_last_image=not uses_expanded_timesteps and not is_vace,
                 default_for_task=True,
                 canvas_policies=(CANVAS_POLICY_SOURCE_ASPECT, CANVAS_POLICY_EXACT_RESIZE),
                 default_canvas_policy=CANVAS_POLICY_SOURCE_ASPECT,

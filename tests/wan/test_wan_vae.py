@@ -84,7 +84,7 @@ def test_wan_i2v_precision_condition_build_is_bitwise_identical_to_f32_concat_ca
     first_frame_f32 = normalized[:, :, None, :, :]
     zero_frames_f32 = mx.zeros((1, 3, 8, 64, 64), dtype=first_frame_f32.dtype)
     old_condition = mx.concatenate([first_frame_f32, zero_frames_f32], axis=2).astype(mx.bfloat16)
-    new_condition = Wan2_2_TI2V._build_first_frame_video_condition(
+    new_condition = Wan2_2_TI2V._build_video_condition(
         normalized_first_frame=normalized,
         num_frames=9,
         batch_size=1,

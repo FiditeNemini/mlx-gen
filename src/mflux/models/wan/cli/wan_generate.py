@@ -38,8 +38,8 @@ def main() -> None:
     provided_options = _provided_options(sys.argv[1:])
     args = parser.parse_args()
     LoRALoader.set_debug_enabled(bool(getattr(args, "debug", False)))
-    provided_options.update(_apply_metadata_defaults(args))
-    _validate_args(parser, args)
+    provided_options.update(_apply_metadata_defaults(args, provided_options))
+    _validate_args(parser, args, provided_options)
     try:
         _apply_seed_defaults(args)
     except ValueError as exc:
@@ -90,6 +90,9 @@ def main() -> None:
             prompt = ""
             try:
                 prompt = PromptUtil.read_prompt(args)
+                # Grid mode (0099): the explicit list replaces the step count,
+                # and flow_shift does not apply to already-shifted grid entries.
+                use_step_grid = args.denoising_step_list is not None
                 generate_kwargs = dict(
                     seed=seed,
                     prompt=prompt,
@@ -99,11 +102,13 @@ def main() -> None:
                     fps=args.fps,
                     guidance=args.guidance,
                     guidance_2=args.guidance_2,
-                    flow_shift=args.flow_shift,
+                    flow_shift=None if use_step_grid else args.flow_shift,
                     solver=args.solver,
-                    num_inference_steps=args.steps,
+                    num_inference_steps=None if use_step_grid else args.steps,
+                    denoising_step_list=args.denoising_step_list,
                     negative_prompt=args.negative_prompt,
                     image_path=args.image_path,
+                    last_image_path=args.last_image,
                     video_path=args.video_path,
                     video_strength=args.video_strength,
                     video_mask_path=args.video_mask_path,
@@ -161,7 +166,7 @@ def main() -> None:
                 _emit_cli_failure_progress(
                     progress,
                     total_frames=args.frames,
-                    total_steps=args.steps,
+                    total_steps=len(args.denoising_step_list) if args.denoising_step_list else args.steps,
                     task=_requested_task(args),
                 )
                 events.emit_failed(
@@ -196,6 +201,17 @@ def _parser() -> argparse.ArgumentParser:
         help="Enable debug logging for internal generation details such as LoRA fusion targets.",
     )
     parser.add_argument("--image-path", default=None, help="Input image for Wan image-to-video models.")
+    parser.add_argument(
+        "--last-image",
+        dest="last_image",
+        default=None,
+        help=(
+            "Optional last-frame anchor for Wan A14B image-to-video: the clip starts at --image-path and "
+            "ends near this image (first+last bracket conditioning, experimental on Wan 2.2 A14B). The "
+            "last image maps through the same canvas and --resize-mode as the first frame. Requires "
+            "--image-path; rejected on TI2V-5B, VACE, and text/video-to-video routes."
+        ),
+    )
     parser.add_argument(
         "--video-path",
         default=None,
@@ -259,6 +275,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fps", type=int, default=WAN_DEFAULT_FPS, help="Output video frame rate.")
     parser.add_argument("--steps", type=int, default=50, help="Denoising steps.")
+    parser.add_argument(
+        "--denoising-step-list",
+        type=int,
+        nargs="+",
+        default=None,
+        help=(
+            "Explicit denoising timestep grid (strictly decreasing integers in [1, 1000]), e.g. "
+            "'--denoising-step-list 1000 750 500 250' for the LightX2V distill contract. Mutually "
+            "exclusive with --steps and --flow-shift (grid entries are final, already-shifted "
+            "timesteps); not supported for video-to-video."
+        ),
+    )
     parser.add_argument(
         "--solver",
         choices=("unipc", "euler"),
@@ -482,7 +510,8 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _apply_metadata_defaults(args: argparse.Namespace) -> set[str]:
+def _apply_metadata_defaults(args: argparse.Namespace, argv_options: set[str] | None = None) -> set[str]:
+    argv_options = argv_options or set()
     provided_options = set()
     if args.config_from_metadata is None:
         return provided_options
@@ -503,9 +532,24 @@ def _apply_metadata_defaults(args: argparse.Namespace) -> set[str]:
     if args.image_path is None and metadata.get("image_path") is not None:
         args.image_path = metadata.get("image_path")
         provided_options.add("--image-path")
+    if args.last_image is None and metadata.get("last_image_path") is not None:
+        args.last_image = metadata.get("last_image_path")
+        provided_options.add("--last-image")
     if args.video_path is None and metadata.get("video_path") is not None:
         args.video_path = metadata.get("video_path")
         provided_options.add("--video-path")
+    # A recorded grid replays only when the user did not explicitly choose a
+    # count or another grid on the command line (explicit argv wins, matching
+    # the metadata-defaults convention). Grid metadata records `steps` as the
+    # grid length, so the `steps` backfill below must not re-apply it.
+    if (
+        args.denoising_step_list is None
+        and metadata.get("denoising_step_list")
+        and "--steps" not in argv_options
+        and "--flow-shift" not in argv_options
+    ):
+        args.denoising_step_list = [int(step) for step in metadata["denoising_step_list"]]
+        provided_options.add("--denoising-step-list")
     if args.lora_paths is None and metadata.get("lora_paths") is not None:
         args.lora_paths = metadata.get("lora_paths")
         provided_options.add("--lora-paths")
@@ -528,6 +572,8 @@ def _apply_metadata_defaults(args: argparse.Namespace) -> set[str]:
         "canvas_policy",
         "resize_mode",
     ):
+        if name in ("steps", "flow_shift") and args.denoising_step_list is not None:
+            continue
         value = metadata.get(name)
         if value is not None and getattr(args, name) == _parser().get_default(name):
             setattr(args, name, value)
@@ -549,19 +595,37 @@ def _apply_metadata_defaults(args: argparse.Namespace) -> set[str]:
     return provided_options
 
 
-def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace, provided_options: set[str]) -> None:
     if args.prompt is None and args.prompt_file is None:
         parser.error("Either --prompt or --prompt-file is required, or provide prompt in --config-from-metadata.")
     if args.fps <= 0:
         parser.error("--fps must be greater than zero.")
     if args.steps <= 0:
         parser.error("--steps must be greater than zero.")
+    if args.denoising_step_list is not None:
+        # Explicit grid combos fail here, before any model work (ADR 0002).
+        if "--steps" in provided_options:
+            parser.error("--denoising-step-list and --steps are mutually exclusive: the grid defines the step count.")
+        if "--flow-shift" in provided_options:
+            parser.error(
+                "--denoising-step-list cannot be combined with --flow-shift: grid entries are final "
+                "(already-shifted) timesteps."
+            )
+        if args.video_path is not None:
+            parser.error(
+                "--denoising-step-list is not supported for video-to-video: --video-strength truncates the "
+                "schedule, which would silently drop grid points."
+            )
     if args.max_sequence_length <= 0:
         parser.error("--max-sequence-length must be greater than zero.")
     if args.image_path is not None and args.video_path is not None:
         parser.error("--image-path and --video-path cannot be used together.")
     if args.image_path is not None and not Path(args.image_path).exists():
         parser.error(f"--image-path does not exist: {args.image_path}")
+    if args.last_image is not None and args.image_path is None:
+        parser.error("--last-image requires --image-path (first+last bracket conditioning is image-to-video only).")
+    if args.last_image is not None and not Path(args.last_image).exists():
+        parser.error(f"--last-image does not exist: {args.last_image}")
     if args.video_path is not None and not Path(args.video_path).exists():
         parser.error(f"--video-path does not exist: {args.video_path}")
     if args.video_strength is not None and args.video_path is None:
@@ -582,6 +646,18 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
         model_config.transformer_overrides.get("supports_image_to_video", True)
     ):
         raise ValueError(f"{model_config.model_name} does not support image-to-video input.")
+    if args.last_image is not None and bool(model_config.transformer_overrides.get("expand_timesteps", True)):
+        # Fail before the multi-minute weight load: the 5B first-frame
+        # conditioning path (expand_timesteps) has no last-frame slot.
+        raise ValueError(
+            f"{model_config.model_name} does not support --last-image: its first-frame conditioning "
+            "(expand_timesteps) has no last-frame slot. Use a Wan A14B image-to-video model."
+        )
+    if args.denoising_step_list is not None and is_vace:
+        raise ValueError(
+            "--denoising-step-list is not supported on Wan VACE models; explicit step grids target "
+            "the Wan TI2V/A14B distill recipes."
+        )
     if args.video_path is not None and not bool(
         model_config.transformer_overrides.get("supports_video_to_video", False)
     ):
@@ -607,21 +683,23 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
         )
     if args.reference_image_paths:
         for path in args.reference_image_paths:
-            _probe_reference_image(image_path=path)
+            _probe_image_option(image_path=path, option="--reference-image")
+    if args.last_image is not None:
+        _probe_image_option(image_path=args.last_image, option="--last-image")
     if args.video_path is not None:
         _probe_source_video(video_path=args.video_path, requested_frames=args.frames, requested_fps=args.fps)
     if args.video_mask_path is not None:
         _probe_video_mask(mask_path=args.video_mask_path, is_vace=is_vace)
 
 
-def _probe_reference_image(*, image_path: str) -> None:
+def _probe_image_option(*, image_path: str, option: str) -> None:
     from PIL import Image
 
     try:
         with Image.open(image_path) as image:
             image.verify()
     except Exception as exc:
-        raise ValueError(f"--reference-image is not a readable image: {image_path} ({exc})") from exc
+        raise ValueError(f"{option} is not a readable image: {image_path} ({exc})") from exc
 
 
 def _probe_video_mask(*, mask_path: str, is_vace: bool = False) -> None:
@@ -831,6 +909,7 @@ def _write_failure_manifest(
             "prompt": prompt,
             "negative_prompt": args.negative_prompt or None,
             "image_path": str(args.image_path) if args.image_path is not None else None,
+            "last_image_path": str(args.last_image) if args.last_image is not None else None,
             "video_path": str(args.video_path) if args.video_path is not None else None,
             "video_strength": args.video_strength,
             "video_mask_path": str(args.video_mask_path) if args.video_mask_path is not None else None,
@@ -844,10 +923,13 @@ def _write_failure_manifest(
             "canvas_policy": args.canvas_policy,
             "resize_mode": args.resize_mode,
             "frames": args.frames,
-            "steps": args.steps,
+            # Grid runs never consult the parsed count/shift; recording them
+            # would misstate what actually ran.
+            "steps": None if args.denoising_step_list else args.steps,
+            "denoising_step_list": args.denoising_step_list,
             "guidance": args.guidance,
             "guidance_2": args.guidance_2,
-            "flow_shift": args.flow_shift,
+            "flow_shift": None if args.denoising_step_list else args.flow_shift,
             "solver": args.solver,
             "fps": args.fps,
             "output": resolved_output_path,

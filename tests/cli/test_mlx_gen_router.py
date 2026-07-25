@@ -727,6 +727,20 @@ def test_capabilities_command_reports_wan_a14b_video_to_video(capsys):
     assert all(capability["public_task"] != "video-to-video" for capability in ti2v_payload["capabilities"])
 
 
+def test_capabilities_command_reports_wan_last_image_on_a14b_i2v_only(capsys):
+    # Bracket conditioning (0097) rides the A14B 36-channel concat i2v path;
+    # the 5B expand-timesteps first-frame path has no last-frame slot.
+    mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-I2V-A14B-Diffusers"])
+    i2v_payload = json.loads(capsys.readouterr().out)
+    i2v_row = next(capability for capability in i2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
+    assert i2v_row["supports_last_image"] is True
+
+    mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-TI2V-5B-Diffusers"])
+    ti2v_payload = json.loads(capsys.readouterr().out)
+    ti2v_row = next(capability for capability in ti2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
+    assert ti2v_row["supports_last_image"] is False
+
+
 def test_capabilities_command_accepts_base_model_for_local_paths(capsys):
     mlx_gen._show_capabilities(["--model", "../models/local-flux2-folder", "--base-model", "flux2-klein-4b"])
 
@@ -4282,12 +4296,24 @@ def test_wan_cli_kwargs_bind_to_both_variant_signatures(monkeypatch, tmp_path):
         "argv",
         [
             "mlxgen-generate-wan",
-            "--model", "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
-            "--prompt", "a city timelapse",
-            "--width", "128", "--height", "128", "--frames", "5",
-            "--steps", "2", "--seed", "123",
-            "--image-path", str(image_path),
-            "--output", str(tmp_path / "out.mp4"),
+            "--model",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--width",
+            "128",
+            "--height",
+            "128",
+            "--frames",
+            "5",
+            "--steps",
+            "2",
+            "--seed",
+            "123",
+            "--image-path",
+            str(image_path),
+            "--output",
+            str(tmp_path / "out.mp4"),
             "--no-progress",
         ],
     )
@@ -4296,12 +4322,354 @@ def test_wan_cli_kwargs_bind_to_both_variant_signatures(monkeypatch, tmp_path):
 
     # The is_vace branch adds these on top of the same base dict.
     vace_extras = {
-        "reference_image_paths": [], "conditioning_scale": 1.0,
+        "reference_image_paths": [],
+        "conditioning_scale": 1.0,
         "masked_region_mode": "generate",
     }
 
     inspect.signature(Wan2_2_TI2V.generate_video).bind(object(), **cli_kwargs)
     inspect.signature(WanVace.generate_video).bind(object(), **cli_kwargs, **vace_extras)
+
+
+def _run_fake_wan_cli(monkeypatch, argv):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+            return "out_1.mp4"
+
+    class FakeWan:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "Wan2_2_TI2V", FakeWan)
+    monkeypatch.setattr(sys, "argv", ["mlxgen-generate-wan", *argv])
+    wan_generate.main()
+    return observed
+
+
+def test_wan_cli_last_image_forwards_to_generate(monkeypatch, tmp_path):
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "first.png"
+    last_path = tmp_path / "last.png"
+    image_path.write_bytes(b"fake")
+    PILImage.new("RGB", (8, 8), "white").save(last_path)
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--width",
+            "128",
+            "--height",
+            "128",
+            "--frames",
+            "5",
+            "--steps",
+            "2",
+            "--seed",
+            "123",
+            "--image-path",
+            str(image_path),
+            "--last-image",
+            str(last_path),
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["last_image_path"] == str(last_path)
+    assert observed["generate"]["image_path"] == str(image_path)
+
+
+def test_wan_cli_last_image_requires_image_path(monkeypatch, tmp_path, capsys):
+    from PIL import Image as PILImage
+
+    from mflux.models.wan.cli import wan_generate
+
+    last_path = tmp_path / "last.png"
+    PILImage.new("RGB", (8, 8), "white").save(last_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--last-image",
+            str(last_path),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        wan_generate.main()
+
+    assert "--last-image requires --image-path" in capsys.readouterr().err
+
+
+def test_wan_cli_last_image_rejected_on_expand_timesteps_model_before_load(monkeypatch, tmp_path, capsys):
+    from PIL import Image as PILImage
+
+    from mflux.models.wan.cli import wan_generate
+
+    image_path = tmp_path / "first.png"
+    last_path = tmp_path / "last.png"
+    PILImage.new("RGB", (8, 8), "white").save(image_path)
+    PILImage.new("RGB", (8, 8), "black").save(last_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--image-path",
+            str(image_path),
+            "--last-image",
+            str(last_path),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        wan_generate.main()
+
+    assert "does not support --last-image" in capsys.readouterr().err
+
+
+def test_wan_cli_last_image_replays_from_metadata(monkeypatch, tmp_path):
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "first.png"
+    last_path = tmp_path / "last.png"
+    image_path.write_bytes(b"fake")
+    PILImage.new("RGB", (8, 8), "white").save(last_path)
+    metadata_path = tmp_path / "run.metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "prompt": "a city timelapse",
+                "seed": 7,
+                "image_path": str(image_path),
+                "last_image_path": str(last_path),
+            }
+        )
+    )
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            "--config-from-metadata",
+            str(metadata_path),
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["last_image_path"] == str(last_path)
+    assert observed["generate"]["seed"] == 7
+
+
+def test_wan_cli_denoising_step_list_forwards_and_disables_count_flags(monkeypatch, tmp_path):
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--seed",
+            "123",
+            "--denoising-step-list",
+            "1000",
+            "750",
+            "500",
+            "250",
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["denoising_step_list"] == [1000, 750, 500, 250]
+    # Grid mode never consults the parsed count/shift; the CLI forwards None
+    # so the model-side mutual exclusion stays satisfied.
+    assert observed["generate"]["num_inference_steps"] is None
+    assert observed["generate"]["flow_shift"] is None
+
+
+def test_wan_cli_denoising_step_list_mutually_exclusive_flags(monkeypatch, tmp_path, capsys):
+    from mflux.models.wan.cli import wan_generate
+
+    for conflicting in (["--steps", "4"], ["--flow-shift", "5.0"]):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "mlxgen-generate-wan",
+                "--model",
+                "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+                "--prompt",
+                "a city timelapse",
+                "--denoising-step-list",
+                "1000",
+                "750",
+                *conflicting,
+            ],
+        )
+        with pytest.raises(SystemExit):
+            wan_generate.main()
+        assert "--denoising-step-list" in capsys.readouterr().err
+
+
+def test_wan_cli_denoising_step_list_rejects_video_path(monkeypatch, tmp_path, capsys):
+    from mflux.models.wan.cli import wan_generate
+
+    video_path = tmp_path / "input.mp4"
+    video_path.write_bytes(b"fake")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--video-path",
+            str(video_path),
+            "--denoising-step-list",
+            "1000",
+            "750",
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        wan_generate.main()
+
+    assert "not supported for video-to-video" in capsys.readouterr().err
+
+
+def test_wan_cli_denoising_step_list_replays_from_metadata(monkeypatch, tmp_path):
+    # A grid run records steps=len(grid) and flow_shift=None; replay must
+    # restore the grid and NOT re-apply the recorded steps as a count.
+    metadata_path = tmp_path / "run.metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "prompt": "a city timelapse",
+                "seed": 7,
+                "steps": 4,
+                "flow_shift": None,
+                "denoising_step_list": [1000, 750, 500, 250],
+            }
+        )
+    )
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--config-from-metadata",
+            str(metadata_path),
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["denoising_step_list"] == [1000, 750, 500, 250]
+    assert observed["generate"]["num_inference_steps"] is None
+    assert observed["generate"]["flow_shift"] is None
+
+
+def test_wan_cli_metadata_grid_beats_hand_edited_numeric_flow_shift(monkeypatch, tmp_path):
+    # Cycle-2 review pin: a hand-edited sidecar carrying BOTH a grid and a
+    # numeric flow_shift (a combination no real run records - grid runs write
+    # flow_shift null) replays the grid and drops the contradictory shift;
+    # the model must not receive a grid+flow_shift conflict.
+    metadata_path = tmp_path / "run.metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "prompt": "a city timelapse",
+                "seed": 7,
+                "steps": 4,
+                "flow_shift": 5.0,
+                "denoising_step_list": [1000, 750, 500, 250],
+            }
+        )
+    )
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--config-from-metadata",
+            str(metadata_path),
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["denoising_step_list"] == [1000, 750, 500, 250]
+    assert observed["generate"]["num_inference_steps"] is None
+    assert observed["generate"]["flow_shift"] is None
+
+
+def test_wan_cli_explicit_steps_wins_over_metadata_grid(monkeypatch, tmp_path):
+    # Explicit argv beats metadata (the metadata-defaults convention): a user
+    # passing --steps replays the run in count mode without the recorded grid.
+    metadata_path = tmp_path / "run.metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "prompt": "a city timelapse",
+                "seed": 7,
+                "steps": 4,
+                "denoising_step_list": [1000, 750, 500, 250],
+            }
+        )
+    )
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--config-from-metadata",
+            str(metadata_path),
+            "--steps",
+            "6",
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["denoising_step_list"] is None
+    assert observed["generate"]["num_inference_steps"] == 6
 
 
 def test_wan_cli_prompt_encoder_flags_reach_model_constructor(monkeypatch, tmp_path):

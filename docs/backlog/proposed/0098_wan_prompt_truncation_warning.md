@@ -3,7 +3,7 @@
 ## Metadata
 
 - Created: 2026-07-25
-- Status: Proposed (storyboard cross-scene-consistency investigation, 2026-07-25)
+- Status: Implemented (pending release) — 2026-07-25, cycle-1 implementation wave
 - Completed: N/A
 - Effort: S
 
@@ -56,7 +56,40 @@ anchors, subject sheets, and long action text can reach the cap).
 
 ## Progress checklist
 
-- [ ] Overflow detection at encode time
-- [ ] CLI warning + metadata fields
-- [ ] Negative-prompt case under CFG
-- [ ] Focused tests
+- [x] Overflow detection at encode time
+- [x] CLI warning + metadata fields
+- [x] Negative-prompt case under CFG
+- [x] Focused tests
+
+## Implementation record (2026-07-25, pending release)
+
+- `encode_prompt` (shared by Wan2_2_TI2V and WanVace) now runs
+  `_check_prompt_truncation` before every encode: an uncapped tokenizer probe
+  on the same `_prompt_clean`ed text the capped encode sees. One stderr line
+  per truncated prompt, naming the counts
+  ("Wan prompt truncated: 547 -> 512 UMT5 tokens; the last 35 tokens do not
+  condition the video."). The probe runs even on prompt-embed cache hits — the
+  truth about what conditioned the video does not depend on cache state.
+- Metadata sidecar gains `prompt_tokens` / `prompt_truncated` on every Wan
+  run, plus `negative_prompt_tokens` / `negative_prompt_truncated` ONLY when
+  CFG actually encodes the negative (guidance > 1.0) — recording a negative
+  count under the CFG-off Lightning recipe would misstate what ran.
+- Runtime-event field: deliberately NOT added. The JSONL event schema is
+  phase-based progress shared across families; there is no per-run
+  prompt-facts event to ride, and adding a Wan-only field to every progress
+  event would violate the "lightweight shared events" contract. The metadata
+  sidecar is the host-facing record (BlackPixel reads it).
+- Tests: `tests/wan/test_wan_prompt_truncation.py` (8 tests, fake tokenizer —
+  the logic under test is the overflow accounting, not the HF tokenizer):
+  over/under budget, exact-fit boundary, negative-prompt gating under CFG,
+  cleaned-text parity, and the metadata merge in generate_video.
+
+## Cycle-2 adversarial review (2026-07-25, no defects found)
+
+- Verified the uncapped probe counts the SAME `_prompt_clean`ed text the
+  capped encode tokenizes, runs before (and independent of) both the
+  in-memory and disk prompt-embed caches, and gates the negative-prompt pair
+  on the actual CFG encode condition (`guidance > 1.0`).
+- Live confirmation: both 0097 probe sidecars carry
+  `prompt_tokens`/`prompt_truncated` (14/false); WanVace merges the same
+  report into its extra_metadata. No changes needed.

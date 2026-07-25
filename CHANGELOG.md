@@ -5,9 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.25.0] - 2026-07-25
+
+Load-path performance and Wan conditioning release. The performance wave
+(backlog 0093/0094/0095) makes page-cold weight loads fault in at sequential
+SSD speed, caps the previously unbounded MLX buffer cache with a
+machine-derived default, and makes the flux2 prompt and compiled-predict
+caches real. The Wan wave (backlog 0097/0098/0099) adds EXPERIMENTAL A14B
+first+last bracket conditioning (`--last-image`; the capabilities contract
+bumps `schema_version` 4 -> 5 with the additive `supports_last_image` field),
+an honest prompt-truncation warning with token-count metadata, and explicit
+denoising step grids for on-grid Lightning sampling.
+
+Release validation: same-seed TI2V-5B output is bitwise identical to 0.24.0
+under identical dependency versions (raw-YUV frame comparison; evidence in
+backlog 0101).
 
 ### Added
+
+- **Wan A14B i2v first+last bracket conditioning (0097)**: `--last-image <path>`
+  (Python: `generate_video(last_image_path=...)`) pins the END of a Wan A14B
+  image-to-video clip to a second anchor image, porting the diffusers
+  `WanImageToVideoPipeline` `last_image` variant exactly (condition video
+  `[first, zeros x (frames-2), last]`, mask endpoints kept at 1). The last image
+  maps through the same canvas and `--resize-mode` as the first frame. Recorded
+  in metadata (`last_image_path`), replayed by `--config-from-metadata`, and
+  advertised as an additive `supports_last_image` capability field on the
+  `wan.first-frame` row (capabilities `schema_version` 5). Fails loudly on every route without the A14B
+  36-channel i2v conditioning layout: text/video-to-video, TI2V-5B
+  (`expand_timesteps`), and Wan VACE. Official first+last training exists for
+  Wan 2.1 (FLF2V); on Wan 2.2 A14B this ships as EXPERIMENTAL with a measured
+  probe: on the preserved storyboard case (Lightning 4-step, 480x240x33f,
+  target = a real future frame of the same shot), the bracketed clip ended at
+  final-frame MAE 4.6/255 from the target (NCC 0.995, sharpness preserved at
+  711 vs target 713) against the first-frame-only baseline's MAE 56.1
+  (NCC 0.335, drift-to-whiteout sharpness 55), with no mid-clip exposure
+  jumps (max brightness step 5.9 vs baseline 17.5). One probe pair; see
+  backlog item 0097 for bounds before relying on exact end-frame adherence.
+- **Wan prompt-truncation warning (0098)**: Wan prompt encoding silently
+  right-truncated prompts beyond `--max-sequence-length` (512) UMT5 tokens;
+  the trailing text simply never conditioned the video. Encoding now measures
+  the real token counts, prints one stderr warning per truncated prompt naming
+  the counts ("prompt truncated: 547 -> 512 UMT5 tokens"), and records
+  `prompt_tokens` / `prompt_truncated` (plus `negative_prompt_tokens` /
+  `negative_prompt_truncated` when CFG actually encodes the negative) in the
+  metadata sidecar so hosts can surface headroom.
+- **Wan explicit denoising step grids (0099)**: `--denoising-step-list 1000 750
+  500 250` (Python: `generate_video(denoising_step_list=[...])`) runs the exact
+  timestep grid the lightx2v distill contract specifies
+  (`Wan22StepDistillScheduler` `denoising_step_list`) instead of a count-derived
+  schedule, on both the unipc and euler solvers. The transformer sees exactly
+  the requested timesteps; sigma follows the flow-matching identity
+  `t / 1000` (with the count path's same leading `1e-6` guard on the UniPC
+  solver). Grid entries are final, already-shifted timesteps, so the flag is
+  mutually exclusive with `--steps` and `--flow-shift` (clear errors, no silent
+  reconciliation) and rejected for video-to-video (strength truncation would
+  drop grid points) and on Wan VACE. Metadata records the grid (`steps` becomes
+  the grid length, `flow_shift` is recorded as null) and
+  `--config-from-metadata` replays it. This enables on-grid 4/8-step Lightning
+  variants and honest Lightning-vs-base comparisons.
 
 - **Sequential weight prefetch at load (0093)**: weight files selected for a load from
   HF-repo layouts are sequentially read into the OS page cache before first use, so
@@ -43,16 +99,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   application, training preview, assistant LoRA scale toggling (training preview
   context exit), LoRA bake at `save_model`, and low-RAM transformer release (compiled
   callables must not keep freed weights alive or replay stale baked constants).
-
-- Backlog: filed the 2026-07-23 image-to-image latency audit follow-ups as
-  proposed items 0093 (sequential weight prefetch at load — ~100 s of a
-  165 s page-cold q8 Klein 9B generation is lazy-mmap fault-in at
-  120-320 MB/s vs ~12.6 GB/s sequential SSD), 0094 (default MLX buffer-cache
-  limit — the Python API applies no cap and the cache grew to 32.9 GB after
-  two generations), and 0095 (wire the write-only flux2 `prompt_cache` and
-  reuse the compiled predict per resident instance). No runtime behavior
-  changes in this entry; measurements and the reconciliation model live in
-  the BlackPixel repo's backlog item 0069.
 
 ## [0.24.0] - 2026-07-23
 

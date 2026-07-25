@@ -3,7 +3,8 @@
 ## Metadata
 
 - Created: 2026-07-25
-- Status: Proposed (storyboard cross-scene-consistency investigation, 2026-07-25)
+- Status: Implemented (pending release) — 2026-07-25, cycle-1 implementation
+  wave; quality probe PASSED (measured below), shipped as EXPERIMENTAL
 - Completed: N/A
 - Effort: S (code) + A/B gate (quality evidence)
 
@@ -96,7 +97,101 @@ VACE 1.3B reference route, see 0100).
 
 ## Progress checklist
 
-- [ ] Bracket layout ported behind an optional argument
-- [ ] Route gating (A14B i2v only; fail-closed elsewhere)
-- [ ] Fixed-seed A/B gate on the storyboard chain case
-- [ ] Capability row + docs or a recorded rejection verdict
+- [x] Bracket layout ported behind an optional argument
+- [x] Route gating (A14B i2v only; fail-closed elsewhere)
+- [x] Fixed-seed A/B gate on the storyboard chain case (probe below)
+- [x] Capability row + docs (shipped as EXPERIMENTAL with the probe verdict)
+
+## Implementation record (2026-07-25, pending release)
+
+- `_load_video_condition` ports the diffusers `WanImageToVideoPipeline`
+  `last_image` variant exactly: condition video
+  `[first, zeros x (num_frames - 2), last]` (built via `_build_video_condition`
+  with the F2/0089 precision-first discipline — the no-last path is bitwise
+  unchanged, test-pinned) and the latent mask keeps BOTH endpoint frames at 1
+  before the existing temporal-scale packing. The mask packing is
+  test-verified against a line-for-line numpy port of the diffusers reference
+  (`tests/wan/test_wan_last_image_bracket.py`).
+- The last image maps through the SAME resolved canvas and `resize_mode` as
+  the first frame (`_normalized_condition_frame`, one geometry for both
+  anchors); the canvas itself stays derived from the FIRST image (i2v
+  source-aspect rules unchanged).
+- Condition-cache identity: `_encode_video_condition` keys now include the
+  last-image identity `(path, mtime_ns, size)` (or None), so a bracketed
+  condition can never alias the single-frame condition of the same first
+  image, and overwriting either source file invalidates the entry.
+- Surface: `generate_video(last_image_path=...)` on BOTH Wan variant
+  signatures (WanVace accepts and rejects explicitly — the bind-contract
+  lesson), `--last-image` CLI flag, metadata `last_image_path`,
+  `--config-from-metadata` replay, additive `supports_last_image` capability
+  field on `wan.first-frame` rows (True only for non-expand-timesteps i2v =
+  A14B i2v), failure-manifest field. Runtime start event unchanged.
+- Fail-closed routes (ADR 0002): text-to-video and video-to-video (no
+  image_path), TI2V-5B (`expand_timesteps` — its 48-channel first-frame path
+  has no last-frame slot; the 36-channel concat path this feature rides is
+  `is_image_to_video and not expand_timesteps`, i.e. exactly I2V-A14B),
+  Wan VACE, and `num_frames < 2`. CLI rejects before weight load.
+
+## Quality probe (2026-07-25, ADR 0001 gate) — PASSED, shipped as EXPERIMENTAL
+
+Fixed-seed pair on the preserved storyboard chain case (`/tmp/bpx_ab/`
+armA_s2, the film's ship scene): first anchor = frame 0, target last anchor =
+frame 48 (2.0 s of REAL future motion from the same continuous shot, so the
+target is in-distribution but non-trivial: first-vs-target MAE 43.2/255,
+gray NCC 0.475). Both runs: I2V-A14B q8, Lightning 4-step CFG-off storyboard
+recipe (`steps 4, guidance 1.0/1.0, flow_shift 5.0, unipc`, Seko-V1 rank-64
+LoRAs), 480x240, 33 frames, seed 4242, identical prompt. Artifacts + metrics
+script preserved in `untracked/flf_probe_2026_07_25/`.
+
+| Metric (final frame vs target) | baseline (first only) | bracket (first+last) |
+| --- | --- | --- |
+| MAE (0-255) | 56.1 | **4.6** (first-anchor reproduction floor is 3.2) |
+| PSNR | 11.1 dB | **31.1 dB** |
+| gray NCC | 0.335 | **0.9948** |
+| final-frame Laplacian-variance sharpness | 55 (whiteout blur) | **711** (target: 713) |
+
+Artifact scan (mid-clip plausibility): bracket max consecutive-frame
+brightness step 5.9 gray levels (baseline 17.5), max inter-frame MAE 11.8 at
+mid-motion (baseline 23.6), final hop 9.0 — BELOW the clip's own mid-motion
+peaks, so no terminal snap onto the anchor; brightness arc is smooth
+(112 -> 152 -> 132), no flashes or exposure jumps; mid-frame visual check
+clean (no ghosting/morph, ship + mountains intact). Side effect worth
+noting: the baseline run ends in the investigation's documented
+drift-to-whiteout failure (ship swallowed by blur clouds), which the bracket
+suppressed entirely in this pair.
+
+Verdict: bracket adherence VALIDATED on this probe — the clip ends at
+VAE/codec-floor distance from the requested last frame with no mid-clip
+artifacts. Honesty bounds: ONE pair, Lightning 4-step CFG-off only, target
+drawn from the same shot's real future (the favorable storyboard handoff
+case; adversarial targets — different shot, mismatched lighting — were not
+probed). The 20-step CFG-on pair was NOT run: ~10x Lightning cost per scene
+exceeded this wave's GPU budget (~2 short runs used of 4). The flag therefore
+ships as EXPERIMENTAL with these numbers quoted in docs; item 0100's
+supersession decision (VACE recipe) can now be taken against a measured
+result.
+
+## Cycle-2 adversarial review (2026-07-25, no code defects found)
+
+- Packing re-verified line-for-line against the diffusers reference
+  (`pipeline_wan_i2v.py` `prepare_latents`), including the
+  repeat-interleave/view/transpose mask packing semantics and the
+  bracket-endpoint rows; the port's extra `[:, :, :latent_frames]` slice is a
+  no-op under the enforced `num_frames % temporal_scale == 1` contract. The
+  F2 build-in-precision path is cast-commutative with the reference's
+  concat-then-cast (bitwise; zeros cast exactly).
+- Probe audited: both sidecars share seed 4242 and every parameter except
+  `last_image_path`; the metrics script re-run reproduced every quoted
+  number exactly (MAE 4.62/56.13, NCC 0.9948/0.3354, sharpness 711.2/713.3,
+  brightness steps 5.94/17.53, final hop 8.98 vs mid-motion 11.83). Wording
+  in docs/CHANGELOG confirmed appropriately hedged (EXPERIMENTAL + bounds).
+- Replay round-trip executed against the probe bundle's real bracket sidecar:
+  every recorded field restores exactly (seed, steps 4, flow_shift 5.0, both
+  anchors, LoRAs, quantize 8).
+- One convention fix: `supports_last_image` shipped without the additive-field
+  capabilities `schema_version` bump the `supports_video_mask` precedent
+  established; bumped 4 -> 5 (no host reads the version today — verified
+  BlackPixel never consumes it).
+- New regression pins: condition-cache FIFO eviction order with plain +
+  bracketed pairs, and resize_mode reaching the LAST anchor through the same
+  geometry as the first frame (pad letterbox vs stretch discriminates).

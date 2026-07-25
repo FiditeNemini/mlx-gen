@@ -4,6 +4,7 @@ import io
 import math
 import re
 import shutil
+import sys
 import time
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
@@ -90,12 +91,15 @@ class Wan2_2_TI2V(nn.Module):
         # Lifetime count of per-item high-noise expert reloads (0089 e4);
         # generate_video diffs it per run for truthful metadata.
         self._high_noise_reload_count = 0
+        # Token-count report of the most recent encode_prompt call (0098);
+        # generate_video copies it into the metadata sidecar.
+        self._last_prompt_truncation: dict[str, int | bool] | None = None
 
     def generate_video(
         self,
         seed: int,
         prompt: str,
-        num_inference_steps: int = 50,
+        num_inference_steps: int | None = None,
         height: int = RECOMMENDED_HEIGHT,
         width: int = RECOMMENDED_WIDTH,
         num_frames: int = RECOMMENDED_FRAMES,
@@ -104,8 +108,10 @@ class Wan2_2_TI2V(nn.Module):
         guidance_2: float | None | object = _GUIDANCE_2_UNSET,
         flow_shift: float | None = None,
         solver: str | None = None,
+        denoising_step_list: list[int] | None = None,
         negative_prompt: str | None = None,
         image_path: Path | str | None = None,
+        last_image_path: Path | str | None = None,
         video_path: Path | str | None = None,
         video_strength: float | None = None,
         video_mask_path: Path | str | None = None,
@@ -121,6 +127,19 @@ class Wan2_2_TI2V(nn.Module):
         compile_transformer: bool = False,
     ) -> GeneratedVideo:
         start_time = time.time()
+        # 0099: an explicit distill grid replaces the count-derived schedule.
+        # Combinations the grid cannot honor fail loudly (ADR 0002); when no
+        # grid is given, None resolves to the historical default step count.
+        self._validate_step_schedule_request(
+            num_inference_steps=num_inference_steps,
+            denoising_step_list=denoising_step_list,
+            flow_shift=flow_shift,
+            video_path=video_path,
+        )
+        if num_inference_steps is None:
+            num_inference_steps = (
+                len(denoising_step_list) if denoising_step_list is not None else Wan2_2_TI2V.RECOMMENDED_STEPS
+            )
         request = WanVideoRequest.resolve(
             self,
             guidance=guidance,
@@ -130,6 +149,7 @@ class Wan2_2_TI2V(nn.Module):
             width=width,
             num_frames=num_frames,
             image_path=image_path,
+            last_image_path=last_image_path,
             video_path=video_path,
             video_strength=video_strength,
             video_mask_path=video_mask_path,
@@ -161,7 +181,12 @@ class Wan2_2_TI2V(nn.Module):
         negative_prompt = request.negative_prompt
         batch_size = request.batch_size
         scheduler = self._create_scheduler(flow_shift=flow_shift, solver=solver)
-        scheduler.set_timesteps(num_inference_steps)
+        if denoising_step_list is not None:
+            # Grid mode (0099): the list already encodes its (shifted) schedule,
+            # so flow_shift never touches it; metadata records flow_shift=None.
+            scheduler.set_timesteps(denoising_step_list=denoising_step_list)
+        else:
+            scheduler.set_timesteps(num_inference_steps)
         timesteps = scheduler.timesteps.tolist()
         if is_video_to_video:
             timesteps = self._video_to_video_timesteps(
@@ -265,6 +290,7 @@ class Wan2_2_TI2V(nn.Module):
             else:
                 condition = self._encode_video_condition(
                     image_path=image_path,
+                    last_image_path=last_image_path,
                     height=height,
                     width=width,
                     num_frames=num_frames,
@@ -502,6 +528,14 @@ class Wan2_2_TI2V(nn.Module):
             "lora_target_roles": getattr(self, "lora_target_roles", None) or None,
             **({"released_inactive_denoiser": True} if high_noise_denoiser_released else {}),
             **({"high_noise_reloads": high_noise_reloads} if high_noise_reloads else {}),
+            # Prompt-conditioning truth (0098): what the UMT5 encoder actually saw.
+            **(getattr(self, "_last_prompt_truncation", None) or {}),
+            **({"last_image_path": str(last_image_path)} if last_image_path is not None else {}),
+            **(
+                {"denoising_step_list": [int(step) for step in denoising_step_list]}
+                if denoising_step_list is not None
+                else {}
+            ),
         }
         del latents
         gc.collect()
@@ -539,7 +573,9 @@ class Wan2_2_TI2V(nn.Module):
                 fps=fps,
                 guidance=guidance,
                 guidance_2=guidance_2,
-                flow_shift=flow_shift,
+                # A grid run never consults flow_shift; recording the resolved
+                # default would make --config-from-metadata replay a conflict.
+                flow_shift=None if denoising_step_list is not None else flow_shift,
                 solver=solver,
                 task=task,
                 image_path=image_path,
@@ -591,12 +627,50 @@ class Wan2_2_TI2V(nn.Module):
         do_classifier_free_guidance: bool,
         max_sequence_length: int = 512,
     ) -> tuple[mx.array, mx.array | None]:
+        # 0098: the tokenizer right-truncates silently at max_sequence_length;
+        # measure the real token counts once per encode so overflow is warned
+        # about and recorded instead of dropping trailing prompt text unseen.
+        self._last_prompt_truncation = self._check_prompt_truncation(
+            prompt=prompt,
+            negative_prompt=(negative_prompt or "") if do_classifier_free_guidance else None,
+            max_sequence_length=max_sequence_length,
+        )
         prompts = [prompt]
         if not do_classifier_free_guidance:
             return self._get_t5_prompt_embeds(prompts, max_sequence_length=max_sequence_length), None
         prompts.append(negative_prompt or "")
         embeds = self._get_t5_prompt_embeds(prompts, max_sequence_length=max_sequence_length)
         return embeds[0:1], embeds[1:2]
+
+    def _check_prompt_truncation(
+        self,
+        *,
+        prompt: str,
+        negative_prompt: str | None,
+        max_sequence_length: int,
+    ) -> dict[str, int | bool]:
+        tokenizer = self.tokenizers["wan"].tokenizer
+        report: dict[str, int | bool] = {}
+        # The negative prompt entry exists only when CFG actually encodes it.
+        for label, key, text in (
+            ("prompt", "prompt", prompt),
+            ("negative prompt", "negative_prompt", negative_prompt),
+        ):
+            if text is None:
+                continue
+            # Uncapped probe on the same cleaned text the capped encode sees.
+            token_count = len(tokenizer(self._prompt_clean(text), add_special_tokens=True)["input_ids"])
+            truncated = token_count > max_sequence_length
+            report[f"{key}_tokens"] = int(token_count)
+            report[f"{key}_truncated"] = truncated
+            if truncated:
+                dropped = token_count - max_sequence_length
+                print(
+                    f"⚠️  Wan {label} truncated: {token_count} -> {max_sequence_length} UMT5 tokens; "
+                    f"the last {dropped} tokens do not condition the video.",
+                    file=sys.stderr,
+                )
+        return report
 
     def prepare_latents(
         self,
@@ -767,9 +841,7 @@ class Wan2_2_TI2V(nn.Module):
         video_np = np.empty((1, num_frames, height, width, 3), dtype=np.float32)
         for index, frame in enumerate(clip.frames[:num_frames]):
             video_np[0, index] = np.asarray(
-                ImageUtil.scale_to_dimensions(
-                    frame, target_width=width, target_height=height, resize_mode=resize_mode
-                ),
+                ImageUtil.scale_to_dimensions(frame, target_width=width, target_height=height, resize_mode=resize_mode),
                 dtype=np.float32,
             )
         video_np /= 255.0
@@ -1049,9 +1121,21 @@ class Wan2_2_TI2V(nn.Module):
         num_frames: int,
         batch_size: int,
         resize_mode: str = "resize",
+        last_image_path: Path | str | None = None,
     ) -> mx.array:
-        # resize_mode changes the conditioned pixels, so it is part of the cache identity.
-        cache_key = ("video", self._cache_path_key(image_path), height, width, num_frames, batch_size, resize_mode)
+        # resize_mode changes the conditioned pixels, so it is part of the cache
+        # identity; so is the last-image identity (0097) - a bracketed condition
+        # must never alias the single-frame condition of the same first image.
+        cache_key = (
+            "video",
+            self._cache_path_key(image_path),
+            self._cache_path_key(last_image_path),
+            height,
+            width,
+            num_frames,
+            batch_size,
+            resize_mode,
+        )
         cached = self._cached_tensor(cache_name="image_condition_cache", key=cache_key)
         if cached is not None:
             return cached
@@ -1062,6 +1146,7 @@ class Wan2_2_TI2V(nn.Module):
             num_frames=num_frames,
             batch_size=batch_size,
             resize_mode=resize_mode,
+            last_image_path=last_image_path,
         )
         return self._store_cached_tensor(cache_name="image_condition_cache", key=cache_key, value=condition)
 
@@ -1073,17 +1158,21 @@ class Wan2_2_TI2V(nn.Module):
         num_frames: int,
         batch_size: int,
         resize_mode: str = "resize",
+        last_image_path: Path | str | None = None,
     ) -> mx.array:
         if image_path is None:
             raise ValueError("Wan image-to-video requires image_path.")
-        image = ImageUtil.scale_to_dimensions(
-            ImageUtil.load_image(image_path), target_width=width, target_height=height, resize_mode=resize_mode
-        )
-        image_np = np.array(image).astype(np.float32) / 255.0
-        image_mx = mx.array(image_np[None, ...])
-        image_mx = mx.transpose(image_mx, (0, 3, 1, 2))
-        video_condition = self._build_first_frame_video_condition(
-            normalized_first_frame=ImageUtil._normalize(image_mx),
+        video_condition = self._build_video_condition(
+            normalized_first_frame=self._normalized_condition_frame(
+                image_path, height=height, width=width, resize_mode=resize_mode
+            ),
+            # The last image maps through the SAME canvas geometry as the first
+            # frame (0097): one canvas, one resize_mode, both anchors.
+            normalized_last_frame=(
+                self._normalized_condition_frame(last_image_path, height=height, width=width, resize_mode=resize_mode)
+                if last_image_path is not None
+                else None
+            ),
             num_frames=num_frames,
             batch_size=batch_size,
             precision=ModelConfig.precision,
@@ -1093,7 +1182,12 @@ class Wan2_2_TI2V(nn.Module):
         latent_height = latent_condition.shape[3]
         latent_width = latent_condition.shape[4]
         mask_np = np.ones((batch_size, 1, num_frames, latent_height, latent_width), dtype=np.float32)
-        mask_np[:, :, 1:] = 0
+        if last_image_path is None:
+            mask_np[:, :, 1:] = 0
+        else:
+            # Bracket mask (diffusers WanImageToVideoPipeline `last_image`):
+            # both endpoint frames stay 1; only the middle is generated freely.
+            mask_np[:, :, 1 : num_frames - 1] = 0
         mask = mx.array(mask_np)
         first_frame_mask = mx.repeat(mask[:, :, 0:1], self.vae.temporal_scale, axis=2)
         mask = mx.concatenate([first_frame_mask, mask[:, :, 1:]], axis=2)
@@ -1104,12 +1198,28 @@ class Wan2_2_TI2V(nn.Module):
         return condition.astype(mx.float32)
 
     @staticmethod
-    def _build_first_frame_video_condition(
+    def _normalized_condition_frame(
+        image_path: Path | str,
+        *,
+        height: int,
+        width: int,
+        resize_mode: str,
+    ) -> mx.array:
+        image = ImageUtil.scale_to_dimensions(
+            ImageUtil.load_image(image_path), target_width=width, target_height=height, resize_mode=resize_mode
+        )
+        image_np = np.array(image).astype(np.float32) / 255.0
+        image_mx = mx.transpose(mx.array(image_np[None, ...]), (0, 3, 1, 2))
+        return ImageUtil._normalize(image_mx)
+
+    @staticmethod
+    def _build_video_condition(
         *,
         normalized_first_frame: mx.array,
         num_frames: int,
         batch_size: int,
         precision: mx.Dtype,
+        normalized_last_frame: mx.array | None = None,
     ) -> mx.array:
         # F2 (0089): build the padded VAE-encode input directly in the model precision.
         # The old path concatenated first_frame + zero_frames in float32 and cast the
@@ -1118,11 +1228,17 @@ class Wan2_2_TI2V(nn.Module):
         # allocating the zero padding in the target dtype is BITWISE identical
         # (elementwise cast; zeros cast exactly) at roughly half the transient
         # footprint. Normalization stays in float32 so its rounding is unchanged.
+        # With a last frame (0097), the layout is the diffusers `last_image` bracket:
+        # [first, zeros x (num_frames - 2), last], built with the same discipline.
         height = normalized_first_frame.shape[2]
         width = normalized_first_frame.shape[3]
         first_frame = normalized_first_frame.astype(precision)[:, :, None, :, :]
-        zero_frames = mx.zeros((batch_size, first_frame.shape[1], num_frames - 1, height, width), dtype=precision)
-        return mx.concatenate([first_frame, zero_frames], axis=2)
+        if normalized_last_frame is None:
+            zero_frames = mx.zeros((batch_size, first_frame.shape[1], num_frames - 1, height, width), dtype=precision)
+            return mx.concatenate([first_frame, zero_frames], axis=2)
+        last_frame = normalized_last_frame.astype(precision)[:, :, None, :, :]
+        zero_frames = mx.zeros((batch_size, first_frame.shape[1], num_frames - 2, height, width), dtype=precision)
+        return mx.concatenate([first_frame, zero_frames, last_frame], axis=2)
 
     @staticmethod
     def _cache_path_key(image_path: Path | str | None) -> tuple[str, int, int] | None:
@@ -1598,6 +1714,35 @@ class Wan2_2_TI2V(nn.Module):
         if is_video_to_video and solver != "unipc":
             raise ValueError("Wan video-to-video currently requires solver='unipc'.")
 
+    @staticmethod
+    def _validate_step_schedule_request(
+        *,
+        num_inference_steps: int | None,
+        denoising_step_list: list[int] | None,
+        flow_shift: float | None,
+        video_path: Path | str | None,
+    ) -> None:
+        if denoising_step_list is None:
+            return
+        # ADR 0002: an explicit grid must never be silently reconciled with
+        # options that would alter or truncate it.
+        if num_inference_steps is not None:
+            raise ValueError(
+                "denoising_step_list and num_inference_steps are mutually exclusive: "
+                "the grid already defines the step count."
+            )
+        if flow_shift is not None:
+            raise ValueError(
+                "denoising_step_list cannot be combined with an explicit flow_shift: "
+                "the grid entries are final (already-shifted) timesteps, so flow_shift would not apply."
+            )
+        if video_path is not None:
+            raise ValueError(
+                "denoising_step_list is not supported for Wan video-to-video: video_strength truncates the "
+                "schedule, which would silently drop grid points. Pass the truncated grid explicitly on a "
+                "text/image-to-video run instead."
+            )
+
     def _create_scheduler(self, *, flow_shift: float, solver: str):
         if solver == "unipc":
             return WanUniPCMultistepScheduler(flow_shift=flow_shift)
@@ -1637,7 +1782,7 @@ class Wan2_2_TI2V(nn.Module):
         fps: int | float,
         guidance: float,
         guidance_2: float | None,
-        flow_shift: float,
+        flow_shift: float | None,
         solver: str,
         task: str,
         image_path: Path | str | None,
