@@ -156,6 +156,79 @@ Route rules:
   `wan-vace` model (see [VACE](#vace-reference-images-and-learned-mask-conditioning) below);
 - do not expect TI2V-5B or I2V-A14B to accept source-video input on the public CLI.
 
+## Continuing A Clip: Multi-Frame Context Conditioning
+
+When a new A14B image-to-video clip continues an existing shot, seeding it from ONE still frame
+resets the motion: one frame carries no velocity, so the continuation restarts at whatever speed
+and direction the model guesses. `--context-frames` hands over the predecessor's last K frames
+instead (the SkyReels-V2/SVI-class multi-frame handover): `--image-path` takes the FIRST frame of
+the handover window and `--context-frames` the ordered rest — 4, 8, or 12 frames, so the
+conditioned head (5, 9, or 13 frames) fills whole 4x VAE latent groups.
+
+```bash
+# Predecessor tail frames f44..f48 extracted as PNGs; head = 5 frames.
+mlxgen generate --model AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit \
+  --prompt "the ship continues rising, camera static" \
+  --image f44.png --context-frames f45.png f46.png f47.png f48.png \
+  --width 480 --height 272 --frames 49 --fps 16 \
+  --steps 4 --guidance 1.0 --guidance-2 1.0 --flow-shift 5.0 --seed 5151 \
+  --lora-paths "lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors" \
+               "lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors" \
+  --lora-scales 1.0 1.0 --lora-target-roles high_noise_transformer low_noise_transformer
+```
+
+The continuation regenerates the head frames (conditioned, not copied), so a host assembling a
+film should trim the predecessor at the FIRST handover frame to avoid double-play. This is
+EXPERIMENTAL zero-shot behavior on Wan 2.2 A14B — measured bounds, the boundary flare artifact,
+and the `--context-noise` knob are documented in the API table and backlog item 0102.
+
+## Chaining Clips With A Persistent Identity Anchor: SVI 2.0 Pro
+
+Multi-frame context conditioning carries momentum, but nothing in it re-states WHO the subject is:
+over long chains the subject drifts. SVI 2.0 Pro (Stable Video Infinity, ICLR'26 Oral, trained for
+Wan 2.2 A14B i2v) restructures the conditioning of every clip as
+`[anchor_latent, motion_latent, zero-latents]`: one persistent anchor image is re-injected into
+EVERY clip of the chain (identity), the previous clip's final denoised latent hands the motion
+over losslessly (momentum), and an error-recycling LoRA pair teaches the model to recover from its
+own accumulated errors (drift resistance). MLX-Gen ships this as an EXPERIMENTAL mode:
+
+```bash
+# Clip 1: the anchor IS the first frame; the run exports clip1.svi_latent.safetensors.
+mlxgen generate --model AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit \
+  --prompt "a silver survey drone hovering low over a geyser field, camera static" \
+  --svi-anchor-image anchor.png \
+  --svi-lora-high "vita-video-gen/svi-model:version-2.0/SVI_Wan2.2-I2V-A14B_high_noise_lora_v2.0_pro.safetensors" \
+  --svi-lora-low  "vita-video-gen/svi-model:version-2.0/SVI_Wan2.2-I2V-A14B_low_noise_lora_v2.0_pro.safetensors" \
+  --width 480 --height 240 --frames 49 --fps 16 --seed 101 \
+  --steps 4 --guidance 1.0 --guidance-2 1.0 --flow-shift 5.0 \
+  --lora-paths "lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/high_noise_model.safetensors" \
+               "lightx2v/Wan2.2-Lightning:Wan2.2-I2V-A14B-4steps-lora-rank64-Seko-V1/low_noise_model.safetensors" \
+  --lora-scales 0.6 1.0 --lora-target-roles high_noise_transformer low_noise_transformer \
+  --output clip1.mp4
+
+# Clip 2: SAME anchor, the exported latent as motion handover, a NEW seed.
+mlxgen generate ... --svi-anchor-image anchor.png \
+  --svi-motion-latent clip1.svi_latent.safetensors --seed 202 --output clip2.mp4
+```
+
+Contract highlights (every violation fails loudly before weight load where possible):
+
+- the SVI LoRA pair is REQUIRED (`--svi-lora-high`/`--svi-lora-low`, fixed scale 1.0, strict
+  key-match: any unmatched key aborts) and FORBIDDEN outside SVI mode — the pair retrains the
+  conditioning convention, so each without the other produces garbage;
+- `--svi-anchor-image` replaces `--image-path` and conflicts with `--last-image`,
+  `--context-frames`, and `--video-path`; TI2V-5B and VACE reject it;
+- every SVI run exports its final latent as `<output>.svi_latent.safetensors` for the next clip;
+  the chain must keep ONE canvas end to end (mismatches are rejected at load);
+- assembly must drop the first `svi_assembly_trim_frames` frames (metadata; `1 + 4 x count`, i.e.
+  5 for the default one motion latent) of every CONTINUATION clip: they re-render the anchor
+  restoration and the predecessor's tail;
+- use a UNIQUE seed per clip (author guidance: identical seeds accumulate artifacts) and keep
+  continuation segments at or below 65 frames (a longer segment prints a trained-length advisory);
+- when stacking with the Lightning 4-step pair, the author-documented trade-off is the lightx2v
+  scale on the HIGH-noise expert: 1.0 = weaker dynamics/text-following and anchor snap-back,
+  0.5-0.6 recommended; keep low-noise lightx2v and both SVI files at 1.0.
+
 ## Masked Video-To-Video
 
 Plain video-to-video re-synthesizes every pixel, so background details (text, logos, posters)

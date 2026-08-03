@@ -365,7 +365,7 @@ def test_reframe_option_is_limited_to_validated_edit_capabilities():
 def test_model_capabilities_are_publicly_inspectable():
     capabilities = mlxgen.get_model_capabilities(model="flux2-klein-4b")
 
-    assert capabilities.schema_version == 5
+    assert capabilities.schema_version == 7
     assert capabilities.family == "flux2"
     assert {capability.mode for capability in capabilities.capabilities} >= {
         MODE_TEXT_ONLY,
@@ -475,7 +475,10 @@ def test_qwen_base_structured_control_routes_to_dedicated_capability():
     assert qwen_control.public_task == "text-to-image"
     assert qwen_control.capability_id == "qwen.control"
     assert qwen_control.control_model is not None
-    assert mlxgen.resolve_task(model="AbstractFramework/qwen-image-8bit", has_control_image=True).capability_id == "qwen.control"
+    assert (
+        mlxgen.resolve_task(model="AbstractFramework/qwen-image-8bit", has_control_image=True).capability_id
+        == "qwen.control"
+    )
     assert mlxgen.infer_task(model="AbstractFramework/qwen-image-8bit", has_control_image=True) == "text-to-image"
     assert all(capability.id != "qwen.control" for capability in source_capabilities.capabilities)
     assert all(capability.id != "qwen.control" for capability in qwen_2512_capabilities.capabilities)
@@ -599,7 +602,9 @@ def test_base_qwen_route_validation_statuses_are_split_cleanly():
     base_text = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.text")
     base_latent = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.latent")
     base_control = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.control")
-    base_control_inpaint = next(capability for capability in base_qwen.capabilities if capability.id == "qwen.control-inpaint")
+    base_control_inpaint = next(
+        capability for capability in base_qwen.capabilities if capability.id == "qwen.control-inpaint"
+    )
     assert base_text.lora_status == "validated"
     assert base_text.lora_validation_profile == "lora_qwen_q8_realism_t2i_2026_06_22"
     assert base_latent.lora_status == "validated"

@@ -5,6 +5,72 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Wan A14B i2v SVI 2.0 Pro conditioning (0103)**: `--svi-anchor-image`,
+  `--svi-motion-latent`, `--svi-motion-latent-count`, `--svi-lora-high`,
+  `--svi-lora-low` (Python: `generate_video(svi_anchor_image_path=...,
+  svi_motion_latent_path=..., svi_motion_latent_count=...,
+  svi_motion_latent_export_path=...)` plus the `svi_lora_high_path`/
+  `svi_lora_low_path` constructor pair) bring Stable Video Infinity 2.0 Pro
+  (ICLR'26 Oral, vita-epfl `svi_wan22` branch) chain conditioning to the Wan
+  2.2 A14B image-to-video route: every clip conditions on
+  `[anchor_latent, motion_latent?, zero-latents]` — one PERSISTENT identity
+  anchor re-injected into every clip, plus the previous clip's final denoised
+  latent (handed over losslessly through an exported
+  `*.svi_latent.safetensors` sidecar, never a pixel round-trip), padded with
+  true zero latents (NOT the stock VAE-encoded zero frames — the two
+  conventions are mutually unintelligible). The SVI error-recycling LoRA pair
+  loads at scale 1.0 under a strict key-match contract
+  (`unmatched_key_count == 0` per file, verified 800/800 on the official
+  `vita-video-gen/svi-model` v2.0 Pro pack) and is re-fused on per-item
+  high-noise expert reloads; PEFT adapter-infix keys
+  (`lora_A.default.weight`) now normalize for single-adapter files. SVI mode
+  and the pack gate each other loudly in BOTH directions (running either
+  without the other produces garbage per the upstream warning), and the mode
+  conflicts explicitly with `--image-path`, `--last-image`,
+  `--context-frames`, and `--video-path`; TI2V-5B and VACE reject before
+  weight load. Continuation clips >65 frames print a trained-length advisory.
+  Metadata records the full SVI truth (`svi_anchor_image_path`,
+  `svi_motion_latent_path`/`_count`, `svi_motion_latent_export`,
+  `svi_assembly_trim_frames` = 1 + 4x count for continuation clips, and the
+  per-expert LoRA key-match reports), replays through
+  `--config-from-metadata`, and is advertised as the additive `supports_svi`
+  field on the `wan.first-frame` capability row (capabilities
+  `schema_version` 6 -> 7). Use a unique seed per clip (author guidance:
+  identical seeds accumulate artifacts).
+
+- **Wan A14B i2v multi-frame context head conditioning (0102)**:
+  `--context-frames <png>...` (Python: `generate_video(context_image_paths=[...])`)
+  extends the conditioned head of a Wan A14B image-to-video clip with the
+  ordered frames that FOLLOW `--image-path` in the motion being continued —
+  the SkyReels-V2/SVI-class multi-frame handover that lets a storyboard
+  continuation inherit the predecessor's real momentum instead of restarting
+  from one frozen frame. The head `[image, *context]` must fill whole 4x VAE
+  latent groups (4/8/12 context frames = heads 5/9/13; the misuse of passing
+  all K frames to `--context-frames` fails loudly on that count check), needs
+  `frames >= head + 4`, composes with `--last-image`, and maps every frame
+  through the same canvas and `--resize-mode` as the first frame. Fails
+  loudly on every route without the A14B 36-channel i2v conditioning layout:
+  text/video-to-video, TI2V-5B (`expand_timesteps`), and Wan VACE — the CLI
+  rejects before the multi-minute weight load. `--context-noise <0-1000>`
+  (Python: `context_noise=...`) optionally perturbs the conditioned head in
+  latent space (SkyReels `addnoise_condition` precedent, ~20), deterministic
+  per seed and outside the condition cache. Recorded in metadata
+  (`context_image_paths`, `context_noise`), replayed by
+  `--config-from-metadata`, recorded in failure manifests, and advertised as
+  the additive `supports_context_frames` field on the `wan.first-frame`
+  capability row (capabilities `schema_version` 5 -> 6). Ships EXPERIMENTAL
+  with a measured zero-shot probe (backlog 0102): on a Lightning 4-step
+  continuation pair the K=5 head carried the source clip's motion speed
+  across the seam (magnitude ratio 0.90 vs the single-frame baseline's 1.90
+  double-speed restart; direction cosine 0.999) at the cost of a mild
+  ~2-frame flare/exposure step at the conditioned-to-free boundary (luma
+  delta ~3.2/255 against the source clip's own 1.15 max; structurally clean
+  in stills). K=1 behavior is bitwise unchanged.
+
 ## [0.25.0] - 2026-07-25
 
 Load-path performance and Wan conditioning release. The performance wave

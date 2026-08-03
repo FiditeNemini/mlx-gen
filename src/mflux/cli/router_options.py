@@ -165,6 +165,22 @@ ROUTER_OPTIONS: tuple[RouterOption, ...] = (
         emitter="_collect_images/route.image_argument",
     ),
     RouterOption(
+        flags=("--svi-anchor-image",),
+        dest="svi_anchor_image",
+        policy=ForwardPolicy.TRANSFORMED,
+        kwargs={
+            "default": None,
+            "help": (
+                "SVI 2.0 Pro anchor image for Wan A14B image-to-video chain conditioning (0103): "
+                "one persistent identity anchor re-injected into every clip. Takes the image slot "
+                "for routing (image-to-video without --image); the wan backend owns the full "
+                "SVI contract (--svi-lora-high/--svi-lora-low, --svi-motion-latent)."
+            ),
+        },
+        metadata_keys=("svi_anchor_image_path",),
+        emitter="_svi_forwarded_argv",
+    ),
+    RouterOption(
         flags=("--video", "--input-video"),
         dest="videos",
         policy=ForwardPolicy.TRANSFORMED,

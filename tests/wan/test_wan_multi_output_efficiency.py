@@ -203,7 +203,16 @@ def test_wan_video_condition_cache_reuses_same_source(monkeypatch, tmp_path):
     expected = mx.array([2.0], dtype=mx.float32)
 
     def fake_load(
-        self, *, image_path, height, width, num_frames, batch_size, resize_mode="resize", last_image_path=None
+        self,
+        *,
+        image_path,
+        height,
+        width,
+        num_frames,
+        batch_size,
+        resize_mode="resize",
+        last_image_path=None,
+        context_image_paths=None,
     ):
         observed.append((str(image_path), height, width, num_frames, batch_size, resize_mode, last_image_path))
         return expected

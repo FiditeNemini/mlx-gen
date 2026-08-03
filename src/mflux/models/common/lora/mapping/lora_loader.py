@@ -174,13 +174,16 @@ class LoRALoader:
 
         # Clean PEFT/Diffusers prefixes from weight keys
         weights = {LoRALoader._normalize_state_dict_key(key): value for key, value in weights.items()}
+        weights = LoRALoader._normalize_peft_adapter_infix(weights)
 
         if state_dict_transform is not None:
             weights = state_dict_transform(weights, transformer)
 
         pattern_mappings = LoRALoader._build_pattern_mappings(lora_mapping)
 
-        applied_count, matched_keys = LoRALoader._apply_lora_with_mapping(transformer, weights, scale, pattern_mappings, role=role)
+        applied_count, matched_keys = LoRALoader._apply_lora_with_mapping(
+            transformer, weights, scale, pattern_mappings, role=role
+        )
 
         total_keys = len(weights)
         unmatched_keys = set(weights.keys()) - matched_keys
@@ -264,6 +267,23 @@ class LoRALoader:
             if key.startswith(prefix):
                 return key[len(prefix) :]
         return key
+
+    _PEFT_ADAPTER_INFIX_PATTERN = re.compile(r"\.(lora_[AB])\.([^.]+)\.weight$")
+
+    @staticmethod
+    def _normalize_peft_adapter_infix(weights: dict[str, mx.array]) -> dict[str, mx.array]:
+        # PEFT state dicts saved with the adapter name retained use
+        # `...lora_A.<adapter>.weight` (e.g. `.lora_A.default.weight`, the
+        # format DiffSynth-trained Wan LoRAs such as SVI ship in). Strip the
+        # infix ONLY when the file uses exactly one adapter name: with several
+        # adapters the strip would collide keys, so those files stay untouched
+        # and fail loudly as unmatched instead of merging silently.
+        adapter_names = {
+            match.group(2) for key in weights if (match := LoRALoader._PEFT_ADAPTER_INFIX_PATTERN.search(key))
+        }
+        if len(adapter_names) != 1:
+            return weights
+        return {LoRALoader._PEFT_ADAPTER_INFIX_PATTERN.sub(r".\1.weight", key): value for key, value in weights.items()}
 
     @staticmethod
     def _pattern_aliases(pattern: str) -> tuple[str, ...]:

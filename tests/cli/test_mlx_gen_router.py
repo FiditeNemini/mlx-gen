@@ -741,6 +741,23 @@ def test_capabilities_command_reports_wan_last_image_on_a14b_i2v_only(capsys):
     assert ti2v_row["supports_last_image"] is False
 
 
+def test_capabilities_command_reports_wan_context_frames_on_a14b_i2v_only(capsys):
+    # Multi-frame context conditioning (0102) rides the same A14B 36-channel
+    # concat i2v path as the bracket; hosts gate on this additive v6 field.
+    mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-I2V-A14B-Diffusers"])
+    i2v_payload = json.loads(capsys.readouterr().out)
+    assert i2v_payload["schema_version"] == 7
+    i2v_row = next(capability for capability in i2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
+    assert i2v_row["supports_context_frames"] is True
+    assert i2v_row["supports_svi"] is True
+
+    mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-TI2V-5B-Diffusers"])
+    ti2v_payload = json.loads(capsys.readouterr().out)
+    ti2v_row = next(capability for capability in ti2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
+    assert ti2v_row["supports_context_frames"] is False
+    assert ti2v_row["supports_svi"] is False
+
+
 def test_capabilities_command_accepts_base_model_for_local_paths(capsys):
     mlx_gen._show_capabilities(["--model", "../models/local-flux2-folder", "--base-model", "flux2-klein-4b"])
 
@@ -4485,6 +4502,177 @@ def test_wan_cli_last_image_replays_from_metadata(monkeypatch, tmp_path):
     )
 
     assert observed["generate"]["last_image_path"] == str(last_path)
+    assert observed["generate"]["seed"] == 7
+
+
+def _context_frame_files(tmp_path, count):
+    from PIL import Image as PILImage
+
+    paths = []
+    for index in range(count):
+        path = tmp_path / f"ctx_{index}.png"
+        PILImage.new("RGB", (8, 8), (index * 31 % 256, 64, 128)).save(path)
+        paths.append(str(path))
+    return paths
+
+
+def test_wan_cli_context_frames_forward_to_generate(monkeypatch, tmp_path):
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "first.png"
+    PILImage.new("RGB", (8, 8), "white").save(image_path)
+    context_paths = _context_frame_files(tmp_path, 4)
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            "--prompt",
+            "the starship keeps rising",
+            "--frames",
+            "13",
+            "--steps",
+            "2",
+            "--seed",
+            "123",
+            "--image-path",
+            str(image_path),
+            "--context-frames",
+            *context_paths,
+            "--context-noise",
+            "20",
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["context_image_paths"] == context_paths
+    assert observed["generate"]["context_noise"] == 20.0
+    assert observed["generate"]["image_path"] == str(image_path)
+
+
+def test_wan_cli_context_frames_require_image_path(monkeypatch, tmp_path, capsys):
+    from mflux.models.wan.cli import wan_generate
+
+    context_paths = _context_frame_files(tmp_path, 4)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--context-frames",
+            *context_paths,
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        wan_generate.main()
+
+    assert "--context-frames requires --image-path" in capsys.readouterr().err
+
+
+def test_wan_cli_context_frames_count_misuse_fails_at_parse_time(monkeypatch, tmp_path, capsys):
+    # Passing all 5 head frames to --context-frames (instead of moving the
+    # first to --image-path) must fail loudly on the mod-4 contract.
+    from PIL import Image as PILImage
+
+    from mflux.models.wan.cli import wan_generate
+
+    image_path = tmp_path / "first.png"
+    PILImage.new("RGB", (8, 8), "white").save(image_path)
+    context_paths = _context_frame_files(tmp_path, 5)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--image-path",
+            str(image_path),
+            "--context-frames",
+            *context_paths,
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        wan_generate.main()
+
+    assert "multiple of 4" in capsys.readouterr().err
+
+
+def test_wan_cli_context_frames_rejected_on_expand_timesteps_model_before_load(monkeypatch, tmp_path, capsys):
+    from PIL import Image as PILImage
+
+    from mflux.models.wan.cli import wan_generate
+
+    image_path = tmp_path / "first.png"
+    PILImage.new("RGB", (8, 8), "white").save(image_path)
+    context_paths = _context_frame_files(tmp_path, 4)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
+            "--prompt",
+            "a city timelapse",
+            "--image-path",
+            str(image_path),
+            "--context-frames",
+            *context_paths,
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        wan_generate.main()
+
+    assert "does not support --context-frames" in capsys.readouterr().err
+
+
+def test_wan_cli_context_frames_replay_from_metadata(monkeypatch, tmp_path):
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "first.png"
+    PILImage.new("RGB", (8, 8), "white").save(image_path)
+    context_paths = _context_frame_files(tmp_path, 4)
+    metadata_path = tmp_path / "run.metadata.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "prompt": "the starship keeps rising",
+                "seed": 7,
+                "image_path": str(image_path),
+                "context_image_paths": context_paths,
+                "context_noise": 20.0,
+            }
+        )
+    )
+
+    observed = _run_fake_wan_cli(
+        monkeypatch,
+        [
+            "--model",
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            "--config-from-metadata",
+            str(metadata_path),
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    assert observed["generate"]["context_image_paths"] == context_paths
+    assert observed["generate"]["context_noise"] == 20.0
     assert observed["generate"]["seed"] == 7
 
 

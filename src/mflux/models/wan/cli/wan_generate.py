@@ -59,6 +59,8 @@ def main() -> None:
             lora_paths=args.lora_paths,
             lora_scales=args.lora_scales,
             lora_target_roles=args.lora_target_roles,
+            svi_lora_high_path=args.svi_lora_high,
+            svi_lora_low_path=args.svi_lora_low,
             keep_text_encoder_resident=args.keep_text_encoder,
             prompt_embed_disk_cache=not args.no_prompt_cache,
         )
@@ -109,6 +111,16 @@ def main() -> None:
                     negative_prompt=args.negative_prompt,
                     image_path=args.image_path,
                     last_image_path=args.last_image,
+                    context_image_paths=args.context_frames,
+                    context_noise=args.context_noise,
+                    svi_anchor_image_path=args.svi_anchor_image,
+                    svi_motion_latent_path=args.svi_motion_latent,
+                    svi_motion_latent_count=args.svi_motion_latent_count,
+                    # Every SVI clip exports its final latent beside the video
+                    # so the NEXT clip can hand the motion over losslessly.
+                    svi_motion_latent_export_path=(
+                        _svi_latent_export_path(output_path) if args.svi_anchor_image is not None else None
+                    ),
                     video_path=args.video_path,
                     video_strength=args.video_strength,
                     video_mask_path=args.video_mask_path,
@@ -211,6 +223,85 @@ def _parser() -> argparse.ArgumentParser:
             "last image maps through the same canvas and --resize-mode as the first frame. Requires "
             "--image-path; rejected on TI2V-5B, VACE, and text/video-to-video routes."
         ),
+    )
+    parser.add_argument(
+        "--context-frames",
+        dest="context_frames",
+        nargs="+",
+        default=None,
+        help=(
+            "Ordered frames that FOLLOW --image-path in the motion being continued (multi-frame context "
+            "conditioning, experimental on Wan 2.2 A14B image-to-video): the conditioned head becomes "
+            "[--image-path, *--context-frames], so a clip can inherit the predecessor's momentum instead "
+            "of restarting from one frozen frame. Pass 4, 8, or 12 frames (the head must fill whole 4x "
+            "latent groups: 5, 9, or 13 conditioned frames). All frames map through the same canvas and "
+            "--resize-mode as the first frame. Requires --image-path; composes with --last-image; "
+            "rejected on TI2V-5B, VACE, and text/video-to-video routes."
+        ),
+    )
+    parser.add_argument(
+        "--context-noise",
+        dest="context_noise",
+        type=float,
+        default=None,
+        help=(
+            "Optional noise on the conditioned context head, on a 0-1000 timestep-like scale "
+            "(SkyReels addnoise_condition precedent, ~20 recommended): mild noise on clean context "
+            "latents can soften the boundary between conditioned and generated frames. Requires "
+            "--context-frames."
+        ),
+    )
+    parser.add_argument(
+        "--svi-anchor-image",
+        dest="svi_anchor_image",
+        default=None,
+        help=(
+            "SVI 2.0 Pro anchor image (experimental, Wan 2.2 A14B image-to-video only): one persistent "
+            "identity anchor re-injected into EVERY clip of a chain, conditioned as "
+            "[anchor_latent, motion_latent?, zero-latents]. Requires --svi-lora-high/--svi-lora-low "
+            "(the error-recycling LoRA pair that teaches this layout). Replaces --image-path in SVI "
+            "mode; conflicts with --image-path, --last-image, --context-frames, and --video-path. "
+            "Every SVI run exports its final latent next to the output for the next clip's "
+            "--svi-motion-latent. Use a unique seed per clip."
+        ),
+    )
+    parser.add_argument(
+        "--svi-motion-latent",
+        dest="svi_motion_latent",
+        default=None,
+        help=(
+            "Motion handover for SVI continuation clips: the .svi_latent.safetensors file exported by the "
+            "PREVIOUS clip's SVI run. Its trailing latent entr(y/ies) carry the predecessor's ending motion; "
+            "omit for the first clip of a chain. Requires --svi-anchor-image and a matching canvas."
+        ),
+    )
+    parser.add_argument(
+        "--svi-motion-latent-count",
+        dest="svi_motion_latent_count",
+        type=_positive_int,
+        default=1,
+        help=(
+            "How many trailing latent entries of --svi-motion-latent to hand over (default 1, the reference "
+            "recipe; each entry re-renders 4 pixel frames that assembly must trim - see "
+            "svi_assembly_trim_frames in the metadata)."
+        ),
+    )
+    parser.add_argument(
+        "--svi-lora-high",
+        dest="svi_lora_high",
+        default=None,
+        help=(
+            "SVI 2.0 Pro high-noise LoRA (local file or repo:file, e.g. vita-video-gen/svi-model:"
+            "version-2.0/SVI_Wan2.2-I2V-A14B_high_noise_lora_v2.0_pro.safetensors). Loaded at scale 1.0 "
+            "with a strict key-match contract: any unmatched key aborts. Requires --svi-lora-low and "
+            "--svi-anchor-image."
+        ),
+    )
+    parser.add_argument(
+        "--svi-lora-low",
+        dest="svi_lora_low",
+        default=None,
+        help="SVI 2.0 Pro low-noise LoRA counterpart of --svi-lora-high; same strict-match contract.",
     )
     parser.add_argument(
         "--video-path",
@@ -535,6 +626,28 @@ def _apply_metadata_defaults(args: argparse.Namespace, argv_options: set[str] | 
     if args.last_image is None and metadata.get("last_image_path") is not None:
         args.last_image = metadata.get("last_image_path")
         provided_options.add("--last-image")
+    if args.context_frames is None and metadata.get("context_image_paths"):
+        args.context_frames = [str(path) for path in metadata.get("context_image_paths")]
+        provided_options.add("--context-frames")
+    if args.context_noise is None and metadata.get("context_noise") is not None:
+        args.context_noise = float(metadata.get("context_noise"))
+        provided_options.add("--context-noise")
+    if args.svi_anchor_image is None and metadata.get("svi_anchor_image_path") is not None:
+        args.svi_anchor_image = metadata.get("svi_anchor_image_path")
+        provided_options.add("--svi-anchor-image")
+    if args.svi_motion_latent is None and metadata.get("svi_motion_latent_path") is not None:
+        args.svi_motion_latent = metadata.get("svi_motion_latent_path")
+        provided_options.add("--svi-motion-latent")
+    if "--svi-motion-latent-count" not in argv_options and metadata.get("svi_motion_latent_count") is not None:
+        args.svi_motion_latent_count = int(metadata.get("svi_motion_latent_count"))
+        provided_options.add("--svi-motion-latent-count")
+    # The SVI pack replays from its per-role report paths (resolved at load).
+    if args.svi_lora_high is None and metadata.get("svi_lora_high"):
+        args.svi_lora_high = metadata["svi_lora_high"].get("resolved_path")
+        provided_options.add("--svi-lora-high")
+    if args.svi_lora_low is None and metadata.get("svi_lora_low"):
+        args.svi_lora_low = metadata["svi_lora_low"].get("resolved_path")
+        provided_options.add("--svi-lora-low")
     if args.video_path is None and metadata.get("video_path") is not None:
         args.video_path = metadata.get("video_path")
         provided_options.add("--video-path")
@@ -626,6 +739,30 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace, pr
         parser.error("--last-image requires --image-path (first+last bracket conditioning is image-to-video only).")
     if args.last_image is not None and not Path(args.last_image).exists():
         parser.error(f"--last-image does not exist: {args.last_image}")
+    if args.context_frames is not None and args.image_path is None:
+        parser.error(
+            "--context-frames requires --image-path: the conditioned head is [--image-path, *--context-frames]."
+        )
+    if args.context_frames is not None:
+        # Every supported Wan VAE packs 4 pixel frames per latent frame, so the
+        # count contract is checkable here, before the multi-minute weight load.
+        if len(args.context_frames) % 4 != 0:
+            parser.error(
+                f"--context-frames takes a multiple of 4 frames (got {len(args.context_frames)}): the "
+                "conditioned head [--image-path, *--context-frames] must fill whole 4x latent groups "
+                "(4, 8, or 12 context frames = 5, 9, or 13 conditioned frames). If you passed the start "
+                "frame in --context-frames as well, move it to --image-path."
+            )
+        if 1 + len(args.context_frames) > 13:
+            parser.error(
+                f"--context-frames conditions {1 + len(args.context_frames)} head frames; the supported "
+                "maximum is 13 (4, 8, or 12 context frames)."
+            )
+        for path in args.context_frames:
+            if not Path(path).exists():
+                parser.error(f"--context-frames entry does not exist: {path}")
+    if args.context_noise is not None and args.context_frames is None:
+        parser.error("--context-noise requires --context-frames (it perturbs the multi-frame conditioned head).")
     if args.video_path is not None and not Path(args.video_path).exists():
         parser.error(f"--video-path does not exist: {args.video_path}")
     if args.video_strength is not None and args.video_path is None:
@@ -638,6 +775,39 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace, pr
         parser.error("--lora-scales requires --lora-paths.")
     if args.lora_target_roles is not None and not args.lora_paths:
         parser.error("--lora-target-roles requires --lora-paths.")
+    # SVI mode (0103): the anchor, the LoRA pair, and the motion handover are
+    # one mechanism; half-configured invocations fail before any model work.
+    if args.svi_anchor_image is not None:
+        for option, value in (
+            ("--image-path", args.image_path),
+            ("--last-image", args.last_image),
+            ("--context-frames", args.context_frames),
+            ("--video-path", args.video_path),
+        ):
+            if value:
+                parser.error(
+                    f"--svi-anchor-image conflicts with {option}: SVI conditioning is "
+                    "[anchor, motion-latent, zero-latents]; the anchor takes the image slot."
+                )
+        if args.svi_lora_high is None or args.svi_lora_low is None:
+            parser.error(
+                "--svi-anchor-image requires --svi-lora-high and --svi-lora-low: the SVI conditioning "
+                "layout only works with the SVI error-recycling LoRA pair loaded."
+            )
+        if not Path(args.svi_anchor_image).exists():
+            parser.error(f"--svi-anchor-image does not exist: {args.svi_anchor_image}")
+    else:
+        if args.svi_motion_latent is not None:
+            parser.error("--svi-motion-latent requires --svi-anchor-image.")
+        if args.svi_lora_high is not None or args.svi_lora_low is not None:
+            parser.error(
+                "--svi-lora-high/--svi-lora-low require --svi-anchor-image: the SVI pack retrains the "
+                "conditioning convention and would corrupt a non-SVI run."
+            )
+        if "--svi-motion-latent-count" in provided_options:
+            parser.error("--svi-motion-latent-count requires --svi-anchor-image and --svi-motion-latent.")
+    if args.svi_motion_latent is not None and not Path(args.svi_motion_latent).exists():
+        parser.error(f"--svi-motion-latent does not exist: {args.svi_motion_latent}")
 
 
 def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: ModelConfig) -> None:
@@ -652,6 +822,24 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
         raise ValueError(
             f"{model_config.model_name} does not support --last-image: its first-frame conditioning "
             "(expand_timesteps) has no last-frame slot. Use a Wan A14B image-to-video model."
+        )
+    if args.context_frames is not None and (
+        is_vace or bool(model_config.transformer_overrides.get("expand_timesteps", True))
+    ):
+        # Same pre-load discipline for the multi-frame head (0102).
+        raise ValueError(
+            f"{model_config.model_name} does not support --context-frames: multi-frame context "
+            "conditioning needs the Wan A14B image-to-video conditioning layout. Use a Wan A14B "
+            "image-to-video model."
+        )
+    if args.svi_anchor_image is not None and (
+        is_vace or bool(model_config.transformer_overrides.get("expand_timesteps", True))
+    ):
+        # Same pre-load discipline for SVI conditioning (0103).
+        raise ValueError(
+            f"{model_config.model_name} does not support --svi-anchor-image: SVI 2.0 Pro conditioning "
+            "needs the dual-expert Wan A14B image-to-video conditioning layout. Use a Wan A14B "
+            "image-to-video model."
         )
     if args.denoising_step_list is not None and is_vace:
         raise ValueError(
@@ -686,6 +874,11 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
             _probe_image_option(image_path=path, option="--reference-image")
     if args.last_image is not None:
         _probe_image_option(image_path=args.last_image, option="--last-image")
+    if args.context_frames is not None:
+        for path in args.context_frames:
+            _probe_image_option(image_path=path, option="--context-frames")
+    if args.svi_anchor_image is not None:
+        _probe_image_option(image_path=args.svi_anchor_image, option="--svi-anchor-image")
     if args.video_path is not None:
         _probe_source_video(video_path=args.video_path, requested_frames=args.frames, requested_fps=args.fps)
     if args.video_mask_path is not None:
@@ -850,6 +1043,12 @@ def _positive_int(value: str) -> int:
     return parsed
 
 
+def _svi_latent_export_path(output_path: str | Path) -> Path:
+    # video.mp4 -> video.svi_latent.safetensors, per resolved (seeded) output.
+    resolved = Path(output_path)
+    return resolved.with_name(resolved.stem + ".svi_latent.safetensors")
+
+
 def _emit_cli_video_progress(progress: "_WanCliProgress", *, phase: str, video) -> None:
     total_frames = getattr(video, "num_frames", 0)
     total_steps = getattr(video, "steps", 0)
@@ -910,6 +1109,13 @@ def _write_failure_manifest(
             "negative_prompt": args.negative_prompt or None,
             "image_path": str(args.image_path) if args.image_path is not None else None,
             "last_image_path": str(args.last_image) if args.last_image is not None else None,
+            "context_image_paths": [str(path) for path in args.context_frames] if args.context_frames else None,
+            "context_noise": args.context_noise,
+            "svi_anchor_image_path": str(args.svi_anchor_image) if args.svi_anchor_image is not None else None,
+            "svi_motion_latent_path": str(args.svi_motion_latent) if args.svi_motion_latent is not None else None,
+            "svi_motion_latent_count": args.svi_motion_latent_count if args.svi_anchor_image is not None else None,
+            "svi_lora_high_path": str(args.svi_lora_high) if args.svi_lora_high is not None else None,
+            "svi_lora_low_path": str(args.svi_lora_low) if args.svi_lora_low is not None else None,
             "video_path": str(args.video_path) if args.video_path is not None else None,
             "video_strength": args.video_strength,
             "video_mask_path": str(args.video_mask_path) if args.video_mask_path is not None else None,
@@ -951,7 +1157,7 @@ def _runtime_diagnostics() -> dict:
 def _requested_task(args: argparse.Namespace) -> str:
     if args.video_path is not None:
         return "video-to-video"
-    if args.image_path is not None:
+    if args.image_path is not None or getattr(args, "svi_anchor_image", None) is not None:
         return "image-to-video"
     return "text-to-video"
 

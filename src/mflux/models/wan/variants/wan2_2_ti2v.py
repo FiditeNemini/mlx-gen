@@ -25,6 +25,7 @@ from mflux.models.wan.model.wan_transformer import WanBlockHealthContext, WanTra
 from mflux.models.wan.model.wan_vae import Wan2_2_VAE
 from mflux.models.wan.prompt_embed_store import WanPromptEmbedStore
 from mflux.models.wan.scheduler import WanEulerScheduler, WanUniPCMultistepScheduler
+from mflux.models.wan.variants.wan_svi import WanSvi
 from mflux.models.wan.variants.wan_video_request import WanVideoRequest
 from mflux.models.wan.wan_initializer import WanInitializer
 from mflux.models.wan.weights import WanWeightDefinition
@@ -66,6 +67,8 @@ class Wan2_2_TI2V(nn.Module):
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         lora_target_roles: list[str] | None = None,
+        svi_lora_high_path: str | None = None,
+        svi_lora_low_path: str | None = None,
         keep_text_encoder_resident: bool = False,
         prompt_embed_disk_cache: bool = True,
     ):
@@ -79,6 +82,8 @@ class Wan2_2_TI2V(nn.Module):
             lora_paths=lora_paths,
             lora_scales=lora_scales,
             lora_target_roles=lora_target_roles,
+            svi_lora_high_path=svi_lora_high_path,
+            svi_lora_low_path=svi_lora_low_path,
         )
         # Prompt-encoding cost controls (0086). The UMT5 text encoder is an
         # ~11 GB torch load per encode: hosts that chain generations with new
@@ -112,6 +117,12 @@ class Wan2_2_TI2V(nn.Module):
         negative_prompt: str | None = None,
         image_path: Path | str | None = None,
         last_image_path: Path | str | None = None,
+        context_image_paths: list[Path | str] | None = None,
+        context_noise: float | None = None,
+        svi_anchor_image_path: Path | str | None = None,
+        svi_motion_latent_path: Path | str | None = None,
+        svi_motion_latent_count: int = 1,
+        svi_motion_latent_export_path: Path | str | None = None,
         video_path: Path | str | None = None,
         video_strength: float | None = None,
         video_mask_path: Path | str | None = None,
@@ -150,6 +161,12 @@ class Wan2_2_TI2V(nn.Module):
             num_frames=num_frames,
             image_path=image_path,
             last_image_path=last_image_path,
+            context_image_paths=context_image_paths,
+            context_noise=context_noise,
+            svi_anchor_image_path=svi_anchor_image_path,
+            svi_motion_latent_path=svi_motion_latent_path,
+            svi_motion_latent_count=svi_motion_latent_count,
+            svi_motion_latent_export_path=svi_motion_latent_export_path,
             video_path=video_path,
             video_strength=video_strength,
             video_mask_path=video_mask_path,
@@ -277,7 +294,22 @@ class Wan2_2_TI2V(nn.Module):
         self._require_tensor_health(latents, phase="prepare-latents", name="latents")
         first_frame_mask = None
         condition = None
-        if is_image_to_video:
+        svi_mode = svi_anchor_image_path is not None
+        if svi_mode:
+            # SVI 2.0 Pro layout (0103): [anchor, motion?, zero-latents] with
+            # the standard first-frame mask; never the stock zero-frame encode.
+            condition = self._encode_svi_condition(
+                anchor_image_path=svi_anchor_image_path,
+                motion_latent_path=svi_motion_latent_path,
+                motion_latent_count=svi_motion_latent_count,
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                batch_size=batch_size,
+                resize_mode=resize_mode,
+            )
+            self._require_tensor_health(condition, phase="svi-conditioning", name="condition")
+        elif is_image_to_video:
             if self._uses_expanded_timesteps():
                 first_frame_mask = WanTimestepPolicy.first_frame_mask(latent_shape=latents.shape)
                 condition = self._encode_first_frame_condition(
@@ -291,12 +323,26 @@ class Wan2_2_TI2V(nn.Module):
                 condition = self._encode_video_condition(
                     image_path=image_path,
                     last_image_path=last_image_path,
+                    context_image_paths=context_image_paths,
                     height=height,
                     width=width,
                     num_frames=num_frames,
                     batch_size=batch_size,
                     resize_mode=resize_mode,
                 )
+                if context_noise and context_image_paths:
+                    # SkyReels-V2 addnoise_condition precedent: mild noise on the
+                    # clean context latents softens the model's over-commitment to
+                    # the conditioned head and improves boundary blending. Applied
+                    # per-run OUTSIDE the condition cache (it is seed-dependent;
+                    # the cache stays clean-only).
+                    condition = self._apply_context_noise(
+                        condition=condition,
+                        context_noise=context_noise,
+                        head_frame_count=1 + len(context_image_paths),
+                        temporal_scale=self.vae.temporal_scale,
+                        seed=seed,
+                    )
                 self._require_tensor_health(condition, phase="image-conditioning", name="condition")
 
         # Opt-in compiled denoisers (0090 d12): per-expert compiled callables,
@@ -509,6 +555,19 @@ class Wan2_2_TI2V(nn.Module):
         if release_denoisers_before_decode:
             self._release_denoisers()
         self._require_tensor_health(latents, phase="pre-decode", name="latents")
+        svi_motion_latent_export = None
+        if svi_mode and svi_motion_latent_export_path is not None:
+            # The exact float32 scheduler state, exported BEFORE the decode
+            # cast: the next clip's motion latent must be the final denoised
+            # latent, never a pixel round-trip (SVI 2.0 Pro latent handover).
+            svi_motion_latent_export = WanSvi.export_motion_latents(
+                svi_motion_latent_export_path,
+                latents=latents,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                model_name=self.model_config.model_name,
+            )
         self._emit_progress(
             progress_callback,
             phase="decode",
@@ -531,6 +590,22 @@ class Wan2_2_TI2V(nn.Module):
             # Prompt-conditioning truth (0098): what the UMT5 encoder actually saw.
             **(getattr(self, "_last_prompt_truncation", None) or {}),
             **({"last_image_path": str(last_image_path)} if last_image_path is not None else {}),
+            # Context-head truth (0102): the ordered conditioned frames after the
+            # start frame, and the noise fraction actually applied to the head.
+            **({"context_image_paths": [str(path) for path in context_image_paths]} if context_image_paths else {}),
+            **({"context_noise": float(context_noise)} if context_noise else {}),
+            # SVI truth (0103): anchor identity, motion handover, the exported
+            # latent for the next clip, and the assembly trim the layout implies.
+            **(
+                self._svi_extra_metadata(
+                    svi_anchor_image_path=svi_anchor_image_path,
+                    svi_motion_latent_path=svi_motion_latent_path,
+                    svi_motion_latent_count=svi_motion_latent_count,
+                    svi_motion_latent_export=svi_motion_latent_export,
+                )
+                if svi_mode
+                else {}
+            ),
             **(
                 {"denoising_step_list": [int(step) for step in denoising_step_list]}
                 if denoising_step_list is not None
@@ -1113,6 +1188,84 @@ class Wan2_2_TI2V(nn.Module):
         mx.eval(condition)
         return condition.astype(mx.float32)
 
+    def _encode_svi_condition(
+        self,
+        *,
+        anchor_image_path: Path | str,
+        motion_latent_path: Path | str | None,
+        motion_latent_count: int,
+        height: int,
+        width: int,
+        num_frames: int,
+        batch_size: int,
+        resize_mode: str = "resize",
+    ) -> mx.array:
+        # The motion latent file participates in the cache identity through
+        # mtime/size (like every image source): a re-exported predecessor
+        # invalidates the cached condition.
+        cache_key = (
+            "svi",
+            self._cache_path_key(anchor_image_path),
+            self._cache_path_key(motion_latent_path),
+            motion_latent_count if motion_latent_path is not None else None,
+            height,
+            width,
+            num_frames,
+            batch_size,
+            resize_mode,
+        )
+        cached = self._cached_tensor(cache_name="image_condition_cache", key=cache_key)
+        if cached is not None:
+            return cached
+        condition = WanSvi.build_condition(
+            self,
+            anchor_image_path=anchor_image_path,
+            motion_latent_path=motion_latent_path,
+            motion_latent_count=motion_latent_count,
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            batch_size=batch_size,
+            resize_mode=resize_mode,
+        )
+        return self._store_cached_tensor(cache_name="image_condition_cache", key=cache_key, value=condition)
+
+    def _svi_extra_metadata(
+        self,
+        *,
+        svi_anchor_image_path: Path | str,
+        svi_motion_latent_path: Path | str | None,
+        svi_motion_latent_count: int,
+        svi_motion_latent_export: Path | None,
+    ) -> dict:
+        is_continuation = svi_motion_latent_path is not None
+        metadata: dict = {
+            "svi_anchor_image_path": str(svi_anchor_image_path),
+            "svi_assembly_trim_frames": WanSvi.assembly_trim_frames(
+                temporal_scale=int(self.vae.temporal_scale),
+                motion_latent_count=svi_motion_latent_count,
+                is_continuation=is_continuation,
+            ),
+        }
+        if is_continuation:
+            metadata["svi_motion_latent_path"] = str(svi_motion_latent_path)
+            metadata["svi_motion_latent_count"] = int(svi_motion_latent_count)
+        if svi_motion_latent_export is not None:
+            metadata["svi_motion_latent_export"] = str(svi_motion_latent_export)
+        for report, key in (
+            (self._svi_lora_report("high_noise_transformer"), "svi_lora_high"),
+            (self._svi_lora_report("low_noise_transformer"), "svi_lora_low"),
+        ):
+            if report is not None:
+                metadata[key] = report.to_dict()
+        return metadata
+
+    def _svi_lora_report(self, role: str):
+        for report in getattr(self, "svi_lora_reports", ()) or ():
+            if report.role == role:
+                return report
+        return None
+
     def _encode_video_condition(
         self,
         image_path: Path | str | None,
@@ -1122,14 +1275,17 @@ class Wan2_2_TI2V(nn.Module):
         batch_size: int,
         resize_mode: str = "resize",
         last_image_path: Path | str | None = None,
+        context_image_paths: list[Path | str] | None = None,
     ) -> mx.array:
         # resize_mode changes the conditioned pixels, so it is part of the cache
         # identity; so is the last-image identity (0097) - a bracketed condition
-        # must never alias the single-frame condition of the same first image.
+        # must never alias the single-frame condition of the same first image -
+        # and the context-head identity (0102) for the same reason.
         cache_key = (
             "video",
             self._cache_path_key(image_path),
             self._cache_path_key(last_image_path),
+            tuple(self._cache_path_key(path) for path in context_image_paths) if context_image_paths else None,
             height,
             width,
             num_frames,
@@ -1147,6 +1303,7 @@ class Wan2_2_TI2V(nn.Module):
             batch_size=batch_size,
             resize_mode=resize_mode,
             last_image_path=last_image_path,
+            context_image_paths=context_image_paths,
         )
         return self._store_cached_tensor(cache_name="image_condition_cache", key=cache_key, value=condition)
 
@@ -1159,6 +1316,7 @@ class Wan2_2_TI2V(nn.Module):
         batch_size: int,
         resize_mode: str = "resize",
         last_image_path: Path | str | None = None,
+        context_image_paths: list[Path | str] | None = None,
     ) -> mx.array:
         if image_path is None:
             raise ValueError("Wan image-to-video requires image_path.")
@@ -1166,8 +1324,17 @@ class Wan2_2_TI2V(nn.Module):
             normalized_first_frame=self._normalized_condition_frame(
                 image_path, height=height, width=width, resize_mode=resize_mode
             ),
-            # The last image maps through the SAME canvas geometry as the first
-            # frame (0097): one canvas, one resize_mode, both anchors.
+            # Context frames (0102) and the last image map through the SAME
+            # canvas geometry as the first frame (0097): one canvas, one
+            # resize_mode, every anchor.
+            normalized_context_frames=(
+                [
+                    self._normalized_condition_frame(path, height=height, width=width, resize_mode=resize_mode)
+                    for path in context_image_paths
+                ]
+                if context_image_paths
+                else None
+            ),
             normalized_last_frame=(
                 self._normalized_condition_frame(last_image_path, height=height, width=width, resize_mode=resize_mode)
                 if last_image_path is not None
@@ -1181,21 +1348,48 @@ class Wan2_2_TI2V(nn.Module):
         latent_frames = latent_condition.shape[2]
         latent_height = latent_condition.shape[3]
         latent_width = latent_condition.shape[4]
+        # The conditioned head is the start frame plus the ordered context
+        # frames (0102). head=1 reproduces the historical single-frame mask
+        # fill bitwise; the x4 temporal packing below is untouched, which is
+        # why the head must fill whole latent groups (K = 1 mod 4).
+        head_frame_count = 1 + (len(context_image_paths) if context_image_paths else 0)
+        mask = self._packed_condition_mask(
+            batch_size=batch_size,
+            num_frames=num_frames,
+            latent_height=latent_height,
+            latent_width=latent_width,
+            head_frame_count=head_frame_count,
+            last_frame_conditioned=last_image_path is not None,
+        )
+        condition = mx.concatenate([mask[:, :, :latent_frames], latent_condition], axis=1)
+        mx.eval(condition)
+        return condition.astype(mx.float32)
+
+    def _packed_condition_mask(
+        self,
+        *,
+        batch_size: int,
+        num_frames: int,
+        latent_height: int,
+        latent_width: int,
+        head_frame_count: int,
+        last_frame_conditioned: bool,
+    ) -> mx.array:
+        # The diffusers WanImageToVideoPipeline mask packing, shared by the
+        # stock i2v/context/bracket layout (0097/0102) and the SVI layout
+        # (0103, head_frame_count=1): pixel-frame mask -> 4x temporal groups.
         mask_np = np.ones((batch_size, 1, num_frames, latent_height, latent_width), dtype=np.float32)
-        if last_image_path is None:
-            mask_np[:, :, 1:] = 0
+        if not last_frame_conditioned:
+            mask_np[:, :, head_frame_count:] = 0
         else:
             # Bracket mask (diffusers WanImageToVideoPipeline `last_image`):
-            # both endpoint frames stay 1; only the middle is generated freely.
-            mask_np[:, :, 1 : num_frames - 1] = 0
+            # the head and the final frame stay 1; the middle is generated freely.
+            mask_np[:, :, head_frame_count : num_frames - 1] = 0
         mask = mx.array(mask_np)
         first_frame_mask = mx.repeat(mask[:, :, 0:1], self.vae.temporal_scale, axis=2)
         mask = mx.concatenate([first_frame_mask, mask[:, :, 1:]], axis=2)
         mask = mx.reshape(mask, (batch_size, -1, self.vae.temporal_scale, latent_height, latent_width))
-        mask = mx.transpose(mask, (0, 2, 1, 3, 4))
-        condition = mx.concatenate([mask[:, :, :latent_frames], latent_condition], axis=1)
-        mx.eval(condition)
-        return condition.astype(mx.float32)
+        return mx.transpose(mask, (0, 2, 1, 3, 4))
 
     @staticmethod
     def _normalized_condition_frame(
@@ -1220,25 +1414,60 @@ class Wan2_2_TI2V(nn.Module):
         batch_size: int,
         precision: mx.Dtype,
         normalized_last_frame: mx.array | None = None,
+        normalized_context_frames: list[mx.array] | None = None,
     ) -> mx.array:
         # F2 (0089): build the padded VAE-encode input directly in the model precision.
         # The old path concatenated first_frame + zero_frames in float32 and cast the
         # result (a ~1 GB f32 transient at 1280x720x81, ~3 GB at 1920x1080x121) that
-        # the cast immediately halved. Casting the single normalized frame first and
+        # the cast immediately halved. Casting each normalized frame first and
         # allocating the zero padding in the target dtype is BITWISE identical
         # (elementwise cast; zeros cast exactly) at roughly half the transient
         # footprint. Normalization stays in float32 so its rounding is unchanged.
         # With a last frame (0097), the layout is the diffusers `last_image` bracket:
         # [first, zeros x (num_frames - 2), last], built with the same discipline.
+        # With context frames (0102), the head extends to the ordered motion tail
+        # of the predecessor: [first, context..., zeros, last?].
         height = normalized_first_frame.shape[2]
         width = normalized_first_frame.shape[3]
-        first_frame = normalized_first_frame.astype(precision)[:, :, None, :, :]
-        if normalized_last_frame is None:
-            zero_frames = mx.zeros((batch_size, first_frame.shape[1], num_frames - 1, height, width), dtype=precision)
-            return mx.concatenate([first_frame, zero_frames], axis=2)
-        last_frame = normalized_last_frame.astype(precision)[:, :, None, :, :]
-        zero_frames = mx.zeros((batch_size, first_frame.shape[1], num_frames - 2, height, width), dtype=precision)
-        return mx.concatenate([first_frame, zero_frames, last_frame], axis=2)
+        head_frames = [
+            frame.astype(precision)[:, :, None, :, :]
+            for frame in (normalized_first_frame, *(normalized_context_frames or []))
+        ]
+        head_frame_count = len(head_frames)
+        tail_frames = (
+            [] if normalized_last_frame is None else [normalized_last_frame.astype(precision)[:, :, None, :, :]]
+        )
+        zero_frame_count = num_frames - head_frame_count - len(tail_frames)
+        zero_frames = mx.zeros((batch_size, head_frames[0].shape[1], zero_frame_count, height, width), dtype=precision)
+        return mx.concatenate([*head_frames, zero_frames, *tail_frames], axis=2)
+
+    @staticmethod
+    def _apply_context_noise(
+        *,
+        condition: mx.array,
+        context_noise: float,
+        head_frame_count: int,
+        temporal_scale: int,
+        seed: int,
+    ) -> mx.array:
+        # SkyReels-V2 `addnoise_condition` semantics on a 0-1000 timestep-like
+        # scale: latent = (1 - t/1000) * latent + (t/1000) * noise, applied to
+        # the LATENT channels of the conditioned head only. The packed mask
+        # channels (first temporal_scale channels) stay binary truth, and free
+        # / last-anchor latent frames are untouched. The noise key is derived
+        # from the generation seed with a fixed offset so it is deterministic
+        # per seed yet independent of the initial-latents stream.
+        noise_fraction = float(context_noise) / 1000.0
+        head_latent_frames = 1 + (head_frame_count - 1) // temporal_scale
+        mask_channels = condition[:, :temporal_scale]
+        latent_channels = condition[:, temporal_scale:]
+        head = latent_channels[:, :, :head_latent_frames]
+        noise = mx.random.normal(head.shape, dtype=head.dtype, key=mx.random.key(seed + 0x9E3779B9))
+        noised_head = (1.0 - noise_fraction) * head + noise_fraction * noise
+        latent_channels = mx.concatenate([noised_head, latent_channels[:, :, head_latent_frames:]], axis=2)
+        condition = mx.concatenate([mask_channels, latent_channels], axis=1)
+        mx.eval(condition)
+        return condition.astype(mx.float32)
 
     @staticmethod
     def _cache_path_key(image_path: Path | str | None) -> tuple[str, int, int] | None:

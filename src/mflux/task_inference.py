@@ -39,7 +39,11 @@ VIDEO_TASKS = PUBLIC_VIDEO_TASKS
 VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
 # v5: additive supports_last_image row field (0097), matching the v4 bump
 # convention for supports_video_mask.
-CAPABILITIES_SCHEMA_VERSION = 5
+# v6: additive supports_context_frames row field (0102), same additive-field
+# convention: hosts gate multi-frame context conditioning on this field.
+# v7: additive supports_svi row field (0103), same additive-field convention:
+# hosts gate SVI 2.0 Pro anchor/motion-latent conditioning on this field.
+CAPABILITIES_SCHEMA_VERSION = 7
 QWEN_CONTROL_UNION_MODEL = "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
 QWEN_CONTROL_INPAINT_MODEL = "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
 # Untrusted inferred identities that earned native masked edit through an exact smoke proof.
@@ -93,6 +97,10 @@ class GenerationCapability:
     supports_video_mask: bool = False
     # Wan A14B i2v first+last bracket conditioning (--last-image, 0097).
     supports_last_image: bool = False
+    # Wan A14B i2v multi-frame context head conditioning (--context-frames, 0102).
+    supports_context_frames: bool = False
+    # Wan A14B i2v SVI 2.0 Pro anchor/motion-latent conditioning (--svi-anchor-image, 0103).
+    supports_svi: bool = False
     supports_mask: bool = False
     supports_control_image: bool = False
     supports_control_mask: bool = False
@@ -140,6 +148,8 @@ class GenerationCapability:
             "supports_video_strength": self.supports_video_strength,
             "supports_video_mask": self.supports_video_mask,
             "supports_last_image": self.supports_last_image,
+            "supports_context_frames": self.supports_context_frames,
+            "supports_svi": self.supports_svi,
             "supports_mask": self.supports_mask,
             "supports_control_image": self.supports_control_image,
             "supports_control_mask": self.supports_control_mask,
@@ -1209,6 +1219,7 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
         # 36-channel concat i2v path; the 5B expand-timesteps path has no
         # last-frame slot.
         uses_expanded_timesteps = bool(identity.model_config.transformer_overrides.get("expand_timesteps", True))
+        has_transformer_2 = bool(identity.model_config.transformer_overrides.get("has_transformer_2", False))
         capabilities.append(
             GenerationCapability(
                 id="wan.first-frame",
@@ -1220,6 +1231,10 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 supports_frames=True,
                 supports_fps=True,
                 supports_last_image=not uses_expanded_timesteps and not is_vace,
+                supports_context_frames=not uses_expanded_timesteps and not is_vace,
+                # SVI 2.0 Pro (0103) needs the dual-expert A14B conditioning
+                # stream AND the high/low LoRA pair slots.
+                supports_svi=not uses_expanded_timesteps and not is_vace and has_transformer_2,
                 default_for_task=True,
                 canvas_policies=(CANVAS_POLICY_SOURCE_ASPECT, CANVAS_POLICY_EXACT_RESIZE),
                 default_canvas_policy=CANVAS_POLICY_SOURCE_ASPECT,

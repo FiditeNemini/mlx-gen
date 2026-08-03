@@ -20,6 +20,12 @@ from mflux.models.wan.weights.wan_lora_mapping import WanLoRAMapping
 
 
 class WanInitializer:
+    # The SVI error-recycling LoRAs retrain the conditioning convention; the
+    # reference loads them at alpha=1 on top of the base experts, and our
+    # LoRALinear applies scale x (B @ A) with no rank divisor when the file
+    # carries no alpha keys - so 1.0 reproduces the reference exactly.
+    SVI_LORA_SCALE = 1.0
+
     @staticmethod
     def init(
         model,
@@ -29,6 +35,8 @@ class WanInitializer:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         lora_target_roles: list[str] | None = None,
+        svi_lora_high_path: str | None = None,
+        svi_lora_low_path: str | None = None,
     ) -> None:
         path = model_path if model_path else model_config.model_name
         LoRACompatibility.validate_for_model_config(
@@ -52,6 +60,11 @@ class WanInitializer:
             lora_paths=lora_paths,
             lora_scales=lora_scales,
             lora_target_roles=lora_target_roles,
+        )
+        WanInitializer._apply_svi_loras(
+            model,
+            svi_lora_high_path=svi_lora_high_path,
+            svi_lora_low_path=svi_lora_low_path,
         )
 
     @staticmethod
@@ -271,6 +284,67 @@ class WanInitializer:
         model.lora_target_roles = resolved_roles
 
     @staticmethod
+    def _apply_svi_loras(
+        model,
+        *,
+        svi_lora_high_path: str | None,
+        svi_lora_low_path: str | None,
+    ) -> None:
+        # SVI 2.0 Pro pack loading (0103). Kept SEPARATE from the generic LoRA
+        # bookkeeping: metadata `lora_paths` must stay replayable through
+        # --lora-paths, while the SVI pack replays through its own flags and
+        # carries its own strict-match contract.
+        if svi_lora_high_path is None and svi_lora_low_path is None:
+            model.svi_lora_paths = []
+            model.svi_lora_reports = ()
+            return
+        if svi_lora_high_path is None or svi_lora_low_path is None:
+            raise LoRAApplicationError(
+                "The SVI LoRA pair is indivisible: pass BOTH svi_lora_high_path and svi_lora_low_path "
+                "(the error-recycling fine-tune targets the high- and low-noise experts together)."
+            )
+        if model.transformer_2 is None:
+            raise LoRAApplicationError(
+                f"{model.model_config.model_name} does not support the SVI LoRA pair: SVI 2.0 Pro targets "
+                "the dual-expert Wan 2.2 A14B image-to-video model."
+            )
+        reports = []
+        resolved_paths = []
+        for lora_path, role in (
+            (svi_lora_high_path, "high_noise_transformer"),
+            (svi_lora_low_path, "low_noise_transformer"),
+        ):
+            result = LoRALoader.load_and_apply_lora_detailed(
+                lora_mapping=WanLoRAMapping.get_mapping(),
+                transformer=WanInitializer._transformer_for_role(model, role),
+                lora_paths=[lora_path],
+                lora_scales=[WanInitializer.SVI_LORA_SCALE],
+                role=role,
+                state_dict_transform=WanInitializer._transform_wan_lora_state_dict,
+            )
+            report = result.reports[0]
+            WanInitializer._require_strict_svi_key_match(report)
+            reports.append(report)
+            resolved_paths.extend(result.resolved_paths)
+        model.svi_lora_paths = resolved_paths
+        model.svi_lora_reports = tuple(reports)
+
+    @staticmethod
+    def _require_strict_svi_key_match(report) -> None:
+        # The generic loader warns-and-skips unmatched keys; for the SVI pack a
+        # partial match means a partially-taught conditioning convention - the
+        # exact silent-failure trap the redo doctrine gates against. Zero
+        # tolerance, loud fail (doctrine B1: assert unmatched_key_count == 0).
+        if report.unmatched_key_count != 0:
+            raise LoRAApplicationError(
+                f"SVI LoRA {report.resolved_path} ({report.role}) left {report.unmatched_key_count} of "
+                f"{report.total_key_count} keys unmatched (matched {report.matched_key_count}). A partially "
+                "applied SVI error-recycling LoRA silently corrupts the conditioning convention; refusing "
+                "to continue. The file may not be an SVI Wan2.2-I2V-A14B pack, or its key format is "
+                "unsupported."
+            )
+
+    @staticmethod
     def _reapply_high_noise_loras(model, transformer: WanTransformer) -> None:
         # Deterministic re-fusion (0089 e4): iterate the resolved paths/scales/roles
         # exactly as stored at init so the fused stack order (and any FusedLoRALinear
@@ -289,6 +363,22 @@ class WanInitializer:
                 role=role,
                 state_dict_transform=WanInitializer._transform_wan_lora_state_dict,
             )
+        # The SVI high-noise LoRA is part of the expert's identity (0103): a
+        # reloaded high expert without it would denoise under the WRONG
+        # convention for the rest of the run. Re-fuse it last, matching the
+        # init-time application order, under the same strict-match contract.
+        for report in getattr(model, "svi_lora_reports", ()) or ():
+            if report.role != "high_noise_transformer":
+                continue
+            result = LoRALoader.load_and_apply_lora_detailed(
+                lora_mapping=WanLoRAMapping.get_mapping(),
+                transformer=transformer,
+                lora_paths=[report.resolved_path],
+                lora_scales=[WanInitializer.SVI_LORA_SCALE],
+                role=report.role,
+                state_dict_transform=WanInitializer._transform_wan_lora_state_dict,
+            )
+            WanInitializer._require_strict_svi_key_match(result.reports[0])
 
     @staticmethod
     def _resolve_lora_roles(

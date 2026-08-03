@@ -11,7 +11,7 @@
 - `docs/README.md`: documentation tree index.
 - `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, SeedVR2 image/video restoration and upscaling, and Wan video examples.
 - `docs/architecture.md`: system overview and model-file lifecycle diagrams, package shape, command boundaries, runtime failure contract, quantization policy, and the Python integration boundary.
-- `docs/api.md`: public CLI, legacy-command migration boundary, router behavior, task/mode resolution, I2I mode selection, canvas policy and `--resize-mode` (resize | crop | pad) source mapping, masked edit via `--mask-path` including the FLUX.2 Klein `flux2.inpaint` route, Qwen structured control with `--controlnet-image-path`, generative reframe, backend-specific outpaint with Qwen adaptive source restoration and FLUX.2 Klein base source-locked denoising, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor image sizing plus video clip controls, negative prompts including the FLUX.2 exception, Qwen edit-version routing, Wan video sizes and `--canvas-policy` on the wan route, experimental Wan A14B `--last-image` first+last bracket conditioning, `--denoising-step-list` explicit distill timestep grids, the Wan prompt-truncation warning with `prompt_tokens`/`prompt_truncated` metadata, Wan prompt-embed disk cache and resident text encoder flags, `--no-validate-health`, runtime memory defaults (machine-derived MLX buffer-cache limit plus HF-repo weight prefetch, with `--mlx-cache-limit-gb`, `MFLUX_MLX_CACHE_LIMIT_GB`, and `MFLUX_NO_WEIGHT_PREFETCH` overrides), runtime events with resolved dimensions on `start` and enriched `save` metadata, `mlxgen capabilities` including per-route `resize_modes`/`canvas_policies` and the additive `supports_last_image` field (capabilities `schema_version` 5), generated-output runtime-memory metadata, and Python routing helpers.
+- `docs/api.md`: public CLI, legacy-command migration boundary, router behavior, task/mode resolution, I2I mode selection, canvas policy and `--resize-mode` (resize | crop | pad) source mapping, masked edit via `--mask-path` including the FLUX.2 Klein `flux2.inpaint` route, Qwen structured control with `--controlnet-image-path`, generative reframe, backend-specific outpaint with Qwen adaptive source restoration and FLUX.2 Klein base source-locked denoising, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor image sizing plus video clip controls, negative prompts including the FLUX.2 exception, Qwen edit-version routing, Wan video sizes and `--canvas-policy` on the wan route, experimental Wan A14B `--last-image` first+last bracket conditioning, experimental Wan A14B `--context-frames` multi-frame context head conditioning (with `--context-noise`), experimental Wan A14B SVI 2.0 Pro chain conditioning (`--svi-anchor-image`, `--svi-motion-latent`, strict-match `--svi-lora-high`/`--svi-lora-low`, exported `*.svi_latent.safetensors` motion handover), `--denoising-step-list` explicit distill timestep grids, the Wan prompt-truncation warning with `prompt_tokens`/`prompt_truncated` metadata, Wan prompt-embed disk cache and resident text encoder flags, `--no-validate-health`, runtime memory defaults (machine-derived MLX buffer-cache limit plus HF-repo weight prefetch, with `--mlx-cache-limit-gb`, `MFLUX_MLX_CACHE_LIMIT_GB`, and `MFLUX_NO_WEIGHT_PREFETCH` overrides), runtime events with resolved dimensions on `start` and enriched `save` metadata, `mlxgen capabilities` including per-route `resize_modes`/`canvas_policies` and the additive `supports_last_image` and `supports_context_frames` fields (capabilities `schema_version` 6), generated-output runtime-memory metadata, and Python routing helpers.
 - `docs/image-edit-modes.md`: plain-language guide to latent img2img, edit-reference, masked edit/inpaint, structured control, multi-reference, generative reframe, and outpaint, including what each mode preserves and what to expect from the output.
 - `docs/masked-editing.md`: canonical masked-edit reference — request contract, per-model route matrix with proof grades (Qwen edit/base, Z-Image Turbo, FLUX.2 Klein, video masks; non-turbo Z-Image masked edit is withdrawn for now), per-family behavior including the tunable base-Qwen `--mask-strength` warm start and `effective_steps` metadata, and route selection advice.
 - `docs/qwen-route-matrix.md`: current MLX-Gen route truth for Qwen Image and Qwen Image Edit, mapping public `mlxgen` capability ids to the upstream Diffusers Qwen pipeline families and to the proof surfaces that already exist.
@@ -26,7 +26,7 @@
 - `docs/model-management.md`: explicit `download` and `prepare`, generation from local model files, local MLX-Gen packages, matching Hugging Face handle resolution, and `DownloadRequiredError`.
 - `docs/quantization.md`: complete published package matrix, q8/q4/BF16 policies, model-family compatibility, Wan TI2V/A14B package status, A14B q8 generated-output records, and the distinction between MLX-Gen q8 packages and third-party FP8 checkpoint guidance.
 - `docs/huggingface-publishing.md`: generated model cards and AbstractFramework Hugging Face upload guidance.
-- `docs/python-integration.md`: embedding MLX-Gen, route-resolved runtime loading, `model_kwargs` constructor passthrough (resident text encoder, prompt-cache opt-out), runtime memory defaults for hosts (`MFLUX_MLX_CACHE_LIMIT_GB`, `-1` unlimited opt-out, host-managed `mx.set_cache_limit` detection, `MFLUX_NO_WEIGHT_PREFETCH`), Wan `last_image_path` and `denoising_step_list` generation kwargs, `save_kwargs` including `validate_health=False`, serial multi-output reuse for unified `mlxgen generate` families, overwrite/collision behavior, SeedVR2's direct-model boundary, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
+- `docs/python-integration.md`: embedding MLX-Gen, route-resolved runtime loading, `model_kwargs` constructor passthrough (resident text encoder, prompt-cache opt-out), runtime memory defaults for hosts (`MFLUX_MLX_CACHE_LIMIT_GB`, `-1` unlimited opt-out, host-managed `mx.set_cache_limit` detection, `MFLUX_NO_WEIGHT_PREFETCH`), Wan `last_image_path`, `context_image_paths`/`context_noise`, and `denoising_step_list` generation kwargs, `save_kwargs` including `validate_health=False`, serial multi-output reuse for unified `mlxgen generate` families, overwrite/collision behavior, SeedVR2's direct-model boundary, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
 - `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 image/video sizing and default audio-preservation behavior, Qwen edit variants, negative prompts, reframe/outpaint, Wan resolutions, prompting guidance, usage limits, and why MLX-Gen q8 Lightning guidance should not be generalized to arbitrary FP8 checkpoints.
 - `docs/troubleshooting.md`: user-facing failure symptoms, diagnostics, fixes, and legacy `mflux-generate-*` migration guidance.
 - `docs/release.md`: release and publishing process.
@@ -331,12 +331,46 @@ bracket conditioning. The last image maps through the same resolved canvas and `
 as the first frame, so match their aspect ratios. It requires `--image-path` and is rejected on
 TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video. The path is recorded in
 metadata (`last_image_path`), replayed by `--config-from-metadata`, and advertised as the
-additive `supports_last_image` field on the `wan.first-frame` capability row (capabilities
-`schema_version` 5). Official first+last training exists for Wan 2.1 (FLF2V); on Wan 2.2 A14B
+additive `supports_last_image` field on the `wan.first-frame` capability row. Official
+first+last training exists for Wan 2.1 (FLF2V); on Wan 2.2 A14B
 this ships as EXPERIMENTAL: the shipped probe measured end-frame adherence at MAE 4.6/255 vs
 the target (first-frame-only baseline: 56.1) with no mid-clip exposure jumps on one Lightning
 4-step storyboard pair whose target was a real future frame of the same shot — treat broader
 recipes (other step counts, out-of-distribution targets) as unverified.
+
+Wan A14B image-to-video can also CONTINUE an existing shot with real momentum:
+`--context-frames <png>...` (Python: `context_image_paths=[...]`) extends the conditioned head
+with the ordered frames that FOLLOW `--image-path` in the motion being continued (the
+SkyReels-V2/SVI-class multi-frame handover). The head `[image, *context]` must fill whole 4x
+VAE latent groups — 4, 8, or 12 context frames = heads 5, 9, 13 — and needs
+`--frames >= head + 4`; it composes with `--last-image`, maps every frame through the first
+frame's canvas and `--resize-mode`, and is rejected on TI2V-5B (`expand_timesteps`), Wan VACE,
+and text/video-to-video before the weight load. `--context-noise <0-1000>` (Python:
+`context_noise=...`, SkyReels `addnoise_condition` precedent, ~20) optionally perturbs the
+head in latent space, deterministic per seed. Both are recorded in metadata
+(`context_image_paths`, `context_noise`), replayed by `--config-from-metadata`, and advertised
+as the additive `supports_context_frames` field on the `wan.first-frame` capability row
+(capabilities `schema_version` 6). EXPERIMENTAL zero-shot behavior with a measured probe
+(backlog 0102): the K=5 head carried seam motion speed (magnitude ratio 0.90 vs the
+single-frame baseline's 1.90 double-speed restart) at the cost of a mild ~2-frame
+flare/exposure step at the conditioned-to-free boundary; hosts assembling films should trim
+the predecessor at the FIRST handover frame (the head is regenerated, not copied).
+
+`--svi-anchor-image` (Python: `generate_video(svi_anchor_image_path=...)`) enables SVI 2.0 Pro
+chain conditioning on the same Wan A14B i2v route (EXPERIMENTAL, backlog 0103): every clip
+conditions on `[anchor_latent, motion_latent?, zero-latents]` — one persistent anchor image
+re-injected into every clip of a chain (identity), the previous clip's final denoised latent
+handed over via the exported `<output>.svi_latent.safetensors` and `--svi-motion-latent`
+(momentum; count via `--svi-motion-latent-count`, default 1), and TRUE zero-latent padding
+(not the stock zero-frame VAE encode). Requires the SVI error-recycling LoRA pair
+(`--svi-lora-high`/`--svi-lora-low`, fixed scale 1.0, strict key-match: any unmatched key
+aborts; the pack is likewise rejected on non-SVI runs). Conflicts with `--image-path`,
+`--last-image`, `--context-frames`, `--video-path`; TI2V-5B and VACE reject before weight
+load; continuations >65 frames warn. Metadata records `svi_*` truth including
+`svi_assembly_trim_frames` (drop that many leading frames of each continuation at assembly:
+`1 + 4 x count`); hosts gate on the additive `supports_svi` capability field (capabilities
+`schema_version` 7). Use a unique seed per clip; author-documented Lightning coexistence sets
+lightx2v HIGH scale 0.5-0.6, LOW 1.0.
 
 `--denoising-step-list 1000 750 500 250` (Python: `denoising_step_list=[...]`) runs an exact
 denoising timestep grid (strictly decreasing integers in `[1, 1000]`) instead of a

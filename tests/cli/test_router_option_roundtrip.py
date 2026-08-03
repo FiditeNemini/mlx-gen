@@ -226,3 +226,77 @@ def test_unconsumed_options_pass_through_verbatim():
     fps_index = invocation.argv.index("--fps")
     assert invocation.argv[fps_index + 1] == "16"
     assert "--low-ram" in invocation.argv
+
+
+WAN_I2V_MODEL = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
+
+
+def test_svi_anchor_fills_the_image_slot_and_reemits_its_own_flag():
+    # SVI mode (0103) has no --image; the anchor must satisfy the i2v plan's
+    # image requirement while re-emitting under its own flag, never as
+    # --image-path.
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            WAN_I2V_MODEL,
+            "--svi-anchor-image",
+            "anchor.png",
+            "--prompt",
+            "the drone rises",
+        ]
+    )
+
+    assert invocation.target_name == "mlxgen-generate-wan"
+    anchor_index = invocation.argv.index("--svi-anchor-image")
+    assert invocation.argv[anchor_index + 1] == "anchor.png"
+    assert "--image-path" not in invocation.argv
+
+
+def test_svi_anchor_conflicts_with_image_at_the_router(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                WAN_I2V_MODEL,
+                "--svi-anchor-image",
+                "anchor.png",
+                "--image",
+                "first.png",
+                "--prompt",
+                "p",
+            ]
+        )
+    assert "conflicts with --image" in capsys.readouterr().err
+
+
+def test_svi_anchor_rejected_on_non_wan_families(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                QWEN_MODEL,
+                "--svi-anchor-image",
+                "anchor.png",
+                "--prompt",
+                "p",
+            ]
+        )
+    assert "requires a Wan A14B image-to-video model" in capsys.readouterr().err
+
+
+def test_svi_anchor_backfills_from_metadata(tmp_path):
+    metadata_path = tmp_path / "prior.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": WAN_I2V_MODEL,
+                "svi_anchor_image_path": "anchor.png",
+                "prompt": "replay",
+            }
+        )
+    )
+
+    invocation = mlx_gen._resolve_invocation(["--config-from-metadata", str(metadata_path)])
+
+    anchor_index = invocation.argv.index("--svi-anchor-image")
+    assert invocation.argv[anchor_index + 1] == "anchor.png"

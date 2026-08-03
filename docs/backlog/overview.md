@@ -12,14 +12,14 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 14 |
-| Proposed | 22 |
+| Proposed | 25 |
 | Completed | 63 |
 | Deprecated | 1 |
 | Recurrent | 1 |
 
-Counts are item files (recounted 2026-07-25 after the 0.25.0 release
-hygiene: 0093-0095 and 0097-0099 plus release item 0101 moved to
-completed/), including topic-track items under
+Counts are item files (recounted 2026-08-03 after adding 0104; the
+2026-07-25 release hygiene had moved 0093-0095, 0097-0099, and release
+item 0101 to completed/), including topic-track items under
 `planned/memory/`; the completed `planned/runtime_contracts/` track holds only its index.
 Items 0086-0090 came from a 2026-07-22 adversarial performance audit of the
 BlackPixel embedding host traced end-to-end against the 0.23.1 release.
@@ -342,15 +342,20 @@ memory follow-up state.
    Wan items. Proposed [Krea 2 Turbo integration](proposed/0050_krea2_turbo_integration.md) is an
    adjacent low-priority watch item: technically credible, but held back mainly by its
    materially restrictive custom license.
-21. Continue ERNIE-Image/Turbo after completed
+21. Keep [MiniMax H3 joint audio-video](proposed/0104_minimax_h3_joint_audio_video_watch.md)
+   license-blocked. The published grant excludes the EU development territory even though the
+   repository is public. Do not fetch or execute the weights unless the public terms change or
+   written permission is obtained; only then consider a five-second FL2VA parity spike and a new
+   generated joint audio-video contract ADR.
+22. Continue ERNIE-Image/Turbo after completed
    [ERNIE Image Turbo LoRA runtime support](completed/0037_ernie_image_turbo_lora_runtime_support.md):
    the latent img2img proof is now accepted, so the remaining follow-up is stronger Diffusers
    parity coverage and non-turbo validation.
-22. Continue Wan2.2 after the first TI2V-5B and A14B T2V/I2V milestones: add q8/q4 validation,
+23. Continue Wan2.2 after the first TI2V-5B and A14B T2V/I2V milestones: add q8/q4 validation,
    stronger quality/performance checks, and remaining cancel APIs. SeedVR2 has a validated
    `mlxgen upscale` command, official 3B/7B source loading, and q8/q4 `mlxgen prepare` package
    support.
-23. Keep Bonsai LoRA fail-closed and low priority; revisit it only through
+24. Keep Bonsai LoRA fail-closed and low priority; revisit it only through
    [proposed item 0038](proposed/0038_bonsai_packed_lora_runtime_support.md). The current packed
    runtime does not expose replaceable linear targets for standard LoRA injection, and the first
    public “Bonsai LoRA” candidate inspected used unrelated SDXL UNet keys.
@@ -399,6 +404,9 @@ memory follow-up state.
 | 0092 | [Rename the Python module from `mflux` to `mlxgen`](proposed/0092_mflux_to_mlxgen_module_rename.md) | Packaging, public API naming, embedding hosts | Promote when a release window can absorb the breaking import path (with shim), an ADR fixes the deprecation policy, and the 0.25-track wave has shipped. |
 | 0096 | [Outpaint capability expansion beyond Qwen edit and Klein Base](proposed/0096_outpaint_capability_expansion.md) | Image edit, outpaint, capability registry, embedding hosts | Owner-requested (2026-07-23): survey which families can truthfully outpaint (existing mask routes + source-locked denoising math); evidence-gated per ADR 0001. |
 | 0100 | [VACE identity-anchor recipe documentation](proposed/0100_wan_vace_identity_anchor_recipe.md) | Wan VACE, subject reference, draft/repair tier | Conditional: decide after 0097's A/B (supersession gate); recipe is wireable today with no code changes. |
+| 0102 | [Wan A14B i2v multi-frame context head conditioning](proposed/0102_wan_context_frame_head_conditioning.md) | Wan video, storyboard continue seams, momentum carry | Implemented 2026-07-27 (EXPERIMENTAL, unreleased): `--context-frames`/`--context-noise` extend the i2v conditioned head to K in {5,9,13} frames (the 0097 non-goal, now gated per the BlackPixel frame-consistency blueprint); zero-shot probe measured momentum carry (K=5 seam magnitude ratio 0.90 vs single-frame 1.90) with a mild boundary flare; capabilities `schema_version` 6 adds `supports_context_frames`. |
+| 0103 | [Wan A14B i2v SVI 2.0 Pro conditioning](proposed/0103_wan_svi_pro_conditioning.md) | Wan video, storyboard chains, identity anchor + latent motion handover | Implemented 2026-07-27 (EXPERIMENTAL, unreleased): `--svi-anchor-image`/`--svi-motion-latent`/`--svi-lora-high`/`--svi-lora-low` port Stable Video Infinity 2.0 Pro chain conditioning (`[anchor, motion latent, zero-latents]` + error-recycling LoRA pair under a strict `unmatched_key_count == 0` contract, 800/800 verified) to the A14B i2v route per the BlackPixel consistency-redo doctrine (mechanism 4, probe-gated); capabilities `schema_version` 7 adds `supports_svi`. |
+| 0104 | [MiniMax H3 joint audio-video license-blocked watch](proposed/0104_minimax_h3_joint_audio_video_watch.md) | Joint audio-video generation, licensing, new artifact contract | Promote only after the EU license gate clears, stable official upstream semantics exist, a target-Mac resource envelope is credible, and a generated joint audio-video contract ADR is accepted. |
 ## Completed ledger
 
 | ID | Item | Area | Completed | Outcome |
@@ -496,6 +504,11 @@ memory follow-up state.
 
 ## Planning notes
 
+- Added 2026-08-03 MiniMax H3 license-blocked watch item after re-reading the formal license and
+  MiniMax's own Q&A. The public grant excludes the EU, UK, United States, and Republic of Korea;
+  public repository access does not authorize local execution in France. If amended terms or
+  written permission clear that gate, start with a bounded FL2VA parity and resource spike before
+  considering the separate Ref2VA route or any public generated-audio contract.
 - Created the backlog system on 2026-05-25 while triaging local and online model integration
   candidates for MLX-Gen and AbstractVision.
 - Refined the model roadmap on 2026-05-25 after checking Hugging Face model sizes, licenses,

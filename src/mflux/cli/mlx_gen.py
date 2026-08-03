@@ -76,7 +76,11 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     args, forwarded = _parse_router_args(argv)
     images = _collect_images(args)
     videos = _collect_videos(args)
-    route = _resolve_route(args, image_count=len(images), video_count=len(videos))
+    # The SVI anchor (0103) IS the image-to-video source for plan resolution:
+    # it fills the image slot without ever being emitted as --image-path (the
+    # wan backend owns the --svi-anchor-image contract).
+    svi_argv = _svi_forwarded_argv(args=args, images=images)
+    route = _resolve_route(args, image_count=len(images) + (1 if args.svi_anchor_image else 0), video_count=len(videos))
     if route.requires_image and not images:
         _parser().error(f"{route.target_name} requires --image or --images.")
     reframe_argv = _reframe_forwarded_argv(args=args, images=images, forwarded=forwarded)
@@ -117,6 +121,7 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     normalized_argv.extend(forwarded)
     normalized_argv.extend(reframe_argv)
     normalized_argv.extend(outpaint_argv)
+    normalized_argv.extend(svi_argv)
 
     return RouterInvocation(
         target_name=route.target_name,
@@ -170,6 +175,8 @@ def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     if args.video_mask_path is None:
         args.video_mask_path = metadata.get("video_mask_path")
     args.has_video_mask = args.video_mask_path is not None
+    if args.svi_anchor_image is None and metadata.get("svi_anchor_image_path") is not None:
+        args.svi_anchor_image = str(metadata.get("svi_anchor_image_path"))
     if args.reframe_padding is None:
         args.reframe_padding = metadata.get("reframe_padding")
     if args.outpaint_padding is None:
@@ -694,6 +701,17 @@ def _collect_videos(args: argparse.Namespace) -> list[str]:
     return videos or args.metadata_videos
 
 
+def _svi_forwarded_argv(args: argparse.Namespace, images: list[str]) -> list[str]:
+    if args.svi_anchor_image is None:
+        return []
+    if images:
+        _parser().error(
+            "--svi-anchor-image conflicts with --image/--image-path: SVI conditioning derives the whole "
+            "clip from the anchor and the optional --svi-motion-latent."
+        )
+    return ["--svi-anchor-image", str(args.svi_anchor_image)]
+
+
 def _reframe_forwarded_argv(args: argparse.Namespace, images: list[str], forwarded: list[str]) -> list[str]:
     if not args.has_reframe:
         return []
@@ -761,7 +779,14 @@ def _resolve_route(args: argparse.Namespace, image_count: int, video_count: int)
     has_images = image_count > 0
     has_videos = video_count > 0
     model_config = _model_config(args.model, base_model=args.base_model)
+    _validate_svi_route_request(args, model_config=model_config)
     plan = _resolve_generation_plan(args, image_count=image_count, video_count=video_count, model_config=model_config)
+    if args.svi_anchor_image is not None and plan.family != "wan":
+        # Backstop for identities whose family only resolves during planning.
+        _parser().error(
+            "--svi-anchor-image requires a Wan A14B image-to-video model: SVI 2.0 Pro conditioning "
+            f"does not exist on the resolved {plan.family} route."
+        )
     _validate_controlnet_route_options(args, plan=plan)
     _validate_lora_compatibility(args=args, model_config=model_config)
     _validate_family_override(args, model_config=model_config, plan=plan)
@@ -772,6 +797,22 @@ def _resolve_route(args: argparse.Namespace, image_count: int, video_count: int)
         model_override=plan.model_override,
         control_model=plan.control_model,
     )
+
+
+def _validate_svi_route_request(args: argparse.Namespace, *, model_config: ModelConfig | None) -> None:
+    # Fail with the SVI truth BEFORE plan resolution can produce a misleading
+    # image-to-image error for the anchor-sourced image count (0103).
+    if args.svi_anchor_image is None or model_config is None:
+        return
+    try:
+        family = get_model_capabilities(model_config=model_config).family
+    except TaskInferenceError:
+        return
+    if family != "wan":
+        _parser().error(
+            "--svi-anchor-image requires a Wan A14B image-to-video model: SVI 2.0 Pro conditioning "
+            f"does not exist on {family} routes."
+        )
 
 
 def _validate_controlnet_route_options(args: argparse.Namespace, *, plan) -> None:

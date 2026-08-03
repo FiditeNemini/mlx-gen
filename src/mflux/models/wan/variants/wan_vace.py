@@ -44,6 +44,12 @@ class WanVace(Wan2_2_TI2V):
         negative_prompt: str | None = None,
         image_path: Path | str | None = None,
         last_image_path: Path | str | None = None,
+        context_image_paths: list[Path | str] | None = None,
+        context_noise: float | None = None,
+        svi_anchor_image_path: Path | str | None = None,
+        svi_motion_latent_path: Path | str | None = None,
+        svi_motion_latent_count: int = 1,
+        svi_motion_latent_export_path: Path | str | None = None,
         video_path: Path | str | None = None,
         video_strength: float | None = None,
         video_mask_path: Path | str | None = None,
@@ -71,6 +77,25 @@ class WanVace(Wan2_2_TI2V):
             raise ValueError(
                 "Wan VACE does not support last_image_path; first+last bracket conditioning "
                 "is a Wan A14B image-to-video feature."
+            )
+        if context_image_paths:
+            raise ValueError(
+                "Wan VACE does not support context_image_paths; multi-frame context conditioning "
+                "is a Wan A14B image-to-video feature. Use a VACE condition video for temporal extension."
+            )
+        if context_noise is not None:
+            raise ValueError(
+                "Wan VACE does not support context_noise; it perturbs the Wan A14B multi-frame conditioned head."
+            )
+        if (
+            svi_anchor_image_path is not None
+            or svi_motion_latent_path is not None
+            or svi_motion_latent_export_path is not None
+            or svi_motion_latent_count != 1
+        ):
+            raise ValueError(
+                "Wan VACE does not support SVI conditioning; SVI 2.0 Pro targets the dual-expert "
+                "Wan A14B image-to-video model. Use VACE reference images for identity injection instead."
             )
         if denoising_step_list is not None:
             raise ValueError(
