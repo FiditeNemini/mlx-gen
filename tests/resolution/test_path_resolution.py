@@ -136,6 +136,30 @@ class TestPathResolutionHuggingFace:
         assert result == repo_cache
 
     @pytest.mark.fast
+    def test_huggingface_revision_selects_only_the_pinned_cached_snapshot(self, tmp_path):
+        stale = tmp_path / "models--org--model" / "snapshots" / "stale"
+        pinned = tmp_path / "models--org--model" / "snapshots" / "pinned"
+        stale.mkdir(parents=True)
+        pinned.mkdir(parents=True)
+        (stale / "model.safetensors").touch()
+        (pinned / "model.safetensors").touch()
+
+        with patch("huggingface_hub.constants.HF_HUB_CACHE", str(tmp_path)):
+            result = PathResolution.resolve(path="org/model", revision="pinned")
+
+        assert result == pinned
+
+    @pytest.mark.fast
+    @patch("huggingface_hub.snapshot_download")
+    def test_huggingface_download_passes_pinned_revision(self, mock_download, tmp_path):
+        mock_download.return_value = str(tmp_path / "cached")
+
+        with allow_downloads():
+            PathResolution.resolve(path="org/model", revision="abc123")
+
+        assert mock_download.call_args.kwargs["revision"] == "abc123"
+
+    @pytest.mark.fast
     def test_huggingface_uses_complete_local_prepared_folder(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         prepared = tmp_path / "models" / "model"
@@ -208,7 +232,9 @@ class TestPathResolutionHuggingFace:
         )
 
         with patch("huggingface_hub.constants.HF_HUB_CACHE", str(tmp_path)):
-            result = PathResolution.resolve(path="org/model", patterns=["transformer/*.safetensors", "transformer/*.json"])
+            result = PathResolution.resolve(
+                path="org/model", patterns=["transformer/*.safetensors", "transformer/*.json"]
+            )
 
         assert result == repo_cache
 

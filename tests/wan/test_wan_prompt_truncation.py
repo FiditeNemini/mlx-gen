@@ -66,7 +66,9 @@ def test_wan_negative_prompt_truncation_reported_only_when_encoded(capsys):
 def test_wan_encode_prompt_records_truncation_report(monkeypatch, capsys):
     model = _model_with_fake_tokenizer()
     monkeypatch.setattr(
-        model, "_get_t5_prompt_embeds", lambda prompts, max_sequence_length: mx.zeros((len(prompts), 1, 8))
+        model,
+        "_get_t5_prompt_embeds",
+        lambda prompts, max_sequence_length, clean_prompts=True: mx.zeros((len(prompts), 1, 8)),
     )
 
     # CFG off: the negative prompt is never encoded, so it is not probed.
@@ -141,6 +143,28 @@ def test_wan_prompt_truncation_probe_uses_cleaned_text():
     )
 
     assert report == {"prompt_tokens": 4, "prompt_truncated": False}
+
+
+def test_wan_prompt_truncation_probe_can_preserve_verbatim_text():
+    model = _model_with_fake_tokenizer()
+    observed: list[str] = []
+
+    class RecordingTokenizer:
+        def __call__(self, text, **kwargs):
+            observed.append(text)
+            return {"input_ids": [0]}
+
+    model.tokenizers = {"wan": SimpleNamespace(tokenizer=RecordingTokenizer())}
+    raw = "SYSTEM PREFIX.User  prompt\nwith spacing"
+
+    model._check_prompt_truncation(
+        prompt=raw,
+        negative_prompt=None,
+        max_sequence_length=512,
+        clean_prompts=False,
+    )
+
+    assert observed == [raw]
 
 
 @pytest.mark.parametrize("max_sequence_length", [1, 512])

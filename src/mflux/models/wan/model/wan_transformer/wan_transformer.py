@@ -1,5 +1,6 @@
 import math
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import mlx.core as mx
@@ -227,11 +228,185 @@ class WanTransformer(nn.Module):
         hidden_states = mx.transpose(hidden_states, (0, 7, 1, 4, 2, 5, 3, 6))
         return hidden_states.reshape(batch_size, -1, num_frames, height, width)
 
+    def forward_packed(
+        self,
+        *,
+        latent_segments: Sequence[mx.array],
+        source_ids: Sequence[float],
+        timestep: mx.array,
+        encoder_hidden_states: mx.array,
+        target_segment_index: int = -1,
+        clear_cache_each_block: bool = False,
+        block_health_context: WanBlockHealthContext | None = None,
+    ) -> mx.array:
+        if self.vace_layers is not None:
+            raise ValueError("Packed Wan execution is not supported by transformers configured with VACE layers.")
+        if not latent_segments:
+            raise ValueError("latent_segments must contain at least the target segment.")
+        if len(latent_segments) != len(source_ids):
+            raise ValueError(
+                f"latent_segments and source_ids must have the same length, got "
+                f"{len(latent_segments)} and {len(source_ids)}."
+            )
+
+        segment_count = len(latent_segments)
+        if target_segment_index < 0:
+            target_segment_index += segment_count
+        if target_segment_index < 0 or target_segment_index >= segment_count:
+            raise ValueError(
+                f"target_segment_index {target_segment_index} is outside the {segment_count} packed segments."
+            )
+
+        resolved_source_ids = [float(source_id) for source_id in source_ids]
+        for index, source_id in enumerate(resolved_source_ids):
+            if not math.isfinite(source_id):
+                raise ValueError(f"source_ids[{index}] must be finite, got {source_ids[index]}.")
+            if index == target_segment_index:
+                if source_id != 0.0:
+                    raise ValueError(f"The target segment must use source ID 0, got {source_id}.")
+            elif source_id <= 0.0:
+                raise ValueError(
+                    f"Conditioning segments must use positive source IDs, got {source_id} at index {index}."
+                )
+
+        first_segment = latent_segments[0]
+        if first_segment.ndim != 5:
+            raise ValueError(f"latent_segments[0] must be 5D [B,C,T,H,W], got {first_segment.shape}.")
+        batch_size = first_segment.shape[0]
+        segment_dtype = first_segment.dtype
+        p_t, p_h, p_w = self.patch_size
+        for index, segment in enumerate(latent_segments):
+            if segment.ndim != 5:
+                raise ValueError(f"latent_segments[{index}] must be 5D [B,C,T,H,W], got {segment.shape}.")
+            if segment.shape[0] != batch_size:
+                raise ValueError(
+                    f"All packed segments must use batch size {batch_size}, got {segment.shape[0]} at index {index}."
+                )
+            if segment.shape[1] != self.in_channels:
+                raise ValueError(
+                    f"Wan transformer input channel mismatch at segment {index}: "
+                    f"got {segment.shape[1]} channels, expected {self.in_channels}."
+                )
+            if segment.dtype != segment_dtype:
+                raise ValueError(
+                    f"All packed segments must use dtype {segment_dtype}, got {segment.dtype} at index {index}."
+                )
+            if segment.shape[2] % p_t or segment.shape[3] % p_h or segment.shape[4] % p_w:
+                raise ValueError(
+                    f"latent_segments[{index}] shape {segment.shape[2:]} must be divisible by patch size "
+                    f"{self.patch_size}."
+                )
+        if timestep.ndim != 1 or timestep.shape[0] != batch_size:
+            raise ValueError(
+                f"Packed Wan execution requires one scalar timestep per batch item, got {timestep.shape} "
+                f"for batch size {batch_size}."
+            )
+        if encoder_hidden_states.shape[0] != batch_size:
+            raise ValueError(
+                f"encoder_hidden_states batch size {encoder_hidden_states.shape[0]} does not match "
+                f"the packed latent batch size {batch_size}."
+            )
+
+        packed_segments = []
+        rotary_cos = []
+        rotary_sin = []
+        segment_lengths = []
+        for segment, source_id in zip(latent_segments, resolved_source_ids, strict=True):
+            cos, sin = self.rope(segment, source_id=source_id)
+            patched = self._patch_embed(segment)
+            packed_segments.append(patched)
+            rotary_cos.append(cos)
+            rotary_sin.append(sin)
+            segment_lengths.append(patched.shape[1])
+
+        hidden_states = mx.concatenate(packed_segments, axis=1)
+        rotary_emb = (
+            mx.concatenate(rotary_cos, axis=1),
+            mx.concatenate(rotary_sin, axis=1),
+        )
+        self._check_block_health(
+            enabled=self._block_health_enabled(),
+            name="packed.patch_embedding",
+            tensor=hidden_states,
+            context=block_health_context,
+        )
+
+        temb, timestep_proj, encoder_hidden_states = self.condition_embedder(
+            timestep=timestep,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        timestep_proj = timestep_proj.reshape(batch_size, 6, -1)
+        block_health_enabled = self._block_health_enabled()
+        self._check_block_health(
+            enabled=block_health_enabled,
+            name="packed.condition_embedder.temb",
+            tensor=temb,
+            context=block_health_context,
+        )
+        self._check_block_health(
+            enabled=block_health_enabled,
+            name="packed.condition_embedder.timestep_proj",
+            tensor=timestep_proj,
+            context=block_health_context,
+        )
+        self._check_block_health(
+            enabled=block_health_enabled,
+            name="packed.condition_embedder.encoder_hidden_states",
+            tensor=encoder_hidden_states,
+            context=block_health_context,
+        )
+        for block_index, block in enumerate(self.blocks):
+            hidden_states = block(
+                hidden_states,
+                encoder_hidden_states,
+                timestep_proj,
+                rotary_emb,
+                block_name=f"blocks.{block_index}",
+                block_health_context=block_health_context,
+            )
+            self._check_block_health(
+                enabled=block_health_enabled,
+                name=f"blocks.{block_index}.hidden_states",
+                tensor=hidden_states,
+                context=block_health_context,
+            )
+            if clear_cache_each_block:
+                mx.eval(hidden_states)
+                mx.clear_cache()
+
+        hidden_states = self._project_out(hidden_states, temb)
+        self._check_block_health(
+            enabled=block_health_enabled,
+            name="packed.proj_out",
+            tensor=hidden_states,
+            context=block_health_context,
+        )
+        target_start = sum(segment_lengths[:target_segment_index])
+        target_end = target_start + segment_lengths[target_segment_index]
+        target_tokens = hidden_states[:, target_start:target_end]
+        return self._unpatch(target_tokens, latent_segments[target_segment_index].shape)
+
     def _patch_embed(self, hidden_states: mx.array) -> mx.array:
         hidden_states = mx.transpose(hidden_states, (0, 2, 3, 4, 1))
         hidden_states = self.patch_embedding(hidden_states)
         batch_size, frames, height, width, channels = hidden_states.shape
         return hidden_states.reshape(batch_size, frames * height * width, channels)
+
+    def _unpatch(self, hidden_states: mx.array, latent_shape: tuple[int, ...]) -> mx.array:
+        batch_size, _, num_frames, height, width = latent_shape
+        p_t, p_h, p_w = self.patch_size
+        hidden_states = hidden_states.reshape(
+            batch_size,
+            num_frames // p_t,
+            height // p_h,
+            width // p_w,
+            p_t,
+            p_h,
+            p_w,
+            -1,
+        )
+        hidden_states = mx.transpose(hidden_states, (0, 7, 1, 4, 2, 5, 3, 6))
+        return hidden_states.reshape(batch_size, -1, num_frames, height, width)
 
     def _vace_control_hints(
         self,

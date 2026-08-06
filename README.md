@@ -16,7 +16,8 @@ callbacks.
 > download or prepare models before running a job, then use one `mlxgen` command to generate,
 > inspect supported modes, and compare generated examples and measured results. MLX-Gen contributes
 > by adding tested T2I/I2I routes, Qwen Image Edit 2509/2511 routing and parity fixes, Bonsai Image
-> support, Wan2.2 text-to-video, image-to-video, and video-to-video support, model-specific mixed quantization
+> support, Wan2.2 text-to-video, image-to-video, and video-to-video support, Bernini-R reference-guided
+> video generation/editing, model-specific mixed quantization
 > policies, published quantized Hugging Face repos optimized for MLX-Gen, and progress callbacks
 > for apps. The fork exists so AbstractVision and related AbstractFramework projects can move
 > quickly without losing the option to merge useful changes back upstream if that becomes valuable
@@ -62,6 +63,13 @@ The main capabilities are:
   object into a new scene from one or more `--reference-image` inputs, or run learned masked
   source-video edits, verified stage-by-stage against the diffusers reference with an included
   proof bundle;
+- ByteDance Bernini-R 1.3B renderer support (`bernini-r-1.3b`): generate video from one to eight
+  ordered ordinary reference images, edit one source video with those references, or run
+  source-only prompt-guided video editing. The route uses pinned factored Wan/Bernini components,
+  supports the unified CLI and Python runtime, and is BF16-only because model-backed validation
+  rejected generic Wan q4 and exposed nominal q8 as a no-op. **Experimental:** component/runtime
+  checks pass, but the schema-v3 visual release gate fails all required cases because of weak
+  motion, missed reference fidelity, cadence seams, and tail corruption;
 - SeedVR2 image and video restoration through `mlxgen upscale`, with official 3B/7B source
   support including the dedicated `seedvr2-7b-sharp` route, published q8/q4 packages,
   shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, streamed restore for
@@ -221,6 +229,7 @@ selected model can dispatch. For release QA evidence on exact packages, use:
 
 ```sh
 mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit
+mlxgen validation --model bernini-r-1.3b
 ```
 
 LoRA support is route-specific. For LoRA work, inspect `supports_lora`, `lora_status`, and
@@ -343,6 +352,11 @@ Wan2.2 video:
 - `AbstractFramework/wan2.2-i2v-a14b-diffusers-bf16`
 - `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit`
 
+Bernini-R uses the official `ByteDance/Bernini-R-1.3B-Diffusers` renderer together with pinned
+Wan2.1 base components. It currently has no published MLX-Gen quantized package: use
+`mlxgen download --model bernini-r-1.3b`, omit `--quantize`, and see
+[Bernini-R 1.3B](docs/bernini.md).
+
 Use `mlxgen download --model <repo-id>` to cache a published model, then pass the repository id to
 the relevant command: `mlxgen generate` for image/video generation or `mlxgen upscale` for SeedVR2
 upscaling. See
@@ -404,6 +418,7 @@ progress callbacks make long runs observable.
 - [API and CLI](docs/api.md): command surface, router behavior, image-to-image modes, generative reframe, backend-specific outpaint, SeedVR2 sizing, Wan video sizes, capabilities, and Python entry points.
 - [Image edit modes](docs/image-edit-modes.md): what latent img2img, edit-reference, multi-reference, generative reframe, and outpaint mean in practice, with examples.
 - [Wan video](docs/wan-video.md): practical Wan2.2 T2V/I2V sizing, plain and masked prompt-guided A14B video-to-video with included proof artifacts, the natively ported Wan2.1-VACE-1.3B route (reference-image object injection and learned mask conditioning), a measured motion-fidelity ladder (strength vs gesture preservation), broader A14B target size families, and 5-second M5 Max comparison clips.
+- [Bernini-R 1.3B](docs/bernini.md): ordered reference-to-video, reference-guided/source-only video editing, factored downloads, BF16-only memory guidance, and playable proof artifacts.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
 - [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, the host-safe video restore profile, published five-second Eiffel `1x` and `2x` 3B/7B validation bundles, readable tone-correction labels, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.

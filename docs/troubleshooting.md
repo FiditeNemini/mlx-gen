@@ -191,6 +191,44 @@ Wan uses frame-count control rather than a separate duration flag. Duration is `
 
 If Wan generation or MP4 save validation fails, the CLI writes a failure manifest next to the intended output path, for example `video.failure.json` for `video.mp4`. The manifest includes the error, tensor-health report when available, seed, prompt, dimensions, frames, steps, guidance, fps, output path, and memory-related runtime flags.
 
+## Bernini Rejects Quantization Or Produces Weak Reference Fidelity
+
+Bernini-R 1.3B is currently BF16-only. Omit `--quantize`. Generic Wan q4 was tested and produced
+invalid overexposed latent-like output; nominal q8 quantized zero Bernini transformer linear
+layers while labeling the run q8. Current MLX-Gen releases reject both instead of silently
+returning a broken or misleading result.
+
+The BF16 route itself is experimental. Current schema-v3 evidence fails visual quality across
+R2V, RV2V, alternate-reference A/B, and V2V. Weak motion, missed references, four-frame cadence
+jumps, or corruption from roughly frame 13 are known blockers, not settings that the current docs
+claim to solve. Preserve the MP4 and metadata and compare them with the paged proof bundle before
+assuming a successful exit means a successful edit.
+
+For a memory-constrained host, keep `--low-ram` enabled. The bounded model-backed proof peaked at
+9.45 GB whole-process physical footprint on the 128 GB validation host, which predicts a useful
+margin on an 18 GB Mac but is not a direct 18 GB-host proof. That does not mean 18 GB of fresh disk
+is sufficient: the pinned factored selective download is about 16.36 GiB and requires 2 GiB
+headroom, for 18.36 GiB free. Run:
+
+```sh
+mlxgen download --model bernini-r-1.3b
+```
+
+If R2V is coherent but misses requested accessories, check these before treating it as a runtime
+bug:
+
+- name references in their exact CLI order (`image0`, `image1`, ...);
+- keep the prompt within the 512-token warning boundary;
+- use the official 40-step quality budget and 848px default condition cap;
+- use focused source images; a low-resolution 20-step proof can establish routing without
+  retaining every reference detail;
+- do not compare MLX and PyTorch integer seeds as pixel parity—export exact initial tensors for
+  numerical comparison.
+
+For RV2V/V2V, Bernini requires source-aspect, resize-only video conditioning. It intentionally
+rejects crop, pad, exact-resize, `--video-strength`, masks, LoRA, and non-UniPC solvers. See
+[Bernini-R 1.3B](bernini.md) and its [validation bundle](assets/validation/bernini-r-1.3b-2026-08-04/README.md).
+
 ## `generate --path` Fails
 
 `--path` belongs to `mlxgen prepare`, where it names the local MLX-Gen package to create. It is not a generation option.

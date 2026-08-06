@@ -11,13 +11,13 @@ outside chat history.
 
 | State | Count |
 | --- | ---: |
-| Planned | 14 |
+| Planned | 15 |
 | Proposed | 25 |
-| Completed | 63 |
+| Completed | 64 |
 | Deprecated | 1 |
 | Recurrent | 1 |
 
-Counts are item files (recounted 2026-08-03 after adding 0104; the
+Counts are item files (recounted 2026-08-04 after adding item 0106; the
 2026-07-25 release hygiene had moved 0093-0095, 0097-0099, and release
 item 0101 to completed/), including topic-track items under
 `planned/memory/`; the completed `planned/runtime_contracts/` track holds only its index.
@@ -222,6 +222,16 @@ remains an opt-in memory-pressure path rather than a default quality-preserving 
 The highest-priority work is now the remaining memory-validation band. The runtime-contract
 hardening band is closed and documented.
 
+The [Bernini-R 1.3B renderer integration](completed/0105_bernini_r_1_3b_renderer_integration.md)
+is complete only as a functional runtime. Its original visual pass was invalidated after 5K
+full-frame review: every required case fails, the registry is `FAIL`, and the route is
+experimental. Treat [item 0106](planned/0106_bernini_full_trajectory_parity_and_release_quality.md)
+as urgent release-blocking work before any Bernini quality recommendation.
+
+- Build the exact-input real-conditioning first-step and full-trajectory Bernini 1.3B parity
+  ladder in item 0106, locate the cadence/tail divergence, and require a metadata-bearing official
+  1.3B baseline plus passing 5K paged visual proof before promoting the registry.
+
 1. Finish the remaining memory validation track: find and test an exact-quality SeedVR2 video
    memory reduction for item 0062 only if a larger still-supported profile proves the global-noise
    term is materially relevant; otherwise re-scope it as a low-value research item for future
@@ -377,6 +387,7 @@ memory follow-up state.
 | 0062 | [SeedVR2 chunk-bounded video noise](planned/memory/0062_seedvr2_chunk_bounded_noise.md) | Video restoration, SeedVR2, memory | P0 | Reopened; exact-quality memory reduction pending |
 | 0063 | [Component-wise model loading memory policy](planned/memory/0063_componentwise_model_loading_memory_policy.md) | Memory, CLI, model loading | P0 | Quantitative validation pending |
 | 0064 | [Generation retention cleanup](planned/memory/0064_generation_retention_cleanup.md) | Memory, hidden states, stepwise output | P0 | Quantitative validation pending |
+| 0106 | [Bernini-R 1.3B full-trajectory parity and release quality](planned/0106_bernini_full_trajectory_parity_and_release_quality.md) | Bernini video, exact-input parity, cadence, visual release proof | P0 release blocker | Planned |
 
 ## Proposed ledger
 
@@ -474,6 +485,7 @@ memory follow-up state.
 | 0101 | [Release 0.25.0 (performance + Wan consistency waves)](completed/0101_release_0_25_0.md) | Release execution, smoke evidence | 2026-07-25 | v0.25.0 published to PyPI + GitHub Release from `2452f0c` (workflow 30162410505; first attempt hit a transient PyPI-probe network reset, green on rerun); ships 0093-0095 + 0097-0099; same-seed TI2V-5B raw-YUV output bitwise identical to 0.24.0 under identical locked deps (both runs `--no-prompt-cache`). |
 | 0081 | [FLUX.2 Klein masked edit / inpaint](completed/0081_flux2_klein_masked_edit.md) | Image edit, FLUX.2 Klein, mask-based inpaint | 2026-07-15 | Ported the diffusers `Flux2KleinInpaintPipeline` semantics onto the Klein family: new `flux2.inpaint` capability with per-step source compositing and clean-source conditioning tokens, torch-parity bilinear mask downsampling, optional masked-area reference images on the backend/Python surface, adversarial review, and local q8 smoke proofs (published visual-QA rows remain follow-up). |
 | 0082 | [Masked edit expansion: native base-Qwen and Z-Image non-turbo](completed/0082_masked_edit_expansion_qwen_zimage.md) | Image edit, Qwen base, Z-Image, mask routing | 2026-07-15 | Shipped native `qwen.base-inpaint` (diffusers `QwenImageInpaintPipeline` port, internal 0.85 warm start, `effective_steps` metadata, one masked route per row) and non-turbo `z-image.inpaint`, plan-time maskless rejection, the canonical `docs/masked-editing.md` page, and a published visual-smoke proof bundle with preservation measurements. |
+| 0105 | [Bernini-R 1.3B renderer integration](completed/0105_bernini_r_1_3b_renderer_integration.md) | Video generation/editing, reference roles, factored sources, proof | 2026-08-04 | Shipped the exact BF16 renderer-only R2V/RV2V/V2V runtime and factored-source contracts. Post-completion audit withdrew the quality claim: every required visual row fails, the registry is `FAIL`, and item 0106 owns the blocking trajectory/quality work. |
 
 ## Deprecated ledger
 
@@ -504,6 +516,10 @@ memory follow-up state.
 
 ## Planning notes
 
+- Completed 2026-08-04 Bernini-R 1.3B after five architecture, parity, framework, model-backed,
+  and closure cycles with two adversarial reviewers. The accepted claim is renderer-only BF16 at
+  bounded profiles: 9.45 GB maximum measured physical footprint on the 128 GB host, 18.36 GiB cold
+  selective-download preflight including headroom, and explicit retained quality limitations.
 - Added 2026-08-03 MiniMax H3 license-blocked watch item after re-reading the formal license and
   MiniMax's own Q&A. The public grant excludes the EU, UK, United States, and Republic of Korea;
   public repository access does not authorize local execution in France. If amended terms or

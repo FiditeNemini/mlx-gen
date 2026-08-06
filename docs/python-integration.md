@@ -313,7 +313,42 @@ video = model.generate_video(
 video.save("video.mp4")
 ```
 
-For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. That same route now owns public `video-to-video`: pass `video_path`, keep `solver="unipc"`, use `video_strength` for the source-change amount, and add `video_mask_path` when you want preserved regions locked to the source. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. On that i2v route, `last_image_path=...` adds an optional second anchor the clip should end near (first+last bracket conditioning, experimental on Wan 2.2 A14B; the last image maps through the same canvas and `resize_mode` as the first frame, and every other Wan route rejects it). Also on that route, `context_image_paths=[...]` extends the conditioned head with the ordered frames that FOLLOW `image_path` in the motion being continued (4, 8, or 12 frames — heads of 5, 9, or 13 fill whole 4x latent groups), so a continuation inherits real momentum instead of restarting from one frozen frame; `context_noise=...` (0-1000, ~20) optionally perturbs that head SkyReels-style. Both are experimental zero-shot behaviors measured in backlog 0102, rejected on every non-A14B-i2v route, and hosts should gate on the `supports_context_frames` capability field (schema_version 6). For chained scenes, the same i2v route also ships SVI 2.0 Pro conditioning (backlog 0103, EXPERIMENTAL): construct the model with the SVI error-recycling LoRA pair (`svi_lora_high_path=...`, `svi_lora_low_path=...`; strict key-match, fixed scale 1.0) and call `generate_video(svi_anchor_image_path=...)` for the first clip, then add `svi_motion_latent_path=...` (the previous clip's exported latent; export with `svi_motion_latent_export_path=...`) and a NEW seed per clip for continuations — one persistent anchor carries identity, the latent handover carries momentum, and assembly must drop `svi_assembly_trim_frames` frames (metadata; 5 for the default one motion latent) from each continuation clip. SVI mode replaces `image_path` and conflicts with `last_image_path`/`context_image_paths`/`video_path`; hosts gate on `supports_svi` (schema_version 7). `denoising_step_list=[1000, 750, 500, 250]` runs an exact distill timestep grid instead of a step count on text/image-to-video routes; it is mutually exclusive with `num_inference_steps` and an explicit `flow_shift`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`. For Wan image-to-video, `width` and `height` are size targets; the model API resolves the final output canvas from the source image aspect ratio and model spatial multiples. For Wan video-to-video, `width` and `height` are the requested output canvas after Wan patch-multiple normalization.
+For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. That same route now owns public `video-to-video`: pass `video_path`, keep `solver="unipc"`, use `video_strength` for the source-change amount, and add `video_mask_path` when you want preserved regions locked to the source. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. On that i2v route, `last_image_path=...` adds an optional second anchor the clip should end near (first+last bracket conditioning, experimental on Wan 2.2 A14B; the last image maps through the same canvas and `resize_mode` as the first frame, and every other Wan route rejects it). Also on that route, `context_image_paths=[...]` extends the conditioned head with the ordered frames that FOLLOW `image_path` in the motion being continued (4, 8, or 12 frames — heads of 5, 9, or 13 fill whole 4x latent groups), so a continuation inherits real momentum instead of restarting from one frozen frame; `context_noise=...` (0-1000, ~20) optionally perturbs that head SkyReels-style. Both are experimental zero-shot behaviors measured in backlog 0102, rejected on every non-A14B-i2v route, and hosts should gate on the `supports_context_frames` capability field (introduced in schema 6; current schema 8). For chained scenes, the same i2v route also ships SVI 2.0 Pro conditioning (backlog 0103, EXPERIMENTAL): construct the model with the SVI error-recycling LoRA pair (`svi_lora_high_path=...`, `svi_lora_low_path=...`; strict key-match, fixed scale 1.0) and call `generate_video(svi_anchor_image_path=...)` for the first clip, then add `svi_motion_latent_path=...` (the previous clip's exported latent; export with `svi_motion_latent_export_path=...`) and a NEW seed per clip for continuations — one persistent anchor carries identity, the latent handover carries momentum, and assembly must drop `svi_assembly_trim_frames` frames (metadata; 5 for the default one motion latent) from each continuation clip. SVI mode replaces `image_path` and conflicts with `last_image_path`/`context_image_paths`/`video_path`; hosts gate on `supports_svi` (introduced in schema 7; current schema 8). `denoising_step_list=[1000, 750, 500, 250]` runs an exact distill timestep grid instead of a step count on text/image-to-video routes; it is mutually exclusive with `num_inference_steps` and an explicit `flow_shift`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`. For Wan image-to-video, `width` and `height` are size targets; the model API resolves the final output canvas from the source image aspect ratio and model spatial multiples. For Wan video-to-video, `width` and `height` are the requested output canvas after Wan patch-multiple normalization.
+
+Bernini uses a dedicated renderer class and keeps references separate from first-frame images:
+
+```python
+from pathlib import Path
+
+from mflux.models.wan.variants import BerniniRenderer
+
+renderer = BerniniRenderer()
+video = renderer.generate_video(
+    seed=42,
+    prompt="Animate the subject from image0 in a fixed medium shot",
+    reference_image_paths=[Path("subject.png")],
+    width=320,
+    height=192,
+    num_frames=17,
+    num_inference_steps=20,
+    fps=16,
+    max_condition_size=256,
+    clear_cache_each_step=True,
+    clear_cache_each_transformer_block=True,
+)
+video.save("referenced.mp4", export_json_metadata=True)
+```
+
+Pass `video_path=...` as well for RV2V, or pass a video without references for V2V. Construct
+without `quantize`; Bernini is BF16-only. It rejects LoRA and the ordinary Wan image/strength/mask/
+continuation controls. Applications can inspect `bernini.reference-video`,
+`bernini.reference-video-edit`, and `bernini.video-edit` through the same capability planner before
+loading weights. These capabilities advertise executable experimental routes, not a visual-quality
+pass; the current validation profile is `FAIL`. See [Bernini-R 1.3B](bernini.md) for the exact input,
+memory, and failure contract.
+Set `release_denoisers_before_decode=True` only for a one-shot low-memory call: it makes that
+renderer instance unusable for a second generation. The unified CLI applies it only to single-seed
+low-RAM jobs.
 
 Image generation emits `start` and `denoise`, followed by exactly one terminal phase: `complete`,
 `failed`, or `interrupted`. For image and in-memory video APIs, `complete` means the generated

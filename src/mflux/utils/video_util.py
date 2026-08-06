@@ -2,6 +2,7 @@ import json
 import logging
 import shutil
 import subprocess
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from fractions import Fraction
@@ -16,6 +17,7 @@ import PIL.Image
 
 from mflux.models.common.config import ModelConfig
 from mflux.utils.image_util import ImageUtil
+from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.tensor_health import TensorHealth
 from mflux.utils.video_health import VideoHealth
 
@@ -520,6 +522,7 @@ class VideoUtil:
         validate_health: bool = True,
         source_audio_copy: "SourceAudioCopySpec | None" = None,
     ) -> Path:
+        save_started = time.perf_counter()
         if not frames:
             raise ValueError("Cannot save a video without frames.")
         if fps <= 0:
@@ -559,6 +562,11 @@ class VideoUtil:
         audio_fields = VideoUtil._apply_source_audio_copy(spec=source_audio_copy, file_path=file_path)
         if metadata is not None and audio_fields:
             metadata.update(audio_fields)
+        VideoUtil._finalize_save_metadata(
+            metadata=metadata,
+            export_json_metadata=export_json_metadata,
+            save_started=save_started,
+        )
 
         VideoUtil._save_metadata(
             file_path=file_path,
@@ -580,6 +588,7 @@ class VideoUtil:
         validate_health: bool = True,
         source_audio_copy: "SourceAudioCopySpec | None" = None,
     ) -> Path:
+        save_started = time.perf_counter()
         batch_iterator = iter(frame_batches)
         first_batch = next(batch_iterator, None)
         if first_batch is None or not first_batch:
@@ -618,6 +627,11 @@ class VideoUtil:
         audio_fields = VideoUtil._apply_source_audio_copy(spec=source_audio_copy, file_path=file_path)
         if metadata is not None and audio_fields:
             metadata.update(audio_fields)
+        VideoUtil._finalize_save_metadata(
+            metadata=metadata,
+            export_json_metadata=export_json_metadata,
+            save_started=save_started,
+        )
 
         VideoUtil._save_metadata(
             file_path=file_path,
@@ -1348,6 +1362,20 @@ class VideoUtil:
             from mflux.utils.generated_video import GeneratedVideo
 
             GeneratedVideo.save_metadata(file_path, metadata)
+
+    @staticmethod
+    def _finalize_save_metadata(*, metadata: dict | None, export_json_metadata: bool, save_started: float) -> None:
+        if metadata is None or not export_json_metadata:
+            return
+        save_time = time.perf_counter() - save_started
+        metadata["save_time_seconds"] = round(save_time, 2)
+        generation_time = metadata.get("generation_time_seconds")
+        if isinstance(generation_time, (int, float)):
+            metadata["total_generation_time_seconds"] = round(float(generation_time) + save_time, 2)
+        metadata["runtime_memory"] = RuntimeMemory.snapshot(
+            "video-save-complete",
+            synchronize=True,
+        ).to_metadata()
 
     @staticmethod
     def _metadata_frame_count(metadata: dict | None) -> int | None:

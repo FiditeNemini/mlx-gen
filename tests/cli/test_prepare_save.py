@@ -227,3 +227,29 @@ def test_prepare_rejects_prepacked_bonsai(tmp_path, capsys):
             save.main()
 
     assert "Bonsai checkpoints are already MLX-packed" in capsys.readouterr().err
+
+
+def test_prepare_rejects_unproven_bernini_package_routes(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(
+        "mflux.models.common.cli.save._model_class_for_config",
+        lambda config: pytest.fail("Bernini must fail before selecting a generic Wan saver"),
+    )
+    with patch(
+        "sys.argv",
+        [
+            "mlxgen prepare",
+            "--model",
+            "bernini-r-1.3b",
+            "--path",
+            str(tmp_path / "bernini"),
+            "--quantize",
+            "8",
+        ],
+    ):
+        with pytest.raises(SystemExit) as exc:
+            save.main()
+
+    assert exc.value.code == 2
+    error = capsys.readouterr().err
+    assert "pinned factored BF16 source route" in error
+    assert "mlxgen prepare" in error

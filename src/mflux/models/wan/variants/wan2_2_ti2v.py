@@ -28,6 +28,7 @@ from mflux.models.wan.scheduler import WanEulerScheduler, WanUniPCMultistepSched
 from mflux.models.wan.variants.wan_svi import WanSvi
 from mflux.models.wan.variants.wan_video_request import WanVideoRequest
 from mflux.models.wan.wan_initializer import WanInitializer
+from mflux.models.wan.wan_text_encoder_loader import WanTextEncoderLoader
 from mflux.models.wan.weights import WanWeightDefinition
 from mflux.utils.dimension_resolver import (
     CANVAS_POLICY_EXACT_RESIZE,
@@ -701,6 +702,7 @@ class Wan2_2_TI2V(nn.Module):
         negative_prompt: str | None,
         do_classifier_free_guidance: bool,
         max_sequence_length: int = 512,
+        clean_prompts: bool = True,
     ) -> tuple[mx.array, mx.array | None]:
         # 0098: the tokenizer right-truncates silently at max_sequence_length;
         # measure the real token counts once per encode so overflow is warned
@@ -709,12 +711,24 @@ class Wan2_2_TI2V(nn.Module):
             prompt=prompt,
             negative_prompt=(negative_prompt or "") if do_classifier_free_guidance else None,
             max_sequence_length=max_sequence_length,
+            clean_prompts=clean_prompts,
         )
         prompts = [prompt]
         if not do_classifier_free_guidance:
-            return self._get_t5_prompt_embeds(prompts, max_sequence_length=max_sequence_length), None
+            return (
+                self._get_t5_prompt_embeds(
+                    prompts,
+                    max_sequence_length=max_sequence_length,
+                    clean_prompts=clean_prompts,
+                ),
+                None,
+            )
         prompts.append(negative_prompt or "")
-        embeds = self._get_t5_prompt_embeds(prompts, max_sequence_length=max_sequence_length)
+        embeds = self._get_t5_prompt_embeds(
+            prompts,
+            max_sequence_length=max_sequence_length,
+            clean_prompts=clean_prompts,
+        )
         return embeds[0:1], embeds[1:2]
 
     def _check_prompt_truncation(
@@ -723,6 +737,7 @@ class Wan2_2_TI2V(nn.Module):
         prompt: str,
         negative_prompt: str | None,
         max_sequence_length: int,
+        clean_prompts: bool = True,
     ) -> dict[str, int | bool]:
         tokenizer = self.tokenizers["wan"].tokenizer
         report: dict[str, int | bool] = {}
@@ -733,8 +748,9 @@ class Wan2_2_TI2V(nn.Module):
         ):
             if text is None:
                 continue
-            # Uncapped probe on the same cleaned text the capped encode sees.
-            token_count = len(tokenizer(self._prompt_clean(text), add_special_tokens=True)["input_ids"])
+            # Probe the exact text variant the capped encode sees.
+            encoded_text = self._prompt_clean(text) if clean_prompts else text
+            token_count = len(tokenizer(encoded_text, add_special_tokens=True)["input_ids"])
             truncated = token_count > max_sequence_length
             report[f"{key}_tokens"] = int(token_count)
             report[f"{key}_truncated"] = truncated
@@ -1038,15 +1054,20 @@ class Wan2_2_TI2V(nn.Module):
         )
         self._copy_runtime_assets(base_path)
 
-    def _get_t5_prompt_embeds(self, prompts: list[str], max_sequence_length: int) -> mx.array:
-        cleaned = [self._prompt_clean(prompt) for prompt in prompts]
-        cache_key = (tuple(cleaned), max_sequence_length)
+    def _get_t5_prompt_embeds(
+        self,
+        prompts: list[str],
+        max_sequence_length: int,
+        clean_prompts: bool = True,
+    ) -> mx.array:
+        encoded_prompts = [self._prompt_clean(prompt) for prompt in prompts] if clean_prompts else list(prompts)
+        cache_key = (tuple(encoded_prompts), max_sequence_length)
         cached = self._cached_tensor(cache_name="prompt_embed_cache", key=cache_key)
         if cached is not None:
             return cached
         # Tokenize with numpy tensors: the tokenized ids feed BOTH the exact
         # disk-cache key and the encoder, and a disk hit must not import torch.
-        text_inputs = self._tokenize_prompts(cleaned=cleaned, max_sequence_length=max_sequence_length)
+        text_inputs = self._tokenize_prompts(cleaned=encoded_prompts, max_sequence_length=max_sequence_length)
         disk_key = self._prompt_embed_disk_key(text_inputs=text_inputs, max_sequence_length=max_sequence_length)
         embeds = self._prompt_embed_store.load(disk_key) if disk_key is not None else None
         if embeds is not None:
@@ -1076,10 +1097,14 @@ class Wan2_2_TI2V(nn.Module):
             self._prompt_embed_fingerprint = WanPromptEmbedStore.compute_text_encoder_fingerprint(
                 self.root_path / "text_encoder"
             )
+        encoder_fingerprint = self._prompt_embed_fingerprint
+        precision_policy_id = WanTextEncoderLoader.precision_policy_id(getattr(self, "model_config", None))
+        if precision_policy_id is not None:
+            encoder_fingerprint = f"{encoder_fingerprint}:{precision_policy_id}"
         input_ids = np.ascontiguousarray(text_inputs["input_ids"])
         attention_mask = np.ascontiguousarray(text_inputs["attention_mask"])
         return WanPromptEmbedStore.compute_key(
-            encoder_fingerprint=self._prompt_embed_fingerprint,
+            encoder_fingerprint=encoder_fingerprint,
             input_ids_bytes=str(input_ids.shape).encode("utf-8") + input_ids.tobytes(),
             attention_mask_bytes=str(attention_mask.shape).encode("utf-8") + attention_mask.tobytes(),
             max_sequence_length=max_sequence_length,
@@ -1089,7 +1114,6 @@ class Wan2_2_TI2V(nn.Module):
     def _load_t5_prompt_embeds(self, *, text_inputs, max_sequence_length: int) -> mx.array:
         try:
             import torch
-            from transformers import UMT5EncoderModel
             from transformers.utils import logging as transformers_logging
         except ImportError as exc:
             raise RuntimeError("Wan prompt encoding requires torch and transformers.") from exc
@@ -1110,10 +1134,12 @@ class Wan2_2_TI2V(nn.Module):
             try:
                 transformers_logging.set_verbosity_error()
                 with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                    text_encoder = UMT5EncoderModel.from_pretrained(
-                        text_encoder_path,
+                    text_encoder = WanTextEncoderLoader.load(
+                        text_encoder_path=text_encoder_path,
                         torch_dtype=torch.bfloat16,
-                        local_files_only=True,
+                        bernini_compatibility=(
+                            WanTextEncoderLoader.precision_policy_id(getattr(self, "model_config", None)) is not None
+                        ),
                     )
             finally:
                 transformers_logging.set_verbosity(transformers_verbosity)
@@ -1974,7 +2000,10 @@ class Wan2_2_TI2V(nn.Module):
 
     def _create_scheduler(self, *, flow_shift: float, solver: str):
         if solver == "unipc":
-            return WanUniPCMultistepScheduler(flow_shift=flow_shift)
+            flow_sigma_schedule = self._wan_config("unipc_flow_sigma_schedule", None)
+            if flow_sigma_schedule is None:
+                return WanUniPCMultistepScheduler(flow_shift=flow_shift)
+            return WanUniPCMultistepScheduler(flow_shift=flow_shift, flow_sigma_schedule=str(flow_sigma_schedule))
         if solver == "euler":
             return WanEulerScheduler(flow_shift=flow_shift)
         raise ValueError(f"Wan solver must be one of {_WAN_SOLVERS}, got {solver!r}.")

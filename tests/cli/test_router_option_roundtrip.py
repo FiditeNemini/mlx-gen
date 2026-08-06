@@ -36,7 +36,11 @@ def test_every_router_parser_action_maps_to_exactly_one_descriptor():
 
 def test_every_descriptor_declares_an_explicit_fate():
     for option in ROUTER_OPTIONS:
-        if option.policy in {ForwardPolicy.REEMIT_VALUE, ForwardPolicy.REEMIT_FLAG}:
+        if option.policy in {
+            ForwardPolicy.REEMIT_VALUE,
+            ForwardPolicy.REEMIT_VALUES,
+            ForwardPolicy.REEMIT_FLAG,
+        }:
             assert option.emit_flag in option.flags
             assert option.emit_order is not None
         elif option.policy is ForwardPolicy.TRANSFORMED:
@@ -65,11 +69,54 @@ def test_reemit_descriptor_values_roundtrip_from_argv(tmp_path):
     for option in reemit_options():
         if option.route_gated:
             continue  # covered by the dedicated base-model gating test below
+        if option.policy is ForwardPolicy.REEMIT_VALUES:
+            continue  # covered by the repeatable reference-image test below
         assert option.emit_flag in invocation.argv, f"{option.emit_flag} was consumed but not re-emitted"
     strength_index = invocation.argv.index("--video-strength")
     assert invocation.argv[strength_index + 1] == "0.7"
     mask_index = invocation.argv.index("--video-mask-path")
     assert invocation.argv[mask_index + 1] == str(mask_file)
+
+
+def test_repeatable_reference_images_roundtrip_without_becoming_primary_images():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "ByteDance/Bernini-R-1.3B-Diffusers",
+            "--reference-image",
+            "subject.png",
+            "--reference-image",
+            "garment.png",
+            "--prompt",
+            "the subject turns toward the camera",
+        ]
+    )
+
+    indices = [index for index, value in enumerate(invocation.argv) if value == "--reference-image"]
+    assert [invocation.argv[index + 1] for index in indices] == ["subject.png", "garment.png"]
+    assert "--image-path" not in invocation.argv
+
+
+def test_reference_images_compose_with_primary_video_on_exact_bernini_route():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "bernini-r-1.3b",
+            "--video-path",
+            "source.mp4",
+            "--reference-image",
+            "garment.png",
+            "--reference-image",
+            "logo.png",
+            "--prompt",
+            "replace the jacket and add the referenced logo",
+        ]
+    )
+
+    assert invocation.target_name == "mlxgen-generate-wan"
+    assert invocation.argv[invocation.argv.index("--video-path") + 1] == "source.mp4"
+    indices = [index for index, value in enumerate(invocation.argv) if value == "--reference-image"]
+    assert [invocation.argv[index + 1] for index in indices] == ["garment.png", "logo.png"]
 
 
 def test_base_model_reemitted_only_on_accepting_routes():
@@ -152,6 +199,26 @@ def test_metadata_sourced_values_roundtrip(tmp_path):
     assert invocation.argv[model_index + 1] == WAN_MODEL
     # The metadata file itself is still forwarded for backend-side replay of unconsumed options.
     assert "--config-from-metadata" in invocation.argv
+
+
+def test_reference_images_replay_from_metadata_as_typed_conditioning(tmp_path):
+    metadata_path = tmp_path / "prior.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "bernini-r-1.3b",
+                "reference_image_paths": ["ref_a.png", "ref_b.png"],
+                "prompt": "replay",
+            }
+        )
+    )
+
+    invocation = mlx_gen._resolve_invocation(["--config-from-metadata", str(metadata_path)])
+
+    assert invocation.target_name == "mlxgen-generate-wan"
+    assert "--image-path" not in invocation.argv
+    indices = [index for index, value in enumerate(invocation.argv) if value == "--reference-image"]
+    assert [invocation.argv[index + 1] for index in indices] == ["ref_a.png", "ref_b.png"]
 
 
 def test_out_of_range_metadata_video_strength_fails_at_backend_parse(tmp_path):

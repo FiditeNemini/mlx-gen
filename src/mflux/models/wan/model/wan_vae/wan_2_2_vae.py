@@ -178,6 +178,9 @@ class Wan2_1_Decoder3d(nn.Module):
 
 
 class Wan2_2_VAE(nn.Module):
+    COMPACT_FEATURE_CACHE_POLICY_ID = "wan-compact-feature-cache-v1"
+    SPATIAL_TILING_POLICY_ID = "wan21-diffusers-0.35.2-256x256-stride192-v1"
+    TILED_DECODE_MODE = "bounded_tile_major_spatial_vae"
     Z_DIM = 48
     ENCODER_BASE_DIM = 160
     DECODER_BASE_DIM = 256
@@ -187,6 +190,10 @@ class Wan2_2_VAE(nn.Module):
     PATCH_SIZE = 2
     SPATIAL_SCALE = 16
     TEMPORAL_SCALE = 4
+    TILE_SAMPLE_MIN_HEIGHT = 256
+    TILE_SAMPLE_MIN_WIDTH = 256
+    TILE_SAMPLE_STRIDE_HEIGHT = 192
+    TILE_SAMPLE_STRIDE_WIDTH = 192
     LATENTS_MEAN = np.array([-0.2289, -0.0052, -0.1323, -0.2339, -0.2799, 0.0174, 0.1838, 0.1557, -0.1382, 0.0542, 0.2813, 0.0891, 0.157, -0.0098, 0.0375, -0.1825, -0.2246, -0.1207, -0.0698, 0.5109, 0.2665, -0.2108, -0.2158, 0.2502, -0.2055, -0.0322, 0.1109, 0.1567, -0.0729, 0.0899, -0.2799, -0.123, -0.0313, -0.1649, 0.0117, 0.0723, -0.2839, -0.2083, -0.052, 0.3748, 0.0152, 0.1957, 0.1433, -0.2944, 0.3573, -0.0548, -0.1681, -0.0667], dtype=np.float32)  # fmt: off
     LATENTS_STD = np.array([0.4765, 1.0364, 0.4514, 1.1677, 0.5313, 0.499, 0.4818, 0.5013, 0.8158, 1.0344, 0.5894, 1.0901, 0.6885, 0.6165, 0.8454, 0.4978, 0.5759, 0.3523, 0.7135, 0.6804, 0.5833, 1.4146, 0.8986, 0.5659, 0.7069, 0.5338, 0.4889, 0.4917, 0.4069, 0.4999, 0.6866, 0.4093, 0.5709, 0.6065, 0.6415, 0.4944, 0.5726, 1.2042, 0.5458, 1.6887, 0.3971, 1.06, 0.3943, 0.5537, 0.5444, 0.4089, 0.7468, 0.7744], dtype=np.float32)  # fmt: off
     WAN21_LATENTS_MEAN = np.array([-0.7571, -0.7089, -0.9113, 0.1075, -0.1745, 0.9653, -0.1517, 1.5508, 0.4134, -0.0715, 0.5517, -0.3632, -0.1922, -0.9497, 0.2503, -0.2921], dtype=np.float32)  # fmt: off
@@ -219,8 +226,16 @@ class Wan2_2_VAE(nn.Module):
         self.patch_size = patch_size
         self.spatial_scale = scale_factor_spatial
         self.temporal_scale = scale_factor_temporal
-        self.latents_mean = np.array(latents_mean if latents_mean is not None else self._default_mean(z_dim), dtype=np.float32)
-        self.latents_std = np.array(latents_std if latents_std is not None else self._default_std(z_dim), dtype=np.float32)
+        self.tile_sample_min_height = self.TILE_SAMPLE_MIN_HEIGHT
+        self.tile_sample_min_width = self.TILE_SAMPLE_MIN_WIDTH
+        self.tile_sample_stride_height = self.TILE_SAMPLE_STRIDE_HEIGHT
+        self.tile_sample_stride_width = self.TILE_SAMPLE_STRIDE_WIDTH
+        self.latents_mean = np.array(
+            latents_mean if latents_mean is not None else self._default_mean(z_dim), dtype=np.float32
+        )
+        self.latents_std = np.array(
+            latents_std if latents_std is not None else self._default_std(z_dim), dtype=np.float32
+        )
         if is_residual:
             self.encoder = Wan2_2_Encoder3d(
                 in_channels=in_channels,
@@ -260,42 +275,89 @@ class Wan2_2_VAE(nn.Module):
         self.quant_conv = Wan2_2_CausalConv3d(z_dim * 2, z_dim * 2, 1, padding=0, name="quant_conv")
         self.post_quant_conv = Wan2_2_CausalConv3d(z_dim, z_dim, 1, padding=0, name="post_quant_conv")
 
-    def encode(self, images: mx.array) -> mx.array:
+    def encode(
+        self,
+        images: mx.array,
+        *,
+        clear_cache_each_slice: bool = False,
+        tile_spatial: bool = False,
+    ) -> mx.array:
         if images.ndim == 4:
             images = images.reshape(images.shape[0], images.shape[1], 1, images.shape[2], images.shape[3])
         if images.ndim != 5:
             raise ValueError(f"Expected Wan VAE encode input with shape [B,C,F,H,W], got {images.shape}")
 
+        sample_height, sample_width = images.shape[-2:]
+        if tile_spatial:
+            self._require_spatial_tiling_supported()
         images = self.patchify(images, patch_size=self.patch_size)
         if getattr(self.encoder, "supports_cache", False):
-            encoded = self._encode_cached(images)
+            if tile_spatial and self._should_tile_sample(height=sample_height, width=sample_width):
+                encoded = self._encode_cached_tiled(images, clear_cache_each_slice=clear_cache_each_slice)
+            else:
+                encoded = self._encode_cached(images, clear_cache_each_slice=clear_cache_each_slice)
+                encoded = self.quant_conv(encoded)
         else:
             encoded = self.encoder(images)
-        encoded = self.quant_conv(encoded)
+            encoded = self.quant_conv(encoded)
         return encoded[:, : self.z_dim]
 
-    def encode_normalized(self, images: mx.array) -> mx.array:
+    def encode_normalized(
+        self,
+        images: mx.array,
+        *,
+        clear_cache_each_slice: bool = False,
+        tile_spatial: bool = False,
+    ) -> mx.array:
         latents_mean = mx.array(self.latents_mean).reshape(1, self.z_dim, 1, 1, 1)
         latents_std = mx.array(self.latents_std).reshape(1, self.z_dim, 1, 1, 1)
-        return (self.encode(images) - latents_mean) / latents_std
+        return (
+            self.encode(
+                images,
+                clear_cache_each_slice=clear_cache_each_slice,
+                tile_spatial=tile_spatial,
+            )
+            - latents_mean
+        ) / latents_std
 
-    def decode(self, latents: mx.array, *, clear_cache_each_slice: bool = False) -> mx.array:
+    def decode(
+        self,
+        latents: mx.array,
+        *,
+        clear_cache_each_slice: bool = False,
+        tile_spatial: bool = False,
+    ) -> mx.array:
         if latents.ndim == 4:
             latents = latents.reshape(latents.shape[0], latents.shape[1], 1, latents.shape[2], latents.shape[3])
+        if tile_spatial:
+            self._require_spatial_tiling_supported()
+        if tile_spatial and self._should_tile_latent(height=latents.shape[-2], width=latents.shape[-1]):
+            return mx.concatenate(
+                list(
+                    self.iter_decode_slices(
+                        latents,
+                        clear_cache_each_slice=clear_cache_each_slice,
+                        tile_spatial=True,
+                    )
+                ),
+                axis=2,
+            )
         latents = self.post_quant_conv(latents)
         feat_cache = self._new_feature_cache()
         decoded_slices = []
         for frame_idx in range(latents.shape[2]):
             feat_idx = [0]
-            decoded_slices.append(
-                self.decoder(
-                    latents[:, :, frame_idx : frame_idx + 1, :, :],
-                    feat_cache=feat_cache,
-                    feat_idx=feat_idx,
-                    first_chunk=frame_idx == 0,
-                )
+            decoded = self.decoder(
+                latents[:, :, frame_idx : frame_idx + 1, :, :],
+                feat_cache=feat_cache,
+                feat_idx=feat_idx,
+                first_chunk=frame_idx == 0,
             )
-            mx.eval(decoded_slices[-1])
+            if clear_cache_each_slice:
+                self._materialize_feature_cache(decoded, feat_cache)
+            else:
+                mx.eval(decoded)
+            decoded_slices.append(decoded)
             if clear_cache_each_slice:
                 gc.collect()
                 mx.synchronize()
@@ -304,27 +366,53 @@ class Wan2_2_VAE(nn.Module):
         decoded = self.unpatchify(decoded, patch_size=self.patch_size)
         return mx.clip(decoded, -1.0, 1.0)
 
-    def decode_normalized_latents(self, latents: mx.array, *, clear_cache_each_slice: bool = False) -> mx.array:
+    def decode_normalized_latents(
+        self,
+        latents: mx.array,
+        *,
+        clear_cache_each_slice: bool = False,
+        tile_spatial: bool = False,
+    ) -> mx.array:
         latents_mean = mx.array(self.latents_mean).reshape(1, self.z_dim, 1, 1, 1)
         latents_std = mx.array(self.latents_std).reshape(1, self.z_dim, 1, 1, 1)
-        return self.decode(latents * latents_std + latents_mean, clear_cache_each_slice=clear_cache_each_slice)
+        return self.decode(
+            latents * latents_std + latents_mean,
+            clear_cache_each_slice=clear_cache_each_slice,
+            tile_spatial=tile_spatial,
+        )
 
     def iter_decode_normalized_latent_slices(
         self,
         latents: mx.array,
         *,
         clear_cache_each_slice: bool = False,
+        tile_spatial: bool = False,
     ) -> Iterator[mx.array]:
         latents_mean = mx.array(self.latents_mean).reshape(1, self.z_dim, 1, 1, 1)
         latents_std = mx.array(self.latents_std).reshape(1, self.z_dim, 1, 1, 1)
         yield from self.iter_decode_slices(
             latents * latents_std + latents_mean,
             clear_cache_each_slice=clear_cache_each_slice,
+            tile_spatial=tile_spatial,
         )
 
-    def iter_decode_slices(self, latents: mx.array, *, clear_cache_each_slice: bool = False) -> Iterator[mx.array]:
+    def iter_decode_slices(
+        self,
+        latents: mx.array,
+        *,
+        clear_cache_each_slice: bool = False,
+        tile_spatial: bool = False,
+    ) -> Iterator[mx.array]:
         if latents.ndim == 4:
             latents = latents.reshape(latents.shape[0], latents.shape[1], 1, latents.shape[2], latents.shape[3])
+        if tile_spatial:
+            self._require_spatial_tiling_supported()
+        if tile_spatial and self._should_tile_latent(height=latents.shape[-2], width=latents.shape[-1]):
+            yield from self._iter_decode_tiled_slices(
+                latents,
+                clear_cache_each_slice=clear_cache_each_slice,
+            )
+            return
         latents = self.post_quant_conv(latents)
         mx.eval(latents)
         feat_cache = self._new_feature_cache()
@@ -336,6 +424,8 @@ class Wan2_2_VAE(nn.Module):
                 feat_idx=feat_idx,
                 first_chunk=frame_idx == 0,
             )
+            if clear_cache_each_slice:
+                self._materialize_feature_cache(decoded, feat_cache)
             decoded = self.unpatchify(decoded, patch_size=self.patch_size)
             decoded = mx.clip(decoded, -1.0, 1.0)
             mx.eval(decoded)
@@ -346,7 +436,13 @@ class Wan2_2_VAE(nn.Module):
                 mx.synchronize()
                 mx.clear_cache()
 
-    def _encode_cached(self, images: mx.array) -> mx.array:
+    def _encode_cached(
+        self,
+        images: mx.array,
+        *,
+        clear_cache_each_slice: bool = False,
+        quantize_slices: bool = False,
+    ) -> mx.array:
         feat_cache = self._new_feature_cache()
         encoded_slices = []
         iterations = 1 + (images.shape[2] - 1) // self.temporal_scale
@@ -357,8 +453,205 @@ class Wan2_2_VAE(nn.Module):
             else:
                 start = 1 + self.temporal_scale * (index - 1)
                 chunk = images[:, :, start : start + self.temporal_scale]
-            encoded_slices.append(self.encoder(chunk, feat_cache=feat_cache, feat_idx=feat_idx))
+            encoded = self.encoder(chunk, feat_cache=feat_cache, feat_idx=feat_idx)
+            if quantize_slices:
+                encoded = self.quant_conv(encoded)
+            if clear_cache_each_slice:
+                self._materialize_feature_cache(encoded, feat_cache)
+                gc.collect()
+                mx.synchronize()
+                mx.clear_cache()
+            else:
+                mx.eval(encoded)
+            encoded_slices.append(encoded)
         return mx.concatenate(encoded_slices, axis=2)
+
+    def _encode_cached_tiled(self, images: mx.array, *, clear_cache_each_slice: bool) -> mx.array:
+        input_height, input_width = images.shape[-2:]
+        tile_height = self.tile_sample_min_height
+        tile_width = self.tile_sample_min_width
+        stride_height = self.tile_sample_stride_height
+        stride_width = self.tile_sample_stride_width
+        latent_height = input_height // self.spatial_scale
+        latent_width = input_width // self.spatial_scale
+        tile_latent_height = self.tile_sample_min_height // self.spatial_scale
+        tile_latent_width = self.tile_sample_min_width // self.spatial_scale
+        stride_latent_height = self.tile_sample_stride_height // self.spatial_scale
+        stride_latent_width = self.tile_sample_stride_width // self.spatial_scale
+        blend_height = tile_latent_height - stride_latent_height
+        blend_width = tile_latent_width - stride_latent_width
+        rows = []
+        for top in range(0, input_height, stride_height):
+            row = []
+            for left in range(0, input_width, stride_width):
+                tile = images[:, :, :, top : top + tile_height, left : left + tile_width]
+                encoded = self._encode_cached(
+                    tile,
+                    clear_cache_each_slice=clear_cache_each_slice,
+                    quantize_slices=True,
+                )
+                encoded = mx.contiguous(encoded)
+                mx.eval(encoded)
+                row.append(encoded)
+                if clear_cache_each_slice:
+                    gc.collect()
+                    mx.synchronize()
+                    mx.clear_cache()
+            rows.append(row)
+
+        result_rows = []
+        for row_index, row in enumerate(rows):
+            result_row = []
+            for column_index, tile in enumerate(row):
+                if row_index > 0:
+                    tile = self._blend_vertical(rows[row_index - 1][column_index], tile, blend_height)
+                if column_index > 0:
+                    tile = self._blend_horizontal(row[column_index - 1], tile, blend_width)
+                row[column_index] = tile
+                result_row.append(tile[:, :, :, :stride_latent_height, :stride_latent_width])
+            result_rows.append(mx.concatenate(result_row, axis=-1))
+        encoded = mx.contiguous(mx.concatenate(result_rows, axis=-2)[:, :, :, :latent_height, :latent_width])
+        mx.eval(encoded)
+        del rows, result_rows, row, result_row, tile
+        gc.collect()
+        mx.synchronize()
+        mx.clear_cache()
+        return encoded
+
+    def _iter_decode_tiled_slices(
+        self,
+        latents: mx.array,
+        *,
+        clear_cache_each_slice: bool,
+    ) -> Iterator[mx.array]:
+        latent_height, latent_width = latents.shape[-2:]
+        tile_latent_height = self.tile_sample_min_height // self.spatial_scale
+        tile_latent_width = self.tile_sample_min_width // self.spatial_scale
+        stride_latent_height = self.tile_sample_stride_height // self.spatial_scale
+        stride_latent_width = self.tile_sample_stride_width // self.spatial_scale
+        stride_sample_height = self.tile_sample_stride_height
+        stride_sample_width = self.tile_sample_stride_width
+        sample_height = latent_height * self.spatial_scale
+        sample_width = latent_width * self.spatial_scale
+        blend_height = self.tile_sample_min_height - stride_sample_height
+        blend_width = self.tile_sample_min_width - stride_sample_width
+        row_positions = list(range(0, latent_height, stride_latent_height))
+        column_positions = list(range(0, latent_width, stride_latent_width))
+        rows = []
+        for top in row_positions:
+            row = []
+            for left in column_positions:
+                feat_cache = self._new_feature_cache()
+                decoded_slices = []
+                for frame_index in range(latents.shape[2]):
+                    tile = latents[
+                        :,
+                        :,
+                        frame_index : frame_index + 1,
+                        top : top + tile_latent_height,
+                        left : left + tile_latent_width,
+                    ]
+                    tile = self.post_quant_conv(tile)
+                    decoded = self.decoder(
+                        tile,
+                        feat_cache=feat_cache,
+                        feat_idx=[0],
+                        first_chunk=frame_index == 0,
+                    )
+                    if clear_cache_each_slice:
+                        self._materialize_feature_cache(decoded, feat_cache)
+                    else:
+                        mx.eval(decoded)
+                    decoded_slices.append(decoded)
+                    if clear_cache_each_slice:
+                        gc.collect()
+                        mx.synchronize()
+                        mx.clear_cache()
+                decoded_tile = mx.contiguous(mx.concatenate(decoded_slices, axis=2))
+                mx.eval(decoded_tile)
+                row.append(decoded_tile)
+                del decoded_slices, feat_cache, decoded, tile
+                gc.collect()
+                mx.synchronize()
+                mx.clear_cache()
+            rows.append(row)
+
+        result_rows = []
+        for row_index, row in enumerate(rows):
+            result_row = []
+            for column_index, tile in enumerate(row):
+                if row_index > 0:
+                    tile = self._blend_vertical(rows[row_index - 1][column_index], tile, blend_height)
+                if column_index > 0:
+                    tile = self._blend_horizontal(row[column_index - 1], tile, blend_width)
+                row[column_index] = tile
+                result_row.append(tile[:, :, :, :stride_sample_height, :stride_sample_width])
+            result_rows.append(mx.concatenate(result_row, axis=-1))
+        decoded = mx.concatenate(result_rows, axis=-2)[:, :, :, :sample_height, :sample_width]
+        decoded = self.unpatchify(decoded, patch_size=self.patch_size)
+        decoded = mx.contiguous(mx.clip(decoded, -1.0, 1.0))
+        mx.eval(decoded)
+        del rows, result_rows, row, result_row, tile
+        gc.collect()
+        mx.synchronize()
+        mx.clear_cache()
+
+        start = 0
+        for frame_index in range(latents.shape[2]):
+            frame_count = 1 if frame_index == 0 else self.temporal_scale
+            decoded_slice = mx.contiguous(decoded[:, :, start : start + frame_count])
+            mx.eval(decoded_slice)
+            yield decoded_slice
+            start += frame_count
+            del decoded_slice
+            if clear_cache_each_slice:
+                gc.collect()
+                mx.synchronize()
+                mx.clear_cache()
+
+    @staticmethod
+    def _blend_vertical(above: mx.array, current: mx.array, extent: int) -> mx.array:
+        extent = min(above.shape[-2], current.shape[-2], extent)
+        if extent <= 0:
+            return current
+        weight = mx.arange(extent, dtype=mx.float32).reshape(1, 1, 1, extent, 1) / extent
+        blended = above[:, :, :, -extent:, :] * (1 - weight) + current[:, :, :, :extent, :] * weight
+        return mx.concatenate([blended.astype(current.dtype), current[:, :, :, extent:, :]], axis=-2)
+
+    @staticmethod
+    def _blend_horizontal(left: mx.array, current: mx.array, extent: int) -> mx.array:
+        extent = min(left.shape[-1], current.shape[-1], extent)
+        if extent <= 0:
+            return current
+        weight = mx.arange(extent, dtype=mx.float32).reshape(1, 1, 1, 1, extent) / extent
+        blended = left[:, :, :, :, -extent:] * (1 - weight) + current[:, :, :, :, :extent] * weight
+        return mx.concatenate([blended.astype(current.dtype), current[:, :, :, :, extent:]], axis=-1)
+
+    def _should_tile_sample(self, *, height: int, width: int) -> bool:
+        return height > self.tile_sample_min_height or width > self.tile_sample_min_width
+
+    def _should_tile_latent(self, *, height: int, width: int) -> bool:
+        return (
+            height > self.tile_sample_min_height // self.spatial_scale
+            or width > self.tile_sample_min_width // self.spatial_scale
+        )
+
+    def _require_spatial_tiling_supported(self) -> None:
+        if self.patch_size != 1:
+            raise ValueError(
+                "Wan VAE spatial tiling is currently proven only for the Wan2.1 patch-size-1 VAE; "
+                f"got patch_size={self.patch_size}."
+            )
+        if not getattr(self.encoder, "supports_cache", False):
+            raise ValueError("Wan VAE spatial tiling requires the cached causal encoder/decoder implementation.")
+
+    @staticmethod
+    def _materialize_feature_cache(output: mx.array, feat_cache: list[mx.array | str | None]) -> None:
+        for cache_index, entry in enumerate(feat_cache):
+            if isinstance(entry, mx.array):
+                feat_cache[cache_index] = mx.contiguous(entry)
+        cache_tensors = [entry for entry in feat_cache if isinstance(entry, mx.array)]
+        mx.eval(output, *cache_tensors)
 
     @staticmethod
     def cache_slice(x: mx.array, previous: mx.array | str | None) -> mx.array:

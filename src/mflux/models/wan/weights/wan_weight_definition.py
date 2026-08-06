@@ -1,4 +1,6 @@
-from typing import List
+from typing import Callable, List
+
+import mlx.core as mx
 
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.weights.loading.weight_definition import ComponentDefinition, TokenizerDefinition
@@ -6,6 +8,9 @@ from mflux.models.wan.weights.wan_weight_mapping import WanWeightMapping
 
 
 class WanWeightDefinition:
+    BERNINI_TRANSFORMER_PRECISION_POLICY_ID = "bernini-transformer-final-modulation-fp32-v1"
+    BERNINI_TRANSFORMER_FP32_KEYS = ("scale_shift_table",)
+
     def __init__(self, model_config: ModelConfig | None = None):
         self.model_config = model_config or ModelConfig.wan2_2_ti2v_5b()
 
@@ -52,10 +57,18 @@ class WanWeightDefinition:
                 "transformer",
                 num_layers,
                 num_vace_blocks=len(vace_layers) if vace_layers else 0,
+                precision_override=self._transformer_precision_override(self.model_config),
             ),
         ]
         if self._has_transformer_2(self.model_config):
-            components.append(self._transformer_component("transformer_2", "transformer_2", num_layers))
+            components.append(
+                self._transformer_component(
+                    "transformer_2",
+                    "transformer_2",
+                    num_layers,
+                    precision_override=self._transformer_precision_override(self.model_config),
+                )
+            )
         components.append(
             ComponentDefinition(
                 name="vae",
@@ -70,7 +83,11 @@ class WanWeightDefinition:
 
     @staticmethod
     def _transformer_component(
-        name: str, hf_subdir: str, num_layers: int, num_vace_blocks: int = 0
+        name: str,
+        hf_subdir: str,
+        num_layers: int,
+        num_vace_blocks: int = 0,
+        precision_override: Callable[[str], mx.Dtype | None] | None = None,
     ) -> ComponentDefinition:
         def mapping_getter() -> list:
             mapping = WanWeightMapping.get_transformer_mapping(num_layers=num_layers)
@@ -84,8 +101,25 @@ class WanWeightDefinition:
             num_layers=num_layers,
             loading_mode="multi_glob",
             precision=ModelConfig.precision,
+            precision_override=precision_override,
             mapping_getter=mapping_getter,
         )
+
+    @staticmethod
+    def _transformer_precision_override(
+        model_config: ModelConfig,
+    ) -> Callable[[str], mx.Dtype | None] | None:
+        if not bool(model_config.transformer_overrides.get("supports_bernini_renderer", False)):
+            return None
+
+        def bernini_runtime_precision(key: str) -> mx.Dtype | None:
+            # The checkpoint's final modulation table is especially sensitive to
+            # BF16 rounding on MLX. Keeping the broader set that Diffusers protects
+            # in FP32 makes the recurrent MLX trajectory less faithful, so this is
+            # intentionally the narrower parity-proven backend policy.
+            return mx.float32 if key in WanWeightDefinition.BERNINI_TRANSFORMER_FP32_KEYS else None
+
+        return bernini_runtime_precision
 
     @staticmethod
     def get_tokenizers() -> List[TokenizerDefinition]:
@@ -117,6 +151,25 @@ class WanWeightDefinition:
             "transformer/*.json",
             "vae/*.safetensors",
             "vae/*.json",
+        ]
+        if self._has_transformer_2(self.model_config):
+            patterns.extend(["transformer_2/*.safetensors", "transformer_2/*.json"])
+        return patterns
+
+    def get_base_download_patterns(self) -> List[str]:
+        return [
+            "tokenizer/*",
+            "text_encoder/*.safetensors",
+            "text_encoder/*.json",
+            "vae/*.safetensors",
+            "vae/*.json",
+        ]
+
+    def get_transformer_download_patterns(self) -> List[str]:
+        patterns = [
+            "config.json",
+            "transformer/*.safetensors",
+            "transformer/*.json",
         ]
         if self._has_transformer_2(self.model_config):
             patterns.extend(["transformer_2/*.safetensors", "transformer_2/*.json"])

@@ -11,7 +11,7 @@
 - `docs/README.md`: documentation tree index.
 - `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, SeedVR2 image/video restoration and upscaling, and Wan video examples.
 - `docs/architecture.md`: system overview and model-file lifecycle diagrams, package shape, command boundaries, runtime failure contract, quantization policy, and the Python integration boundary.
-- `docs/api.md`: public CLI, legacy-command migration boundary, router behavior, task/mode resolution, I2I mode selection, canvas policy and `--resize-mode` (resize | crop | pad) source mapping, masked edit via `--mask-path` including the FLUX.2 Klein `flux2.inpaint` route, Qwen structured control with `--controlnet-image-path`, generative reframe, backend-specific outpaint with Qwen adaptive source restoration and FLUX.2 Klein base source-locked denoising, SeedVR2 official-source and q8/q4 package usage for 3B/7B, shortest-edge/scale-factor image sizing plus video clip controls, negative prompts including the FLUX.2 exception, Qwen edit-version routing, Wan video sizes and `--canvas-policy` on the wan route, experimental Wan A14B `--last-image` first+last bracket conditioning, experimental Wan A14B `--context-frames` multi-frame context head conditioning (with `--context-noise`), experimental Wan A14B SVI 2.0 Pro chain conditioning (`--svi-anchor-image`, `--svi-motion-latent`, strict-match `--svi-lora-high`/`--svi-lora-low`, exported `*.svi_latent.safetensors` motion handover), `--denoising-step-list` explicit distill timestep grids, the Wan prompt-truncation warning with `prompt_tokens`/`prompt_truncated` metadata, Wan prompt-embed disk cache and resident text encoder flags, `--no-validate-health`, runtime memory defaults (machine-derived MLX buffer-cache limit plus HF-repo weight prefetch, with `--mlx-cache-limit-gb`, `MFLUX_MLX_CACHE_LIMIT_GB`, and `MFLUX_NO_WEIGHT_PREFETCH` overrides), runtime events with resolved dimensions on `start` and enriched `save` metadata, `mlxgen capabilities` including per-route `resize_modes`/`canvas_policies` and the additive `supports_last_image` and `supports_context_frames` fields (capabilities `schema_version` 6), generated-output runtime-memory metadata, and Python routing helpers.
+- `docs/api.md`: public CLI, generation routing, public tasks and internal modes, image/video/reference input roles, Bernini R2V/RV2V/V2V options, Wan video controls, SeedVR2 upscaling, runtime events, metadata, and the capability schema (`schema_version` 8, including reference-image bounds).
 - `docs/image-edit-modes.md`: plain-language guide to latent img2img, edit-reference, masked edit/inpaint, structured control, multi-reference, generative reframe, and outpaint, including what each mode preserves and what to expect from the output.
 - `docs/masked-editing.md`: canonical masked-edit reference — request contract, per-model route matrix with proof grades (Qwen edit/base, Z-Image Turbo, FLUX.2 Klein, video masks; non-turbo Z-Image masked edit is withdrawn for now), per-family behavior including the tunable base-Qwen `--mask-strength` warm start and `effective_steps` metadata, and route selection advice.
 - `docs/qwen-route-matrix.md`: current MLX-Gen route truth for Qwen Image and Qwen Image Edit, mapping public `mlxgen` capability ids to the upstream Diffusers Qwen pipeline families and to the proof surfaces that already exist.
@@ -21,10 +21,11 @@
 - `docs/reframe-outpaint.md`: reframe/outpaint workflows, exact commands, the mixed June 8 profile, the current FLUX.2 Klein base source-model starship proof, and the related validation profile ids.
 - `docs/lora.md`: route-specific LoRA capability fields, explicit adapter download, strict scale matching, exact adapter/base-model compatibility, source/no-LoRA/with-LoRA validation, exact public proof rows for current Qwen, Z-Image, FLUX.2, ERNIE, and Wan routes, including base Qwen latent, the exact `AbstractFramework/z-image-turbo-8bit` latent children's-drawing row, Qwen 2511 multi-reference/reframe/outpaint, FLUX.2 Klein 9B multi-reference, FLUX.2 Klein base 4B outpaint, direct `lightx2v/Wan2.2-Lightning` download, and explicit guidance that the validated Lightning target is the MLX-Gen q8 package rather than an arbitrary external FP8 checkpoint.
 - `docs/wan-video.md`: practical Wan2.2 T2V/I2V guidance, plain and masked prompt-guided A14B video-to-video with the exact reproducible proof commands and included artifacts, output canvas and source mapping (`--canvas-policy`, `--resize-mode`), repeat-run and application performance options (prompt-embed disk cache, resident text encoder, health-check opt-out, opt-in compiled transformer, A14B inactive-expert release), broader A14B target size families, and `101`-frame, 20 fps M5 Max comparison clips for A14B and TI2V-5B.
+- `docs/bernini.md`: experimental Bernini-R 1.3B reference-to-video and video-edit routes, pinned factored BF16 setup, 18 GB capacity boundaries, and schema-v3 proof with a failed visual release gate.
 - `docs/recommendations.md`: conservative model recommendations for `18 GB`, `24 GB`, `32 GB`, `64 GB`, and `128+ GB` Macs based on published MLX-Gen memory measurements.
 - `docs/examples/spaceship-snow.md`: complete model-backed workflow across T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B.
-- `docs/model-management.md`: explicit `download` and `prepare`, generation from local model files, local MLX-Gen packages, matching Hugging Face handle resolution, and `DownloadRequiredError`.
-- `docs/quantization.md`: complete published package matrix, q8/q4/BF16 policies, model-family compatibility, Wan TI2V/A14B package status, A14B q8 generated-output records, and the distinction between MLX-Gen q8 packages and third-party FP8 checkpoint guidance.
+- `docs/model-management.md`: explicit `download` and `prepare`, local packages, factored Bernini setup and disk preflight, matching Hugging Face handle resolution, and `DownloadRequiredError`.
+- `docs/quantization.md`: published package matrix, model-specific q8/q4/BF16 policies, Wan storage/runtime behavior, Bernini's BF16-only gate, and Bonsai ternary support.
 - `docs/huggingface-publishing.md`: generated model cards and AbstractFramework Hugging Face upload guidance.
 - `docs/python-integration.md`: embedding MLX-Gen, route-resolved runtime loading, `model_kwargs` constructor passthrough (resident text encoder, prompt-cache opt-out), runtime memory defaults for hosts (`MFLUX_MLX_CACHE_LIMIT_GB`, `-1` unlimited opt-out, host-managed `mx.set_cache_limit` detection, `MFLUX_NO_WEIGHT_PREFETCH`), Wan `last_image_path`, `context_image_paths`/`context_noise`, and `denoising_step_list` generation kwargs, `save_kwargs` including `validate_health=False`, serial multi-output reuse for unified `mlxgen generate` families, overwrite/collision behavior, SeedVR2's direct-model boundary, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
 - `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 image/video sizing and default audio-preservation behavior, Qwen edit variants, negative prompts, reframe/outpaint, Wan resolutions, prompting guidance, usage limits, and why MLX-Gen q8 Lightning guidance should not be generalized to arbitrary FP8 checkpoints.
@@ -48,7 +49,8 @@ generation for real applications: users download or prepare models before runnin
 one command to generate, inspect supported modes, and compare generated examples and measured
 results. MLX-Gen contributes by adding tested T2I/I2I routes, Qwen Image Edit 2509/2511 routing
 and parity fixes, Bonsai Image support, Wan2.2 text-to-video, image-to-video, and prompt-guided
-video-to-video support, model-specific mixed quantization policies, published MLX-Gen optimized
+video-to-video support, Bernini-R reference video generation/editing, model-specific quantization
+policies, published MLX-Gen optimized
 packages, and progress callbacks for apps. The fork exists so AbstractFramework projects can move
 quickly without losing the option to
 merge useful changes back upstream if that becomes valuable for the wider mflux community.
@@ -57,7 +59,7 @@ The project focuses on practical Apple Silicon workflows:
 
 - generation from local model files after explicit setup;
 - local MLX-Gen model packages, including quantized layouts;
-- Qwen Image/Edit, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image, base FIBO, Wan2.2, and SeedVR2 support;
+- Qwen Image/Edit, FLUX.2 Klein, Z-Image, ERNIE Image Turbo, Bonsai Image, base FIBO, Wan2.2, Bernini-R, and SeedVR2 support;
 - model capability inspection before heavy runs;
 - progress events for applications;
 - integration with AbstractVision, AbstractCore, AbstractFramework, and AbstractFlow.
@@ -102,6 +104,7 @@ Public tasks describe media direction:
 - `image-to-image`
 - `text-to-video`
 - `image-to-video`
+- `video-to-video`
 
 Image editing is not a separate public task. It is an internal image-to-image mode. The resolver
 uses model capabilities, image count, and options to choose a generation plan:
@@ -112,6 +115,9 @@ uses model capabilities, image count, and options to choose a generation plan:
 - one image with FLUX.2 or a dedicated edit checkpoint and no `--image-strength`: edit/reference I2I;
 - one image with a latent image model such as ERNIE Image Turbo, Z-Image, or base Qwen Image: latent img2img only when `--image-strength` is explicit;
 - repeated `--image`: multi-reference I2I when supported;
+- repeatable `--reference-image`: a separate semantic conditioning role for VACE and Bernini;
+- one to eight Bernini references without a primary image: reference-to-video under the public
+  `text-to-video` task; one source video plus references: reference-guided `video-to-video`;
 - mask/fill options: accepted only by mask/fill capabilities; canvas outpaint options are accepted
   only by capabilities that advertise `supports_outpaint=true`.
 
@@ -350,7 +356,7 @@ and text/video-to-video before the weight load. `--context-noise <0-1000>` (Pyth
 head in latent space, deterministic per seed. Both are recorded in metadata
 (`context_image_paths`, `context_noise`), replayed by `--config-from-metadata`, and advertised
 as the additive `supports_context_frames` field on the `wan.first-frame` capability row
-(capabilities `schema_version` 6). EXPERIMENTAL zero-shot behavior with a measured probe
+(introduced in capabilities schema 6; current payload schema 8). EXPERIMENTAL zero-shot behavior with a measured probe
 (backlog 0102): the K=5 head carried seam motion speed (magnitude ratio 0.90 vs the
 single-frame baseline's 1.90 double-speed restart) at the cost of a mild ~2-frame
 flare/exposure step at the conditioned-to-free boundary; hosts assembling films should trim
@@ -369,7 +375,7 @@ aborts; the pack is likewise rejected on non-SVI runs). Conflicts with `--image-
 load; continuations >65 frames warn. Metadata records `svi_*` truth including
 `svi_assembly_trim_frames` (drop that many leading frames of each continuation at assembly:
 `1 + 4 x count`); hosts gate on the additive `supports_svi` capability field (capabilities
-`schema_version` 7). Use a unique seed per clip; author-documented Lightning coexistence sets
+schema 7; current payload schema 8). Use a unique seed per clip; author-documented Lightning coexistence sets
 lightx2v HIGH scale 0.5-0.6, LOW 1.0.
 
 `--denoising-step-list 1000 750 500 250` (Python: `denoising_step_list=[...]`) runs an exact
@@ -431,6 +437,97 @@ restyles in place), `--conditioning-scale` (default 1.0) controls the branch str
 the diffusers reference (proof in docs/assets/validation/wan-vace-2026-07-06/). TI2V-5B
 and I2V-A14B reject `--video-path`. The exact reproducible proof command and included artifacts
 live in `docs/wan-video.md` and `docs/assets/examples/spaceship-v2v/`.
+
+---
+
+## Bernini-R 1.3B
+
+MLX-Gen exposes ByteDance's Bernini-R 1.3B renderer through a dedicated Wan-family runtime. The
+surface is experimental: numerical/runtime contracts pass, but every required visual-quality row
+fails. Use it only for development and diagnosis when ordinary images should act as semantic
+references rather than first frames, or when a source video should be edited with those references:
+
+- one to eight ordered `--reference-image` inputs and no video select reference-to-video (R2V);
+- one `--video` plus one to eight references select reference-guided video editing (RV2V);
+- one `--video` with no references selects source-only prompt-guided video editing (V2V).
+
+The planner-backed Bernini motion-rewrite workflow, T2I/I2I convenience routes, LoRA, masks,
+warm-start strength, first/last frame anchors, multi-frame continuation, and multiple source videos
+are not supported by this renderer-only integration.
+
+Download the pinned, factored BF16 runtime set explicitly:
+
+```sh
+mlxgen download --model bernini-r-1.3b
+```
+
+This exact catalog alias selects `ByteDance/Bernini-R-1.3B-Diffusers`. The main
+`ByteDance/Bernini-R` A14B repository and similarly named third-party repositories fail closed;
+they are never silently rewritten to the 1.3B renderer.
+
+The selected files total about 16.36 GiB on a cold cache. The command requires 18.36 GiB free,
+including 2 GiB of headroom, and omits sources already present at their pinned revisions. Do not
+pass `--all-files`; Bernini needs selected files from two repositories. `mlxgen prepare` and every
+runtime `--quantize` value are rejected because only the factored BF16 route is numerically
+credible. BF16 itself is not production-quality validated.
+
+Example R2V request:
+
+```sh
+mlxgen generate \
+  --model bernini-r-1.3b \
+  --reference-image subject.png \
+  --reference-image garment.png \
+  --prompt "Place the subject from image0 in a studio, wearing the garment from image1, slowly turning toward the camera" \
+  --width 320 --height 192 --frames 17 --fps 16 \
+  --steps 20 --max-condition-size 256 \
+  --seed 42 --low-ram --metadata \
+  --output referenced.mp4
+```
+
+Example RV2V request:
+
+```sh
+mlxgen generate \
+  --model bernini-r-1.3b \
+  --video source.mp4 \
+  --reference-image garment.jpg \
+  --prompt "Replace the outer shirt with the garment from image0 while preserving the person, framing, background, and motion" \
+  --width 176 --height 320 --frames 17 --fps 16 \
+  --steps 20 --max-condition-size 320 \
+  --seed 42 --low-ram --metadata \
+  --output garment-edit.mp4
+```
+
+Official quality defaults are 848x480, 81 frames, 16 fps, 40 steps, UniPC, and flow shift 5. The
+maximum condition side defaults to 848; its accepted range is 16-1280 in multiples of 16.
+Source-video modes preserve the source aspect ratio, accept resize-only conditioning, treat the
+requested canvas as an area target, and hard-cap the final side at the condition limit. Their
+`--frames` value is a maximum because source duration/fps may clamp the actual `4n+1` output;
+metadata `output_frames` is authoritative. Prompts have a hard 512-token UMT5 budget. R2V uses
+text guidance 4.0 and reference guidance 4.5 with APG; RV2V adds source guidance 1.25 and uses
+chained CFG; V2V uses text guidance 4.0 with APG.
+
+The bounded low-RAM matrix peaks at 9.45 GB whole-process physical footprint on the 128 GB
+validation host, so the tested shapes fit an 18 GB-class envelope; this is not a direct 18 GB-host
+proof. Capacity is separate from quality. Full-frame review found nearly static motion, missed
+references, four-latent-slice cadence jumps, and corrupted tails. The exact-upstream-prompt
+33-frame diagnostic also collapses from about frame 13. The schema-v3 bundle uses 5K paged sheets,
+exact hashes, playable MP4s, and reports machine pass/visual quality fail. Its upstream clips are
+qualitative targets because their producing checkpoint and recipe are unattested, not 1.3B parity
+baselines.
+
+Discover the three failed experimental BF16 route rows through the framework registry:
+
+```sh
+mlxgen validation --model bernini-r-1.3b
+```
+
+The returned `bernini_r_1_3b_2026_08_04` profile is `FAIL` and includes route-scoped reviewer
+notes, upstream input references, and direct paths to the R2V, RV2V, and V2V failure artifacts.
+
+See `docs/bernini.md` for the full CLI/Python contract, guidance table, capacity limits, and proof
+links.
 
 ---
 

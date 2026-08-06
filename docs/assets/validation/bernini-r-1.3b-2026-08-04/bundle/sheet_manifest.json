@@ -1,0 +1,8343 @@
+{
+  "cases": {
+    "r2v_1280_condition_smoke": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/r2v_1280_condition_smoke/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 1,
+        "sample_count": 5,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sha256": "ba0669533918dbecd238e6e2a9f294813d878032bafcdd8f114584ef3a50c805",
+        "sheet_contract_version": 3,
+        "source_frame_count": 5,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1174,
+            1646
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "path": "cases/run_1/r2v_1280_condition_smoke/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            730,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          0
+        ],
+        "sha256": "12263cae838e136e31c374ca4f2d74497b76a8f1194a6fab0b1804a15f2c77a7",
+        "sheet_contract_version": 3,
+        "source_frame_count": 1,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0
+        ],
+        "path": "cases/run_1/r2v_1280_condition_smoke/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 8,
+        "sample_indices": [
+          0,
+          1,
+          1,
+          2,
+          2,
+          3,
+          3,
+          4
+        ],
+        "sha256": "59b19eed3179d5c50e35b65ffb8c8f414b6b72a3233ba43cd37e0f0f0aa641c7",
+        "sheet_contract_version": 3,
+        "source_frame_count": 5,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 1.7481,
+          "latent_boundary_mean_global_mae": 26.1492,
+          "latent_boundary_start_indices": [
+            0
+          ],
+          "max_global_mae": 26.1492,
+          "max_local_tile_mae": 42.7591,
+          "mean_global_mae": 17.7566,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 14.959,
+          "transition_count": 4
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          26.1492,
+          24.1401,
+          14.5632,
+          6.1737
+        ],
+        "transition_max_tile_mae": [
+          42.7591,
+          38.9447,
+          29.6423,
+          12.6781
+        ],
+        "transition_start_indices": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "width": 5312
+      }
+    },
+    "r2v_848_condition_smoke": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/r2v_848_condition_smoke/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 1,
+        "sample_count": 5,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "sha256": "6c7e592f9fe6effc1071a9e1c6c91636387d9f76ce3b235715dd474c38b1f087",
+        "sheet_contract_version": 3,
+        "source_frame_count": 5,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1174,
+            1646
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "path": "cases/run_1/r2v_848_condition_smoke/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            730,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          0
+        ],
+        "sha256": "073e0535ddd697abc50526a9dfc50944d8135afc41eb44e7db95d91f314d8768",
+        "sheet_contract_version": 3,
+        "source_frame_count": 1,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ],
+          [
+            128,
+            128
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0
+        ],
+        "path": "cases/run_1/r2v_848_condition_smoke/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 8,
+        "sample_indices": [
+          1,
+          2,
+          0,
+          1,
+          2,
+          3,
+          3,
+          4
+        ],
+        "sha256": "88d60bd524f5ff14aa68be6da3677d76f56d8cff5c4dbadc9b46066ff5fd31d5",
+        "sheet_contract_version": 3,
+        "source_frame_count": 5,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 2.0116,
+          "latent_boundary_mean_global_mae": 28.4066,
+          "latent_boundary_start_indices": [
+            0
+          ],
+          "max_global_mae": 28.4066,
+          "max_local_tile_mae": 44.7611,
+          "mean_global_mae": 17.6928,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 14.1215,
+          "transition_count": 4
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          21.9053,
+          28.4066,
+          14.9849,
+          5.4743
+        ],
+        "transition_max_tile_mae": [
+          44.7611,
+          41.4349,
+          28.8086,
+          9.8955
+        ],
+        "transition_start_indices": [
+          1,
+          0,
+          2,
+          3
+        ],
+        "width": 5312
+      }
+    },
+    "r2v_eight_reference": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/r2v_eight_reference/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "af68e3ee2c024da3881ad40ee5b17118f04ed5891230cde148cf12d360252655",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_01": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 1,
+        "path": "cases/run_1/r2v_eight_reference/official_contact_sheet_page_01.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "sha256": "1c812d48d367a0c43efa9421e6a1735ac30dfa70e5c463670d5bdd96cc14149a",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_02": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 2,
+        "path": "cases/run_1/r2v_eight_reference/official_contact_sheet_page_02.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39
+        ],
+        "sha256": "f380aefc2fd93a5bb400b999b2834308fb7e41bf3d64daa24cf8e0cb4b39165f",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_03": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 3,
+        "path": "cases/run_1/r2v_eight_reference/official_contact_sheet_page_03.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59
+        ],
+        "sha256": "b828626838b56586b7c1a96f591ece3a46ca70ff45e6b41ef477a516be4e9562",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_04": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 4,
+        "path": "cases/run_1/r2v_eight_reference/official_contact_sheet_page_04.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79
+        ],
+        "sha256": "5ff61d8b4d87afc34376a488be22548dfb621c06135b05e629c134ed5d298709",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_05": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 1296,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "page_count": 5,
+        "page_number": 5,
+        "path": "cases/run_1/r2v_eight_reference/official_contact_sheet_page_05.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          80
+        ],
+        "sha256": "bbd5f16fb37b0bd202cdcd21df63cd5f8890c567b00116bde1937bcd1d1a989d",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 2416,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1174,
+            1646
+          ],
+          [
+            1254,
+            1254
+          ],
+          [
+            1254,
+            1254
+          ],
+          [
+            1254,
+            1254
+          ],
+          [
+            1448,
+            1086
+          ],
+          [
+            848,
+            1088
+          ],
+          [
+            848,
+            1272
+          ],
+          [
+            1254,
+            1254
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "path": "cases/run_1/r2v_eight_reference/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            730,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ],
+          [
+            1024,
+            768
+          ],
+          [
+            798,
+            1024
+          ],
+          [
+            683,
+            1024
+          ],
+          [
+            1024,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 2,
+        "sample_count": 8,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "sha256": "76ce687943e4c34c81c372ea13bf00fd0b5fd08dc09996cdc247bb951609f721",
+        "sheet_contract_version": 3,
+        "source_frame_count": 8,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ],
+          [
+            320,
+            192
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/r2v_eight_reference/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ],
+          [
+            960,
+            576
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          8,
+          9,
+          4,
+          5,
+          12,
+          13,
+          0,
+          1,
+          14,
+          15
+        ],
+        "sha256": "75431a9598efc178cc26cb3dbf18497a6b98aa6c849f2540c032626f2c30da6d",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 2.3931,
+          "latent_boundary_mean_global_mae": 13.9462,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 15.5022,
+          "max_local_tile_mae": 47.7253,
+          "mean_global_mae": 7.8573,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 5.8277,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          15.5022,
+          13.1624,
+          12.0369,
+          15.0832,
+          7.9722
+        ],
+        "transition_max_tile_mae": [
+          47.7253,
+          44.7969,
+          39.138,
+          32.1139,
+          28.0824
+        ],
+        "transition_start_indices": [
+          8,
+          4,
+          12,
+          0,
+          14
+        ],
+        "width": 5312
+      }
+    },
+    "rv2v_garment": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_garment/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "b67bbc779929cbf76cf9e1c68bfa68123ffd5707b2e0516c555d3b0788520acf",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_01": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_garment/official_contact_sheet_page_01.png",
+        "rendered_sizes": [
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "sha256": "d2ac7fb02d9c0ac8e48c33f8641a1c17b7d9440bfc1aca6e4e3f9d66a3494547",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_02": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 2,
+        "path": "cases/run_1/rv2v_garment/official_contact_sheet_page_02.png",
+        "rendered_sizes": [
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39
+        ],
+        "sha256": "5e2e3b7517c0a8fb70016a9cd05d61c378f6e15cf5c3f14a67a435344318f241",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_03": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 3,
+        "path": "cases/run_1/rv2v_garment/official_contact_sheet_page_03.png",
+        "rendered_sizes": [
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59
+        ],
+        "sha256": "ddc5eea598364565faef30f2df1ec1bbd67663d1195c126aea93986026b2a680",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_04": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ],
+          [
+            480,
+            848
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 4,
+        "path": "cases/run_1/rv2v_garment/official_contact_sheet_page_04.png",
+        "rendered_sizes": [
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ],
+          [
+            580,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79
+        ],
+        "sha256": "395f79b8c7a115c238c8e723eea64238cb21d30b4c4c3dcbea98a7b207f7d804",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_05": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 1296,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            480,
+            848
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "page_count": 5,
+        "page_number": 5,
+        "path": "cases/run_1/rv2v_garment/official_contact_sheet_page_05.png",
+        "rendered_sizes": [
+          [
+            580,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          80
+        ],
+        "sha256": "1d379ca573472b45c76842b8d6c4d0e67e040d428cfec7bee40f47c620da5259",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1280,
+            2173
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "path": "cases/run_1/rv2v_garment/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            603,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          0
+        ],
+        "sha256": "68348cc185eed0b14b8cc97b35cf6ce61f93b171f9e1761c573b8280a61032d0",
+        "sheet_contract_version": 3,
+        "source_frame_count": 1,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "source": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_garment/source_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          11,
+          12,
+          14,
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          25
+        ],
+        "sha256": "73ff1d0f93fa0490c7ad27ca55a9c12728598f975b8c768c6b6686a9955f9848",
+        "sheet_contract_version": 3,
+        "source_frame_count": 125,
+        "timeline_group": "source",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/rv2v_garment/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          12,
+          13,
+          15,
+          16,
+          14,
+          15,
+          13,
+          14,
+          5,
+          6
+        ],
+        "sha256": "524e6271412c688fe8020a2c29ced7dfd36cb2fa45e59d5ef8692703c19fd59e",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 1.7584,
+          "latent_boundary_mean_global_mae": 4.3513,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 9.9203,
+          "max_local_tile_mae": 32.5755,
+          "mean_global_mae": 2.9438,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 2.4746,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          9.9203,
+          4.4755,
+          3.6637,
+          3.7822,
+          3.3089
+        ],
+        "transition_max_tile_mae": [
+          32.5755,
+          21.7165,
+          19.6637,
+          15.584,
+          11.6322
+        ],
+        "transition_start_indices": [
+          12,
+          15,
+          14,
+          13,
+          5
+        ],
+        "width": 5312
+      }
+    },
+    "rv2v_no_reference_control": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_no_reference_control/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "82dc1a671d9bda1492f8d99d0425482939149cf60d726dac93033c7c9b9e49e8",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "source": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_no_reference_control/source_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          11,
+          12,
+          14,
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          25
+        ],
+        "sha256": "d0992cee7bbf7986b6f16386bb6c47332dbe77bc015c0fb5ee35048a79ff810a",
+        "sheet_contract_version": 3,
+        "source_frame_count": 125,
+        "timeline_group": "source",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/rv2v_no_reference_control/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          12,
+          13,
+          10,
+          11,
+          15,
+          16,
+          5,
+          6,
+          13,
+          14
+        ],
+        "sha256": "67ee90cc331924918d7b5e43333684bc186ebf49b4c4cc6d52ecdc5725b6a9b8",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 1.5544,
+          "latent_boundary_mean_global_mae": 3.499,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 6.5465,
+          "max_local_tile_mae": 18.8542,
+          "mean_global_mae": 2.563,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 2.2511,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          6.5465,
+          2.3928,
+          2.6012,
+          3.579,
+          2.628
+        ],
+        "transition_max_tile_mae": [
+          18.8542,
+          13.5322,
+          12.6891,
+          12.0853,
+          11.8271
+        ],
+        "transition_start_indices": [
+          12,
+          10,
+          15,
+          5,
+          13
+        ],
+        "width": 5312
+      }
+    },
+    "rv2v_no_source_control": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_no_source_control/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "62451106cd426be036591a12e114bde930c62abee5357058cf4403f843005dd8",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1280,
+            2173
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "path": "cases/run_1/rv2v_no_source_control/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            603,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          0
+        ],
+        "sha256": "8585c0f21e4d94c86cdde732621415fa27b0fbfb5aa3f075dc483349420edc1d",
+        "sheet_contract_version": 3,
+        "source_frame_count": 1,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/rv2v_no_source_control/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          8,
+          9,
+          10,
+          11,
+          11,
+          12,
+          7,
+          8,
+          3,
+          4
+        ],
+        "sha256": "4d3fb60e2e0dd1dda84bff894c2d881d2905fb5ba508fdbaffec11896ee9bc8a",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 1.5247,
+          "latent_boundary_mean_global_mae": 7.2919,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 14.1835,
+          "max_local_tile_mae": 45.2425,
+          "mean_global_mae": 5.4098,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 4.7824,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          14.1835,
+          8.4336,
+          8.1788,
+          8.5475,
+          8.0011
+        ],
+        "transition_max_tile_mae": [
+          45.2425,
+          31.2568,
+          27.3626,
+          27.276,
+          24.8506
+        ],
+        "transition_start_indices": [
+          8,
+          10,
+          11,
+          7,
+          3
+        ],
+        "width": 5312
+      }
+    },
+    "rv2v_reference_black_ab": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_reference_black_ab/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "0edf1da3da9e4d92f1804e888ebad5c4acbac8d647824d6784760ba97207d9b6",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1254,
+            1254
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "path": "cases/run_1/rv2v_reference_black_ab/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            1024,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          0
+        ],
+        "sha256": "b364f7738353c411e27a316471c9f6776efccbfcc52a69e661dbedc2a478cc6c",
+        "sheet_contract_version": 3,
+        "source_frame_count": 1,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "source": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_reference_black_ab/source_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          11,
+          12,
+          14,
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          25
+        ],
+        "sha256": "ba7bae9ce70cb262268447512badbef5f73ff5d72559f6341143fc0abce6412f",
+        "sheet_contract_version": 3,
+        "source_frame_count": 125,
+        "timeline_group": "source",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/rv2v_reference_black_ab/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          12,
+          13,
+          0,
+          1,
+          13,
+          14,
+          4,
+          5,
+          8,
+          9
+        ],
+        "sha256": "b6e585f7ccd54c3fb30ccad43dfb12a8a29e14679871b2d84d306b3f06f56a7b",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 2.2645,
+          "latent_boundary_mean_global_mae": 5.2665,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 8.0106,
+          "max_local_tile_mae": 20.1165,
+          "mean_global_mae": 3.0609,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 2.3256,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          4.7221,
+          8.0106,
+          3.5181,
+          4.2723,
+          4.0609
+        ],
+        "transition_max_tile_mae": [
+          20.1165,
+          15.9528,
+          15.4645,
+          15.1097,
+          12.8148
+        ],
+        "transition_start_indices": [
+          12,
+          0,
+          13,
+          4,
+          8
+        ],
+        "width": 5312
+      }
+    },
+    "rv2v_reference_none_ab": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_reference_none_ab/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "edc6991cba1bafaead491402ebb5b3ba88e0cbe65059f647e75f77594e593bbb",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "source": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_reference_none_ab/source_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          11,
+          12,
+          14,
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          25
+        ],
+        "sha256": "f4af33289be0d19998a1ea6499874b894899d9c43f8b2ae7cc0574a95e65002d",
+        "sheet_contract_version": 3,
+        "source_frame_count": 125,
+        "timeline_group": "source",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/rv2v_reference_none_ab/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          0,
+          1,
+          8,
+          9,
+          13,
+          14,
+          12,
+          13,
+          4,
+          5
+        ],
+        "sha256": "3cef17312824affc91d50cb71834f606e8b0eb45beebdc5a59a9333d791d16e1",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 2.0738,
+          "latent_boundary_mean_global_mae": 6.1005,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 7.3346,
+          "max_local_tile_mae": 24.2998,
+          "mean_global_mae": 3.7314,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 2.9417,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          7.3346,
+          5.6191,
+          4.8948,
+          6.9904,
+          4.458
+        ],
+        "transition_max_tile_mae": [
+          24.2998,
+          19.3011,
+          17.9883,
+          17.5615,
+          17.1309
+        ],
+        "transition_start_indices": [
+          0,
+          8,
+          13,
+          12,
+          4
+        ],
+        "width": 5312
+      }
+    },
+    "rv2v_reference_pinstripe_ab": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_reference_pinstripe_ab/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "a445163d05559a92467a70193514aa4a8338b607962bef37189d514cc5ed0a27",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "references": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": true,
+        "height": 1296,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            1280,
+            2173
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "path": "cases/run_1/rv2v_reference_pinstripe_ab/reference_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            603,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          0
+        ],
+        "sha256": "b6a2d3b0476ada39b52569ccdcde1716be397c50dc625735c07d29abd8f4603b",
+        "sheet_contract_version": 3,
+        "source_frame_count": 1,
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "source": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/rv2v_reference_pinstripe_ab/source_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ],
+          [
+            563,
+            1024
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          2,
+          3,
+          5,
+          6,
+          8,
+          9,
+          11,
+          12,
+          14,
+          16,
+          17,
+          19,
+          20,
+          22,
+          23,
+          25
+        ],
+        "sha256": "eb838c4fdad39f86a2722986e706dc0e24e09dd4ec87efe996073885cfa30f01",
+        "sheet_contract_version": 3,
+        "source_frame_count": 125,
+        "timeline_group": "source",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ],
+          [
+            176,
+            320
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/rv2v_reference_pinstripe_ab/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ],
+          [
+            528,
+            960
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          0,
+          1,
+          12,
+          13,
+          8,
+          9,
+          4,
+          5,
+          13,
+          14
+        ],
+        "sha256": "93d69efd4e70d4e28d624d09ba63bc20ac3df253cf28b47e8266614c97227883",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 2.5814,
+          "latent_boundary_mean_global_mae": 5.9568,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 10.9263,
+          "max_local_tile_mae": 42.1061,
+          "mean_global_mae": 3.2199,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 2.3076,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          10.9263,
+          5.1324,
+          4.5591,
+          3.2094,
+          3.8423
+        ],
+        "transition_max_tile_mae": [
+          42.1061,
+          19.3076,
+          18.7952,
+          16.8574,
+          14.877
+        ],
+        "transition_start_indices": [
+          0,
+          12,
+          8,
+          4,
+          13
+        ],
+        "width": 5312
+      }
+    },
+    "v2v_snowman": {
+      "mlx": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": true,
+        "input_sizes": [
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/v2v_snowman/mlx_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "sha256": "fd49749b961e38ad580bcfbd2dee3fe514f099794499af65178e6bd03acfc581",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "timeline_group": "mlx",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_01": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 1,
+        "path": "cases/run_1/v2v_snowman/official_contact_sheet_page_01.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19
+        ],
+        "sha256": "2ba5860ee6fae922a5a494df0edb120c0728575e770c314ee19498e26f3a7df2",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_02": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 2,
+        "path": "cases/run_1/v2v_snowman/official_contact_sheet_page_02.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39
+        ],
+        "sha256": "931566f151385346c9907d53cde4114aacd5eccded2148fed4add4fef372622e",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_03": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 3,
+        "path": "cases/run_1/v2v_snowman/official_contact_sheet_page_03.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59
+        ],
+        "sha256": "b9cbd36fe33273673175e1aa8814f0d8c6a4c3b07989e69045334effb4abd695",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_04": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ],
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 5,
+        "page_number": 4,
+        "path": "cases/run_1/v2v_snowman/official_contact_sheet_page_04.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ],
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 20,
+        "sample_indices": [
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79
+        ],
+        "sha256": "8f909c15fc7121f07775f1c7aaea08e139d1a9bb9e09f1f2c687dcdb000b8016",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "official_page_05": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 1296,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            848,
+            480
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null
+        ],
+        "page_count": 5,
+        "page_number": 5,
+        "path": "cases/run_1/v2v_snowman/official_contact_sheet_page_05.png",
+        "rendered_sizes": [
+          [
+            1024,
+            580
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 1,
+        "sample_count": 1,
+        "sample_indices": [
+          80
+        ],
+        "sha256": "c47f6583782a7204673ee1d9c72b6aaed73d7bbf6f23112f44f2c48ac96e5ca6",
+        "sheet_contract_version": 3,
+        "source_frame_count": 81,
+        "timeline_group": "official",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "source": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 4656,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "page_count": 1,
+        "page_number": 1,
+        "path": "cases/run_1/v2v_snowman/source_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ],
+          [
+            1024,
+            563
+          ]
+        ],
+        "resampling": "lanczos",
+        "rows": 4,
+        "sample_count": 17,
+        "sample_indices": [
+          0,
+          2,
+          4,
+          6,
+          7,
+          9,
+          11,
+          13,
+          15,
+          17,
+          19,
+          20,
+          22,
+          24,
+          26,
+          28,
+          30
+        ],
+        "sha256": "45643b131758d736d909741473e9ecf86a9431c14c462ee54f96a0860d2b7850",
+        "sheet_contract_version": 3,
+        "source_frame_count": 150,
+        "timeline_group": "source",
+        "title_font_size": 52,
+        "width": 5312
+      },
+      "worst_transitions": {
+        "cell_height": 1024,
+        "cell_width": 1024,
+        "columns": 5,
+        "downsampled": false,
+        "height": 2416,
+        "includes_all_frames": false,
+        "input_sizes": [
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ],
+          [
+            320,
+            176
+          ]
+        ],
+        "integer_magnification": true,
+        "label_font_size": 32,
+        "magnifications": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ],
+        "path": "cases/run_1/v2v_snowman/mlx_worst_transitions_contact_sheet.png",
+        "rendered_sizes": [
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ],
+          [
+            960,
+            528
+          ]
+        ],
+        "resampling": "nearest",
+        "rows": 2,
+        "sample_count": 10,
+        "sample_indices": [
+          0,
+          1,
+          8,
+          9,
+          12,
+          13,
+          4,
+          5,
+          9,
+          10
+        ],
+        "sha256": "2fed5598a1742700ed36510701a58b622451d97ced8f6115eb192a8da021d4e6",
+        "sheet_contract_version": 3,
+        "source_frame_count": 17,
+        "temporal_diagnostics": {
+          "boundary_to_non_boundary_ratio": 2.0598,
+          "latent_boundary_mean_global_mae": 4.6411,
+          "latent_boundary_start_indices": [
+            0,
+            4,
+            8,
+            12
+          ],
+          "max_global_mae": 5.5924,
+          "max_local_tile_mae": 17.9219,
+          "mean_global_mae": 2.8502,
+          "near_freeze_start_indices": [],
+          "non_boundary_mean_global_mae": 2.2532,
+          "transition_count": 16
+        },
+        "title_font_size": 52,
+        "transition_global_mae": [
+          5.4903,
+          3.7802,
+          5.5924,
+          3.7014,
+          2.4538
+        ],
+        "transition_max_tile_mae": [
+          17.9219,
+          13.1895,
+          12.2848,
+          11.9401,
+          10.7884
+        ],
+        "transition_start_indices": [
+          0,
+          8,
+          12,
+          4,
+          9
+        ],
+        "width": 5312
+      }
+    }
+  },
+  "font": "Pillow embedded scalable default",
+  "pillow_version": "12.1.1",
+  "role_control": {
+    "cell_height": 768,
+    "cell_width": 1024,
+    "columns": 5,
+    "downsampled": false,
+    "height": 2768,
+    "input_sizes": [
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ]
+    ],
+    "label_font_size": 32,
+    "path": "role_control_contact_sheet.png",
+    "rendered_sizes": [
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ]
+    ],
+    "resampling": "nearest",
+    "rows": 3,
+    "sha256": "ae94b90b880f3525fc366f8639defd1d8ada750b23cf8d21db96d37c89f27605",
+    "sheet_contract_version": 3,
+    "title_font_size": 52,
+    "width": 5952
+  },
+  "schema_version": 1,
+  "sheet_contract_version": 3,
+  "summary": {
+    "cell_height": 768,
+    "cell_width": 1024,
+    "columns": 5,
+    "downsampled": false,
+    "height": 8816,
+    "input_sizes": [
+      [
+        320,
+        192
+      ],
+      [
+        320,
+        192
+      ],
+      [
+        320,
+        192
+      ],
+      [
+        320,
+        192
+      ],
+      [
+        320,
+        192
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        176,
+        320
+      ],
+      [
+        320,
+        176
+      ],
+      [
+        320,
+        176
+      ],
+      [
+        320,
+        176
+      ],
+      [
+        320,
+        176
+      ],
+      [
+        320,
+        176
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        128,
+        128
+      ]
+    ],
+    "label_font_size": 32,
+    "path": "output_summary_contact_sheet.png",
+    "rendered_sizes": [
+      [
+        1024,
+        614
+      ],
+      [
+        1024,
+        614
+      ],
+      [
+        1024,
+        614
+      ],
+      [
+        1024,
+        614
+      ],
+      [
+        1024,
+        614
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        422,
+        768
+      ],
+      [
+        1024,
+        563
+      ],
+      [
+        1024,
+        563
+      ],
+      [
+        1024,
+        563
+      ],
+      [
+        1024,
+        563
+      ],
+      [
+        1024,
+        563
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ],
+      [
+        768,
+        768
+      ]
+    ],
+    "resampling": "nearest",
+    "rows": 10,
+    "sha256": "5ce299ce5eea339ffe3ba3a765c3678eec4f9c8cfb572228b6be35ae202bd1be",
+    "sheet_contract_version": 3,
+    "title_font_size": 52,
+    "width": 5952
+  }
+}

@@ -22,11 +22,13 @@ The current quantized-model compatibility surface is:
 | FIBO | Supported with mixed q8/BF16 when source access is available | Supported with mixed q4/BF16 when source access is available | Base FIBO text-to-image only. FIBO Edit is a separate model family and is not exposed as a public unified generation capability in this release. |
 | SeedVR2 3B/7B | Supported | Supported | Image super-resolution through `mlxgen upscale`. Published q8/q4 packages are generated from the official `ByteDance-Seed/SeedVR2-3B` and `ByteDance-Seed/SeedVR2-7B` source models. |
 | Wan2.2 | Supported with mixed q8/BF16 | Not published | MLX-Gen keeps Wan conditioning/output projection linears BF16 and quantizes the bulky transformer block linears at q8. |
+| Bernini-R 1.3B | Rejected | Rejected | BF16-only. Generic Wan q4 failed transformer/video gates; nominal q8 quantized zero Bernini transformer linears and mislabeled BF16-equivalent execution. |
 
 MLX-Gen treats low-bit quality as model-specific, not automatic. Qwen and ERNIE use mixed q4/q8 policies to preserve generation quality. FIBO uses mixed q8/BF16 and q4/BF16 policies that keep precision-sensitive conditioning and output paths at BF16. Bonsai uses Prism's pre-packed ternary 2-bit transformer plus a 4-bit Qwen3 text encoder rather than MLX-Gen's `prepare` flow. q8 remains the closest optimized-package option to BF16 when memory allows.
 
 For image and video generation, the default optimized recommendation in MLX-Gen is still the
-validated q8 package when one exists. That is different from third-party FP8 checkpoint guidance.
+validated q8 package when one exists. Bernini is an explicit exception and rejects every
+`--quantize` value. That is different from third-party FP8 checkpoint guidance.
 For example, the upstream LightX2V Qwen Lightning README warns that BF16-trained Lightning LoRAs do
 not automatically behave well on every external FP8 Qwen base. That warning does not map 1:1 to
 MLX-Gen's published q8 packages. In MLX-Gen, prefer the documented q8 route plus the exact
@@ -90,6 +92,7 @@ package size is the published AbstractFramework repository total.
 | Wan2.2 TI2V-5B | T2V and first-frame I2V | 31.9 GiB | `wan2.2-ti2v-5b-diffusers-bf16`<br>`wan2.2-ti2v-5b-diffusers-8bit` | 21.2 GiB<br>16.9 GiB | BF16 package plus q8/BF16 package. BF16 reduces storage/download size versus the FP32/BF16 source snapshot but does not reduce measured runtime memory. q8 further reduces storage and MLX model/allocator footprint in the documented 1280x704 benchmark. No q4 or mixed q4/q8 package is published. |
 | Wan2.2 T2V-A14B | T2V | 117.5 GiB | `wan2.2-t2v-a14b-diffusers-bf16`<br>`wan2.2-t2v-a14b-diffusers-8bit` | 64.1 GiB<br>39.5 GiB | BF16 package plus mixed q8/BF16 package. Runtime measurements are below. |
 | Wan2.2 I2V-A14B | I2V | 117.5 GiB | `wan2.2-i2v-a14b-diffusers-bf16`<br>`wan2.2-i2v-a14b-diffusers-8bit` | 64.1 GiB<br>39.5 GiB | BF16 package plus mixed q8/BF16 package. Runtime measurements are below. |
+| Bernini-R 1.3B | R2V, RV2V, V2V renderer | 16.36 GiB selective pinned files | None | None | BF16-only factored source route. `mlxgen download --model bernini-r-1.3b` fetches the Wan base subset plus renderer transformer; no quantized package is published. |
 
 Runtime memory and timing measurements are currently complete in this document for SeedVR2 3B/7B,
 ERNIE Image Turbo, Bonsai Image, Wan TI2V-5B, and Wan A14B benchmark profiles. Other published
@@ -235,6 +238,19 @@ The combined sheet below stacks the 3B and 7B results from the same source image
 Qwen q8 uses the standard MLX-Gen/mflux quantization flow: quantizable modules are saved at 8-bit where the model layout supports MLX quantization, while VAE weights and non-quantizable layers remain BF16.
 
 Other model families use their existing model-specific quantization predicates.
+
+## Bernini-R Is BF16-Only
+
+Bernini does not inherit the ordinary Wan q8 recommendation. An exact packed-transformer probe
+measured generic q4 at cosine `0.782339` / relative L2 `0.71033` against official Torch, and the
+same-seed MP4 remained an overexposed latent-like texture. Generic Wan q8 skipped every Bernini
+transformer linear; its MP4 was byte-identical to BF16 while metadata claimed q8.
+
+The renderer therefore rejects all `--quantize` values. This is fail-closed behavior, not an
+absence of low-memory testing: the BF16 low-RAM media matrix peaked at 9.45 GB whole-process
+physical footprint. That matrix fails its visual-quality gate, so BF16 is the only numerically
+credible implementation path, not a production-quality endorsement. See the
+[quantization comparison and playable clips](assets/validation/bernini-r-1.3b-2026-08-04/README.md#quantization-diagnosis).
 
 ## Wan q8
 

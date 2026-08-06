@@ -19,8 +19,14 @@ from mflux.cli.runtime_events import CliRuntimeEventStream, cli_print
 from mflux.cli.seed_values import resolve_seed_values
 from mflux.models.common.config import ModelConfig
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
-from mflux.models.wan.variants import Wan2_2_TI2V, WanVace
-from mflux.utils.dimension_resolver import CANVAS_POLICY_CHOICES, RESIZE_MODE_CHOICES, RESIZE_MODE_RESIZE
+from mflux.models.wan.variants import BerniniRenderer, Wan2_2_TI2V, WanVace
+from mflux.utils.dimension_resolver import (
+    CANVAS_POLICY_CHOICES,
+    CANVAS_POLICY_EXACT_RESIZE,
+    CANVAS_POLICY_SOURCE_ASPECT,
+    RESIZE_MODE_CHOICES,
+    RESIZE_MODE_RESIZE,
+)
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError
 from mflux.utils.prompt_util import PromptUtil
 from mflux.utils.runtime_memory import RuntimeMemory
@@ -51,7 +57,8 @@ def main() -> None:
         _validate_model_runtime_args(args=args, model_config=model_config)
         _apply_runtime_memory_options(args)
         is_vace = bool(model_config.transformer_overrides.get("supports_vace", False))
-        model_class = WanVace if is_vace else Wan2_2_TI2V
+        is_bernini = bool(model_config.transformer_overrides.get("supports_bernini_renderer", False))
+        model_class = BerniniRenderer if is_bernini else (WanVace if is_vace else Wan2_2_TI2V)
         model = model_class(
             model_config=model_config,
             quantize=args.quantize,
@@ -145,6 +152,17 @@ def main() -> None:
                         generate_kwargs["conditioning_scale"] = args.conditioning_scale
                     if args.vace_masked_region is not None:
                         generate_kwargs["masked_region_mode"] = args.vace_masked_region
+                elif is_bernini:
+                    generate_kwargs.update(
+                        reference_image_paths=args.reference_image_paths,
+                        reference_guidance=args.reference_guidance,
+                        source_guidance=args.source_guidance,
+                        apg_eta=args.apg_eta,
+                        apg_norm_threshold=args.apg_norm_threshold,
+                        apg_momentum=args.apg_momentum,
+                        max_condition_size=args.max_condition_size,
+                        system_prompt=args.system_prompt,
+                    )
                 video = model.generate_video(**generate_kwargs)
                 cli_print(f"Saving video to: {output_path}", json_events=bool(args.json_events))
                 # The save event carries the output's own fps/frames/dimensions
@@ -173,7 +191,12 @@ def main() -> None:
                 mx.clear_cache()
             except Exception as exc:
                 failure_path = _write_failure_manifest(
-                    output_path=output_path, args=args, seed=seed, prompt=prompt, error=exc
+                    output_path=output_path,
+                    args=args,
+                    seed=seed,
+                    prompt=prompt,
+                    error=exc,
+                    component_source_provenance=getattr(model, "component_source_provenance", None),
                 )
                 _emit_cli_failure_progress(
                     progress,
@@ -413,8 +436,55 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
         help=(
-            "Reference image for Wan VACE models: injects the pictured subject/object into the "
-            "generation. Repeatable. Only supported on VACE model configs."
+            "Role-aware reference image for exact Wan VACE and Bernini-R model routes. On Bernini, "
+            "references describe subjects, objects, or style and are not first-frame anchors. Repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--reference-guidance",
+        type=float,
+        default=None,
+        help="Bernini-R only: guidance scale for reference-image conditioning. Default: model profile (4.5).",
+    )
+    parser.add_argument(
+        "--source-guidance",
+        type=float,
+        default=None,
+        help="Bernini-R only: guidance scale for source-video conditioning. Default: model profile (1.25).",
+    )
+    parser.add_argument(
+        "--apg-eta",
+        type=float,
+        default=None,
+        help="Bernini-R only: APG parallel-component weight. Default: model profile (0.5).",
+    )
+    parser.add_argument(
+        "--apg-norm-threshold",
+        type=float,
+        default=None,
+        help="Bernini-R only: APG per-frame norm cap, applied to each guidance stage. Default: 50.0.",
+    )
+    parser.add_argument(
+        "--apg-momentum",
+        type=float,
+        default=None,
+        help="Bernini-R only: APG running-delta momentum. Default: model profile (0.0).",
+    )
+    parser.add_argument(
+        "--max-condition-size",
+        type=_positive_int,
+        default=None,
+        help=(
+            "Bernini-R only: longest side used when independently encoding source video and reference images. "
+            "Default: model profile (848); maximum proven bound: 1280."
+        ),
+    )
+    parser.add_argument(
+        "--system-prompt",
+        default=None,
+        help=(
+            "Bernini-R only: exact task prefix concatenated to the cleaned prompt. "
+            "By default it is selected from R2V, RV2V, or V2V conditioning."
         ),
     )
     parser.add_argument(
@@ -684,6 +754,13 @@ def _apply_metadata_defaults(args: argparse.Namespace, argv_options: set[str] | 
         "solver",
         "canvas_policy",
         "resize_mode",
+        "reference_guidance",
+        "source_guidance",
+        "apg_eta",
+        "apg_norm_threshold",
+        "apg_momentum",
+        "max_condition_size",
+        "system_prompt",
     ):
         if name in ("steps", "flow_shift") and args.denoising_step_list is not None:
             continue
@@ -812,6 +889,7 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace, pr
 
 def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: ModelConfig) -> None:
     is_vace = bool(model_config.transformer_overrides.get("supports_vace", False))
+    is_bernini = bool(model_config.transformer_overrides.get("supports_bernini_renderer", False))
     if args.image_path is not None and not bool(
         model_config.transformer_overrides.get("supports_image_to_video", True)
     ):
@@ -824,7 +902,7 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
             "(expand_timesteps) has no last-frame slot. Use a Wan A14B image-to-video model."
         )
     if args.context_frames is not None and (
-        is_vace or bool(model_config.transformer_overrides.get("expand_timesteps", True))
+        is_vace or is_bernini or bool(model_config.transformer_overrides.get("expand_timesteps", True))
     ):
         # Same pre-load discipline for the multi-frame head (0102).
         raise ValueError(
@@ -833,7 +911,7 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
             "image-to-video model."
         )
     if args.svi_anchor_image is not None and (
-        is_vace or bool(model_config.transformer_overrides.get("expand_timesteps", True))
+        is_vace or is_bernini or bool(model_config.transformer_overrides.get("expand_timesteps", True))
     ):
         # Same pre-load discipline for SVI conditioning (0103).
         raise ValueError(
@@ -841,9 +919,9 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
             "needs the dual-expert Wan A14B image-to-video conditioning layout. Use a Wan A14B "
             "image-to-video model."
         )
-    if args.denoising_step_list is not None and is_vace:
+    if args.denoising_step_list is not None and (is_vace or is_bernini):
         raise ValueError(
-            "--denoising-step-list is not supported on Wan VACE models; explicit step grids target "
+            "--denoising-step-list is not supported on Wan VACE or Bernini-R models; explicit step grids target "
             "the Wan TI2V/A14B distill recipes."
         )
     if args.video_path is not None and not bool(
@@ -852,9 +930,10 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
         raise ValueError(f"{model_config.model_name} does not support video-to-video input.")
     if args.video_path is not None and args.solver is not None and str(args.solver).strip().lower() != "unipc":
         raise ValueError("Wan video-to-video currently requires --solver unipc.")
-    if args.reference_image_paths and not is_vace:
+    if args.reference_image_paths and not (is_vace or is_bernini):
         raise ValueError(
-            f"--reference-image requires a Wan VACE model config; {model_config.model_name} does not support it."
+            f"--reference-image requires an exact Wan VACE or Bernini-R model config; "
+            f"{model_config.model_name} does not support it."
         )
     if args.conditioning_scale is not None and not is_vace:
         raise ValueError(
@@ -869,6 +948,65 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
             "--video-strength is not supported on Wan VACE models: VACE has no SDEdit warm start. "
             "Use --video-mask-path and --conditioning-scale to control the edit."
         )
+    if is_bernini:
+        if args.max_sequence_length != 512:
+            raise ValueError("Bernini-R requires --max-sequence-length 512, matching the official renderer.")
+        if args.guidance_2 is not None:
+            raise ValueError("--guidance-2 is not supported on Bernini-R 1.3B; use --guidance for text guidance.")
+        if args.video_strength is not None:
+            raise ValueError(
+                "--video-strength is not supported on Bernini-R: the source video is a packed conditioning "
+                "segment, not an SDEdit warm start. Use --source-guidance to control its influence."
+            )
+        if args.video_mask_path is not None:
+            raise ValueError("--video-mask-path is not supported on the Bernini-R renderer-only integration.")
+        if args.lora_paths:
+            raise ValueError("LoRA loading is not validated for Bernini-R and is intentionally disabled.")
+        if args.video_path is not None and args.canvas_policy not in (None, CANVAS_POLICY_SOURCE_ASPECT):
+            raise ValueError(
+                "Bernini-R video conditioning supports only --canvas-policy source-aspect, matching the "
+                "official renderer."
+            )
+        if args.video_path is None and args.canvas_policy not in (None, CANVAS_POLICY_EXACT_RESIZE):
+            raise ValueError(
+                "Bernini-R reference-to-video has no source canvas; omit --canvas-policy or use exact-resize."
+            )
+        if args.resize_mode != RESIZE_MODE_RESIZE:
+            raise ValueError("Bernini-R supports only --resize-mode resize; crop and pad are not official modes.")
+        condition_limit = int(model_config.transformer_overrides.get("max_condition_size_limit", 1280))
+        if args.max_condition_size is not None and args.max_condition_size < 16:
+            raise ValueError("--max-condition-size must be at least 16 pixels for Bernini-R.")
+        if args.max_condition_size is not None and args.max_condition_size > condition_limit:
+            raise ValueError(
+                f"--max-condition-size must not exceed the official Bernini-R {condition_limit}px proven bound."
+            )
+        if args.max_condition_size is not None and args.max_condition_size % 16 != 0:
+            raise ValueError("--max-condition-size must be a multiple of 16 for Bernini packed latents.")
+        reference_count = len(args.reference_image_paths or [])
+        reference_limit = int(model_config.transformer_overrides.get("max_reference_images", 8))
+        if args.video_path is None and reference_count == 0:
+            raise ValueError(
+                "Bernini-R requires one source role before loading weights: pass --video for V2V or "
+                "one to eight --reference-image values for R2V."
+            )
+        if reference_count > reference_limit:
+            raise ValueError(
+                f"Bernini-R supports at most {reference_limit} ordered --reference-image values; "
+                f"received {reference_count}."
+            )
+    bernini_only_values = {
+        "--reference-guidance": args.reference_guidance,
+        "--source-guidance": args.source_guidance,
+        "--apg-eta": args.apg_eta,
+        "--apg-norm-threshold": args.apg_norm_threshold,
+        "--apg-momentum": args.apg_momentum,
+        "--max-condition-size": args.max_condition_size,
+        "--system-prompt": args.system_prompt,
+    }
+    if not is_bernini:
+        supplied = [name for name, value in bernini_only_values.items() if value is not None]
+        if supplied:
+            raise ValueError(f"{', '.join(supplied)} require a Bernini-R model config.")
     if args.reference_image_paths:
         for path in args.reference_image_paths:
             _probe_image_option(image_path=path, option="--reference-image")
@@ -880,7 +1018,11 @@ def _validate_model_runtime_args(*, args: argparse.Namespace, model_config: Mode
     if args.svi_anchor_image is not None:
         _probe_image_option(image_path=args.svi_anchor_image, option="--svi-anchor-image")
     if args.video_path is not None:
-        _probe_source_video(video_path=args.video_path, requested_frames=args.frames, requested_fps=args.fps)
+        _probe_source_video(
+            video_path=args.video_path,
+            requested_frames=None if is_bernini else args.frames,
+            requested_fps=args.fps,
+        )
     if args.video_mask_path is not None:
         _probe_video_mask(mask_path=args.video_mask_path, is_vace=is_vace)
 
@@ -937,10 +1079,12 @@ def _probe_source_video(
         source_info = VideoUtil.inspect_video(video_path)
     except Exception as exc:
         raise ValueError(f"--video-path is not a readable video: {video_path} ({exc})") from exc
+    source_frame_count = source_info.source_frame_count
+    if source_frame_count is not None and source_frame_count <= 0:
+        raise ValueError(f"--video-path has no frames: {video_path}")
     if requested_frames is None:
         return
     source_duration = getattr(source_info, "source_duration_seconds", None)
-    source_frame_count = source_info.source_frame_count
     if requested_fps and source_duration is not None:
         # Resampling samples the output timeline, so the requirement is duration-based. One
         # target-frame period of slack absorbs the fps filter's round=near boundary behavior.
@@ -1005,6 +1149,12 @@ def _apply_model_defaults(args: argparse.Namespace, model_config: ModelConfig, p
         "steps": ("default_steps", "--steps"),
         "guidance": ("default_guidance", "--guidance"),
         "flow_shift": ("flow_shift", "--flow-shift"),
+        "reference_guidance": ("default_reference_guidance", "--reference-guidance"),
+        "source_guidance": ("default_source_guidance", "--source-guidance"),
+        "apg_eta": ("default_apg_eta", "--apg-eta"),
+        "apg_norm_threshold": ("default_apg_norm_threshold", "--apg-norm-threshold"),
+        "apg_momentum": ("default_apg_momentum", "--apg-momentum"),
+        "max_condition_size": ("max_condition_size", "--max-condition-size"),
     }
     for attr, (config_key, option_name) in option_map.items():
         if option_name in provided_options:
@@ -1027,6 +1177,7 @@ def _apply_model_defaults(args: argparse.Namespace, model_config: ModelConfig, p
         and args.video_path is not None
         and args.video_strength is None
         and not wan_config.get("supports_vace", False)
+        and not wan_config.get("supports_bernini_renderer", False)
     ):
         # VACE has no SDEdit warm start; injecting a strength default would be false metadata.
         args.video_strength = WAN_DEFAULT_VIDEO_STRENGTH
@@ -1090,6 +1241,7 @@ def _write_failure_manifest(
     seed: int,
     prompt: str,
     error: BaseException,
+    component_source_provenance: dict | None = None,
 ) -> Path:
     resolved_output_path = str(output_path)
     failure_path = Path(resolved_output_path).with_suffix(".failure.json")
@@ -1122,6 +1274,14 @@ def _write_failure_manifest(
             "reference_image_paths": [str(path) for path in args.reference_image_paths]
             if args.reference_image_paths
             else None,
+            "reference_guidance": args.reference_guidance,
+            "source_guidance": args.source_guidance,
+            "apg_eta": args.apg_eta,
+            "apg_norm_threshold": args.apg_norm_threshold,
+            "apg_momentum": args.apg_momentum,
+            "max_condition_size": args.max_condition_size,
+            "system_prompt": args.system_prompt,
+            "component_source_provenance": dict(component_source_provenance or {}),
             "conditioning_scale": args.conditioning_scale,
             "vace_masked_region": args.vace_masked_region,
             "width": args.width,

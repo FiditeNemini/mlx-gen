@@ -220,6 +220,11 @@ class ModelConfig:
     def wan2_2_i2v_a14b() -> "ModelConfig":
         return AVAILABLE_MODELS["wan2.2-i2v-a14b"]
 
+    @staticmethod
+    @lru_cache
+    def bernini_r_1_3b() -> "ModelConfig":
+        return AVAILABLE_MODELS["bernini-r-1.3b"]
+
     def x_embedder_input_dim(self) -> int:
         if "Fill" in self.model_name:
             return 384
@@ -925,6 +930,102 @@ AVAILABLE_MODELS = {
             "default_steps": 30,
             "default_fps": 16,
             "default_guidance": 5.0,
+            "default_negative_prompt": WAN_DEFAULT_NEGATIVE_PROMPT,
+            "default_solver": "unipc",
+        },
+        text_encoder_overrides={
+            "model_type": "umt5",
+            "d_model": 4096,
+            "d_ff": 10240,
+            "num_layers": 24,
+            "num_heads": 64,
+            "vocab_size": 256384,
+        },
+    ),
+    "bernini-r-1.3b": ModelConfig(
+        priority=29,
+        aliases=[
+            "bernini-r-1.3b",
+            "bernini-r-1-3b",
+            "wan-bernini-r-1.3b",
+            "wan-bernini",
+            "bernini-r",
+        ],
+        inference_aliases=[],
+        model_name="ByteDance/Bernini-R-1.3B-Diffusers",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model="ByteDance/Bernini-R-1.3B-Diffusers",
+        num_train_steps=1000,
+        max_sequence_length=512,
+        supports_guidance=True,
+        requires_sigma_shift=False,
+        transformer_overrides={
+            "in_channels": 16,
+            "out_channels": 16,
+            "num_layers": 30,
+            "num_attention_heads": 12,
+            "attention_head_dim": 128,
+            "ffn_dim": 8960,
+            "patch_size": [1, 2, 2],
+            "expand_timesteps": False,
+            "has_transformer_2": False,
+            "boundary_ratio": None,
+            # The pinned checkpoint records shift=3, but the official renderer
+            # CLI overrides it to 5 for every published inference recipe.
+            "flow_shift": 5.0,
+            "unipc_flow_sigma_schedule": "diffusers-0.35.2",
+            "vae_variant": "wan21",
+            "vae_config": {
+                "base_dim": 96,
+                "decoder_base_dim": None,
+                "z_dim": 16,
+                "in_channels": 3,
+                "out_channels": 3,
+                "patch_size": 1,
+                "scale_factor_spatial": 8,
+                "scale_factor_temporal": 4,
+                "is_residual": False,
+            },
+            "task": "reference-to-video",
+            "supports_image_to_video": False,
+            "supports_video_to_video": True,
+            "supports_bernini_renderer": True,
+            "use_source_id_rotary_embedding": True,
+            "interpolate_source_ids": True,
+            "max_trained_source_id": 5,
+            "max_reference_images": 8,
+            "max_condition_size": 848,
+            "max_condition_size_limit": 1280,
+            # The stock components are compatible with Bernini and are resolved
+            # independently so bounded hosts do not download the 22.7 GB FP32
+            # text encoder duplicated in the renderer repository (ADR 0007).
+            "component_base_model": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+            "expected_component_base_revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+            "expected_transformer_revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+            "expected_renderer_config": {
+                "model_type": "bernini_renderer",
+                "skip_transformer_1": False,
+                "skip_transformer_2": True,
+                "max_sequence_length": 512,
+                "shift": 3.0,
+                "use_unipc": True,
+                "use_src_id_rotary_emb": True,
+            },
+            "expected_component_base_download_bytes": 11_890_921_787,
+            "expected_transformer_download_bytes": 5_676_148_056,
+            "download_headroom_bytes": 2 * 1024**3,
+            "default_width": 848,
+            "default_height": 480,
+            "default_frames": 81,
+            "default_steps": 40,
+            "default_fps": 16,
+            "default_guidance": 4.0,
+            "default_reference_guidance": 4.5,
+            "default_source_guidance": 1.25,
+            "default_apg_eta": 0.5,
+            "default_apg_norm_threshold": 50.0,
+            "default_apg_momentum": 0.0,
             "default_negative_prompt": WAN_DEFAULT_NEGATIVE_PROMPT,
             "default_solver": "unipc",
         },

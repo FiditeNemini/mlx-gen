@@ -303,8 +303,9 @@ def test_wan_generate_releases_high_noise_transformer_before_low_noise_call(monk
     class FakeScheduler:
         num_train_timesteps = 1000
 
-        def __init__(self, flow_shift):
+        def __init__(self, flow_shift, flow_sigma_schedule="endpoint-inclusive"):
             self.flow_shift = flow_shift
+            self.flow_sigma_schedule = flow_sigma_schedule
             self.timesteps = mx.array([], dtype=mx.int64)
 
         def set_timesteps(self, num_inference_steps):
@@ -535,8 +536,9 @@ def test_wan_generate_rejects_non_finite_latents_during_denoise(monkeypatch):
     class FakeScheduler:
         num_train_timesteps = 1000
 
-        def __init__(self, flow_shift):
+        def __init__(self, flow_shift, flow_sigma_schedule="endpoint-inclusive"):
             self.flow_shift = flow_shift
+            self.flow_sigma_schedule = flow_sigma_schedule
             self.timesteps = mx.array([], dtype=mx.int64)
 
         def set_timesteps(self, num_inference_steps):
@@ -679,8 +681,9 @@ def test_wan_video_to_video_uses_scalar_timesteps_when_route_enabled(monkeypatch
     class FakeScheduler:
         num_train_timesteps = 1000
 
-        def __init__(self, flow_shift):
+        def __init__(self, flow_shift, flow_sigma_schedule="endpoint-inclusive"):
             self.flow_shift = flow_shift
+            self.flow_sigma_schedule = flow_sigma_schedule
             self.timesteps = mx.array([], dtype=mx.int64)
 
         def set_timesteps(self, num_inference_steps):
@@ -1236,8 +1239,9 @@ def _patch_two_phase_scheduler(monkeypatch):
     class TwoPhaseScheduler:
         num_train_timesteps = 1000
 
-        def __init__(self, flow_shift):
+        def __init__(self, flow_shift, flow_sigma_schedule=None):
             self.flow_shift = flow_shift
+            self.flow_sigma_schedule = flow_sigma_schedule
             self.timesteps = mx.array([], dtype=mx.int64)
 
         def set_timesteps(self, num_inference_steps):
@@ -1524,9 +1528,10 @@ def _patch_fake_wan_generation(monkeypatch, model, scheduler_output=None, patch_
     class FakeScheduler:
         num_train_timesteps = 1000
 
-        def __init__(self, flow_shift):
+        def __init__(self, flow_shift, flow_sigma_schedule="endpoint-inclusive"):
             calls["scheduler_flow_shift"] = flow_shift
             self.flow_shift = flow_shift
+            self.flow_sigma_schedule = flow_sigma_schedule
             self.timesteps = mx.array([], dtype=mx.int64)
 
         def set_timesteps(self, num_inference_steps):

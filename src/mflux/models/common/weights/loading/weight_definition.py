@@ -40,6 +40,7 @@ class ComponentDefinition:
     num_layers: int | None = None
     loading_mode: str = "mlx_native"
     precision: mx.Dtype | None = None
+    precision_override: Callable[[str], mx.Dtype | None] | None = None
     skip_quantization: bool = False
     bulk_transform: Callable[[mx.array], mx.array] | None = None
     weight_subkey: str | None = None

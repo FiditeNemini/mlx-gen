@@ -1,0 +1,20 @@
+{
+  "cosine_similarity": 0.9999998692670866,
+  "kind": "bernini_official_full_transformer_parity",
+  "max_absolute_error": 0.0006049573421478271,
+  "mean_absolute_error": 0.00015580495119138504,
+  "passed": true,
+  "relative_l2": 0.0005369330391587793,
+  "schema_version": 1,
+  "shape": [
+    1,
+    16,
+    1,
+    4,
+    4
+  ],
+  "thresholds": {
+    "max_relative_l2": 0.05,
+    "min_cosine_similarity": 0.999
+  }
+}

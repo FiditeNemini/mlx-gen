@@ -1,0 +1,41 @@
+{
+  "dtype": "float32",
+  "seed": 8103,
+  "shapes": {
+    "condition_1": [
+      1,
+      16,
+      1,
+      2,
+      2
+    ],
+    "condition_2": [
+      1,
+      16,
+      1,
+      2,
+      4
+    ],
+    "encoder_hidden_states": [
+      1,
+      3,
+      4096
+    ],
+    "target": [
+      1,
+      16,
+      1,
+      4,
+      4
+    ],
+    "timestep": [
+      1
+    ]
+  },
+  "source_ids": [
+    1.0,
+    2.0,
+    0.0
+  ],
+  "target_segment_index": 2
+}

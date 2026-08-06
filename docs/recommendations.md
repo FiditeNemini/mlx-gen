@@ -15,12 +15,13 @@ Use the linked topic pages for the full command surface and benchmark details:
 - [Image edit capabilities](edit-capabilities.md)
 - [Image upscaling](upscaling.md)
 - [Wan video](wan-video.md)
+- [Bernini-R 1.3B](bernini.md)
 
 ## Recommended By Memory Tier
 
 | Memory tier | Text-to-image | Image-to-image and edit | Video generation | Upscaling and video restore |
 | --- | --- | --- | --- | --- |
-| `18 GB` | Start with `prism-ml/bonsai-image-ternary-4B-mlx-2bit`, `AbstractFramework/flux.2-klein-4b-8bit`, or `AbstractFramework/ernie-image-turbo-8bit`. | Use `ernie-image-turbo-8bit` for latent restyle and `flux.2-klein-4b-8bit` for lighter edit/reference work. Avoid Qwen edit and control routes here. | No conservative Wan recommendation from the published full-memory proofs. | `seedvr2-3b` and `seedvr2-7b` image upscaling packages fit comfortably. Treat published SeedVR2 video restore as a higher-memory workflow. |
+| `18 GB` | Start with `prism-ml/bonsai-image-ternary-4B-mlx-2bit`, `AbstractFramework/flux.2-klein-4b-8bit`, or `AbstractFramework/ernie-image-turbo-8bit`. | Use `ernie-image-turbo-8bit` for latent restyle and `flux.2-klein-4b-8bit` for lighter edit/reference work. Avoid Qwen edit and control routes here. | No production recommendation. Bernini-R 1.3B fits the tested low-RAM memory shapes but is experimental because every required visual-quality row fails. | `seedvr2-3b` and `seedvr2-7b` image upscaling packages fit comfortably. Treat published SeedVR2 video restore as a higher-memory workflow. |
 | `24 GB` | Add `AbstractFramework/fibo-8bit`, `AbstractFramework/z-image-turbo-8bit`, and `AbstractFramework/qwen-image-2512-8bit` text-only runs. | `z-image-turbo-8bit` latent and native inpaint become practical. `flux.2-klein-4b-8bit` remains the lighter edit default. | No conservative Wan A14B recommendation since the 2026-06-12 q8 runtime-precision fix (A14B now needs BF16-class memory, ~33 GiB physical peak). | SeedVR2 image upscaling remains easy. The published five-second video-restore profile still needs more headroom than this tier. |
 | `32 GB` | The 24 GB image recommendations remain good with more headroom. | `qwen-image-2512-8bit` text-only runs are comfortable. For edit-heavy work, `z-image-turbo-8bit` and `flux.2-klein-4b-8bit` are still the safer defaults than Qwen Edit. | Wan A14B runs at BF16-class memory since 2026-06-12 (~33 GiB physical peak at the small low-RAM profile), above this tier's conservative envelope. | `seedvr2-3b-8bit` published `29/8` five-second video restore is in range; `seedvr2-7b` video restore is still above this tier in the published profile. |
 | `64 GB` | All image families above are practical. | Add `AbstractFramework/qwen-image-edit-2511-8bit` for strong layout-preserving edit/reference work, plus `AbstractFramework/qwen-image-8bit` control and control-inpaint. | Wan A14B (q8 storage or BF16; both run at BF16-class memory, ~33 GiB physical peak in the small low-RAM profile) is the first conservative tier for A14B video. | `seedvr2-7b` image upscaling is easy. For published video-restore proofs, keep using `seedvr2-3b` unless you have more than 64 GB free. |
@@ -47,11 +48,17 @@ Use the linked topic pages for the full command surface and benchmark details:
 | T2V | `AbstractFramework/wan2.2-t2v-a14b-diffusers-8bit` | `384x224`, `33` frames, `12` steps, low-RAM | `33.0 GiB` physical peak (BF16-class since the 2026-06-12 q8 runtime fix; pre-fix value was `20.7 GiB`) |
 | I2V | `AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit` | `384x384`, `33` frames, `12` steps, low-RAM | `33.7 GiB` physical peak (BF16-class since the 2026-06-12 q8 runtime fix; pre-fix value was `21.5 GiB`) |
 | T2V / I2V | `AbstractFramework/wan2.2-ti2v-5b-diffusers-8bit` | `1280x704`, `17` frames, `20` steps | `103.7 GiB` physical peak |
+| R2V | `ByteDance/Bernini-R-1.3B-Diffusers` factored BF16 | `320x192`, `17` frames, `20` steps, 8 references, low-RAM | `9.12 GB` sampled physical peak |
+| RV2V | `ByteDance/Bernini-R-1.3B-Diffusers` factored BF16 | `176x320`, `17` frames, `20` steps, source + reference, low-RAM | `9.22 GB` sampled physical peak |
+| V2V control | `ByteDance/Bernini-R-1.3B-Diffusers` factored BF16 | `176x320`, `17` frames, `20` steps, source only, low-RAM | `9.45 GB` sampled physical peak |
 
 ## Practical Reading
 
-- `18 GB` is enough for compact image families and SeedVR2 image upscaling, but not for the
-  published full-memory Wan or SeedVR2 video profiles.
+- `18 GB` is enough for compact image families and SeedVR2 image upscaling. Bernini BF16 low-RAM
+  fits the tested shapes (9.45 GB maximum bounded-matrix peak; 8.17 GB for the 33-frame,
+  eight-reference 848-condition structural probe), but it is not recommended for production:
+  its visual release gate fails. The official 81-frame profile remains unmeasured, and a fresh
+  selective download separately needs 18.36 GiB free disk including headroom.
 - `64 GB` is the first conservative tier for Wan A14B video: since the 2026-06-12 q8
   runtime-precision fix, A14B runs at BF16-class memory (~33 GiB physical peak even at the small
   low-RAM benchmark profile).

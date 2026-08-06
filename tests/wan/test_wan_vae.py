@@ -1,5 +1,6 @@
 import mlx.core as mx
 import numpy as np
+import pytest
 
 from mflux.models.common.config import ModelConfig
 from mflux.models.fibo.model.fibo_vae.common.wan_2_2_rms_norm import Wan2_2_RMSNorm
@@ -105,9 +106,7 @@ def test_wan_i2v_precision_condition_build_is_bitwise_identical_to_f32_concat_ca
     old_latents = vae.encode_normalized(old_condition)
     new_latents = vae.encode_normalized(new_condition)
     mx.eval(old_latents, new_latents)
-    np.testing.assert_array_equal(
-        np.array(new_latents.astype(mx.float32)), np.array(old_latents.astype(mx.float32))
-    )
+    np.testing.assert_array_equal(np.array(new_latents.astype(mx.float32)), np.array(old_latents.astype(mx.float32)))
 
 
 def test_wan_vae_encode_normalized_first_frame_matches_i2v_condition_shape():
@@ -130,11 +129,143 @@ def test_wan_vae_encode_normalized_video_handles_17_frame_clip():
     assert latents.shape == (1, 48, 5, 4, 4)
 
 
+def test_wan_vae_low_ram_encode_matches_default(monkeypatch):
+    mx.random.seed(19)
+    vae = Wan2_2_VAE()
+    video = mx.random.normal((1, 3, 17, 64, 64), dtype=mx.float32)
+    expected = vae.encode_normalized(video)
+    mx.eval(expected)
+    clear_calls = []
+    monkeypatch.setattr(
+        "mflux.models.wan.model.wan_vae.wan_2_2_vae.mx.clear_cache",
+        lambda: clear_calls.append(True),
+    )
+
+    actual = vae.encode_normalized(video, clear_cache_each_slice=True)
+    mx.eval(actual)
+
+    np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))
+    assert clear_calls == [True] * 5
+
+
+def test_wan21_vae_spatial_tiling_handles_short_edge_tiles_and_streams_full_shape():
+    vae = Wan2_2_VAE(
+        base_dim=8,
+        decoder_base_dim=8,
+        z_dim=4,
+        dim_mult=[1, 1, 1, 1],
+        num_res_blocks=1,
+        in_channels=3,
+        out_channels=3,
+        patch_size=1,
+        scale_factor_spatial=8,
+        scale_factor_temporal=4,
+        is_residual=False,
+        latents_mean=[0.0] * 4,
+        latents_std=[1.0] * 4,
+    )
+    vae.tile_sample_min_height = 32
+    vae.tile_sample_min_width = 32
+    vae.tile_sample_stride_height = 24
+    vae.tile_sample_stride_width = 24
+    mx.random.seed(23)
+    video = mx.random.normal((1, 3, 5, 48, 56), dtype=mx.float32)
+
+    latents = vae.encode_normalized(
+        video,
+        clear_cache_each_slice=True,
+        tile_spatial=True,
+    )
+    decoded_slices = list(
+        vae.iter_decode_normalized_latent_slices(
+            latents,
+            clear_cache_each_slice=True,
+            tile_spatial=True,
+        )
+    )
+    decoded = mx.concatenate(decoded_slices, axis=2)
+    aggregate = vae.decode_normalized_latents(
+        latents,
+        clear_cache_each_slice=True,
+        tile_spatial=True,
+    )
+    mx.eval(latents, decoded, aggregate)
+
+    assert latents.shape == (1, 4, 2, 6, 7)
+    assert [item.shape for item in decoded_slices] == [(1, 3, 1, 48, 56), (1, 3, 4, 48, 56)]
+    assert decoded.shape == aggregate.shape == video.shape
+    np.testing.assert_array_equal(np.asarray(decoded), np.asarray(aggregate))
+
+
+def test_wan21_vae_spatial_decode_uses_one_temporal_cache_per_tile(monkeypatch):
+    vae = Wan2_2_VAE(
+        base_dim=8,
+        decoder_base_dim=8,
+        z_dim=4,
+        dim_mult=[1, 1, 1, 1],
+        num_res_blocks=1,
+        in_channels=3,
+        out_channels=3,
+        patch_size=1,
+        scale_factor_spatial=8,
+        scale_factor_temporal=4,
+        is_residual=False,
+        latents_mean=[0.0] * 4,
+        latents_std=[1.0] * 4,
+    )
+    vae.tile_sample_min_height = 32
+    vae.tile_sample_min_width = 32
+    vae.tile_sample_stride_height = 24
+    vae.tile_sample_stride_width = 24
+    original_decoder = vae.decoder
+    calls = []
+    cache_index = 0
+
+    class TaggedCache(list):
+        pass
+
+    class RecordingDecoder:
+        def __call__(self, *args, **kwargs):
+            calls.append((kwargs["feat_cache"].tile_index, kwargs["first_chunk"]))
+            return original_decoder(*args, **kwargs)
+
+    def new_cache():
+        nonlocal cache_index
+        cache = TaggedCache([None] * 64)
+        cache.tile_index = cache_index
+        cache_index += 1
+        return cache
+
+    monkeypatch.setattr(vae, "decoder", RecordingDecoder())
+    monkeypatch.setattr(vae, "_new_feature_cache", new_cache)
+
+    decoded = list(
+        vae.iter_decode_normalized_latent_slices(
+            mx.zeros((1, 4, 2, 6, 7), dtype=mx.float32),
+            clear_cache_each_slice=True,
+            tile_spatial=True,
+        )
+    )
+    mx.eval(*decoded)
+
+    assert calls == [(tile_index, first_chunk) for tile_index in range(6) for first_chunk in (True, False)]
+
+
+def test_wan_vae_spatial_tiling_fails_closed_for_patch_size_two():
+    vae = Wan2_2_VAE()
+
+    with pytest.raises(ValueError, match="patch-size-1"):
+        vae.decode_normalized_latents(
+            mx.zeros((1, 48, 2, 4, 4), dtype=mx.float32),
+            tile_spatial=True,
+        )
+
+
 def test_wan_vae_rms_norm_normalizes_bf16_inputs_in_fp32():
     norm = Wan2_2_RMSNorm(dim=4, images=False)
-    x = mx.array(
-        np.linspace(-12.0, 12.0, 1 * 4 * 2 * 2 * 2, dtype=np.float32).reshape(1, 4, 2, 2, 2)
-    ).astype(mx.bfloat16)
+    x = mx.array(np.linspace(-12.0, 12.0, 1 * 4 * 2 * 2 * 2, dtype=np.float32).reshape(1, 4, 2, 2, 2)).astype(
+        mx.bfloat16
+    )
 
     output = norm(x)
     mx.eval(output)

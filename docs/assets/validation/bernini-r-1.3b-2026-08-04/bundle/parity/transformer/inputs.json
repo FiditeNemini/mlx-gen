@@ -1,0 +1,50 @@
+{
+  "checkpoint_revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+  "dtype": "float32",
+  "input_sha256": "953c24f9f34bf8055a8e41022ee5372b8c02fa74195e6e994d837950b37dcdcd",
+  "official_source_revision": "2d2b4591ac053ec25c6371b01a5a6746679e5793",
+  "seed": 8103,
+  "shapes": {
+    "condition_1": [
+      1,
+      16,
+      1,
+      2,
+      2
+    ],
+    "condition_2": [
+      1,
+      16,
+      1,
+      2,
+      4
+    ],
+    "encoder_hidden_states": [
+      1,
+      3,
+      4096
+    ],
+    "rotary_query": [
+      1,
+      7,
+      12,
+      128
+    ],
+    "target": [
+      1,
+      16,
+      1,
+      4,
+      4
+    ],
+    "timestep": [
+      1
+    ]
+  },
+  "source_ids": [
+    1.0,
+    2.0,
+    0.0
+  ],
+  "target_segment_index": 2
+}

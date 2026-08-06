@@ -1,0 +1,129 @@
+{
+  "schema_version": 3,
+  "reviewed_at": "2026-08-04T06:22:34+02:00",
+  "reviewer": "Codex all-frame visual inspection with two adversarial reviews",
+  "scope": "Every MLX output frame was inspected at original detail through the all-frame 5K sheets and the MP4s. Every official comparison frame, every exact conditioned source frame, and each clip's five highest-MAE transitions are also rendered. Dispositions are bound to each reviewed MP4, every per-case sheet, the overview sheets, and the sheet manifest by SHA-256. Evidence completeness is separate from the required visual-quality gate.",
+  "summary_contact_sheet_sha256": "5ce299ce5eea339ffe3ba3a765c3678eec4f9c8cfb572228b6be35ae202bd1be",
+  "role_control_contact_sheet_sha256": "ae94b90b880f3525fc366f8639defd1d8ada750b23cf8d21db96d37c89f27605",
+  "sheet_manifest_sha256": "1f4ec59ca6c390ff6bc1a87ace5b1d7a60cabee713ac1048c6be04d75974cc8a",
+  "cases": {
+    "r2v_eight_reference": {
+      "status": "fail",
+      "output_sha256": "b13faa921a7db7a119324e80223c949fc79924a630673db5c061a61027e77ae8",
+      "sheet_sha256": {
+        "mlx": "af68e3ee2c024da3881ad40ee5b17118f04ed5891230cde148cf12d360252655",
+        "official_page_01": "1c812d48d367a0c43efa9421e6a1735ac30dfa70e5c463670d5bdd96cc14149a",
+        "official_page_02": "f380aefc2fd93a5bb400b999b2834308fb7e41bf3d64daa24cf8e0cb4b39165f",
+        "official_page_03": "b828626838b56586b7c1a96f591ece3a46ca70ff45e6b41ef477a516be4e9562",
+        "official_page_04": "5ff61d8b4d87afc34376a488be22548dfb621c06135b05e629c134ed5d298709",
+        "official_page_05": "bbd5f16fb37b0bd202cdcd21df63cd5f8890c567b00116bde1937bcd1d1a989d",
+        "references": "76ce687943e4c34c81c372ea13bf00fd0b5fd08dc09996cdc247bb951609f721",
+        "worst_transitions": "75431a9598efc178cc26cb3dbf18497a6b98aa6c849f2540c032626f2c30da6d"
+      },
+      "notes": "The 17-frame output is nearly static and does not perform the requested cup lift, sip, lowering, or music-bobbing motion. The face is blurred and featureless, and the headphones and cup do not transfer visibly. Shirt, shorts, bench, marble material, and sunset transfer partially. Large discontinuities occur at frames 0-to-1, 4-to-5, 8-to-9, and 12-to-13, aligned with temporal latent-slice boundaries. This fails the required motion, reference-fidelity, and temporal-quality criteria."
+    },
+    "rv2v_garment": {
+      "status": "fail",
+      "output_sha256": "e70f01590db4c14298ae7cdc7de07acd7c20ec000d39eb441723e98bb1ad63d7",
+      "sheet_sha256": {
+        "mlx": "b67bbc779929cbf76cf9e1c68bfa68123ffd5707b2e0516c555d3b0788520acf",
+        "official_page_01": "d2ac7fb02d9c0ac8e48c33f8641a1c17b7d9440bfc1aca6e4e3f9d66a3494547",
+        "official_page_02": "5e2e3b7517c0a8fb70016a9cd05d61c378f6e15cf5c3f14a67a435344318f241",
+        "official_page_03": "ddc5eea598364565faef30f2df1ec1bbd67663d1195c126aea93986026b2a680",
+        "official_page_04": "395f79b8c7a115c238c8e723eea64238cb21d30b4c4c3dcbea98a7b207f7d804",
+        "official_page_05": "1d379ca573472b45c76842b8d6c4d0e67e040d428cfec7bee40f47c620da5259",
+        "references": "68348cc185eed0b14b8cc97b35cf6ce61f93b171f9e1761c573b8280a61032d0",
+        "source": "73ff1d0f93fa0490c7ad27ca55a9c12728598f975b8c768c6b6686a9955f9848",
+        "worst_transitions": "524e6271412c688fe8020a2c29ced7dfd36cb2fa45e59d5ef8692703c19fd59e"
+      },
+      "notes": "The pinstripe garment edit is partially visible and the person and framing remain recognizable, but motion is nearly static and frames 13 through 16 contain conspicuous block, doubling, and subject-corruption artifacts. The corruption affects roughly the final quarter of the output, not one isolated sampled frame. This fails the required clean temporal-quality criterion."
+    },
+    "rv2v_no_reference_control": {
+      "status": "negative_result",
+      "output_sha256": "ff9204287cd9eddab8e2cac5cddcdc36c02ac62780df39c3f5c64b997104f4dd",
+      "sheet_sha256": {
+        "mlx": "82dc1a671d9bda1492f8d99d0425482939149cf60d726dac93033c7c9b9e49e8",
+        "source": "d0992cee7bbf7986b6f16386bb6c47332dbe77bc015c0fb5ee35048a79ff810a",
+        "worst_transitions": "67ee90cc331924918d7b5e43333684bc186ebf49b4c4cc6d52ecdc5725b6a9b8"
+      },
+      "notes": "This control remains text-confounded because the prompt itself requests pinstripes. It is nearly static and its tail degrades, so it records diagnostic execution but cannot support a reference-role or quality pass."
+    },
+    "rv2v_no_source_control": {
+      "status": "negative_result",
+      "output_sha256": "f55f201e8c496d8f2c64aea9b6721828dae56f5e3699c1b5d6fb32a4b42259de",
+      "sheet_sha256": {
+        "mlx": "62451106cd426be036591a12e114bde930c62abee5357058cf4403f843005dd8",
+        "references": "8585c0f21e4d94c86cdde732621415fa27b0fbfb5aa3f075dc483349420edc1d",
+        "worst_transitions": "4d3fb60e2e0dd1dda84bff894c2d881d2905fb5ba508fdbaffec11896ee9bc8a"
+      },
+      "notes": "Removing the source changes the person and composition, which is diagnostically consistent with the source role, but the generated person is artificial and detached-looking and the output is nearly static. This is a role-control negative result, not quality evidence."
+    },
+    "rv2v_reference_pinstripe_ab": {
+      "status": "fail",
+      "output_sha256": "ac447a502bda2287ee87657431bcfb37cc374435f317c5fd55703083ec863e91",
+      "sheet_sha256": {
+        "mlx": "a445163d05559a92467a70193514aa4a8338b607962bef37189d514cc5ed0a27",
+        "references": "b6a2d3b0476ada39b52569ccdcde1716be397c50dc625735c07d29abd8f4603b",
+        "source": "eb838c4fdad39f86a2722986e706dc0e24e09dd4ec87efe996073885cfa30f01",
+        "worst_transitions": "93d69efd4e70d4e28d624d09ba63bc20ac3df253cf28b47e8266614c97227883"
+      },
+      "notes": "The pale pinstripe reference changes the garment, demonstrating some reference sensitivity, but green sleeve artifacts, weak motion, and degradation across frames 13 through 16 make the result unacceptable as a required-quality case."
+    },
+    "rv2v_reference_black_ab": {
+      "status": "fail",
+      "output_sha256": "b10c410f234c713057aa244be2712c8d4244739bdff57b1975dcbadd7df654cc",
+      "sheet_sha256": {
+        "mlx": "0edf1da3da9e4d92f1804e888ebad5c4acbac8d647824d6784760ba97207d9b6",
+        "references": "b364f7738353c411e27a316471c9f6776efccbfcc52a69e661dbedc2a478cc6c",
+        "source": "ba7bae9ce70cb262268447512badbef5f73ff5d72559f6341143fc0abce6412f",
+        "worst_transitions": "b6e585f7ccd54c3fb30ccad43dfb12a8a29e14679871b2d84d306b3f06f56a7b"
+      },
+      "notes": "The floral overshirt largely remains; the black T-shirt and Bernini logo do not transfer faithfully. Motion is weak and the tail degrades. Although the output differs from the pinstripe row, difference alone does not satisfy reference fidelity, so this required-quality case fails."
+    },
+    "rv2v_reference_none_ab": {
+      "status": "negative_result",
+      "output_sha256": "16c68a54043501b617908af54fa67b460daedc62ca81ebd40277e8d6a9b746f2",
+      "sheet_sha256": {
+        "mlx": "edc6991cba1bafaead491402ebb5b3ba88e0cbe65059f647e75f77594e593bbb",
+        "source": "f4af33289be0d19998a1ea6499874b894899d9c43f8b2ae7cc0574a95e65002d",
+        "worst_transitions": "3cef17312824affc91d50cb71834f606e8b0eb45beebdc5a59a9333d791d16e1"
+      },
+      "notes": "The floral shirt remains, as expected without a reference, but the row switches to the no-reference V2V APG branch and is not a strict reference-presence ablation. Its weak motion and tail degradation make it diagnostic context only."
+    },
+    "v2v_snowman": {
+      "status": "fail",
+      "output_sha256": "ecb8e77f5e89227991bb7f5e1ff3eeb29dfe49a55b0d187d72ce1a3c54fef249",
+      "sheet_sha256": {
+        "mlx": "fd49749b961e38ad580bcfbd2dee3fe514f099794499af65178e6bd03acfc581",
+        "official_page_01": "2ba5860ee6fae922a5a494df0edb120c0728575e770c314ee19498e26f3a7df2",
+        "official_page_02": "931566f151385346c9907d53cde4114aacd5eccded2148fed4add4fef372622e",
+        "official_page_03": "b9cbd36fe33273673175e1aa8814f0d8c6a4c3b07989e69045334effb4abd695",
+        "official_page_04": "8f909c15fc7121f07775f1c7aaea08e139d1a9bb9e09f1f2c687dcdb000b8016",
+        "official_page_05": "c47f6583782a7204673ee1d9c72b6aaed73d7bbf6f23112f44f2c48ac96e5ca6",
+        "source": "45643b131758d736d909741473e9ecf86a9431c14c462ee54f96a0860d2b7850",
+        "worst_transitions": "2fed5598a1742700ed36510701a58b622451d97ced8f6115eb192a8da021d4e6"
+      },
+      "notes": "The dog and snowy path remain recognizable and a small cartoon-like snowman appears, but the result is nearly static and frames 13 through 16 contain severe cyan and block corruption. This fails the requested realistic edit and clean temporal-quality criteria."
+    },
+    "r2v_848_condition_smoke": {
+      "status": "structural_only",
+      "output_sha256": "bb4122738c4a54e7b6aa97c3db864b0887a786ffa78b01e93c8b64f9a11121dd",
+      "sheet_sha256": {
+        "mlx": "6c7e592f9fe6effc1071a9e1c6c91636387d9f76ce3b235715dd474c38b1f087",
+        "references": "073e0535ddd697abc50526a9dfc50944d8135afc41eb44e7db95d91f314d8768",
+        "worst_transitions": "88d60bd524f5ff14aa68be6da3677d76f56d8cff5c4dbadc9b46066ff5fd31d5"
+      },
+      "notes": "The one-step 128x128 output is blurred colored noise. It proves only that the 848px condition-size structural path produces a decodable five-frame MP4 within the sampled memory envelope; it is not quality evidence."
+    },
+    "r2v_1280_condition_smoke": {
+      "status": "structural_only",
+      "output_sha256": "b442a7025a76bac872f7bffe350b6d9b66f28cd78e0a3db4b4872afef10dc5dd",
+      "sheet_sha256": {
+        "mlx": "ba0669533918dbecd238e6e2a9f294813d878032bafcdd8f114584ef3a50c805",
+        "references": "12263cae838e136e31c374ca4f2d74497b76a8f1194a6fab0b1804a15f2c77a7",
+        "worst_transitions": "59b19eed3179d5c50e35b65ffb8c8f414b6b72a3233ba43cd37e0f0f0aa641c7"
+      },
+      "notes": "The one-step 128x128 output is blurred colored noise. It proves only that the 1280px condition-size structural path produces a decodable five-frame MP4 within the sampled memory envelope; it is not quality evidence."
+    }
+  }
+}

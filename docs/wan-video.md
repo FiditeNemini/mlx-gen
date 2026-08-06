@@ -5,6 +5,10 @@ prompt-guided video-to-video on `Wan2.2-T2V-A14B` in plain form or with `--video
 this page for practical size, frame, and runtime guidance; use [API and CLI](api.md#wan-video) for
 the full command surface.
 
+For ordinary reference-image-to-video and reference-guided source-video editing, use the separate
+[Bernini-R 1.3B](bernini.md) renderer. Bernini shares Wan components but has different packed
+source-ID conditioning, guidance, precision, and canvas contracts.
+
 ## Current Practical Guidance
 
 Wan A14B is the stronger local option in the measured starship example below when you can accept a
@@ -153,7 +157,8 @@ Route rules:
   [Masked Video-To-Video](#masked-video-to-video) below);
 - do not expect reference images, control videos, SeedVR2-style restore/upscale behavior, or
   VACE-style learned conditioning on this A14B route - those live on the natively ported
-  `wan-vace` model (see [VACE](#vace-reference-images-and-learned-mask-conditioning) below);
+  `wan-vace` model (see [VACE](#vace-reference-images-and-learned-mask-conditioning) below) or the
+  role-aware [Bernini renderer](bernini.md);
 - do not expect TI2V-5B or I2V-A14B to accept source-video input on the public CLI.
 
 ## Continuing A Clip: Multi-Frame Context Conditioning
@@ -166,7 +171,7 @@ the handover window and `--context-frames` the ordered rest — 4, 8, or 12 fram
 conditioned head (5, 9, or 13 frames) fills whole 4x VAE latent groups.
 
 ```bash
-# Predecessor tail frames f44..f48 extracted as PNGs; head = 5 frames.
+# Predecessor tail frames f44..f48 extracted as ONGs; head = 5 frames.
 mlxgen generate --model AbstractFramework/wan2.2-i2v-a14b-diffusers-8bit \
   --prompt "the ship continues rising, camera static" \
   --image f44.png --context-frames f45.png f46.png f47.png f48.png \

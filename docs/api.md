@@ -30,8 +30,10 @@ Reader-first workflow split:
 | --- | --- | --- |
 | Only a prompt | A new image or a new video | `mlxgen generate` |
 | One image | Image editing, reframe/outpaint, or Wan first-frame image-to-video | `mlxgen generate` |
+| One to eight reference images | A Bernini reference-guided video | `mlxgen generate --model bernini-r-1.3b --reference-image ...` |
 | One video clip | SeedVR2 restoration or upscale, with no prompt | `mlxgen upscale --video-path ...` |
 | One video clip | Prompt-guided content change | `mlxgen generate --model Wan-AI/Wan2.2-T2V-A14B-Diffusers --video-path ...` |
+| One video plus reference images | A Bernini reference-guided edit | `mlxgen generate --model bernini-r-1.3b --video ... --reference-image ...` |
 
 That recommendation is especially important for application integrations that shell out to a
 subprocess. Use `mlxgen generate` instead of calling model-family commands such as
@@ -40,7 +42,8 @@ the command contract that MLX-Gen documents, tests, and evolves for integrations
 
 For a full copy/pasteable workflow that exercises T2I, I2I edit, multi-reference I2I, T2V A14B,
 and I2V A14B, see [Spaceship Snow Workflow](examples/spaceship-snow.md). For practical Wan size
-and runtime examples, see [Wan Video](wan-video.md).
+and runtime examples, see [Wan Video](wan-video.md). For role-aware reference video, see
+[Bernini-R 1.3B](bernini.md).
 
 ## Generation Router
 
@@ -63,9 +66,11 @@ mlxgen capabilities --model flux2-klein-4b
 ```
 
 The JSON includes each route-supported public task, internal mode, image count, route handler, and
-option support. Route support means MLX-Gen knows how to dispatch and validate options; it is not a
-claim that a model/package passed visual release QA. Applications can use the same contract from
-Python through `get_model_capabilities(...)` and `resolve_generation_plan(...)`. For custom
+option support. Capabilities schema 8 adds `min_reference_images` and `max_reference_images` so
+applications can keep semantic references separate from primary `--image` inputs. Route support
+means MLX-Gen knows how to dispatch and validate options; it is not a claim that a model/package
+passed visual release QA. Applications can use the same contract from Python through
+`get_model_capabilities(...)` and `resolve_generation_plan(...)`. For custom
 repositories or local paths whose name does not identify the architecture, construct the
 `ModelConfig` with the same base-model hint that you would pass to the CLI.
 These route helpers cover the unified `mlxgen generate` families only. SeedVR2 uses `mlxgen
@@ -127,6 +132,7 @@ Use `mlxgen validation` when you need exact release evidence for a model/package
 
 ```sh
 mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit
+mlxgen validation --model bernini-r-1.3b
 ```
 
 This returns the current validation profile rows with status, prompt, source image(s), artifact
@@ -134,6 +140,9 @@ path, and reviewer notes. Route support and visual validation are intentionally 
 `mlxgen capabilities --model briaai/Fibo-Edit` exposes no unified public generation capability,
 while `mlxgen validation --model AbstractFramework/qwen-image-edit-2511-8bit` reports the
 published Qwen 2511 edit proof rows.
+The Bernini profile reports three experimental BF16 video routes and links each failed row to its
+playable MP4. Its overall status is `FAIL`: machine/runtime contracts pass, but the required visual
+quality gate does not. The unmeasured official 848x480x81 profile is not implied.
 
 For LoRA routes, pass the exact `lora_validation_profile` value surfaced by `mlxgen capabilities`
 when you want the accepted proof row for that route:
@@ -673,6 +682,49 @@ speed); matching fps passes frames through untouched. Source audio is copied ont
 output best-effort and the outcome is recorded as `audio_copied` / `audio_copy_mode` /
 `audio_copy_reason` in the sidecar.
 
+### Bernini Role-Aware Video
+
+`bernini-r-1.3b` routes the official ByteDance 1.3B renderer through the Wan backend with three
+distinct input contracts:
+
+This surface is **experimental**. Its numerical/runtime contracts pass, but its schema-v3 visual
+release gate fails all required cases. Use these commands for diagnosis and development, not
+production output.
+
+```sh
+# R2V: one to eight ordered references, no source video.
+mlxgen generate --model bernini-r-1.3b \
+  --reference-image subject.png --reference-image garment.png \
+  --prompt "Animate image0 wearing the garment from image1" \
+  --low-ram --metadata --output referenced.mp4
+
+# RV2V: one source video plus one to eight ordered references.
+mlxgen generate --model bernini-r-1.3b \
+  --video source.mp4 --reference-image garment.png \
+  --prompt "Replace the outer garment with image0 and preserve the source person and scene" \
+  --low-ram --metadata --output reference_edit.mp4
+
+# V2V: one source video and no references.
+mlxgen generate --model bernini-r-1.3b \
+  --video source.mp4 --prompt "Add a snowman beside the path" \
+  --low-ram --metadata --output video_edit.mp4
+```
+
+Defaults are 848x480, 81 frames, 16 fps, 40 steps, flow shift 5, UniPC, text guidance 4,
+reference guidance 4.5, source guidance 1.25, and maximum condition side 848. The hard condition
+cap is 1280, the reference count cap is eight, and the prompt cap is exactly 512 UMT5 tokens.
+Video-source modes accept only `source-aspect` plus `resize`; R2V honors its requested canvas.
+On Bernini RV2V/V2V, width and height are a source-aspect area target capped by
+`--max-condition-size`, while frames is a maximum capped by source duration. The start event and
+saved metadata expose the resolved canvas and actual `output_frames`.
+
+Bernini rejects `--quantize`, LoRA, `--video-strength`, `--video-mask-path`, `--guidance-2`,
+explicit denoising grids, non-UniPC solvers, first/last/context/SVI conditioning, and ordinary
+`--image` inputs. `--reference-image` is a separate semantic role and must not be rewritten as
+the first frame. Metadata records ordered paths, condition shapes/source IDs, guidance activity,
+system/effective prompts, component-source revisions, and output health. See
+[Bernini-R 1.3B](bernini.md) for memory measurements and playable proof.
+
 ### Wan Video Parameters
 
 Wan uses frame-count control rather than a separate duration flag. The output duration is:
@@ -683,31 +735,40 @@ duration_seconds = frames / fps
 
 At the default 24 fps, `--frames 121` produces about 5.04 seconds of video, `--frames 73` produces about 3.04 seconds, and `--frames 49` produces about 2.04 seconds.
 
+Bernini source-video modes are the exception to an exact requested count: `--frames` is a maximum,
+and the source duration plus requested fps may resolve fewer `4n+1` frames. Use
+`actual_duration_seconds = output_frames / fps` from the returned artifact or metadata.
+
 | Option | Behavior |
 | --- | --- |
-| `--width`, `--height` | Accepted values are model-specific. Text-to-video and video-to-video values are adjusted up to the selected Wan VAE/patch multiple. For image-to-video, these values are a size target by default: MLX-Gen resolves the final canvas from the source image aspect ratio and the selected model's spatial multiple before conditioning the model (see `--canvas-policy`). |
-| `--canvas-policy` | How the output canvas is resolved from a source input. Default keeps each route's behavior: image-to-video resolves a source-ratio canvas near the requested size; text/video-to-video honor the requested (multiple-adjusted) canvas. `exact-resize` honors the requested canvas on image-to-video, with the source mapped per `--resize-mode`; `source-aspect` on video-to-video derives a source-ratio canvas from the clip. Recorded in metadata and replayed by `--config-from-metadata`. With `--json-events`, the `start` event carries the resolved `width`/`height`. |
-| `--resize-mode` | How source pixels (image-to-video first frame, video-to-video frames, VACE conditioning, and their masks) map onto the canvas: `resize` stretches to fill (default), `crop` center-crops without distortion, `pad` letterboxes the full source without distortion (black bars). Masks always follow the same geometry as the source pixels; letterboxed borders are preserved regions. Recorded in metadata and replayed by `--config-from-metadata`. |
-| `--frames` | Number of output frames. Wan requires `4n + 1`; other values are adjusted to `4 * floor(frames / 4) + 1`. TI2V-5B default: `121`; A14B default: `81`. |
-| `--fps` | MP4 playback frame rate. Any positive integer is accepted. TI2V-5B default/recommended value: `24`; A14B default/recommended value: `16`. |
-| `--steps` | Denoising steps. TI2V-5B default/recommended quality value: `50`; A14B default/recommended value: `40`. Lower values run faster but reduce quality. Mutually exclusive with `--denoising-step-list`. |
-| `--denoising-step-list` | Explicit denoising timestep grid (strictly decreasing integers in `[1, 1000]`), e.g. `--denoising-step-list 1000 750 500 250` for the LightX2V distill contract. The transformer sees exactly these timesteps; sigma follows `t / 1000`. Grid entries are final, already-shifted timesteps, so this flag is mutually exclusive with `--steps` and `--flow-shift`, and rejected for video-to-video (strength truncation would drop grid points) and on Wan VACE. Works on both `unipc` and `euler` solvers. Recorded in metadata (`denoising_step_list`, with `steps` set to the grid length and `flow_shift` null) and replayed by `--config-from-metadata`. Python callers use `denoising_step_list=[...]`. |
-| `--guidance` | Classifier-free guidance scale. TI2V-5B default: `5`; A14B default: `4`. |
+| `--width`, `--height` | Accepted values are model-specific. Text-to-video and video-to-video values are adjusted up to the selected Wan VAE/patch multiple. For image-to-video, these values are a size target by default: MLX-Gen resolves the final canvas from the source image aspect ratio and the selected model's spatial multiple before conditioning the model (see `--canvas-policy`). Bernini source-video modes also treat them as a size target and preserve the source aspect ratio. |
+| `--canvas-policy` | How the output canvas is resolved from a source input. Default keeps each route's behavior: image-to-video resolves a source-ratio canvas near the requested size; text/video-to-video honor the requested (multiple-adjusted) canvas. `exact-resize` honors the requested canvas on image-to-video, with the source mapped per `--resize-mode`; `source-aspect` on video-to-video derives a source-ratio canvas from the clip. Bernini source-video modes require `source-aspect`; its reference-only R2V mode has no source canvas. Recorded in metadata and replayed by `--config-from-metadata`. With `--json-events`, the `start` event carries the resolved `width`/`height`. |
+| `--resize-mode` | How source pixels (image-to-video first frame, video-to-video frames, VACE conditioning, and their masks) map onto the canvas: `resize` stretches to fill (default), `crop` center-crops without distortion, `pad` letterboxes the full source without distortion (black bars). Masks always follow the same geometry as the source pixels; letterboxed borders are preserved regions. Bernini video/reference conditions support resize only. Recorded in metadata and replayed by `--config-from-metadata`. |
+| `--frames` | Requested output frames. Wan requires `4n + 1`; other values are adjusted to `4 * floor(frames / 4) + 1`. On Bernini source-video routes this is a maximum and may resolve lower from source duration/fps; metadata `output_frames` is authoritative. TI2V-5B default: `121`; A14B and Bernini default: `81`. |
+| `--fps` | MP4 playback frame rate. Any positive integer is accepted. TI2V-5B default/recommended value: `24`; A14B and Bernini default/recommended value: `16`. |
+| `--steps` | Denoising steps. TI2V-5B default/recommended quality value: `50`; A14B and Bernini default/recommended value: `40`. Lower values run faster but reduce quality. Mutually exclusive with `--denoising-step-list`. |
+| `--denoising-step-list` | Explicit denoising timestep grid (strictly decreasing integers in `[1, 1000]`), e.g. `--denoising-step-list 1000 750 500 250` for the LightX2V distill contract. The transformer sees exactly these timesteps; sigma follows `t / 1000`. Grid entries are final, already-shifted timesteps, so this flag is mutually exclusive with `--steps` and `--flow-shift`, and rejected for video-to-video (strength truncation would drop grid points), Wan VACE, and Bernini. Works on both `unipc` and `euler` solvers where accepted. Recorded in metadata (`denoising_step_list`, with `steps` set to the grid length and `flow_shift` null) and replayed by `--config-from-metadata`. Python callers use `denoising_step_list=[...]`. |
+| `--guidance` | Classifier-free/text guidance scale. TI2V-5B default: `5`; A14B and Bernini default: `4`. |
 | `--guidance-2` | Optional low-noise guidance scale for Wan A14B `transformer_2`. If both guidance flags are omitted, model-specific two-stage defaults are used. If `--guidance` is set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`. It is rejected for single-transformer Wan models. |
-| `--flow-shift` | Flow-matching scheduler shift. Defaults to the selected Wan model config. TI2V-5B defaults to `5.0` for native 720p-class runs. A14B defaults to `3.0`. For new 480p-class TI2V-5B checks such as `832x480`, pass `--flow-shift 3`. Python callers use `flow_shift=...`. |
+| `--flow-shift` | Flow-matching scheduler shift. Defaults to the selected Wan model config. TI2V-5B and Bernini default to `5.0`; A14B defaults to `3.0`. For new 480p-class TI2V-5B checks such as `832x480`, pass `--flow-shift 3`. Python callers use `flow_shift=...`. |
 | `--last-image` | Wan A14B image-to-video only (experimental on Wan 2.2): a second anchor image the clip should END near, alongside the `--image-path` first frame (diffusers `last_image` first+last bracket conditioning). The last image maps through the same resolved canvas and `--resize-mode` as the first frame — match their aspect ratios. Requires `--image-path`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video. Recorded in metadata (`last_image_path`) and replayed by `--config-from-metadata`; advertised as `supports_last_image` on the `wan.first-frame` capability row. Official first+last training exists for Wan 2.1 (FLF2V); on Wan 2.2 A14B the shipped probe measured end-frame adherence at MAE 4.6/255 vs the target (baseline without the flag: 56.1) with no mid-clip artifacts on one Lightning 4-step storyboard pair — treat broader recipes as unverified (backlog item 0097 records the bounds). |
-| `--context-frames` | Wan A14B image-to-video only (EXPERIMENTAL zero-shot): the ordered frames that FOLLOW `--image-path` in the motion being continued. The conditioned head becomes `[--image-path, *--context-frames]`, so a continuation clip inherits the predecessor's real momentum instead of restarting from one frozen frame (the multi-frame handover used by SkyReels-V2/SVI-class pipelines). Pass 4, 8, or 12 frames — the head must fill whole 4x VAE latent groups (5, 9, or 13 conditioned frames); passing the start frame here too is the common misuse and fails on that count check. Requires `--image-path`; needs `--frames >= head + 4`; composes with `--last-image`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video — CLI rejects before weight load. All frames map through the same canvas and `--resize-mode` as the first frame. Recorded in metadata (`context_image_paths`), replayed by `--config-from-metadata`, advertised as `supports_context_frames` on the `wan.first-frame` capability row (capabilities `schema_version` 6). Measured zero-shot on a Lightning 4-step continuation pair (backlog 0102): the K=5 head carried the source clip's motion speed (seam magnitude ratio 0.90 vs the single-frame baseline's 1.90 = double-speed restart) with a mild ~2-frame flare/exposure step at the conditioned-to-free boundary (luma delta ~3.2/255 vs the source clip's own max 1.15; visually mild, structurally clean). Treat as a storyboard continue-seam tool, not a validated general feature. |
+| `--context-frames` | Wan A14B image-to-video only (EXPERIMENTAL zero-shot): the ordered frames that FOLLOW `--image-path` in the motion being continued. The conditioned head becomes `[--image-path, *--context-frames]`, so a continuation clip inherits the predecessor's real momentum instead of restarting from one frozen frame (the multi-frame handover used by SkyReels-V2/SVI-class pipelines). Pass 4, 8, or 12 frames — the head must fill whole 4x VAE latent groups (5, 9, or 13 conditioned frames); passing the start frame here too is the common misuse and fails on that count check. Requires `--image-path`; needs `--frames >= head + 4`; composes with `--last-image`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video — CLI rejects before weight load. All frames map through the same canvas and `--resize-mode` as the first frame. Recorded in metadata (`context_image_paths`), replayed by `--config-from-metadata`, advertised as `supports_context_frames` on the `wan.first-frame` capability row. The field was introduced in schema 6; the current capabilities payload is schema 8. Measured zero-shot on a Lightning 4-step continuation pair (backlog 0102): the K=5 head carried the source clip's motion speed (seam magnitude ratio 0.90 vs the single-frame baseline's 1.90 = double-speed restart) with a mild ~2-frame flare/exposure step at the conditioned-to-free boundary (luma delta ~3.2/255 vs the source clip's own max 1.15; visually mild, structurally clean). Treat as a storyboard continue-seam tool, not a validated general feature. |
 | `--context-noise` | Optional noise on the `--context-frames` conditioned head, `0-1000` timestep-like scale (SkyReels `addnoise_condition` precedent, ~20 is the community default). Applied in latent space to the head only, deterministic per seed, recorded in metadata (`context_noise`) and replayed. In the shipped zero-shot probe it did not reduce the boundary flare (backlog 0102); it exists so adapter recipes (SVI-class) that expect conditioning noise can be reproduced exactly. Requires `--context-frames`. |
-| `--svi-anchor-image` | Wan A14B image-to-video only (EXPERIMENTAL): SVI 2.0 Pro chain conditioning (Stable Video Infinity, ICLR'26, trained for Wan 2.2 A14B i2v). One persistent anchor image is re-injected into EVERY clip of a chain as `[anchor_latent, motion_latent?, zero-latents]` — identity from the anchor, momentum from the previous clip's exported latent, TRUE zero-latent padding (not the stock zero-frame VAE encode; the conventions are mutually unintelligible, which is why the mode and the LoRA pair gate each other loudly in both directions). Replaces `--image-path`; conflicts with `--image-path`, `--last-image`, `--context-frames`, `--video-path`; rejected on TI2V-5B and VACE before weight load. Requires `--svi-lora-high`/`--svi-lora-low`. Every SVI run exports `<output>.svi_latent.safetensors` for the next clip and records `svi_*` metadata including `svi_assembly_trim_frames` (drop that many frames of every CONTINUATION clip at assembly: `1 + 4 x count`). Use a unique seed per clip. Advertised as `supports_svi` on the `wan.first-frame` capability row (capabilities `schema_version` 7). |
+| `--svi-anchor-image` | Wan A14B image-to-video only (EXPERIMENTAL): SVI 2.0 Pro chain conditioning (Stable Video Infinity, ICLR'26, trained for Wan 2.2 A14B i2v). One persistent anchor image is re-injected into EVERY clip of a chain as `[anchor_latent, motion_latent?, zero-latents]` — identity from the anchor, momentum from the previous clip's exported latent, TRUE zero-latent padding (not the stock zero-frame VAE encode; the conventions are mutually unintelligible, which is why the mode and the LoRA pair gate each other loudly in both directions). Replaces `--image-path`; conflicts with `--image-path`, `--last-image`, `--context-frames`, `--video-path`; rejected on TI2V-5B and VACE before weight load. Requires `--svi-lora-high`/`--svi-lora-low`. Every SVI run exports `<output>.svi_latent.safetensors` for the next clip and records `svi_*` metadata including `svi_assembly_trim_frames` (drop that many frames of every CONTINUATION clip at assembly: `1 + 4 x count`). Use a unique seed per clip. Advertised as `supports_svi` on the `wan.first-frame` capability row. The field was introduced in schema 7; the current capabilities payload is schema 8. |
 | `--svi-motion-latent` | The `*.svi_latent.safetensors` exported by the PREVIOUS clip's SVI run: its trailing latent entries hand the motion over losslessly (never a pixel round-trip). Omit on the first clip of a chain. The chain must keep one canvas end to end (mismatch rejected at load). `--svi-motion-latent-count` (default `1`, the reference recipe) selects how many trailing entries carry over. Requires `--svi-anchor-image`. Continuation segments beyond 65 frames print a trained-length advisory (community-measured color shifts). |
 | `--svi-lora-high`, `--svi-lora-low` | The SVI 2.0 Pro error-recycling LoRA pair (high/low-noise experts; official weights `vita-video-gen/svi-model:version-2.0/SVI_Wan2.2-I2V-A14B_{high,low}_noise_lora_v2.0_pro.safetensors`). Loaded at fixed scale 1.0 under a STRICT key-match contract: any unmatched key aborts the load (`unmatched_key_count == 0` per file; verified 800/800 on the official pack) — a partially applied SVI LoRA silently corrupts the convention. Both-or-neither; requires `--svi-anchor-image` (the pack corrupts non-SVI runs and is rejected for them); re-fused automatically on per-item high-noise expert reloads. Composes with the Lightning 4-step pair through the ordinary `--lora-paths`/`--lora-scales`: the author-documented coexistence sets lightx2v HIGH scale to 0.5-0.6 (1.0 weakens dynamics/text-following and snaps back to the anchor) and keeps lightx2v LOW at 1.0. |
-| `--video`, `--video-path` | One source video for the public Wan video-to-video route (plain, or masked with `--video-mask-path`). The SDEdit-style route (with `--video-strength`) is limited to `Wan2.2-T2V-A14B`; TI2V-5B and I2V-A14B still reject source-video input. Wan VACE models (`wan-vace`) also accept a source video, conditioned through learned VACE layers together with `--reference-image` / `--conditioning-scale` instead of a strength warm start. |
-| `--video-strength` | Denoising strength in `(0, 1]` for Wan video-to-video. Default: `0.8`. Higher values allow larger changes from the source clip. The run denoises `floor(steps x video_strength)` effective steps; saved metadata records the requested `steps` plus the resolved `effective_steps`, and below roughly `0.7` the A14B high-noise stage (and `--guidance`) is skipped with a printed warning. On masked runs, strength applies inside the mask. |
-| `--video-mask-path` | One static image mask for masked video-to-video. White marks the region the model may change; black regions are locked to the source video at every denoising step and match it up to VAE round-trip precision. Binarized at 50% on the latent grid. Requires `--video-path`; all-black masks are rejected before model load; strength applies inside the mask. Recorded in metadata and replayed by `--config-from-metadata`. Mask resampling policy: surfaces ported from an upstream reference keep that reference's resampling (Qwen and Z-Image inpaint masks use NEAREST to match diffusers); in-house surfaces such as this one use BOX area averaging before the 50% threshold. Each mask surface warns once per generation when a mask has an alpha channel (alpha is ignored; luminance is used). On Wan VACE models the same flag feeds the learned VACE mask conditioning instead of the exact latent lock. |
-| `--reference-image` | Wan VACE models only (backend flag on `mlxgen-generate-wan`): a reference image whose pictured subject is injected into the generation through the learned VACE conditioning branch. Repeatable for multiple references. Works with or without `--video-path`. Segment the subject onto a plain white background for object injection; rectangular crops that keep background weaken identity transfer, and full-scene references lose the subject (both failure modes demonstrated in the proof bundle). Recorded in metadata and replayed by `--config-from-metadata`. |
+| `--video`, `--video-path` | One source video for the public Wan video-to-video routes. The SDEdit-style route (with `--video-strength`, optionally a mask) is limited to `Wan2.2-T2V-A14B`. Wan VACE uses learned control conditioning. Bernini uses the video as an independently VAE-encoded packed source, selects V2V without references or RV2V with them, and has no warm start. TI2V-5B and I2V-A14B reject source-video input. |
+| `--video-strength` | Denoising strength in `(0, 1]` for A14B SDEdit-style video-to-video. Default: `0.8`. Higher values allow larger changes from the source clip. The run denoises `floor(steps x video_strength)` effective steps; saved metadata records requested plus effective steps, and below roughly `0.7` the A14B high-noise stage is skipped. Rejected on VACE and Bernini. |
+| `--video-mask-path` | One static image mask for masked video-to-video. White marks the region the model may change; black regions are locked to the source video at every denoising step and match it up to VAE round-trip precision. Binarized at 50% on the latent grid. Requires `--video-path`; all-black masks are rejected before model load; strength applies inside the mask. On Wan VACE the same flag feeds learned mask conditioning. Bernini rejects masks. Recorded in metadata and replayed by `--config-from-metadata`. |
+| `--reference-image` | A repeatable semantic reference role. On Wan VACE, pictured subjects enter the learned VACE control branch; prepared plain-background cutouts work best. On Bernini, one to eight ordinary ordered images become independently VAE-encoded packed segments: reference-only input selects R2V, while one video plus references selects RV2V. The prompt addresses them as `image0`, `image1`, and so on. Recorded in metadata and replayed by `--config-from-metadata`. |
+| `--reference-guidance` | Bernini reference contribution scale (default `4.5`), active on R2V and RV2V. Rejected or inactive outside the Bernini renderer contract. |
+| `--source-guidance` | Bernini source-video contribution scale (default `1.25`), active only on RV2V. |
+| `--apg-eta`, `--apg-norm-threshold`, `--apg-momentum` | Bernini APG controls, defaults `0.5`, `50`, and `0`. Active on R2V and source-only V2V; RV2V uses chained CFG and records them as inactive. |
+| `--max-condition-size` | Bernini hard maximum side for independently resized video/reference conditions and source-video output. Must be a multiple of 16 in `[16, 1280]`; default `848`. The 1280 smoke used one reference and does not prove the independent eight-reference maximum at that size. |
+| `--system-prompt` | Optional Bernini task-prefix override. By default MLX-Gen uses the exact official R2V, RV2V, or V2V prefix and records the effective prompt. |
 | `--conditioning-scale` | Wan VACE models only: strength of the VACE conditioning applied at every control layer (default `1.0`). Replaces `--video-strength`, which VACE models reject (no SDEdit warm start). |
 | `--vace-masked-region` | Wan VACE models only: `generate` (default) gray-fills the white mask region before conditioning per the official VACE inpainting convention, so the model synthesizes new structure there; `repaint` keeps the source content as conditioning, preserving structure and changing style/color only. Recorded in metadata (`masked_region_mode`) and replayed by `--config-from-metadata`. |
-| `--solver` | Wan supports `unipc` and `euler` broadly, but public Wan video-to-video currently requires `unipc`. |
+| `--solver` | Wan supports `unipc` and `euler` broadly, but public A14B video-to-video and every Bernini route require `unipc`. |
 | `--negative-prompt`, `--negative` | If omitted, Wan uses the model's official default negative prompt. Pass `--negative ""` to intentionally run without a negative prompt; this can be better for simple abstract scenes where the default negative prompt adds unwanted texture. |
 | `--seed` | Deterministic seed. Repeat with multiple values to create multiple videos. |
 | `--progress`, `--no-progress` | Show or disable the CLI video progress bar. The bar advances by denoising step and keeps the requested frame count as context. Default: `--progress true`. |
@@ -731,6 +792,7 @@ Common Wan video sizes:
 | TI2V-5B T2V/I2V | 32 px | `1280x704` or `704x1280` | `832x480`, `480x832`; smaller sizes such as `448x256` are smoke checks only | Text-to-video `1280x720` adjusts to `1280x736`; image-to-video preserves the source image ratio at a nearby supported canvas. |
 | T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` | Text-to-video plus public video-to-video (plain or masked with `--video-mask-path`); image input is rejected and public V2V currently requires `unipc`. |
 | I2V-A14B | 16 px | Source-ratio canvas near `1280x720` or `720x1280` | Source-ratio canvas near `832x480`, `448x256`, or `432x240` | Requires one input image; output preserves the source image ratio at a nearby supported canvas. |
+| Bernini-R 1.3B | 16 px | `848x480` or source-ratio equivalent | `320x192`/`176x320` were bounded functional proofs, not final-quality settings | R2V accepts 1-8 references; V2V/RV2V preserve source aspect and use resize-only conditioning. BF16/UniPC only. |
 
 Additional A14B target families that MLX-Gen accepts are useful when you want a different aspect
 ratio while staying on a 16-pixel multiple:
@@ -810,7 +872,7 @@ Useful options:
 | `--video-path` | One or more video files or directories. Directories are expanded to supported video files. Mutually exclusive with `--image-path`. |
 | `--resolution` | Integer shorter-edge target or scale factor such as `2x` or `3x`. Default: `384` for image input. Video input defaults to `1x` when omitted. |
 | `--model` | Optional SeedVR2 model selector. Defaults to `seedvr2-3b`, the official `ByteDance-Seed/SeedVR2-3B` source model. Use `seedvr2-7b` for the official 7B source model, `AbstractFramework/seedvr2-3b-8bit`, `AbstractFramework/seedvr2-3b-4bit`, `AbstractFramework/seedvr2-7b-8bit`, `AbstractFramework/seedvr2-7b-4bit`, or a local path such as `./models/seedvr2-7b-8bit`. |
-| `--quantize` | Optional runtime quantization for source-model runs. Published q8/q4 packages do not need this flag. |
+| `--quantize` | Optional runtime quantization for source-model runs. Published q8/q4 packages do not need this flag. Bernini-R rejects every value and currently requires BF16 because q4 failed model-backed validation and nominal Wan q8 quantized none of its transformer linears. |
 | `--softness` | Optional input smoothing from `0.0` to `1.0`. `0.0` preserves the preprocessed source most directly. Higher values pre-downsample the conditioning image before reconstruction, which can suppress source grain/JPEG texture but can also soften fine details or make a clip look muddy. Try `0.25` to `0.5` for noisy or compressed sources only after checking a short clip first. |
 | `--vae-tiling` | Force tiled VAE encode/decode for image runs. Video restore rejects this flag; use `--low-ram` and temporal chunking instead. |
 | `--color-correction` | Tone/color post-process after restoration. `wavelet` = wavelet tone reconstruction, `lab` = LAB tone matching, `off` = raw model output. |

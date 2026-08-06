@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Bernini-R 1.3B reference video renderer (0105)**: the unified `mlxgen generate` command and
+  Python runtime support reference-to-video with 1-8 ordinary `--reference-image` inputs,
+  prompt-guided video-to-video, and reference-guided video editing with `--video` plus
+  references. The dedicated Wan-family runtime matches Bernini's packed source-aware RoPE,
+  target-only extraction, source ordering, independent VAE conditioning, official UniPC schedule,
+  and task-specific chained APG/CFG semantics. Setup uses a bounded, revision-pinned factored
+  download from the Wan2.1 base components and official 1.3B renderer; `--all-files`, `prepare`,
+  runtime q4/q8, and LoRA are rejected because only the BF16 source route is numerically credible.
+  The route ships as **EXPERIMENTAL**: its machine/runtime contracts pass, but the schema-v3 visual
+  release gate fails every required case. The evidence includes focused numerical parity, eight real model-backed videos,
+  two maximum-condition structural smokes, a route-fixed alternate-reference A/B plus a disclosed
+  cross-branch no-reference context,
+  hash-bound 5K paged contact sheets, and measured whole-process physical peaks up to `9.45 GB` for
+  the bounded proof profiles. Review found weak motion, missed references, four-frame cadence
+  seams, and terminal corruption; an exact-upstream-prompt 33-frame diagnostic also failed. See
+  [Bernini-R 1.3B](docs/bernini.md) for commands, capacity limits, and evidence.
+
 - **Wan A14B i2v SVI 2.0 Pro conditioning (0103)**: `--svi-anchor-image`,
   `--svi-motion-latent`, `--svi-motion-latent-count`, `--svi-lora-high`,
   `--svi-lora-low` (Python: `generate_video(svi_anchor_image_path=...,

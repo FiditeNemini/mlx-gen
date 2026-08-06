@@ -1,0 +1,24 @@
+{
+  "backend": "mlx",
+  "checkpoint_revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+  "checkpoint_root": "<user-home>/.cache/huggingface/hub/models--ByteDance--Bernini-R-1.3B-Diffusers/snapshots/ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+  "elapsed_seconds": 0.5822867910028435,
+  "mlx_version": "0.31.0",
+  "output_dtype": "float32",
+  "output_max": 0.7890625,
+  "output_min": -1.171875,
+  "output_sha256": "10567dfeed4c1be296a1b85e7fb90c22545a0b8bcbd1fdc11ddfd62eb9f4de7f",
+  "output_shape": [
+    1,
+    16,
+    5,
+    8,
+    8
+  ],
+  "platform": "macOS-26.3-arm64-arm-64bit",
+  "rotary_input_precision": "mlx.core.bfloat16",
+  "rotary_output_precision": "mlx.core.float32",
+  "rotary_output_sha256": "f4811d51a0aff82137574fa1e2db98d31093c89efcd6107d617fd210174ba68c",
+  "rotary_phase_precision": "mlx.core.float32",
+  "weight_precision": "mlx.core.bfloat16"
+}

@@ -1,0 +1,51 @@
+{
+  "components": {
+    "text_encoder": {
+      "revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+      "source": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+      "source_role": "base"
+    },
+    "tokenizer": {
+      "revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+      "source": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+      "source_role": "base"
+    },
+    "transformer": {
+      "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+      "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+      "source_role": "transformer"
+    },
+    "vae": {
+      "revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+      "source": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+      "source_role": "base"
+    }
+  },
+  "parity_reports": {
+    "apg": "parity/apg/parity_report.json",
+    "scheduler": "parity/scheduler_diffusers_0_35_2_report.json",
+    "transformer_fp32": "parity/transformer/parity_report.json",
+    "transformer_runtime_bf16_five_slice": "parity/transformer_5slice/parity_runtime_report.json",
+    "vae_bf16_17_frame": "parity/vae_17f/vae_parity_report.json"
+  },
+  "profile": "bernini_r_1_3b_2026_08_04",
+  "quantization_supported": false,
+  "renderer_only": true,
+  "runtime_contract": {
+    "flow_shift": 5.0,
+    "max_condition_size": {
+      "maximum": 1280,
+      "minimum": 16,
+      "multiple": 16
+    },
+    "reference_count": {
+      "maximum": 8,
+      "minimum": 1
+    },
+    "scheduler": "UniPCMultistepScheduler",
+    "scheduler_reference": "diffusers-0.35.2",
+    "source_conditioning": "independent-vae-packed-segments"
+  },
+  "runtime_precision": "bfloat16",
+  "schema_version": 1
+}

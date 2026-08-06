@@ -350,6 +350,7 @@ def resolve_generation_runtime(
     base_model: str | None = None,
     image_count: int = 0,
     video_count: int = 0,
+    reference_image_count: int = 0,
     task: str | None = "auto",
     i2i_mode: str | None = "auto",
     has_image_strength: bool = False,
@@ -368,6 +369,7 @@ def resolve_generation_runtime(
         base_model=base_model,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
         task=task,
         i2i_mode=i2i_mode,
         has_image_strength=has_image_strength,
@@ -418,6 +420,7 @@ def load_generation_model(
     base_model: str | None = None,
     image_count: int = 0,
     video_count: int = 0,
+    reference_image_count: int = 0,
     task: str | None = "auto",
     i2i_mode: str | None = "auto",
     has_image_strength: bool = False,
@@ -442,6 +445,7 @@ def load_generation_model(
         base_model=base_model,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
         task=task,
         i2i_mode=i2i_mode,
         has_image_strength=has_image_strength,
@@ -560,6 +564,13 @@ def _runtime_definition_for_plan(plan: GenerationPlan, model_config: ModelConfig
             import_path="mflux.models.fibo.variants.txt2img.fibo.FIBO",
         )
     if plan.handler_id == "wan.generate":
+        if model_config is not None and bool(
+            model_config.transformer_overrides.get("supports_bernini_renderer", False)
+        ):
+            return _RuntimeDefinition(
+                runtime_id="wan-bernini-r-1.3b",
+                import_path="mflux.models.wan.variants.wan_bernini.BerniniRenderer",
+            )
         if model_config is not None and bool(model_config.transformer_overrides.get("supports_vace", False)):
             return _RuntimeDefinition(
                 runtime_id="wan-vace",

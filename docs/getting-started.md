@@ -30,8 +30,10 @@ Choose the workflow by the media you start from and the outcome you want:
 | --- | --- | --- |
 | Only a prompt | A new image or a new video | `mlxgen generate` |
 | One image | Image editing, reframe/outpaint, or Wan first-frame image-to-video | `mlxgen generate` |
+| One to eight ordinary reference images | A new reference-guided Bernini video | `mlxgen generate --model bernini-r-1.3b --reference-image ...` |
 | One video clip | SeedVR2 restoration or upscale, with no prompt | `mlxgen upscale --video-path ...` |
 | One video clip | Prompt-guided content change | `mlxgen generate --model Wan-AI/Wan2.2-T2V-A14B-Diffusers --video-path ...` |
+| One video plus reference images | A Bernini reference-guided video edit | `mlxgen generate --model bernini-r-1.3b --video ... --reference-image ...` |
 
 For scripts, desktop apps, and other integrations, call these `mlxgen` commands directly. The
 package still includes some `mflux-generate-*` compatibility entry points from the upstream code,
@@ -496,6 +498,32 @@ To keep the background locked to the source while editing only one region, add
 `--video-mask-path mask.png`: white marks the region the model may change, black regions are
 preserved exactly. See [Wan Video](wan-video.md#masked-video-to-video).
 
+Bernini-R 1.3B is the smaller renderer path for ordinary reference images. Download its pinned,
+factored components, then repeat `--reference-image` in the same order used by `image0`, `image1`,
+and so on in the prompt:
+
+```sh
+mlxgen download --model bernini-r-1.3b
+
+mlxgen generate \
+  --model bernini-r-1.3b \
+  --reference-image subject.png \
+  --reference-image garment.png \
+  --prompt "Bring the subject from image0 to life wearing the garment from image1" \
+  --width 320 --height 192 --frames 17 --fps 16 --steps 20 \
+  --max-condition-size 256 \
+  --seed 42 --low-ram --metadata \
+  --output referenced.mp4
+```
+
+Add one `--video source.mp4` to edit a source clip with the references, or use the video without
+references for prompt-guided V2V. Bernini is BF16-only: omit `--quantize`. It is also experimental:
+the tested shapes peaked at 9.45 GB on the 128 GB validation host, but every required visual-quality
+case failed. A completely cold selective download needs 18.36 GiB free including headroom. See
+[Bernini-R 1.3B](bernini.md) for exact role, memory, failure, and proof boundaries.
+For Bernini source-video modes, `--width`/`--height` are a source-aspect area target and
+`--frames` is a maximum; inspect output metadata for the resolved canvas and actual frame count.
+
 To create several Wan variations from one command, pass more than one seed or use
 `--auto-seeds N`. MLX-Gen appends `_seed_<seed>` to the output stem automatically so each MP4 gets
 its own filename.
@@ -546,5 +574,6 @@ Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 - See [API And CLI](api.md) for the supported command surface and Python integration notes.
 - See [Spaceship Snow Workflow](examples/spaceship-snow.md) for a reproducible image and Wan A14B video example with included assets.
 - See [Wan Video](wan-video.md) for practical Wan2.2 sizing and 5-second comparison assets.
+- See [Bernini-R 1.3B](bernini.md) for reference-guided video generation/editing and its proof bundle.
 - See [Quantization](quantization.md) for q4/q8 behavior, Bonsai low-bit packed support, Qwen/ERNIE mixed q4/q8 policies, and Wan mixed q8/BF16 packages.
 - See [Troubleshooting](troubleshooting.md) when a required artifact is missing or a local path cannot be classified.

@@ -18,9 +18,7 @@ def _fake_tokenize(self, *, cleaned, max_sequence_length):
 def _bare_model(tmp_path, *, disk_cache_enabled=False):
     model = Wan2_2_TI2V.__new__(Wan2_2_TI2V)
     model.prompt_embed_cache = {}
-    model._prompt_embed_store = WanPromptEmbedStore(
-        enabled=disk_cache_enabled, cache_dir=tmp_path / "prompt-cache"
-    )
+    model._prompt_embed_store = WanPromptEmbedStore(enabled=disk_cache_enabled, cache_dir=tmp_path / "prompt-cache")
     model._prompt_embed_fingerprint = "test-fingerprint"
     model._keep_text_encoder_resident = False
     model._resident_text_encoder = None
@@ -44,6 +42,30 @@ def test_wan_prompt_embed_cache_reuses_first_load(monkeypatch, tmp_path):
 
     assert observed == [512]
     np.testing.assert_array_equal(np.array(first), np.array(second))
+
+
+def test_wan_prompt_embed_can_preserve_verbatim_text(monkeypatch, tmp_path):
+    model = _bare_model(tmp_path)
+    observed: list[list[str]] = []
+
+    def fake_tokenize(self, *, cleaned, max_sequence_length):
+        observed.append(cleaned)
+        return {
+            "input_ids": np.zeros((len(cleaned), max_sequence_length), dtype=np.int64),
+            "attention_mask": np.ones((len(cleaned), max_sequence_length), dtype=np.int64),
+        }
+
+    monkeypatch.setattr(Wan2_2_TI2V, "_tokenize_prompts", fake_tokenize)
+    monkeypatch.setattr(
+        Wan2_2_TI2V,
+        "_load_t5_prompt_embeds",
+        lambda self, *, text_inputs, max_sequence_length: mx.zeros((len(text_inputs["input_ids"]), 1)),
+    )
+    raw = ["SYSTEM PREFIX.User  prompt\nwith spacing", "negative  prompt"]
+
+    model._get_t5_prompt_embeds(raw, max_sequence_length=8, clean_prompts=False)
+
+    assert observed == [raw]
 
 
 def test_wan_prompt_embed_cache_stays_bounded(monkeypatch, tmp_path):
@@ -93,9 +115,7 @@ def test_wan_prompt_embed_disk_cache_hit_skips_loader(monkeypatch, tmp_path):
 
     # The hit path re-casts to the runtime precision (bf16), which numpy
     # cannot view directly: compare through float32.
-    np.testing.assert_array_equal(
-        np.array(first.astype(mx.float32)), np.array(second.astype(mx.float32))
-    )
+    np.testing.assert_array_equal(np.array(first.astype(mx.float32)), np.array(second.astype(mx.float32)))
 
 
 def test_wan_prompt_embed_disk_key_varies_by_prompt(monkeypatch, tmp_path):

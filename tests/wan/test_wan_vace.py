@@ -226,7 +226,7 @@ def test_vace_runtime_rejects_unsupported_options():
         model.generate_video(seed=1, prompt="x", solver="euler")
 
 
-def test_wan_cli_rejects_reference_image_on_non_vace_models(monkeypatch, tmp_path, capsys):
+def test_wan_cli_rejects_reference_image_on_non_reference_aware_models(monkeypatch, tmp_path, capsys):
     from mflux.models.wan.cli import wan_generate
 
     reference = tmp_path / "ref.png"
@@ -248,7 +248,7 @@ def test_wan_cli_rejects_reference_image_on_non_vace_models(monkeypatch, tmp_pat
     )
     with pytest.raises(SystemExit):
         wan_generate.main()
-    assert "requires a Wan VACE model" in capsys.readouterr().err
+    assert "requires an exact Wan VACE or Bernini-R model" in capsys.readouterr().err
 
 
 def test_wan_cli_rejects_video_strength_on_vace_model(monkeypatch, tmp_path, capsys):

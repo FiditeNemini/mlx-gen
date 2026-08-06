@@ -1,0 +1,55 @@
+{
+  "component_precision": "mlx.core.bfloat16",
+  "decode_shared_official_latent": {
+    "cosine_similarity": 0.9999962516229502,
+    "max_absolute_error": 0.00818490982055664,
+    "mean_absolute_error": 0.0011657599535465123,
+    "psnr_peak_2": 62.25844148982954,
+    "relative_l2": 0.0029083757085768287,
+    "rmse": 0.0015420836095448285
+  },
+  "encode": {
+    "cosine_similarity": 0.999997322300373,
+    "max_absolute_error": 0.008611679077148438,
+    "mean_absolute_error": 0.001635380380007234,
+    "psnr_peak_2": 59.65802498091893,
+    "relative_l2": 0.0023322067668070097,
+    "rmse": 0.0020803133046706068
+  },
+  "end_to_end": {
+    "cosine_similarity": 0.9999928890763032,
+    "max_absolute_error": 0.012369155883789062,
+    "mean_absolute_error": 0.0016930519290629794,
+    "psnr_peak_2": 59.09549989750313,
+    "relative_l2": 0.004185984233878481,
+    "rmse": 0.002219499240707041
+  },
+  "input_shape": [
+    1,
+    3,
+    5,
+    64,
+    80
+  ],
+  "kind": "bernini_wan21_vae_default_bf16_vs_official_fp32",
+  "official_component_base_revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+  "passed": true,
+  "schema_version": 1,
+  "thresholds": {
+    "decode_shared_official_latent": {
+      "max_absolute_error": 0.03,
+      "max_relative_l2": 0.01,
+      "min_cosine_similarity": 0.9999
+    },
+    "encode": {
+      "max_absolute_error": 0.03,
+      "max_relative_l2": 0.01,
+      "min_cosine_similarity": 0.9999
+    },
+    "end_to_end": {
+      "max_relative_l2": 0.015,
+      "min_cosine_similarity": 0.9998,
+      "min_psnr_peak_2": 45.0
+    }
+  }
+}

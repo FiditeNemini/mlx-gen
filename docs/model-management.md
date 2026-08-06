@@ -46,6 +46,29 @@ If a LoRA repository contains more than one `.safetensors` file, pass the file n
 Use `download` when you want to run from the source model name or alias and do not need a separate
 local MLX-Gen package.
 
+### Bernini-R factored download
+
+Bernini-R 1.3B uses a pinned, factored BF16 source set: shared Wan2.1 tokenizer, UMT5, VAE, and
+scheduler files come from `Wan-AI/Wan2.1-VACE-1.3B-diffusers`, while the dedicated renderer comes
+from `ByteDance/Bernini-R-1.3B-Diffusers`. Download the complete runnable set with the alias:
+
+```sh
+mlxgen download --model bernini-r-1.3b
+```
+
+For a cold cache, the selected files total about `16.36 GiB`. The command requires `18.36 GiB`
+free, including `2 GiB` of download headroom, and does not count an already-complete pinned source
+twice. The bounded low-RAM profiles documented in [Bernini-R 1.3B](bernini.md) peaked at 9.45 GB
+on the 128 GB validation host, so the tested shapes fit an 18 GB-class memory envelope, but still
+need an actual 18 GB-host run. This is capacity evidence only: the Bernini visual release gate
+fails. Separately, `18 GB` of free disk is slightly below the cold-download gate.
+
+Do not pass `--all-files` for Bernini. The option is rejected because this route needs selected
+files from two repositories, not one complete repository. Bernini also rejects `mlxgen prepare`
+and runtime `--quantize`: the only numerically supported route is the factored BF16 source set,
+and q4/q8 Bernini packages are not supported. The BF16 route remains experimental after failed
+visual validation.
+
 ## Prepare A Local MLX-Gen Package
 
 Use `mlxgen prepare` when you want a reusable local MLX-Gen package, usually with quantized weights:
@@ -121,6 +144,9 @@ Use `mlxgen prepare` when:
 - you want quantized weights with `--quantize 4` or `--quantize 8`;
 - you want a generated Hugging Face model card;
 - you want a package that another application, such as AbstractVision, can reference without depending on the original repository name.
+
+Bernini-R is an exception: use `mlxgen download --model bernini-r-1.3b`. Its runtime is factored
+across two pinned repositories and intentionally has no `prepare`, q4, or q8 package route.
 
 Bonsai Image is an exception to the ordinary prepare flow. The Prism Bonsai repositories are
 already packed MLX artifacts, so cache them with `download` and generate directly:

@@ -1,5 +1,7 @@
 import gc
 import json
+import math
+from dataclasses import dataclass
 from pathlib import Path
 
 import mlx.core as mx
@@ -17,6 +19,14 @@ from mflux.models.wan.model.wan_transformer import WanTransformer
 from mflux.models.wan.model.wan_vae import Wan2_2_VAE
 from mflux.models.wan.weights import WanWeightDefinition
 from mflux.models.wan.weights.wan_lora_mapping import WanLoRAMapping
+
+
+@dataclass(frozen=True)
+class _WanComponentSources:
+    root_path: Path
+    component_roots: dict[str, Path]
+    provenance: dict[str, dict[str, str]]
+    factored: bool
 
 
 class WanInitializer:
@@ -45,16 +55,35 @@ class WanInitializer:
             lora_paths=lora_paths,
         )
         weight_definition = WanWeightDefinition.for_config(model_config)
-        root_path = PathResolution.resolve(path=path, patterns=weight_definition.get_download_patterns())
-        WanInitializer._validate_source_config(root_path, model_config)
-        WanInitializer._init_config(model, model_config, root_path, weight_definition)
+        sources = WanInitializer._resolve_component_sources(
+            model_config=model_config,
+            model_path=model_path,
+            weight_definition=weight_definition,
+        )
+        if sources.factored:
+            WanInitializer._validate_factored_source_config(
+                base_root=sources.root_path,
+                transformer_root=sources.component_roots["transformer"],
+                model_config=model_config,
+            )
+        else:
+            WanInitializer._validate_source_config(sources.root_path, model_config)
+        WanInitializer._init_config(
+            model,
+            model_config,
+            sources.root_path,
+            weight_definition,
+            component_roots=sources.component_roots,
+            component_source_provenance=sources.provenance,
+            factored_component_sources=sources.factored,
+        )
         # Reload spec (0089 e4): keep the ORIGINAL quantize request so a released
         # high-noise expert can be rebuilt exactly as at init (model.bits only
         # records the resolved level, which loses the stored-vs-requested source).
         model.quantize_arg = quantize
-        WanInitializer._init_tokenizers(model, str(root_path), weight_definition)
+        WanInitializer._init_tokenizers(model, str(sources.root_path), weight_definition)
         WanInitializer._init_models(model, model_config)
-        WanInitializer._load_and_apply_weights(model, root_path, quantize, weight_definition)
+        WanInitializer._load_and_apply_weights(model, sources.root_path, quantize, weight_definition)
         WanInitializer._apply_lora(
             model,
             lora_paths=lora_paths,
@@ -83,8 +112,9 @@ class WanInitializer:
             raise ValueError("Wan weight definition has no 'transformer' component to reload.")
         print("Reloading Wan high-noise transformer for the next high-noise phase...")
         transformer = WanTransformer(**WanInitializer._transformer_kwargs(model.model_config))
+        component_root = getattr(model, "component_roots", {}).get(component.name, model.root_path)
         component_weights, q_level, version = WeightLoader._load_component(
-            root_path=model.root_path,
+            root_path=component_root,
             component=component,
         )
         WanInitializer._normalize_runtime_sensitive_q8_paths(
@@ -118,9 +148,20 @@ class WanInitializer:
         model.transformer = transformer
 
     @staticmethod
-    def _init_config(model, model_config: ModelConfig, root_path: Path, weight_definition: WanWeightDefinition) -> None:
+    def _init_config(
+        model,
+        model_config: ModelConfig,
+        root_path: Path,
+        weight_definition: WanWeightDefinition,
+        component_roots: dict[str, Path] | None = None,
+        component_source_provenance: dict[str, dict[str, str]] | None = None,
+        factored_component_sources: bool = False,
+    ) -> None:
         model.model_config = model_config
         model.root_path = root_path
+        model.component_roots = dict(component_roots or {})
+        model.component_source_provenance = dict(component_source_provenance or {})
+        model.factored_component_sources = factored_component_sources
         model.weight_definition = weight_definition
         model.callbacks = CallbackRegistry()
         model.tiling_config = None
@@ -187,8 +228,9 @@ class WanInitializer:
             if component_model is None:
                 continue
 
+            component_root = getattr(model, "component_roots", {}).get(component.name, root_path)
             component_weights, q_level, version = WeightLoader._load_component(
-                root_path=root_path,
+                root_path=component_root,
                 component=component,
             )
             if component.name == "transformer":
@@ -728,6 +770,287 @@ class WanInitializer:
         return dict(model_config.transformer_overrides.get("vae_config", {}))
 
     @staticmethod
+    def _resolve_component_sources(
+        *,
+        model_config: ModelConfig,
+        model_path: str | None,
+        weight_definition: WanWeightDefinition,
+    ) -> _WanComponentSources:
+        if model_path is not None:
+            return WanInitializer._resolve_monolithic_source(
+                source=model_path,
+                weight_definition=weight_definition,
+            )
+
+        configured_base = model_config.transformer_overrides.get("component_base_model")
+        if configured_base is not None and (not isinstance(configured_base, str) or not configured_base.strip()):
+            raise ValueError("Wan component_base_model must be a non-empty repository id or local path.")
+        base_source = configured_base or model_config.base_model
+        transformer_source = model_config.custom_transformer_model
+
+        if configured_base is not None and not transformer_source:
+            raise ValueError(
+                "Wan factored component sources require custom_transformer_model when component_base_model is set."
+            )
+        if base_source and transformer_source:
+            return WanInitializer._resolve_factored_sources(
+                base_source=base_source,
+                transformer_source=transformer_source,
+                model_config=model_config,
+                weight_definition=weight_definition,
+            )
+        return WanInitializer._resolve_monolithic_source(
+            source=model_config.model_name,
+            weight_definition=weight_definition,
+        )
+
+    @staticmethod
+    def _resolve_monolithic_source(
+        *,
+        source: str,
+        weight_definition: WanWeightDefinition,
+    ) -> _WanComponentSources:
+        root_path = PathResolution.resolve(path=source, patterns=weight_definition.get_download_patterns())
+        if root_path is None:
+            raise FileNotFoundError(f"Wan model source {source!r} did not resolve to a model root.")
+        component_names = [component.name for component in weight_definition.get_components()]
+        component_names.extend(["text_encoder", "tokenizer"])
+        component_roots = {name: root_path for name in component_names}
+        provenance = {
+            name: WanInitializer._component_provenance(source=source, root_path=root_path, source_role="monolithic")
+            for name in component_names
+        }
+        return _WanComponentSources(
+            root_path=root_path,
+            component_roots=component_roots,
+            provenance=provenance,
+            factored=False,
+        )
+
+    @staticmethod
+    def _resolve_factored_sources(
+        *,
+        base_source: str,
+        transformer_source: str,
+        model_config: ModelConfig,
+        weight_definition: WanWeightDefinition,
+    ) -> _WanComponentSources:
+        base_patterns = weight_definition.get_base_download_patterns()
+        transformer_patterns = weight_definition.get_transformer_download_patterns()
+        base_revision = model_config.transformer_overrides.get("expected_component_base_revision")
+        transformer_revision_expected = model_config.transformer_overrides.get("expected_transformer_revision")
+        base_root = PathResolution.resolve(path=base_source, patterns=base_patterns, revision=base_revision)
+        if base_root is None:
+            raise FileNotFoundError(f"Wan base component source {base_source!r} did not resolve to a model root.")
+        WanInitializer._require_source_patterns(
+            source=base_source,
+            root_path=base_root,
+            patterns=base_patterns,
+            source_role="base components",
+        )
+        WanInitializer._validate_expected_snapshot_revision(
+            source=base_source,
+            root_path=base_root,
+            expected_revision=base_revision,
+            source_role="base component",
+        )
+        transformer_root = PathResolution.resolve(
+            path=transformer_source,
+            patterns=transformer_patterns,
+            revision=transformer_revision_expected,
+        )
+        if transformer_root is None:
+            raise FileNotFoundError(
+                f"Wan transformer component source {transformer_source!r} did not resolve to a model root."
+            )
+        WanInitializer._require_source_patterns(
+            source=transformer_source,
+            root_path=transformer_root,
+            patterns=transformer_patterns,
+            source_role="transformer",
+        )
+
+        WanInitializer._validate_expected_snapshot_revision(
+            source=transformer_source,
+            root_path=transformer_root,
+            expected_revision=transformer_revision_expected,
+            source_role="transformer",
+        )
+
+        component_roots = {
+            "text_encoder": base_root,
+            "tokenizer": base_root,
+            "vae": base_root,
+        }
+        for component in weight_definition.get_components():
+            component_roots[component.name] = (
+                transformer_root if component.name.startswith("transformer") else base_root
+            )
+        provenance = {
+            name: WanInitializer._component_provenance(
+                source=base_source,
+                root_path=base_root,
+                source_role="base",
+            )
+            for name in ("text_encoder", "tokenizer", "vae")
+        }
+        for component in weight_definition.get_components():
+            source = transformer_source if component.name.startswith("transformer") else base_source
+            root_path = transformer_root if component.name.startswith("transformer") else base_root
+            source_role = "transformer" if component.name.startswith("transformer") else "base"
+            provenance[component.name] = WanInitializer._component_provenance(
+                source=source,
+                root_path=root_path,
+                source_role=source_role,
+            )
+        return _WanComponentSources(
+            root_path=base_root,
+            component_roots=component_roots,
+            provenance=provenance,
+            factored=True,
+        )
+
+    @staticmethod
+    def _require_source_patterns(
+        *,
+        source: str,
+        root_path: Path,
+        patterns: list[str],
+        source_role: str,
+    ) -> None:
+        required_subdirs = PathResolution._get_required_subdirs_with_safetensors(patterns)
+        if PathResolution._is_snapshot_complete(root_path, required_subdirs, patterns):
+            return
+        raise FileNotFoundError(
+            f"Wan factored {source_role} source {source!r} resolved to incomplete root {root_path}. "
+            f"Required patterns: {patterns}. MLX-Gen will not substitute another cached model."
+        )
+
+    @staticmethod
+    def _component_provenance(*, source: str, root_path: Path, source_role: str) -> dict[str, str]:
+        provenance = {
+            "source": source,
+            "source_role": source_role,
+        }
+        revision = WanInitializer._snapshot_revision(root_path)
+        if revision is not None:
+            provenance["revision"] = revision
+        return provenance
+
+    @staticmethod
+    def _validate_expected_snapshot_revision(
+        *,
+        source: str,
+        root_path: Path,
+        expected_revision: str | None,
+        source_role: str,
+    ) -> None:
+        if expected_revision is None:
+            return
+        actual_revision = WanInitializer._snapshot_revision(root_path)
+        if actual_revision == expected_revision:
+            return
+        actual_label = actual_revision if actual_revision is not None else "unverifiable local path"
+        raise ValueError(
+            f"Wan {source_role} revision mismatch: {source!r} resolved to {actual_label!r}, "
+            f"but the selected model config requires {expected_revision!r}."
+        )
+
+    @staticmethod
+    def _snapshot_revision(root_path: Path) -> str | None:
+        parts = root_path.parts
+        for index, part in enumerate(parts[:-1]):
+            if part == "snapshots":
+                return parts[index + 1]
+        return None
+
+    @staticmethod
+    def _validate_factored_source_config(
+        *,
+        base_root: Path,
+        transformer_root: Path,
+        model_config: ModelConfig,
+    ) -> None:
+        overrides = model_config.transformer_overrides
+        expected_renderer_config = overrides.get("expected_renderer_config")
+        if isinstance(expected_renderer_config, dict):
+            renderer_config = WanInitializer._read_json(transformer_root / "config.json")
+            if renderer_config is None:
+                raise FileNotFoundError(f"Wan factored Bernini source {transformer_root} has no top-level config.json.")
+            for key in expected_renderer_config:
+                WanInitializer._validate_config_key(
+                    transformer_root,
+                    renderer_config,
+                    expected_renderer_config,
+                    f"renderer.{key}",
+                    key,
+                )
+        transformer_config = WanInitializer._read_json(transformer_root / "transformer" / "config.json")
+        if transformer_config is None:
+            raise FileNotFoundError(
+                f"Wan factored transformer source {transformer_root} has no transformer/config.json."
+            )
+        WanInitializer._validate_transformer_config(
+            transformer_root,
+            transformer_config,
+            overrides,
+            "transformer",
+        )
+
+        transformer_2_config = WanInitializer._read_json(transformer_root / "transformer_2" / "config.json")
+        has_transformer_2 = bool(overrides.get("has_transformer_2", False))
+        if has_transformer_2 and transformer_2_config is None:
+            raise FileNotFoundError(
+                f"Wan factored transformer source {transformer_root} has no transformer_2/config.json."
+            )
+        if transformer_2_config is not None and not has_transformer_2:
+            WanInitializer._raise_source_mismatch(
+                root_path=transformer_root,
+                key="transformer_2",
+                actual="present",
+                expected="absent",
+            )
+        if transformer_2_config is not None:
+            WanInitializer._validate_transformer_config(
+                transformer_root,
+                transformer_2_config,
+                overrides,
+                "transformer_2",
+            )
+
+        vae_config = WanInitializer._read_json(base_root / "vae" / "config.json")
+        if vae_config is None:
+            raise FileNotFoundError(f"Wan factored base source {base_root} has no vae/config.json.")
+        WanInitializer._validate_vae_config(base_root, vae_config, overrides)
+
+        text_encoder_config = WanInitializer._read_json(base_root / "text_encoder" / "config.json")
+        if text_encoder_config is None:
+            raise FileNotFoundError(f"Wan factored base source {base_root} has no text_encoder/config.json.")
+        WanInitializer._validate_text_encoder_config(
+            base_root,
+            text_encoder_config,
+            model_config.text_encoder_overrides,
+        )
+
+        tokenizer_config = WanInitializer._read_json(base_root / "tokenizer" / "tokenizer_config.json")
+        tokenizer_json = WanInitializer._read_json(base_root / "tokenizer" / "tokenizer.json")
+        if (
+            tokenizer_config is None
+            or tokenizer_json is None
+            or not (base_root / "tokenizer" / "spiece.model").exists()
+        ):
+            raise FileNotFoundError(
+                f"Wan factored base source {base_root} needs tokenizer_config.json, tokenizer.json, and spiece.model."
+            )
+        WanInitializer._validate_tokenizer_config(
+            base_root,
+            tokenizer_config,
+            tokenizer_json,
+            model_config.text_encoder_overrides,
+        )
+        WanInitializer._validate_factored_scheduler_semantics(base_root, overrides)
+
+    @staticmethod
     def _validate_source_config(root_path: Path | None, model_config: ModelConfig) -> None:
         if root_path is None:
             return
@@ -791,7 +1114,14 @@ class WanInitializer:
     def _validate_transformer_config(
         root_path: Path, transformer_config: dict, overrides: dict, component: str
     ) -> None:
-        for key in ("in_channels", "out_channels", "num_layers", "num_attention_heads", "ffn_dim"):
+        for key in (
+            "in_channels",
+            "out_channels",
+            "num_layers",
+            "num_attention_heads",
+            "attention_head_dim",
+            "ffn_dim",
+        ):
             WanInitializer._validate_config_key(root_path, transformer_config, overrides, f"{component}.{key}", key)
         WanInitializer._validate_config_key(
             root_path, transformer_config, overrides, f"{component}.patch_size", "patch_size"
@@ -812,6 +1142,56 @@ class WanInitializer:
             "is_residual",
         ):
             WanInitializer._validate_config_key(root_path, vae_config, expected_vae_config, f"vae.{key}", key)
+
+    @staticmethod
+    def _validate_text_encoder_config(root_path: Path, source: dict, expected: dict) -> None:
+        for key in ("model_type", "d_model", "d_ff", "num_layers", "num_heads", "vocab_size"):
+            WanInitializer._validate_config_key(root_path, source, expected, f"text_encoder.{key}", key)
+
+    @staticmethod
+    def _validate_tokenizer_config(
+        root_path: Path,
+        tokenizer_config: dict,
+        tokenizer_json: dict,
+        text_encoder_config: dict,
+    ) -> None:
+        tokenizer_class = tokenizer_config.get("tokenizer_class")
+        if tokenizer_class not in {"T5Tokenizer", "T5TokenizerFast"}:
+            WanInitializer._raise_source_mismatch(
+                root_path=root_path,
+                key="tokenizer.tokenizer_class",
+                actual=tokenizer_class,
+                expected="T5Tokenizer or T5TokenizerFast",
+            )
+        vocab = tokenizer_json.get("model", {}).get("vocab")
+        vocab_size = len(vocab) if isinstance(vocab, list) else None
+        encoder_vocab_size = text_encoder_config.get("vocab_size")
+        if vocab_size is None or not isinstance(encoder_vocab_size, int) or vocab_size > encoder_vocab_size:
+            WanInitializer._raise_source_mismatch(
+                root_path=root_path,
+                key="tokenizer.vocab_size",
+                actual=vocab_size,
+                expected=f"at most text encoder vocab_size {encoder_vocab_size!r}",
+            )
+
+    @staticmethod
+    def _validate_factored_scheduler_semantics(root_path: Path, overrides: dict) -> None:
+        solver = overrides.get("default_solver")
+        flow_shift = overrides.get("flow_shift")
+        if solver != "unipc":
+            WanInitializer._raise_source_mismatch(
+                root_path=root_path,
+                key="scheduler.default_solver",
+                actual=solver,
+                expected="unipc",
+            )
+        if not isinstance(flow_shift, (int, float)) or not math.isfinite(float(flow_shift)) or flow_shift <= 0:
+            WanInitializer._raise_source_mismatch(
+                root_path=root_path,
+                key="scheduler.flow_shift",
+                actual=flow_shift,
+                expected="a positive finite code-native UniPC flow shift",
+            )
 
     @staticmethod
     def _validate_config_key(root_path: Path, source: dict, expected_source: dict, label: str, key: str) -> None:

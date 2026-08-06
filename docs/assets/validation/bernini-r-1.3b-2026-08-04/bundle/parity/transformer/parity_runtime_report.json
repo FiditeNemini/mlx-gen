@@ -1,0 +1,53 @@
+{
+  "cosine_similarity": 0.9998361041873198,
+  "kind": "bernini_official_full_transformer_parity",
+  "max_absolute_error": 0.017578125,
+  "mean_absolute_error": 0.005578935146331787,
+  "passed": true,
+  "precision_profile": "runtime",
+  "precision_semantics": {
+    "mlx_attention_qk": "mlx.core.float32",
+    "mlx_phase": "mlx.core.float32",
+    "official_attention_qk": "torch.bfloat16",
+    "official_phase": "torch.complex128"
+  },
+  "relative_l2": 0.018176972486756652,
+  "rotary_application": {
+    "cosine_similarity": 0.9999993388048931,
+    "max_absolute_error": 0.007802009582519531,
+    "mean_absolute_error": 0.0005832729779166627,
+    "mlx_input_precision": "mlx.core.bfloat16",
+    "mlx_output_precision": "mlx.core.float32",
+    "official_input_precision": "torch.bfloat16",
+    "official_output_precision": "torch.bfloat16",
+    "relative_l2": 0.0011501571684784247
+  },
+  "rotary_phase": {
+    "cos": {
+      "cosine_similarity": 0.9999999999999994,
+      "max_absolute_error": 1.9740936874068638e-07,
+      "mean_absolute_error": 2.2472322828733556e-08,
+      "relative_l2": 3.729482843438987e-08
+    },
+    "sin": {
+      "cosine_similarity": 0.9999999999999986,
+      "max_absolute_error": 8.016403751920365e-08,
+      "mean_absolute_error": 4.680723635092406e-09,
+      "relative_l2": 5.572009632835488e-08
+    }
+  },
+  "schema_version": 1,
+  "shape": [
+    1,
+    16,
+    1,
+    4,
+    4
+  ],
+  "thresholds": {
+    "max_relative_l2": 0.025,
+    "max_rotary_application_relative_l2": 0.005,
+    "max_rotary_phase_absolute_error": 2e-06,
+    "min_cosine_similarity": 0.9995
+  }
+}

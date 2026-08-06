@@ -4,7 +4,7 @@ import pickle
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import mlx.core as mx
 from mlx.utils import tree_unflatten
@@ -138,7 +138,11 @@ class WeightLoader:
 
         # Apply precision conversion if specified
         if component.precision is not None:
-            raw_weights = WeightLoader._convert_precision(raw_weights, component.precision)
+            raw_weights = WeightLoader._convert_precision(
+                raw_weights,
+                component.precision,
+                precision_override=component.precision_override,
+            )
 
         # Passthrough mode: apply bulk transform and unflatten (no key mapping)
         if component.mapping_getter is None:
@@ -333,9 +337,7 @@ class WeightLoader:
                     obj = nested
                     break
             tensor_weights = {
-                str(k): WeightLoader._torch_tensor_to_mx(v)
-                for k, v in obj.items()
-                if isinstance(v, torch.Tensor)
+                str(k): WeightLoader._torch_tensor_to_mx(v) for k, v in obj.items() if isinstance(v, torch.Tensor)
             }
             if not tensor_weights:
                 raise ValueError("Torch checkpoint does not contain tensor weights.")
@@ -471,8 +473,18 @@ class WeightLoader:
         return all_weights
 
     @staticmethod
-    def _convert_precision(weights: dict[str, mx.array], precision: mx.Dtype) -> dict[str, mx.array]:
-        return {k: v if v.dtype == precision else v.astype(precision) for k, v in weights.items()}
+    def _convert_precision(
+        weights: dict[str, mx.array],
+        precision: mx.Dtype,
+        *,
+        precision_override: Callable[[str], mx.Dtype | None] | None = None,
+    ) -> dict[str, mx.array]:
+        converted = {}
+        for key, value in weights.items():
+            target = precision_override(key) if precision_override is not None else None
+            target = precision if target is None else target
+            converted[key] = value if value.dtype == target else value.astype(target)
+        return converted
 
     @staticmethod
     def _torch_module() -> Any:

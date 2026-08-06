@@ -108,6 +108,7 @@ class WanRotaryPosEmbed(nn.Module):
         self.attention_head_dim = attention_head_dim
         self.patch_size = patch_size
         self.max_seq_len = max_seq_len
+        self.theta = theta
         h_dim = w_dim = 2 * (attention_head_dim // 6)
         t_dim = attention_head_dim - h_dim - w_dim
         self.t_dim = t_dim
@@ -127,39 +128,61 @@ class WanRotaryPosEmbed(nn.Module):
         # keeps the dict out of nn.Module parameter traversal (weights/quantize).
         self._freqs_cache: dict = {}
 
-    def __call__(self, hidden_states: mx.array) -> tuple[mx.array, mx.array]:
+    def __call__(
+        self,
+        hidden_states: mx.array,
+        source_id: float | None = None,
+    ) -> tuple[mx.array, mx.array]:
         _, _, num_frames, height, width = hidden_states.shape
         p_t, p_h, p_w = self.patch_size
         ppf, pph, ppw = num_frames // p_t, height // p_h, width // p_w
         cached = self._freqs_cache.get((ppf, pph, ppw))
-        if cached is not None:
-            return cached
-        cos_t, cos_h, cos_w = mx.split(self.freqs_cos, [self.t_dim, self.t_dim + self.h_dim], axis=1)
-        sin_t, sin_h, sin_w = mx.split(self.freqs_sin, [self.t_dim, self.t_dim + self.h_dim], axis=1)
+        if cached is None:
+            cos_t, cos_h, cos_w = mx.split(self.freqs_cos, [self.t_dim, self.t_dim + self.h_dim], axis=1)
+            sin_t, sin_h, sin_w = mx.split(self.freqs_sin, [self.t_dim, self.t_dim + self.h_dim], axis=1)
 
-        cos_f = mx.broadcast_to(cos_t[:ppf].reshape(ppf, 1, 1, -1), (ppf, pph, ppw, self.t_dim))
-        cos_h = mx.broadcast_to(cos_h[:pph].reshape(1, pph, 1, -1), (ppf, pph, ppw, self.h_dim))
-        cos_w = mx.broadcast_to(cos_w[:ppw].reshape(1, 1, ppw, -1), (ppf, pph, ppw, self.w_dim))
-        sin_f = mx.broadcast_to(sin_t[:ppf].reshape(ppf, 1, 1, -1), (ppf, pph, ppw, self.t_dim))
-        sin_h = mx.broadcast_to(sin_h[:pph].reshape(1, pph, 1, -1), (ppf, pph, ppw, self.h_dim))
-        sin_w = mx.broadcast_to(sin_w[:ppw].reshape(1, 1, ppw, -1), (ppf, pph, ppw, self.w_dim))
+            cos_f = mx.broadcast_to(cos_t[:ppf].reshape(ppf, 1, 1, -1), (ppf, pph, ppw, self.t_dim))
+            cos_h = mx.broadcast_to(cos_h[:pph].reshape(1, pph, 1, -1), (ppf, pph, ppw, self.h_dim))
+            cos_w = mx.broadcast_to(cos_w[:ppw].reshape(1, 1, ppw, -1), (ppf, pph, ppw, self.w_dim))
+            sin_f = mx.broadcast_to(sin_t[:ppf].reshape(ppf, 1, 1, -1), (ppf, pph, ppw, self.t_dim))
+            sin_h = mx.broadcast_to(sin_h[:pph].reshape(1, pph, 1, -1), (ppf, pph, ppw, self.h_dim))
+            sin_w = mx.broadcast_to(sin_w[:ppw].reshape(1, 1, ppw, -1), (ppf, pph, ppw, self.w_dim))
 
-        freqs_cos = mx.concatenate([cos_f, cos_h, cos_w], axis=-1).reshape(1, ppf * pph * ppw, 1, -1)
-        freqs_sin = mx.concatenate([sin_f, sin_h, sin_w], axis=-1).reshape(1, ppf * pph * ppw, 1, -1)
-        # Materialize once so cache hits return ready tensors instead of re-walking
-        # the lazy graph; MLX arrays are immutable, so sharing them is seed-safe.
-        mx.eval(freqs_cos, freqs_sin)
-        self._freqs_cache[(ppf, pph, ppw)] = (freqs_cos, freqs_sin)
-        # Shapes are constant within a run (one grid per instance), so the bound only
-        # limits idle retention for long-lived hosts that chain runs at several
-        # resolutions. A grid pair is not small: ~114 MB f32 at A14B 121f@1280x720
-        # (111,600 tokens x 128 dims x cos+sin), and A14B holds one embed PER expert.
-        # Two grids cover the realistic alternating-preset case; a third resolution
-        # merely recomputes (~33 ms), so favor the smaller resident footprint.
-        # Eviction is FIFO by insertion (hits do not refresh): adequate at this size.
-        while len(self._freqs_cache) > 2:
-            self._freqs_cache.pop(next(iter(self._freqs_cache)))
-        return freqs_cos, freqs_sin
+            freqs_cos = mx.concatenate([cos_f, cos_h, cos_w], axis=-1).reshape(1, ppf * pph * ppw, 1, -1)
+            freqs_sin = mx.concatenate([sin_f, sin_h, sin_w], axis=-1).reshape(1, ppf * pph * ppw, 1, -1)
+            # Materialize once so cache hits return ready tensors instead of re-walking
+            # the lazy graph; MLX arrays are immutable, so sharing them is seed-safe.
+            mx.eval(freqs_cos, freqs_sin)
+            self._freqs_cache[(ppf, pph, ppw)] = (freqs_cos, freqs_sin)
+            # Shapes are constant within a run (one grid per instance), so the bound only
+            # limits idle retention for long-lived hosts that chain runs at several
+            # resolutions. A grid pair is not small: ~114 MB f32 at A14B 121f@1280x720
+            # (111,600 tokens x 128 dims x cos+sin), and A14B holds one embed PER expert.
+            # Two grids cover the realistic alternating-preset case; a third resolution
+            # merely recomputes (~33 ms), so favor the smaller resident footprint.
+            # Eviction is FIFO by insertion (hits do not refresh): adequate at this size.
+            while len(self._freqs_cache) > 2:
+                self._freqs_cache.pop(next(iter(self._freqs_cache)))
+        else:
+            freqs_cos, freqs_sin = cached
+
+        if source_id is None or float(source_id) == 0.0:
+            return freqs_cos, freqs_sin
+        if not math.isfinite(float(source_id)):
+            raise ValueError(f"source_id must be finite, got {source_id}.")
+
+        source_freqs = mx.arange(0, self.attention_head_dim, 2, dtype=mx.float32)
+        source_freqs = 1.0 / (self.theta ** (source_freqs / self.attention_head_dim))
+        source_phase = float(source_id) * source_freqs
+        source_cos = mx.repeat(mx.cos(source_phase), repeats=2, axis=0).reshape(1, 1, 1, -1)
+        source_sin = mx.repeat(mx.sin(source_phase), repeats=2, axis=0).reshape(1, 1, 1, -1)
+
+        # ByteDance represents both factors as complex phases and multiplies them.
+        # Keep the existing real-valued Wan attention contract by expanding that
+        # multiplication into its equivalent cosine/sine pair.
+        combined_cos = freqs_cos * source_cos - freqs_sin * source_sin
+        combined_sin = freqs_sin * source_cos + freqs_cos * source_sin
+        return combined_cos, combined_sin
 
     @staticmethod
     def _get_1d_rotary_pos_embed(dim: int, max_seq_len: int, theta: float) -> tuple[mx.array, mx.array]:

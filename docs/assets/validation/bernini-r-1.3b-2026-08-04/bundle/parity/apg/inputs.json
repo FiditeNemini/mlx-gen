@@ -1,0 +1,96 @@
+{
+  "cases": {
+    "collinear": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 0.0,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    },
+    "finite_clip": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 1.25,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    },
+    "large_base_norm": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 50.0,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    },
+    "momentum_step_2": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": -0.5,
+      "norm_threshold": 50.0,
+      "relative_tolerance": 2e-07,
+      "updates": 2
+    },
+    "normal": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 50.0,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    },
+    "orthogonal": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 0.0,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    },
+    "overflow_clip": {
+      "absolute_tolerance": 0.0,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 1.25,
+      "relative_tolerance": 0.0,
+      "updates": 1
+    },
+    "realistic_reduction": {
+      "absolute_tolerance": 2e-05,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 50.0,
+      "relative_tolerance": 2e-05,
+      "updates": 1
+    },
+    "tiny_base_norm": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.37,
+      "momentum": 0.0,
+      "norm_threshold": 50.0,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    },
+    "zero": {
+      "absolute_tolerance": 5e-07,
+      "eta": 0.5,
+      "momentum": 0.0,
+      "norm_threshold": 50.0,
+      "relative_tolerance": 2e-07,
+      "updates": 1
+    }
+  },
+  "dtype": "float32",
+  "input_sha256": "69c6fa61f891fbc352a48eed4177c4bc2d9471a36c064cb2a4c6974f18491847",
+  "kind": "bernini_official_apg_inputs",
+  "official_normalize_diff_sha256": "8cde4c7094bc9b2882e969b175b366ab3a5146f2e02edf5a26c861c255210754",
+  "official_source_revision": "2d2b4591ac053ec25c6371b01a5a6746679e5793",
+  "reduction_axes": [
+    1,
+    3,
+    4
+  ],
+  "schema_version": 1,
+  "seed": 8104
+}

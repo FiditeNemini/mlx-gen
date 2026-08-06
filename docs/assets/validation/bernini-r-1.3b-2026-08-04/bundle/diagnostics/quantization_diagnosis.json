@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "kind": "bernini_r_1_3b_quantization_diagnosis",
+  "created_at": "2026-08-04T02:28:00+0200",
+  "input_contract": {
+    "prompt": "Animate image0 as a marble statue slowly turning its head toward the camera in a fixed shot.",
+    "seed": 8120,
+    "width": 128,
+    "height": 128,
+    "frames": 5,
+    "steps": 8,
+    "max_condition_size": 256
+  },
+  "packed_transformer_probe": {
+    "bf16_mlx_vs_official_torch": {
+      "cosine_similarity": 0.9998361041873198,
+      "relative_l2": 0.018176972486756652
+    },
+    "q4_mlx_vs_official_torch": {
+      "cosine_similarity": 0.782339,
+      "relative_l2": 0.71033
+    },
+    "q4_mlx_vs_bf16_mlx": {
+      "cosine_similarity": 0.781742,
+      "relative_l2": 0.71224
+    },
+    "q8_quantized_transformer_linear_count": 0
+  },
+  "videos": {
+    "bf16": {
+      "path": "r2v_bf16_8step.mp4",
+      "sha256": "a245401189d488471d581af0a1ac5e1c4a1d111f2ef6bf3197a4e1120bb9b8d4",
+      "visual_result": "coherent scene"
+    },
+    "q4": {
+      "path": "r2v_q4_8step.mp4",
+      "sha256": "7dda8d5172603039058b01f5495dad1a9320f25f4a5189ecc94d39a02d66c32d",
+      "visual_result": "invalid overexposed latent-like texture"
+    },
+    "nominal_q8": {
+      "path": "r2v_q8_8step.mp4",
+      "sha256": "a245401189d488471d581af0a1ac5e1c4a1d111f2ef6bf3197a4e1120bb9b8d4",
+      "visual_result": "byte-identical to BF16 because no Bernini transformer linear is quantized"
+    }
+  },
+  "comparison_contact_sheet": "quantization_comparison.png",
+  "decision": "Reject every Bernini --quantize value until a selective policy passes packed-transformer and model-backed video gates."
+}

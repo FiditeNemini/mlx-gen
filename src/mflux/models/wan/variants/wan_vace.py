@@ -31,13 +31,13 @@ class WanVace(Wan2_2_TI2V):
         self,
         seed: int,
         prompt: str,
-        num_inference_steps: int = RECOMMENDED_STEPS,
+        num_inference_steps: int | None = RECOMMENDED_STEPS,
         height: int = RECOMMENDED_HEIGHT,
         width: int = RECOMMENDED_WIDTH,
         num_frames: int = RECOMMENDED_FRAMES,
         fps: int = RECOMMENDED_FPS,
         guidance: float | None = None,
-        guidance_2: float | None = None,
+        guidance_2: float | None | object = None,
         flow_shift: float | None = None,
         solver: str | None = None,
         denoising_step_list: list[int] | None = None,
@@ -55,9 +55,6 @@ class WanVace(Wan2_2_TI2V):
         video_mask_path: Path | str | None = None,
         canvas_policy: str | None = None,
         resize_mode: str = "resize",
-        masked_region_mode: str = "generate",
-        reference_image_paths: list[Path | str] | None = None,
-        conditioning_scale: float = 1.0,
         max_sequence_length: int = 512,
         progress_callback=None,
         release_inactive_denoiser: bool | None = None,
@@ -66,8 +63,13 @@ class WanVace(Wan2_2_TI2V):
         clear_cache_each_transformer_block: bool = False,
         tensor_health_check_interval: int | None = None,
         compile_transformer: bool = False,
+        masked_region_mode: str = "generate",
+        reference_image_paths: list[Path | str] | None = None,
+        conditioning_scale: float = 1.0,
     ) -> GeneratedVideo:
         start_time = time.time()
+        if num_inference_steps is None:
+            num_inference_steps = self.RECOMMENDED_STEPS
         if guidance_2 is not None:
             raise ValueError("Wan VACE uses a single transformer; guidance_2 is not supported.")
         # Both flags bind on every Wan variant (shared CLI kwarg set) but are

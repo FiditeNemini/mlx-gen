@@ -9,6 +9,8 @@ class ForwardPolicy(Enum):
     ROUTER_ONLY = "router_only"
     # Consumed by the router parser and re-emitted as `<emit_flag> <value>` when set.
     REEMIT_VALUE = "reemit_value"
+    # Consumed repeatable option, re-emitted once per value.
+    REEMIT_VALUES = "reemit_values"
     # Consumed store_true flag, re-emitted as a bare `<emit_flag>` when set.
     REEMIT_FLAG = "reemit_flag"
     # Consumed and re-emitted by a dedicated helper (route-dependent argument names or
@@ -84,7 +86,7 @@ ROUTER_OPTIONS: tuple[RouterOption, ...] = (
             "help": "Enable debug logging for internal generation details such as LoRA fusion targets.",
         },
         emit_flag="--debug",
-        emit_order=4,
+        emit_order=5,
     ),
     RouterOption(
         flags=("--task",),
@@ -232,6 +234,22 @@ ROUTER_OPTIONS: tuple[RouterOption, ...] = (
         metadata_keys=("video_mask_path",),
         emit_flag="--video-mask-path",
         emit_order=3,
+    ),
+    RouterOption(
+        flags=("--reference-image",),
+        dest="reference_image_paths",
+        policy=ForwardPolicy.REEMIT_VALUES,
+        kwargs={
+            "action": "append",
+            "default": None,
+            "help": (
+                "Repeatable reference-image conditioning for exact model routes such as Wan VACE "
+                "and Bernini-R. Reference images do not occupy the primary --image task slot."
+            ),
+        },
+        metadata_keys=("reference_image_paths",),
+        emit_flag="--reference-image",
+        emit_order=4,
     ),
     RouterOption(
         flags=("--reframe-padding",),

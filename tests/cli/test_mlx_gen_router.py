@@ -746,7 +746,7 @@ def test_capabilities_command_reports_wan_context_frames_on_a14b_i2v_only(capsys
     # concat i2v path as the bracket; hosts gate on this additive v6 field.
     mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-I2V-A14B-Diffusers"])
     i2v_payload = json.loads(capsys.readouterr().out)
-    assert i2v_payload["schema_version"] == 7
+    assert i2v_payload["schema_version"] == 8
     i2v_row = next(capability for capability in i2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
     assert i2v_row["supports_context_frames"] is True
     assert i2v_row["supports_svi"] is True
@@ -6346,6 +6346,87 @@ def test_download_command_uses_a14b_wan_patterns(monkeypatch):
     assert calls[0][2] is True
     assert "transformer_2/*.safetensors" in calls[0][1]
     assert "transformer_2/*.json" in calls[0][1]
+
+
+def test_download_command_uses_pinned_factored_bernini_sources(monkeypatch):
+    calls = []
+
+    def fake_snapshot_download(*, repo_id, allow_patterns, revision=None):
+        calls.append((repo_id, allow_patterns, revision, downloads_enabled()))
+        return f"/tmp/hf-cache/{repo_id.split('/')[-1]}"
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", fake_snapshot_download)
+
+    mlx_gen._download_model(["--model", "bernini-r-1.3b"])
+
+    assert [call[0] for call in calls] == [
+        "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
+        "ByteDance/Bernini-R-1.3B-Diffusers",
+    ]
+    assert calls[0][2] == "ec4d2cb062b548996b179d493fdd05340de702a1"
+    assert calls[1][2] == "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+    assert "text_encoder/*.safetensors" in calls[0][1]
+    assert "transformer/*.safetensors" not in calls[0][1]
+    assert "transformer/*.safetensors" in calls[1][1]
+    assert "text_encoder/*.safetensors" not in calls[1][1]
+    assert all(call[3] is True for call in calls)
+
+
+def test_download_command_rejects_all_files_for_factored_bernini(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr("huggingface_hub.snapshot_download", lambda **kwargs: calls.append(kwargs))
+
+    with pytest.raises(SystemExit) as exc:
+        mlx_gen._download_model(["--model", "bernini-r-1.3b", "--all-files"])
+
+    assert exc.value.code == 2
+    assert calls == []
+    error = capsys.readouterr().err
+    assert "two pinned factored sources" in error
+    assert "Omit --all-files" in error
+
+
+def test_download_command_rejects_cold_bernini_install_without_headroom(monkeypatch, capsys):
+    disk_usage = type("DiskUsage", (), {"free": 1})()
+    monkeypatch.setattr(
+        "mflux.models.common.resolution.path_resolution.PathResolution._find_complete_cached_snapshot",
+        staticmethod(lambda *args, **kwargs: None),
+    )
+    monkeypatch.setattr(mlx_gen.shutil, "disk_usage", lambda path: disk_usage)
+
+    with pytest.raises(SystemExit) as exc:
+        mlx_gen._download_model(["--model", "bernini-r-1.3b"])
+
+    assert exc.value.code == 2
+    error = capsys.readouterr().err
+    assert "Insufficient free space" in error
+    assert "18.36 GiB" in error
+    assert "Already complete pinned sources are not counted" in error
+
+
+def test_download_command_skips_cached_bernini_sources_in_space_preflight(monkeypatch):
+    calls = []
+    disk_usage = type("DiskUsage", (), {"free": 10 * 1024**3})()
+
+    def fake_find(repo_id, patterns, revision=None):
+        if repo_id == "Wan-AI/Wan2.1-VACE-1.3B-diffusers":
+            return Path("/cached/base")
+        return None
+
+    def fake_snapshot_download(*, repo_id, allow_patterns, revision=None):
+        calls.append(repo_id)
+        return f"/tmp/hf-cache/{repo_id.split('/')[-1]}"
+
+    monkeypatch.setattr(
+        "mflux.models.common.resolution.path_resolution.PathResolution._find_complete_cached_snapshot",
+        staticmethod(fake_find),
+    )
+    monkeypatch.setattr(mlx_gen.shutil, "disk_usage", lambda path: disk_usage)
+    monkeypatch.setattr("huggingface_hub.snapshot_download", fake_snapshot_download)
+
+    mlx_gen._download_model(["--model", "bernini-r-1.3b"])
+
+    assert calls == ["Wan-AI/Wan2.1-VACE-1.3B-diffusers", "ByteDance/Bernini-R-1.3B-Diffusers"]
 
 
 def test_prepare_command_routes_to_save_with_downloads_enabled(monkeypatch):

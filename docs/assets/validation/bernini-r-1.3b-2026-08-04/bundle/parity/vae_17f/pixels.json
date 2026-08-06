@@ -1,0 +1,15 @@
+{
+  "construction": "three-channel x/y/time analytic pattern",
+  "dtype": "float32",
+  "range": [
+    -1.0,
+    1.0
+  ],
+  "shape": [
+    1,
+    3,
+    17,
+    64,
+    80
+  ]
+}

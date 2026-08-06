@@ -52,6 +52,14 @@ measured benchmark envelope for each recommended route. It is intentionally cons
 prefer full-process physical-peak measurements when they are available, and the page does not
 promote model families whose public memory evidence is still too thin.
 
+Bernini-R 1.3B fits the tested 18 GB-class memory shapes when `--low-ram` is enabled: the bounded
+BF16 R2V/RV2V/V2V matrix peaked at 9.45 GB whole-process physical footprint on the 128 GB
+validation host. That is not a production recommendation. Every required visual-quality row
+failed because of weak motion, missed reference fidelity, cadence seams, or corrupted frames, and
+the official 81-frame profile is unmeasured. Do not confuse memory with storage: a cold selective
+Bernini download needs 18.36 GiB free including headroom, so an 18 GB fresh disk budget is also
+slightly too small.
+
 ## Can MLX-Gen Packages Load In Diffusers Or Transformers?
 
 No. MLX-Gen packages use the MLX/mflux saved-weight layout and MLX quantization tensors. They are intended for MLX-Gen and compatible mflux code, not direct Diffusers or Transformers `from_pretrained()` loading.
@@ -84,6 +92,10 @@ allocator high-water mark. A quantized model can be much smaller on disk and in 
 memory while a specific profile shows a similar full-process peak because temporary activations
 or decode buffers dominate that run. See [Quantization](quantization.md) for the current tables,
 definitions, and the dated Wan correction.
+
+Bernini is a separate exception. Its generic q4 output collapsed, and nominal q8 quantized zero
+renderer linears and produced a byte-identical BF16 video. MLX-Gen therefore rejects every
+Bernini `--quantize` value instead of reporting a misleading optimization.
 
 ## Can I Quantize ERNIE Image Turbo?
 
@@ -720,6 +732,7 @@ distortion on a mismatched source.
 | TI2V-5B T2V/I2V | 32 px | `1280x704` or `704x1280` | `832x480`, `480x832`; smaller sizes such as `448x256` are smoke checks only |
 | T2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
 | I2V-A14B | 16 px | `1280x720` or `720x1280` | `832x480`, `480x832`, `448x256`, `256x448`, `432x240` |
+| Bernini-R 1.3B | 16 px | `848x480` or source-ratio equivalent | `320x192` and `176x320` are bounded functional proofs only |
 
 For TI2V-5B text-to-video, `1280x720` adjusts to `1280x736`, and `432x240` adjusts to `448x256`.
 For A14B text-to-video, `1280x720`, `832x480`, `448x256`, and `432x240` are already valid multiples
@@ -781,9 +794,9 @@ Limits that matter:
 - the source is resampled onto the `--fps` timeline, so the output keeps real-time speed;
   requesting an fps above the source duplicates frames (a warning says so); matching fps passes
   frames through untouched, and metadata records `source_video_resampled`;
-- the A14B route does not accept extra reference images or VACE-style controls - for
-  reference-image injection and learned mask conditioning use the natively ported
-  `wan-vace` model (see [Wan Video](wan-video.md#vace-reference-images-and-learned-mask-conditioning));
+- the A14B route does not accept extra reference images or VACE-style controls - use the
+  natively ported `wan-vace` model for learned controls, or [Bernini-R](bernini.md) for ordinary
+  role-aware reference images plus optional source video;
 - source frames are stretched to the requested canvas by default, so match the aspect ratio to the
   source, derive the canvas from the clip with `--canvas-policy source-aspect`, or map without
   distortion via `--resize-mode crop|pad`;

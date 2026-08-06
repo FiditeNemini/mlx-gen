@@ -21,16 +21,20 @@ class WanUniPCMultistepScheduler:
         solver_order: int = 2,
         solver_type: str = "bh2",
         lower_order_final: bool = True,
+        flow_sigma_schedule: str = "endpoint-inclusive",
     ):
         if solver_order != 2:
             raise ValueError("Wan2.2 TI2V currently supports UniPC solver_order=2.")
         if solver_type != "bh2":
             raise ValueError("Wan2.2 TI2V currently supports UniPC solver_type='bh2'.")
+        if flow_sigma_schedule not in {"endpoint-inclusive", "diffusers-0.35.2"}:
+            raise ValueError("flow_sigma_schedule must be 'endpoint-inclusive' or 'diffusers-0.35.2'.")
         self.num_train_timesteps = num_train_timesteps
         self.flow_shift = flow_shift
         self.solver_order = solver_order
         self.solver_type = solver_type
         self.lower_order_final = lower_order_final
+        self.flow_sigma_schedule = flow_sigma_schedule
         self.num_inference_steps: int | None = None
         self.timesteps = mx.array([], dtype=mx.int64)
         self.sigmas = mx.array([], dtype=mx.float32)
@@ -63,12 +67,19 @@ class WanUniPCMultistepScheduler:
             timesteps = np.asarray(grid, dtype=np.int64)
             num_inference_steps = len(grid)
         else:
+            assert num_inference_steps is not None
             if num_inference_steps <= 0:
                 raise ValueError("num_inference_steps must be greater than zero.")
-            sigmas = np.linspace(1, 1 / self.num_train_timesteps, num_inference_steps + 1)[:-1]
-            sigmas = self.flow_shift * sigmas / (1 + (self.flow_shift - 1) * sigmas)
-            if abs(sigmas[0] - 1) < 1e-6:
-                sigmas[0] -= 1e-6
+            if self.flow_sigma_schedule == "diffusers-0.35.2":
+                alphas = np.linspace(1, 1 / self.num_train_timesteps, num_inference_steps + 1)
+                unshifted = 1.0 - alphas
+                shifted = self.flow_shift * unshifted / (1 + (self.flow_shift - 1) * unshifted)
+                sigmas = np.flip(shifted)[:-1].copy()
+            else:
+                sigmas = np.linspace(1, 1 / self.num_train_timesteps, num_inference_steps + 1)[:-1]
+                sigmas = self.flow_shift * sigmas / (1 + (self.flow_shift - 1) * sigmas)
+                if abs(sigmas[0] - 1) < 1e-6:
+                    sigmas[0] -= 1e-6
             timesteps = (sigmas * self.num_train_timesteps).astype(np.int64)
         sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
 

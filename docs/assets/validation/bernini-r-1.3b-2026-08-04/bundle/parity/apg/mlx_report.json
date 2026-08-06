@@ -1,0 +1,318 @@
+{
+  "arrays": {
+    "collinear__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.934720516204834,
+      "min": -1.0458098649978638,
+      "sha256": "c5c9f31e5f8e9e1b29c85bcdf716b4440a11d2c1fc29cdc6797f9ed580569209",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "collinear__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 5.228974342346191,
+      "min": -2.8265140056610107,
+      "sha256": "cb49ee02e8aac1c798c3b7860b83af4846743ec6c220b0d3708d7900982a0acb",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "finite_clip__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 0.8223241567611694,
+      "min": -0.9824813008308411,
+      "sha256": "f5a74e5fabc966048185f5e2efa03163f4cebbc9c594107a42cd13fa2dde27b6",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "finite_clip__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 25436663808.0,
+      "min": -30166681600.0,
+      "sha256": "c8cb5f7d6f96b8718f05296b3cb5c6577c72f2da71674d01efbd4f40d05001a8",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "large_base_norm__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.5352959632873535,
+      "min": -2.9226064682006836,
+      "sha256": "79d418f29b8e9c50ba00d88cab7b00d43eaaa29707f25e0629cdb9ec433f53c9",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "large_base_norm__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.543666362762451,
+      "min": -3.0166680812835693,
+      "sha256": "0a66707eabbd6a96bae7190968a3bb6eeea3ca2dbf8011439e07d03bb645e94f",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "momentum_step_2__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.7559590339660645,
+      "min": -1.4929665327072144,
+      "sha256": "41c24dc1e71c8cd1f1d17b4d1f6d605ae263fdf99a4526b0840613684e15d7fb",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "momentum_step_2__output_1": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.7693368196487427,
+      "min": -2.1628825664520264,
+      "sha256": "bd3edc57a28b56c258f35e8ce8acfa86577d77d7c124549bf761e453c9b3b63b",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "momentum_step_2__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.805370807647705,
+      "min": -1.4313888549804688,
+      "sha256": "166d12500ff0cd826d21e687e8b3a2d4955411401734bf9913509af4655526c2",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "momentum_step_2__state_1": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.878697395324707,
+      "min": -2.1255555152893066,
+      "sha256": "5c6628e9cc163480fd851d04bb62c50bc79af95b21c49153e2cd69cd91ce623e",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "normal__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.5352959632873535,
+      "min": -2.9226064682006836,
+      "sha256": "14ca115990f68ff926d46c8291d1ca4a44afac0a5af5ecb8700f27a87f1394df",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "normal__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.543666362762451,
+      "min": -3.0166680812835693,
+      "sha256": "0a66707eabbd6a96bae7190968a3bb6eeea3ca2dbf8011439e07d03bb645e94f",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "orthogonal__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.0,
+      "min": 0.0,
+      "sha256": "1b4d0a166b30b51db7e93dacd7325fea64d57f303153e51b202d1e1560b46b17",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "orthogonal__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 1.0,
+      "min": 0.0,
+      "sha256": "1b4d0a166b30b51db7e93dacd7325fea64d57f303153e51b202d1e1560b46b17",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "overflow_clip__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 0.0,
+      "min": 0.0,
+      "sha256": "2ea9ab9198d1638007400cd2c3bef1cc745b864b76011a0e1bc52180ac6452d4",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "overflow_clip__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.5436664946923405e+20,
+      "min": -3.016668304555995e+20,
+      "sha256": "56e0906b31d280daf6ca703c79e99dca8d3042535bc0a62892abeb4b37083a9d",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "realistic_reduction__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 3.0170705318450928,
+      "min": -2.320772171020508,
+      "sha256": "f91861aa2ed09d5beaf417782b12f36994f6814c3e846b1abdfac8090c3cf2cf",
+      "shape": [
+        1,
+        16,
+        2,
+        16,
+        24
+      ]
+    },
+    "realistic_reduction__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 4.764066696166992,
+      "min": -3.6445064544677734,
+      "sha256": "b342809b28bad2a23ec50da976345d49b3b2aab753d3aeeb806a163716de99e4",
+      "shape": [
+        1,
+        16,
+        2,
+        16,
+        24
+      ]
+    },
+    "tiny_base_norm__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.543649435043335,
+      "min": -3.0165536403656006,
+      "sha256": "b8608d3435a634cd507ef783e9eea6e463210374ade02243ebcab1ee87732b26",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "tiny_base_norm__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 2.543666362762451,
+      "min": -3.0166680812835693,
+      "sha256": "0a66707eabbd6a96bae7190968a3bb6eeea3ca2dbf8011439e07d03bb645e94f",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "zero__output_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 0.0,
+      "min": 0.0,
+      "sha256": "2ea9ab9198d1638007400cd2c3bef1cc745b864b76011a0e1bc52180ac6452d4",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    },
+    "zero__state_0": {
+      "dtype": "float32",
+      "finite": true,
+      "max": 0.0,
+      "min": 0.0,
+      "sha256": "2ea9ab9198d1638007400cd2c3bef1cc745b864b76011a0e1bc52180ac6452d4",
+      "shape": [
+        1,
+        3,
+        2,
+        2,
+        2
+      ]
+    }
+  },
+  "backend": "mlx",
+  "clip_precision": "float32",
+  "mlx_version": "0.31.0",
+  "platform": "macOS-26.3-arm64-arm-64bit",
+  "projection_precision": "stable-float32",
+  "schema_version": 1
+}

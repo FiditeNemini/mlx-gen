@@ -51,6 +51,7 @@ _STATUS_RANK = {
 I2I_EDIT_5X4_PROFILE_ID = "i2i_edit_5x4_2026_06_05"
 REFRAME_OUTPAINT_PROFILE_ID = "reframe_outpaint_2026_06_08"
 FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID = "flux2_klein_base_starship_2026_06_10"
+BERNINI_R_1_3B_PROFILE_ID = "bernini_r_1_3b_2026_08_04"
 
 CANONICAL_SOURCE = "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png"
 QWEN2511_PARITY_DIR = "docs/assets/validation/qwen-edit-2511-parity-2026-06-06"
@@ -71,6 +72,8 @@ MASKED_EDIT_MATRIX_VALIDATION_DIR = "docs/assets/validation/masked-edit-matrix-2
 MASKED_EDIT_MATRIX_PROFILE_ID = "masked_edit_matrix_5x5_2026_07_15"
 ZIMAGE_LATENT_LORA_VALIDATION_DIR = "docs/assets/validation/zimage-latent-lora-2026-06-24"
 LORA_ROUTE_EXPANSION_VALIDATION_DIR = "docs/assets/validation/lora-route-expansion-2026-06-22"
+BERNINI_R_1_3B_VALIDATION_DIR = "docs/assets/validation/bernini-r-1.3b-2026-08-04"
+BERNINI_R_1_3B_REPORT = f"{BERNINI_R_1_3B_VALIDATION_DIR}/bundle/bernini_proof_report.json"
 
 
 @dataclass(frozen=True)
@@ -185,6 +188,7 @@ def list_validation_profiles() -> tuple[ValidationProfile, ...]:
         _i2i_edit_profile(),
         _reframe_outpaint_profile(),
         _flux2_klein_base_starship_profile(),
+        _bernini_r_1_3b_profile(),
         _zimage_inpaint_profile(),
         _masked_edit_matrix_profile(),
         *_lora_profiles(),
@@ -294,6 +298,109 @@ def _flux2_klein_base_starship_profile() -> ValidationProfile:
             "share the route surface through capabilities, but their starship contact sheets are still pending."
         ),
         records=tuple(_flux2_klein_base_starship_records()),
+    )
+
+
+def _bernini_r_1_3b_profile() -> ValidationProfile:
+    model = "ByteDance/Bernini-R-1.3B-Diffusers"
+    shared = {
+        "profile_id": BERNINI_R_1_3B_PROFILE_ID,
+        "model": model,
+        "family": "Bernini-R 1.3B",
+        "package_variant": "BF16 factored source",
+        "status": STATUS_FAIL,
+        "evidence_date": "2026-08-04",
+        "evidence_type": "model_backed_video_and_recorded_adversarial_visual_failure",
+    }
+    return ValidationProfile(
+        id=BERNINI_R_1_3B_PROFILE_ID,
+        title="Bernini-R 1.3B Experimental Renderer Failure Record",
+        canonical_source=f"{BERNINI_R_1_3B_VALIDATION_DIR}/bundle/output_summary_contact_sheet.png",
+        description=(
+            "Model-backed BF16 low-RAM evidence for experimental Bernini renderer routes on Apple Silicon. "
+            "The runtime and component parity checks pass, but every required visual-quality case fails. "
+            "The short 17-frame proofs exhibit weak motion and cadence-aligned tail corruption; a controlled "
+            "33-frame exact-upstream-prompt diagnostic also collapses progressively and has a 2.06x latent-boundary "
+            "jump ratio. The bundled upstream clips are qualitative targets only because their producing checkpoint "
+            "and inference recipe are unattested. See the schema-v3 proof report for the binding verdict: "
+            f"{BERNINI_R_1_3B_REPORT}."
+        ),
+        records=(
+            ValidationRecord(
+                **shared,
+                step="R2V-8REF",
+                step_label="eight-reference video",
+                public_task="text-to-video",
+                mode="reference-video",
+                artifact_path=(
+                    f"{BERNINI_R_1_3B_VALIDATION_DIR}/bundle/cases/run_1/r2v_eight_reference/"
+                    "r2v_eight_reference_17f.mp4"
+                ),
+                source_images=tuple(
+                    "ByteDance/Bernini@2d2b4591ac053ec25c6371b01a5a6746679e5793:"
+                    f"assets/testcases/r2v/source_img{index}.png"
+                    for index in range(8)
+                ),
+                prompt=(
+                    "Create a fixed medium-shot video at sunset. The white marble male statue shown in image0, "
+                    "image5, and image6 sits on the wooden seaside bench in image4. He wears the pink cat-ear "
+                    "headphones from image1, the black bernini T-shirt from image2, and the floral shorts from image3, "
+                    "and holds the rounded brown cup from image7. Keep the statue identity, white stone material, "
+                    "clothing, cup, and bench stable. He slowly lifts the cup, takes a sip, lowers it, and gently bobs "
+                    "to music. Show no steam. He always faces the camera; keep the camera fixed and motion slow and "
+                    "smooth; preserve the warm ocean sunset."
+                ),
+                reviewer_notes=(
+                    "FAIL. The 320x192, 17-frame, 20-step artifact is nearly static, omits the requested cup action, "
+                    "headphones, and faithful identity, and jumps at each four-latent-slice boundary. A separate "
+                    "33-frame run using the exact 2,461-character upstream prompt records 571 UMT5 tokens truncated "
+                    "to 512 and develops severe geometry and mosaic corruption from about frame 13 onward."
+                ),
+            ),
+            ValidationRecord(
+                **shared,
+                step="RV2V-GARMENT",
+                step_label="reference-guided garment edit",
+                public_task="video-to-video",
+                mode="reference-video-edit",
+                artifact_path=(f"{BERNINI_R_1_3B_VALIDATION_DIR}/bundle/cases/run_1/rv2v_garment/rv2v_garment_17f.mp4"),
+                source_images=(
+                    "ByteDance/Bernini@2d2b4591ac053ec25c6371b01a5a6746679e5793:assets/testcases/rv2v/source_case1.mp4",
+                    "ByteDance/Bernini@2d2b4591ac053ec25c6371b01a5a6746679e5793:assets/testcases/rv2v/ref_case1.jpg",
+                ),
+                prompt=(
+                    "Replace the person's outer shirt with the shirt from the reference image while keeping the inner "
+                    "undershirt unchanged, preserving the original body pose, fit behavior, camera framing, lighting, "
+                    "background, pants, hair, skin, shadows, and overall motion exactly as they are."
+                ),
+                reviewer_notes=(
+                    "FAIL. The pinstripe transfer is partially visible and the source remains recognizable, but "
+                    "motion is nearly static and frames 13-16 contain conspicuous block, doubling, and subject "
+                    "corruption. The same-seed reference pair demonstrates sensitivity, not faithful reference "
+                    "control: the black garment does not transfer and neither required A/B row meets quality."
+                ),
+            ),
+            ValidationRecord(
+                **shared,
+                step="V2V-INSERT",
+                step_label="prompt-guided video edit",
+                public_task="video-to-video",
+                mode="latent-video",
+                artifact_path=(f"{BERNINI_R_1_3B_VALIDATION_DIR}/bundle/cases/run_1/v2v_snowman/v2v_snowman_17f.mp4"),
+                source_images=(
+                    "ByteDance/Bernini@2d2b4591ac053ec25c6371b01a5a6746679e5793:assets/testcases/v2v/source_case1.mp4",
+                ),
+                prompt=(
+                    "Add a realistic snowman on the right side of the snowy path, positioned in the mid-right ground "
+                    "so it sits naturally beside the trail without blocking the black-and-white dog."
+                ),
+                reviewer_notes=(
+                    "FAIL. The source scene and dog remain recognizable, but the inserted snowman is cartoon-like "
+                    "rather than realistic, motion is nearly static, and frames 13-16 contain severe cyan/block "
+                    "corruption. A 40-step rerun retains the same failure pattern, so extra steps do not repair it."
+                ),
+            ),
+        ),
     )
 
 
@@ -636,7 +743,7 @@ def _lora_profiles() -> tuple[ValidationProfile, ...]:
                 artifact_path=f"{ZIMAGE_LATENT_LORA_VALIDATION_DIR}/zimage_q8_latent_childdraw_contact_sheet.png",
                 source_images=(CANONICAL_SOURCE,),
                 prompt=(
-                    "Turn this same spaceship in the snow into a childs wax-crayon drawing on white paper. "
+                    "Turn this same spaceship in the snow into a child's wax-crayon drawing on white paper. "
                     "Preserve the exact camera angle, ship position, snowy canyon layout, and single ship "
                     "silhouette. Use thick uneven crayon lines, simple childlike shapes, and flat hand-colored fills."
                 ),

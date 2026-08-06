@@ -1,6 +1,7 @@
 import argparse
 import json
 import shlex
+import shutil
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -76,11 +77,17 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     args, forwarded = _parse_router_args(argv)
     images = _collect_images(args)
     videos = _collect_videos(args)
+    reference_images = _collect_reference_images(args)
     # The SVI anchor (0103) IS the image-to-video source for plan resolution:
     # it fills the image slot without ever being emitted as --image-path (the
     # wan backend owns the --svi-anchor-image contract).
     svi_argv = _svi_forwarded_argv(args=args, images=images)
-    route = _resolve_route(args, image_count=len(images) + (1 if args.svi_anchor_image else 0), video_count=len(videos))
+    route = _resolve_route(
+        args,
+        image_count=len(images) + (1 if args.svi_anchor_image else 0),
+        video_count=len(videos),
+        reference_image_count=len(reference_images),
+    )
     if route.requires_image and not images:
         _parser().error(f"{route.target_name} requires --image or --images.")
     reframe_argv = _reframe_forwarded_argv(args=args, images=images, forwarded=forwarded)
@@ -96,8 +103,18 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
         emit_allowed = not option.route_gated or _route_accepts_base_model(route)
         if option.policy is ForwardPolicy.REEMIT_FLAG:
             if value and emit_allowed:
+                if option.emit_flag is None:
+                    raise AssertionError(f"{option.dest} has no re-emission flag.")
                 normalized_argv.append(option.emit_flag)
+        elif option.policy is ForwardPolicy.REEMIT_VALUES:
+            if value and emit_allowed:
+                if option.emit_flag is None:
+                    raise AssertionError(f"{option.dest} has no re-emission flag.")
+                for item in value:
+                    normalized_argv.extend([option.emit_flag, str(item)])
         elif value is not None and emit_allowed:
+            if option.emit_flag is None:
+                raise AssertionError(f"{option.dest} has no re-emission flag.")
             normalized_argv.extend([option.emit_flag, str(value)])
         # --controlnet-model is INJECTED (never consumed): it rides between --model and
         # --base-model to preserve the emission order pinned by the exact-argv tests.
@@ -156,6 +173,9 @@ def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     _reject_prepare_path_in_generate(parser, args, forwarded)
     args.metadata_images = _metadata_images(metadata)
     args.metadata_videos = _metadata_videos(metadata)
+    args.metadata_reference_images = _metadata_reference_images(metadata)
+    if args.reference_image_paths is None:
+        args.reference_image_paths = list(args.metadata_reference_images)
     try:
         args.task = normalize_task(args.task)
     except TaskInferenceError as exc:
@@ -409,6 +429,15 @@ def _metadata_videos(metadata: dict) -> list[str]:
     return []
 
 
+def _metadata_reference_images(metadata: dict) -> list[str]:
+    paths = metadata.get("reference_image_paths")
+    if isinstance(paths, list):
+        return [str(path) for path in paths]
+    if isinstance(paths, str):
+        return [paths]
+    return []
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = CommandLineParser(
         prog="mlxgen generate",
@@ -432,6 +461,7 @@ def _parser() -> argparse.ArgumentParser:
             "Plain prompt-guided video-to-video is available on exact Wan video-to-video routes such as "
             "`Wan2.2-T2V-A14B`; keep `--solver unipc` for that public path.\n"
             "Wan video routes also accept --failure-diagnostics for failure manifests.\n\n"
+            "Exact VACE and Bernini routes accept repeatable --reference-image conditioning.\n"
             "Use --mask-path for localized masked edit or inpaint on models that support masked edit or inpaint.\n"
             "Use --controlnet-image-path for structured control on a text-to-image route; it is not the same as "
             "source-image editing."
@@ -575,13 +605,44 @@ def _download_model(argv: list[str]) -> None:
     if not is_huggingface_repo_id(repo_id):
         parser.error(f"--model must resolve to a Hugging Face repo id for download. Got: {repo_id!r}")
 
-    patterns = None if args.all_files else _download_patterns(model_config, repo_id)
-    print(f"Downloading {repo_id} into the Hugging Face cache...")
+    if (
+        args.all_files
+        and model_config is not None
+        and model_config.transformer_overrides.get("supports_bernini_renderer")
+    ):
+        parser.error(
+            "Bernini-R uses two pinned factored sources. Omit --all-files so MLX-Gen downloads "
+            "the complete bounded runtime set from both repositories."
+        )
+
+    download_sources: list[tuple[str, list[str] | None, str | None]] = (
+        _factored_download_sources(model_config) if not args.all_files else []
+    )
+    if not download_sources:
+        download_sources = [(repo_id, None if args.all_files else _download_patterns(model_config, repo_id), None)]
+    elif model_config is not None:
+        _preflight_factored_download_space(parser, model_config, download_sources)
+    downloaded_paths = []
     with allow_downloads():
-        path = snapshot_download(repo_id=repo_id, allow_patterns=patterns)
-    print(f"Downloaded snapshot: {path}")
+        for source_repo, patterns, revision in download_sources:
+            revision_label = f" at {revision}" if revision is not None else ""
+            print(f"Downloading {source_repo}{revision_label} into the Hugging Face cache...")
+            if revision is None:
+                downloaded_paths.append(snapshot_download(repo_id=source_repo, allow_patterns=patterns))
+            else:
+                downloaded_paths.append(
+                    snapshot_download(repo_id=source_repo, allow_patterns=patterns, revision=revision)
+                )
+    for path in downloaded_paths:
+        print(f"Downloaded snapshot: {path}")
     print("You can now run generation without a runtime download, for example:")
-    if model_config is not None and _is_seedvr2(
+    if model_config is not None and model_config.transformer_overrides.get("supports_bernini_renderer"):
+        print(
+            "  mlxgen generate --model "
+            f"{shlex.quote(repo_id)} --reference-image reference.png "
+            "--prompt 'Bring the referenced subject to life' --output video.mp4"
+        )
+    elif model_config is not None and _is_seedvr2(
         set(model_config.aliases), _model_key(repo_id, model_config.base_model)
     ):
         print(
@@ -593,6 +654,83 @@ def _download_model(argv: list[str]) -> None:
             "  mlxgen generate --model "
             f"{shlex.quote(repo_id)} --prompt 'A product photo of a ceramic teapot' --output image.png"
         )
+
+
+def _preflight_factored_download_space(
+    parser: argparse.ArgumentParser,
+    model_config: ModelConfig,
+    download_sources: list[tuple[str, list[str] | None, str | None]],
+) -> None:
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    from mflux.models.common.resolution.path_resolution import PathResolution
+
+    overrides = model_config.transformer_overrides
+    base_source = overrides.get("component_base_model")
+    transformer_source = model_config.custom_transformer_model
+    expected_bytes = {
+        base_source: overrides.get("expected_component_base_download_bytes"),
+        transformer_source: overrides.get("expected_transformer_download_bytes"),
+    }
+    missing_bytes = 0
+    missing_sources = []
+    for source_repo, patterns, revision in download_sources:
+        if PathResolution._find_complete_cached_snapshot(source_repo, patterns, revision=revision) is not None:
+            continue
+        source_bytes = expected_bytes.get(source_repo)
+        if not isinstance(source_bytes, int) or source_bytes <= 0:
+            return
+        missing_bytes += source_bytes
+        missing_sources.append(source_repo)
+
+    if not missing_sources:
+        return
+
+    cache_path = Path(HF_HUB_CACHE).expanduser()
+    existing_path = cache_path
+    while not existing_path.exists() and existing_path != existing_path.parent:
+        existing_path = existing_path.parent
+    free_bytes = shutil.disk_usage(existing_path).free
+    headroom_bytes = overrides.get("download_headroom_bytes", 0)
+    if not isinstance(headroom_bytes, int) or headroom_bytes < 0:
+        headroom_bytes = 0
+    required_bytes = missing_bytes + headroom_bytes
+    if free_bytes >= required_bytes:
+        return
+
+    missing_label = ", ".join(missing_sources)
+    parser.error(
+        f"Insufficient free space for the missing factored model sources ({missing_label}). "
+        f"Need at least {required_bytes / 1024**3:.2f} GiB including download headroom; "
+        f"only {free_bytes / 1024**3:.2f} GiB is available at {existing_path}. "
+        "Already complete pinned sources are not counted."
+    )
+
+
+def _factored_download_sources(model_config: ModelConfig | None) -> list[tuple[str, list[str], str | None]]:
+    if model_config is None:
+        return []
+    overrides = model_config.transformer_overrides
+    base_source = overrides.get("component_base_model")
+    transformer_source = model_config.custom_transformer_model
+    if not isinstance(base_source, str) or not base_source or not transformer_source:
+        return []
+
+    from mflux.models.wan.weights import WanWeightDefinition
+
+    definition = WanWeightDefinition.for_config(model_config)
+    return [
+        (
+            base_source,
+            definition.get_base_download_patterns(),
+            overrides.get("expected_component_base_revision"),
+        ),
+        (
+            transformer_source,
+            definition.get_transformer_download_patterns(),
+            overrides.get("expected_transformer_revision"),
+        ),
+    ]
 
 
 def _is_depth_pro_download(model: str) -> bool:
@@ -701,6 +839,10 @@ def _collect_videos(args: argparse.Namespace) -> list[str]:
     return videos or args.metadata_videos
 
 
+def _collect_reference_images(args: argparse.Namespace) -> list[str]:
+    return [str(path) for path in (args.reference_image_paths or args.metadata_reference_images)]
+
+
 def _svi_forwarded_argv(args: argparse.Namespace, images: list[str]) -> list[str]:
     if args.svi_anchor_image is None:
         return []
@@ -775,12 +917,23 @@ def _padding_part_number(value: int | str) -> int:
         raise ValueError(f"Invalid padding value: {value}") from exc
 
 
-def _resolve_route(args: argparse.Namespace, image_count: int, video_count: int) -> _Route:
+def _resolve_route(
+    args: argparse.Namespace,
+    image_count: int,
+    video_count: int,
+    reference_image_count: int = 0,
+) -> _Route:
     has_images = image_count > 0
     has_videos = video_count > 0
     model_config = _model_config(args.model, base_model=args.base_model)
     _validate_svi_route_request(args, model_config=model_config)
-    plan = _resolve_generation_plan(args, image_count=image_count, video_count=video_count, model_config=model_config)
+    plan = _resolve_generation_plan(
+        args,
+        image_count=image_count,
+        video_count=video_count,
+        reference_image_count=reference_image_count,
+        model_config=model_config,
+    )
     if args.svi_anchor_image is not None and plan.family != "wan":
         # Backstop for identities whose family only resolves during planning.
         _parser().error(
@@ -853,6 +1006,7 @@ def _resolve_generation_plan(
     *,
     image_count: int,
     video_count: int,
+    reference_image_count: int = 0,
     model_config: ModelConfig | None,
 ):
     try:
@@ -863,6 +1017,7 @@ def _resolve_generation_plan(
             base_model=args.base_model,
             image_count=image_count,
             video_count=video_count,
+            reference_image_count=reference_image_count,
             task=args.task,
             i2i_mode=args.i2i_mode,
             has_image_strength=args.has_image_strength,

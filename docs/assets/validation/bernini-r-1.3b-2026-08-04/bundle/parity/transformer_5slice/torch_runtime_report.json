@@ -1,0 +1,28 @@
+{
+  "attention_backend": "sdpa",
+  "backend": "official-pytorch",
+  "checkpoint_revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+  "checkpoint_root": "<user-home>/.cache/huggingface/hub/models--ByteDance--Bernini-R-1.3B-Diffusers/snapshots/ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
+  "elapsed_seconds": 4.54378262499813,
+  "execution_device": "cpu",
+  "official_source_revision": "2d2b4591ac053ec25c6371b01a5a6746679e5793",
+  "output_dtype": "float32",
+  "output_max": 0.80078125,
+  "output_min": -1.171875,
+  "output_sha256": "77116657930e0e046de586a21f220c1b8dc4efb11b7a7b5d4e2e078e6798a80c",
+  "output_shape": [
+    1,
+    16,
+    5,
+    8,
+    8
+  ],
+  "platform": "macOS-26.3-arm64-arm-64bit",
+  "reference_root": "<official-source-root>",
+  "rotary_input_precision": "torch.bfloat16",
+  "rotary_output_precision": "torch.bfloat16",
+  "rotary_output_sha256": "7d14683d274544c6a3acbc63e6c8100fa584d9e0c363a679b0f32a078c1c7ad7",
+  "rotary_phase_precision": "torch.complex128",
+  "torch_version": "2.9.1",
+  "weight_precision": "torch.bfloat16"
+}

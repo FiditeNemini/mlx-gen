@@ -80,6 +80,133 @@ def test_wan_unipc_flow_shift_5_sigmas_match_diffusers_reference():
     )
 
 
+def test_wan_unipc_diffusers_0_35_2_flow_grid_matches_bernini_reference():
+    scheduler = WanUniPCMultistepScheduler(
+        flow_shift=5.0,
+        flow_sigma_schedule="diffusers-0.35.2",
+    )
+    scheduler.set_timesteps(40)
+
+    assert np.array(scheduler.timesteps).tolist() == [
+        999,
+        994,
+        989,
+        983,
+        978,
+        972,
+        965,
+        959,
+        952,
+        944,
+        937,
+        929,
+        920,
+        911,
+        902,
+        892,
+        882,
+        870,
+        859,
+        846,
+        833,
+        818,
+        803,
+        786,
+        768,
+        749,
+        728,
+        706,
+        681,
+        654,
+        624,
+        591,
+        555,
+        514,
+        468,
+        416,
+        356,
+        288,
+        208,
+        113,
+    ]
+    np.testing.assert_array_equal(
+        np.array(scheduler.sigmas),
+        np.array(
+            [
+                0.9997998476028442,
+                0.9946947693824768,
+                0.9893770217895508,
+                0.9838330149650574,
+                0.9780480265617371,
+                0.9720060229301453,
+                0.9656894207000732,
+                0.9590790867805481,
+                0.9521540403366089,
+                0.9448912739753723,
+                0.9372654557228088,
+                0.9292486906051636,
+                0.9208100438117981,
+                0.9119154810905457,
+                0.9025267958641052,
+                0.8926018476486206,
+                0.8820932507514954,
+                0.8709479570388794,
+                0.8591062426567078,
+                0.8465008735656738,
+                0.8330553770065308,
+                0.8186829090118408,
+                0.803284227848053,
+                0.7867453694343567,
+                0.7689347267150879,
+                0.7496998310089111,
+                0.7288626432418823,
+                0.7062143683433533,
+                0.6815081238746643,
+                0.6544499397277832,
+                0.6246873140335083,
+                0.5917934775352478,
+                0.5552467703819275,
+                0.5144029855728149,
+                0.4684569239616394,
+                0.4163888096809387,
+                0.35688766837120056,
+                0.28823959827423096,
+                0.2081597000360489,
+                0.11353304982185364,
+                0.0,
+            ],
+            dtype=np.float32,
+        ),
+    )
+
+
+def test_wan_unipc_diffusers_0_35_2_steps_match_bernini_reference():
+    scheduler = WanUniPCMultistepScheduler(
+        flow_shift=5.0,
+        flow_sigma_schedule="diffusers-0.35.2",
+    )
+    scheduler.set_timesteps(4)
+    sample = mx.arange(24, dtype=mx.float32).reshape(1, 2, 3, 2, 2) / 10
+    expected = [
+        (27.449918746948242, [-0.0062534395, 0.093746565, 0.19374657]),
+        (26.86358642578125, [-0.030683802, 0.0693162, 0.16931622]),
+        (25.020977020263672, [-0.10745925, -0.0074592466, 0.09254077]),
+        (19.023977279663086, [-0.3573342, -0.25733417, -0.15733416]),
+    ]
+
+    for index, timestep in enumerate(np.array(scheduler.timesteps).tolist()):
+        model_output = mx.full(sample.shape, 0.1 * (index + 1), dtype=mx.float32)
+        sample = scheduler.step(model_output, timestep, sample, return_dict=False)[0]
+        expected_sum, expected_first = expected[index]
+        np.testing.assert_allclose(float(mx.sum(sample).item()), expected_sum, rtol=1e-5, atol=1e-5)
+        np.testing.assert_allclose(
+            np.array(sample.reshape(-1)[:3]),
+            np.array(expected_first, dtype=np.float32),
+            rtol=1e-5,
+            atol=1e-5,
+        )
+
+
 def test_wan_unipc_order2_flow_prediction_steps_match_diffusers_reference():
     scheduler = WanUniPCMultistepScheduler()
     scheduler.set_timesteps(4)

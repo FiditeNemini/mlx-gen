@@ -2,6 +2,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import mlx.core as mx
 import numpy as np
@@ -561,6 +562,37 @@ def test_save_video_batches_copies_source_audio_and_records_fields(tmp_path, mon
     sidecar = json.loads((tmp_path / "batched_audio.metadata.json").read_text())
     assert sidecar["audio_copied"] is True
     assert "video_health" in sidecar
+
+
+def test_save_video_batches_records_memory_after_lazy_frames_are_consumed(tmp_path, monkeypatch):
+    consumed = False
+
+    def frame_batches():
+        nonlocal consumed
+        consumed = True
+        yield [_solid_frame((0, 255, 0)) for _ in range(4)]
+
+    def snapshot(phase, *, synchronize=False):
+        assert consumed is True
+        assert phase == "video-save-complete"
+        assert synchronize is True
+        return SimpleNamespace(to_metadata=lambda: {"phase": phase, "peak_bytes": 1234})
+
+    monkeypatch.setattr("mflux.utils.video_util.RuntimeMemory.snapshot", snapshot)
+    output_path = tmp_path / "lazy.mp4"
+    VideoUtil.save_video_batches(
+        frame_batches=frame_batches(),
+        path=output_path,
+        fps=4,
+        metadata={"frames": 4, "generation_time_seconds": 2.5},
+        export_json_metadata=True,
+        validate_health=False,
+    )
+
+    sidecar = json.loads((tmp_path / "lazy.metadata.json").read_text())
+    assert sidecar["runtime_memory"] == {"phase": "video-save-complete", "peak_bytes": 1234}
+    assert sidecar["save_time_seconds"] >= 0
+    assert sidecar["total_generation_time_seconds"] >= 2.5
 
 
 def test_save_video_audio_copy_is_best_effort_on_failure(tmp_path, monkeypatch, capsys):

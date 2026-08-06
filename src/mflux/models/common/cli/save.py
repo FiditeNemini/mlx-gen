@@ -76,6 +76,12 @@ def main():
         # 1. Resolve config once and select the prepare backend from its family
         try:
             model_config = ModelConfig.from_name(args.model, base_model=args.base_model)
+            if model_config.transformer_overrides.get("supports_bernini_renderer"):
+                parser.error(
+                    "Bernini-R currently supports only its pinned factored BF16 source route. "
+                    "Use `mlxgen download --model bernini-r-1.3b`; `mlxgen prepare` and "
+                    "q4/q8 Bernini packages are not supported."
+                )
             model_class = _model_class_for_config(model_config)
         except ModelConfigError as exc:
             parser.error(

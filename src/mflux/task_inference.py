@@ -9,6 +9,7 @@ from mflux.utils.dimension_resolver import (
     CANVAS_POLICY_EXACT_RESIZE,
     CANVAS_POLICY_SOURCE_ASPECT,
     RESIZE_MODE_CHOICES,
+    RESIZE_MODE_RESIZE,
 )
 from mflux.utils.exceptions import ModelConfigError
 
@@ -43,7 +44,8 @@ VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
 # convention: hosts gate multi-frame context conditioning on this field.
 # v7: additive supports_svi row field (0103), same additive-field convention:
 # hosts gate SVI 2.0 Pro anchor/motion-latent conditioning on this field.
-CAPABILITIES_SCHEMA_VERSION = 7
+# v8: reference images are a role separate from primary image inputs (ADR 0007).
+CAPABILITIES_SCHEMA_VERSION = 8
 QWEN_CONTROL_UNION_MODEL = "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
 QWEN_CONTROL_INPAINT_MODEL = "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
 # Untrusted inferred identities that earned native masked edit through an exact smoke proof.
@@ -61,6 +63,8 @@ MODE_MULTI_REFERENCE = "multi-reference"
 MODE_TEXT_VIDEO = "text-video"
 MODE_FIRST_FRAME_I2V = "first-frame-i2v"
 MODE_LATENT_VIDEO = "latent-video"
+MODE_REFERENCE_VIDEO = "reference-video"
+MODE_REFERENCE_VIDEO_EDIT = "reference-video-edit"
 
 I2I_MODE_ALIASES = {
     None: I2I_MODE_AUTO,
@@ -123,6 +127,8 @@ class GenerationCapability:
     resize_modes: tuple[str, ...] = ()
     primary_image_index: int | None = None
     dimension_multiple: int | None = None
+    min_reference_images: int = 0
+    max_reference_images: int | None = 0
 
     def allows_image_count(self, image_count: int) -> bool:
         if image_count < self.min_images:
@@ -134,6 +140,11 @@ class GenerationCapability:
             return False
         return self.max_videos is None or video_count <= self.max_videos
 
+    def allows_reference_image_count(self, reference_image_count: int) -> bool:
+        if reference_image_count < self.min_reference_images:
+            return False
+        return self.max_reference_images is None or reference_image_count <= self.max_reference_images
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -144,6 +155,8 @@ class GenerationCapability:
             "max_images": self.max_images,
             "min_videos": self.min_videos,
             "max_videos": self.max_videos,
+            "min_reference_images": self.min_reference_images,
+            "max_reference_images": self.max_reference_images,
             "supports_image_strength": self.supports_image_strength,
             "supports_video_strength": self.supports_video_strength,
             "supports_video_mask": self.supports_video_mask,
@@ -211,6 +224,7 @@ class GenerationPlan:
     lora_status: str = "unsupported"
     lora_target_roles: tuple[str, ...] = ()
     lora_validation_profile: str | None = None
+    reference_image_count: int = 0
 
     @property
     def task(self) -> str:
@@ -226,6 +240,7 @@ class GenerationPlan:
             "handler_id": self.handler_id,
             "image_count": self.image_count,
             "video_count": self.video_count,
+            "reference_image_count": self.reference_image_count,
             "model_name": self.model_name,
             "model_override": self.model_override,
             "canvas_policies": list(self.canvas_policies),
@@ -251,6 +266,7 @@ class ResolvedTask:
     mode: str | None = None
     capability_id: str | None = None
     handler_id: str | None = None
+    reference_image_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -299,6 +315,7 @@ def resolve_generation_plan(
     base_model: str | None = None,
     image_count: int = 0,
     video_count: int = 0,
+    reference_image_count: int = 0,
     task: str | None = TASK_AUTO,
     i2i_mode: str | None = I2I_MODE_AUTO,
     has_image_strength: bool = False,
@@ -314,6 +331,8 @@ def resolve_generation_plan(
         raise TaskInferenceError("image_count must be greater than or equal to zero.")
     if video_count < 0:
         raise TaskInferenceError("video_count must be greater than or equal to zero.")
+    if reference_image_count < 0:
+        raise TaskInferenceError("reference_image_count must be greater than or equal to zero.")
     if image_count > 0 and video_count > 0:
         raise TaskInferenceError(
             "mlxgen generate accepts either input images or input videos for one request, not both."
@@ -391,6 +410,7 @@ def resolve_generation_plan(
             capability.public_task == public_task
             and capability.allows_image_count(image_count)
             and capability.allows_video_count(video_count)
+            and capability.allows_reference_image_count(reference_image_count)
         )
     ]
     if requested_mode != I2I_MODE_AUTO:
@@ -448,6 +468,7 @@ def resolve_generation_plan(
         requested_mode=requested_mode,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
         candidates=candidates,
     )
     if (
@@ -472,6 +493,7 @@ def resolve_generation_plan(
         handler_id=capability.handler_id,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
         model_name=model_capabilities.model_name,
         model_override=capability.model_override,
         canvas_policies=capability.canvas_policies,
@@ -495,6 +517,7 @@ def resolve_task(
     base_model: str | None = None,
     image_count: int = 0,
     video_count: int = 0,
+    reference_image_count: int = 0,
     task: str | None = TASK_AUTO,
     i2i_mode: str | None = I2I_MODE_AUTO,
     has_image_strength: bool = False,
@@ -513,6 +536,7 @@ def resolve_task(
         base_model=base_model,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
         task=task,
         i2i_mode=i2i_mode,
         has_image_strength=has_image_strength,
@@ -529,6 +553,7 @@ def resolve_task(
         family=plan.family,
         image_count=plan.image_count,
         video_count=plan.video_count,
+        reference_image_count=plan.reference_image_count,
         model_name=plan.model_name,
         mode=plan.mode,
         capability_id=plan.capability_id,
@@ -544,6 +569,7 @@ def infer_task(
     base_model: str | None = None,
     image_count: int = 0,
     video_count: int = 0,
+    reference_image_count: int = 0,
     task: str | None = TASK_AUTO,
     i2i_mode: str | None = I2I_MODE_AUTO,
     has_image_strength: bool = False,
@@ -562,6 +588,7 @@ def infer_task(
         base_model=base_model,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
         task=task,
         i2i_mode=i2i_mode,
         has_image_strength=has_image_strength,
@@ -1159,12 +1186,66 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     supports_image_to_video = bool(identity.model_config.transformer_overrides.get("supports_image_to_video", True))
     supports_video_to_video = bool(identity.model_config.transformer_overrides.get("supports_video_to_video", False))
     is_vace = bool(identity.model_config.transformer_overrides.get("supports_vace", False))
-    supports_lora = True
+    is_bernini = bool(identity.model_config.transformer_overrides.get("supports_bernini_renderer", False))
+    supports_lora = not is_bernini
     lora_target_roles = (
         ("high_noise_transformer", "low_noise_transformer")
         if bool(identity.model_config.transformer_overrides.get("has_transformer_2", False))
         else ("transformer",)
     )
+    if is_bernini:
+        bernini_capabilities = [
+            GenerationCapability(
+                id="bernini.reference-video",
+                public_task=TEXT_TO_VIDEO,
+                mode=MODE_REFERENCE_VIDEO,
+                handler_id="wan.generate",
+                min_reference_images=1,
+                max_reference_images=8,
+                supports_frames=True,
+                supports_fps=True,
+                default_for_task=True,
+                canvas_policies=(CANVAS_POLICY_EXACT_RESIZE,),
+                default_canvas_policy=CANVAS_POLICY_EXACT_RESIZE,
+                resize_modes=(RESIZE_MODE_RESIZE,),
+            ),
+            GenerationCapability(
+                id="bernini.video-edit",
+                public_task=VIDEO_TO_VIDEO,
+                mode=MODE_LATENT_VIDEO,
+                handler_id="wan.generate",
+                min_videos=1,
+                max_videos=1,
+                supports_frames=True,
+                supports_fps=True,
+                default_for_task=True,
+                canvas_policies=(CANVAS_POLICY_SOURCE_ASPECT,),
+                default_canvas_policy=CANVAS_POLICY_SOURCE_ASPECT,
+                resize_modes=(RESIZE_MODE_RESIZE,),
+            ),
+            GenerationCapability(
+                id="bernini.reference-video-edit",
+                public_task=VIDEO_TO_VIDEO,
+                mode=MODE_REFERENCE_VIDEO_EDIT,
+                handler_id="wan.generate",
+                min_videos=1,
+                max_videos=1,
+                min_reference_images=1,
+                max_reference_images=8,
+                supports_frames=True,
+                supports_fps=True,
+                canvas_policies=(CANVAS_POLICY_SOURCE_ASPECT,),
+                default_canvas_policy=CANVAS_POLICY_SOURCE_ASPECT,
+                resize_modes=(RESIZE_MODE_RESIZE,),
+            ),
+        ]
+        return ModelCapabilities(
+            schema_version=CAPABILITIES_SCHEMA_VERSION,
+            family=identity.family,
+            label="Bernini-R 1.3B",
+            model_name=identity.model_name,
+            capabilities=tuple(bernini_capabilities),
+        )
     capabilities: list[GenerationCapability] = []
     if declared_task in {TEXT_TO_VIDEO, "text-image-to-video", None}:
         capabilities.append(
@@ -1173,6 +1254,7 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 public_task=TEXT_TO_VIDEO,
                 mode=MODE_TEXT_VIDEO,
                 handler_id="wan.generate",
+                max_reference_images=None if is_vace else 0,
                 supports_frames=True,
                 supports_fps=True,
                 default_for_task=True,
@@ -1193,6 +1275,7 @@ def _wan_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                     handler_id="wan.generate",
                     min_videos=1,
                     max_videos=1,
+                    max_reference_images=None if is_vace else 0,
                     # VACE conditions via masks/references, not an SDEdit strength warm start.
                     supports_video_strength=not is_vace,
                     supports_video_mask=True,
@@ -1320,6 +1403,7 @@ def _select_capability(
     requested_mode: str,
     image_count: int,
     video_count: int,
+    reference_image_count: int,
     candidates: list[GenerationCapability],
 ) -> GenerationCapability:
     if candidates:
@@ -1342,6 +1426,7 @@ def _select_capability(
         requested_mode=requested_mode,
         image_count=image_count,
         video_count=video_count,
+        reference_image_count=reference_image_count,
     )
 
 
@@ -1352,6 +1437,7 @@ def _raise_no_capability(
     requested_mode: str,
     image_count: int,
     video_count: int,
+    reference_image_count: int,
 ) -> None:
     label = model_capabilities.label
     if not model_capabilities.capabilities:
@@ -1364,6 +1450,13 @@ def _raise_no_capability(
         cap.public_task in PUBLIC_IMAGE_TASKS for cap in model_capabilities.capabilities
     ):
         raise TaskInferenceError(f"{label} supports video generation tasks, not {public_task}.")
+    if reference_image_count and not any(
+        capability.public_task == public_task and capability.allows_reference_image_count(reference_image_count)
+        for capability in model_capabilities.capabilities
+    ):
+        raise TaskInferenceError(
+            f"{label} does not support {reference_image_count} --reference-image input(s) for {public_task}."
+        )
     if public_task == IMAGE_TO_IMAGE and not any(
         cap.public_task == IMAGE_TO_IMAGE for cap in model_capabilities.capabilities
     ):
