@@ -17,7 +17,7 @@ def _numpy_normalize_diff(
     eta: float,
     norm_threshold: float,
 ) -> np.ndarray:
-    axes = (1, 3, 4)
+    axes = (1, 3, 4) if diff.ndim == 5 else tuple(range(1, diff.ndim))
     if norm_threshold > 0:
         norm = np.sqrt(np.sum(np.square(diff), axis=axes, keepdims=True))
         diff = diff * np.minimum(np.ones_like(diff), norm_threshold / norm)

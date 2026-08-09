@@ -47,7 +47,7 @@ class BerniniRenderer(Wan2_2_TI2V):
     RECOMMENDED_STEPS = 40
     RECOMMENDED_FPS = 16
     RECOMMENDED_MAX_CONDITION_SIZE = 848
-    MIN_PROVEN_CONVERGED_FRAMES = 25
+    MIN_PROVEN_CONVERGED_FRAMES = 17
     MAX_PROVEN_SHORT_DEBUG_STEPS = 12
     SYSTEM_PROMPTS = {
         "r2v_apg": "You are a helpful assistant specialized in subject-to-video generation.",
@@ -668,7 +668,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         **branch_kwargs,
     ) -> mx.array:
         reference_ids = self._configured_source_ids(len(reference_conditions))
-        empty_noise = self._predict_branch(
+        empty_v = self._predict_branch(
             role="r2v-empty",
             target=target,
             condition_segments=[],
@@ -676,9 +676,7 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=negative_prompt_embeds,
             **branch_kwargs,
         )
-        empty_x = target - sigma * empty_noise
-        del empty_noise
-        reference_noise = self._predict_branch(
+        reference_v = self._predict_branch(
             role="r2v-references",
             target=target,
             condition_segments=reference_conditions,
@@ -686,18 +684,16 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=negative_prompt_embeds,
             **branch_kwargs,
         )
-        reference_x = target - sigma * reference_noise
-        del reference_noise
-        guided_x = empty_x + reference_guidance * self._normalize_diff(
-            reference_x - empty_x,
-            reference_x,
+        guided_v = empty_v + reference_guidance * self._normalize_diff(
+            reference_v - empty_v,
+            reference_v,
             momentum_buffer=buffers[0],
             eta=eta,
             norm_threshold=norm_threshold,
         )
-        mx.eval(guided_x)
-        del empty_x
-        text_noise = self._predict_branch(
+        mx.eval(guided_v)
+        del empty_v
+        text_v = self._predict_branch(
             role="r2v-references-text",
             target=target,
             condition_segments=reference_conditions,
@@ -705,17 +701,16 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=prompt_embeds,
             **branch_kwargs,
         )
-        text_x = target - sigma * text_noise
-        del text_noise
-        guided_x = guided_x + text_guidance * self._normalize_diff(
-            text_x - reference_x,
-            text_x,
+        guided_v = guided_v + text_guidance * self._normalize_diff(
+            text_v - reference_v,
+            text_v,
             momentum_buffer=buffers[1],
             eta=eta,
             norm_threshold=norm_threshold,
         )
-        mx.eval(guided_x)
-        return (target - guided_x) / sigma
+        mx.eval(guided_v)
+        del reference_v, text_v
+        return guided_v
 
     def _v2v_noise_prediction(
         self,
@@ -731,7 +726,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         norm_threshold: float,
         **branch_kwargs,
     ) -> mx.array:
-        uncond_noise = self._predict_branch(
+        uncond_v = self._predict_branch(
             role="v2v-empty-text",
             target=target,
             condition_segments=[video_condition],
@@ -739,9 +734,7 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=negative_prompt_embeds,
             **branch_kwargs,
         )
-        uncond_x = target - sigma * uncond_noise
-        del uncond_noise
-        cond_noise = self._predict_branch(
+        cond_v = self._predict_branch(
             role="v2v-video-text",
             target=target,
             condition_segments=[video_condition],
@@ -749,17 +742,16 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=prompt_embeds,
             **branch_kwargs,
         )
-        cond_x = target - sigma * cond_noise
-        del cond_noise
-        guided_x = uncond_x + text_guidance * self._normalize_diff(
-            cond_x - uncond_x,
-            cond_x,
+        guided_v = uncond_v + text_guidance * self._normalize_diff(
+            cond_v - uncond_v,
+            cond_v,
             momentum_buffer=buffer,
             eta=eta,
             norm_threshold=norm_threshold,
         )
-        mx.eval(guided_x)
-        return (target - guided_x) / sigma
+        mx.eval(guided_v)
+        del uncond_v, cond_v
+        return guided_v
 
     @staticmethod
     def _normalize_diff(
@@ -774,7 +766,7 @@ class BerniniRenderer(Wan2_2_TI2V):
             diff = momentum_buffer.update(diff)
         diff = diff.astype(mx.float32)
         base_pred = base_pred.astype(mx.float32)
-        reduction_axes = (1, 3, 4)
+        reduction_axes = (1, 3, 4) if diff.ndim == 5 else tuple(range(1, diff.ndim))
         if norm_threshold > 0:
             diff_norm = mx.sqrt(mx.sum(mx.square(diff), axis=reduction_axes, keepdims=True))
             scale = mx.minimum(mx.ones_like(diff), norm_threshold / diff_norm)

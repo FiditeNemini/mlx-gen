@@ -424,6 +424,8 @@ class Wan2_2_VAE(nn.Module):
                 feat_idx=feat_idx,
                 first_chunk=frame_idx == 0,
             )
+            if frame_idx == 0 and decoded.shape[2] > 1:
+                decoded = decoded[:, :, 1:, :, :]
             if clear_cache_each_slice:
                 self._materialize_feature_cache(decoded, feat_cache)
             decoded = self.unpatchify(decoded, patch_size=self.patch_size)
