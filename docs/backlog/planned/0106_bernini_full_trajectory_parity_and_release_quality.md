@@ -37,6 +37,25 @@ four-latent-slice cadence jumps, and severe tail corruption. An exact-upstream-p
 diagnostic also fails: it records 571 UMT5 tokens truncated to 512, progressively collapses from
 about frame 13, and has a latent-boundary/non-boundary transition ratio of `2.0645`.
 
+Evidence update from Sunday, August 9, 2026: two runtime precision fixes materially improved the
+renderer math (`float64` APG projection and official-sensitive FP32 transformer paths), but they do
+not close every user-visible gap. The original shirt RV2V contract still fails at the neck/collar
+junction when driven from an ordinary shirt photo. The original one-image statue R2V case still
+reads as scene/camera drift rather than a clean local head turn. Any result that requires prepared
+inputs, trimming, tighter crops, anchored source loops, or stronger prompt restatement must not be
+counted as support. The remaining open question is therefore narrower: which gaps are still
+Bernini parity defects, and which are intrinsic limits of the weaker public conditioning contract.
+
+Evidence update from Monday, August 10, 2026: the stricter target has been made explicit in the
+official public 1.3B example matrix. That matrix now has accepted qualitative local evidence for
+four official rows (`t2i`, `i2i`, `t2v`, `r2v`). `rv2v_case1` now has a full current official run
+and is the next row to judge. The remaining open rows are `v2v_case1`, `v2v_case2` / `mv2v`,
+`v2v_case3`, `r2v_case2`, and `ads2v`. The parity item therefore has two subproblems:
+
+1. close or explicitly reject the remaining open public rows, starting with `rv2v_case1`; and
+2. only after the matrix is current, decide whether the older release-bundle failures still point
+   to an implementation gap, a scope gap, or simply an earlier bounded proof slice.
+
 The bundled upstream output clips cannot close the comparison: their files do not attest the
 producing checkpoint or inference recipe, and the associated upstream launcher defaults to the
 14B renderer. They are qualitative targets, not 1.3B parity baselines.
@@ -66,8 +85,18 @@ reference.
 - Obtain or generate a metadata-bearing official/Diffusers **1.3B** baseline. Record checkpoint
   revision, code revision, prompt/token truncation, negative prompt, dimensions, frames, steps,
   flow shift, guidance/APG settings, condition geometry, and exact initial noise.
+- Treat the official public 1.3B example matrix as a required checklist, not as informal context.
+  Required rows are `t2i`, `i2i`, `t2v`, `v2v_case1`, `v2v_case2`, `v2v_case3`, `r2v`,
+  `r2v_case2`, `rv2v_case1`, and `ads2v`; if one row is intentionally excluded from the public
+  mlx-gen surface, the reason must be stated explicitly and preserved in evidence.
+- Resolve the public-source ambiguities before judging parity: prompt-enhancer usage, whether a row
+  is renderer-only or planner-shaped, and the exact source revision and case inventory for the
+  public testcase tree.
 - Progressively match the reference recipe. Start with bounded shapes; do not run the full
   848x480x81/40-step profile without user approval for the compute cost.
+- Distinguish "math fixed" from "contract proven". A run that only works after patched context
+  references, trimmed startup frames, tighter crops, anchored source-video loops, or stronger
+  prompt/task restatement does not by itself prove the original public contract.
 - Preserve exact MP4s and schema-v3 5K paged proof sheets. Every MLX frame, conditioned source
   frame, reference, upstream/reference frame, and highest localized-change transition must remain
   inspectable and hash-bound.
@@ -128,6 +157,7 @@ reference.
 ## Evidence
 
 - [Current failed schema-v3 proof](../../assets/validation/bernini-r-1.3b-2026-08-04/README.md)
+- [Official public 1.3B example parity matrix](../../assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md)
 - [Functional integration history](../completed/0105_bernini_r_1_3b_renderer_integration.md)
 - [Bernini user guide](../../bernini.md)
 - [ADR 0007](../../adr/0007_role_aware_reference_conditioning_and_factored_model_sources.md)

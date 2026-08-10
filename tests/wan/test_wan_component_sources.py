@@ -7,9 +7,10 @@ import pytest
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.lora.lora_compatibility import LoRACompatibility
 from mflux.models.common.resolution.path_resolution import PathResolution
+from mflux.models.common.tokenizer import TokenizerLoader
 from mflux.models.common.weights.loading.weight_applier import WeightApplier
 from mflux.models.common.weights.loading.weight_loader import WeightLoader
-from mflux.models.wan.wan_initializer import WanInitializer
+from mflux.models.wan.wan_initializer import WanInitializer, _WanComponentSources
 from mflux.models.wan.weights.wan_weight_definition import WanWeightDefinition
 
 
@@ -259,10 +260,44 @@ class TestWanComponentSources:
                 weight_definition=definition,
             )
 
-        assert calls == [
-            config.transformer_overrides["component_base_model"],
-            config.custom_transformer_model,
-        ]
+    def test_init_uses_tokenizer_component_root(self, monkeypatch, tmp_path):
+        config = self._config()
+        tokenizer_root = tmp_path / "tokenizer-root"
+        tokenizer_root.mkdir()
+        model = SimpleNamespace()
+        captured = {}
+
+        monkeypatch.setattr(LoRACompatibility, "validate_for_model_config", lambda **kwargs: None)
+        monkeypatch.setattr(
+            WanInitializer,
+            "_resolve_component_sources",
+            lambda **kwargs: _WanComponentSources(
+                root_path=tmp_path / "base-root",
+                component_roots={
+                    "tokenizer": tokenizer_root,
+                    "text_encoder": tmp_path / "text-root",
+                    "vae": tmp_path / "vae-root",
+                    "transformer": tmp_path / "transformer-root",
+                },
+                provenance={},
+                factored=False,
+            ),
+        )
+        monkeypatch.setattr(WanInitializer, "_validate_source_config", lambda *args, **kwargs: None)
+        monkeypatch.setattr(WanInitializer, "_init_config", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            TokenizerLoader,
+            "load_all",
+            lambda definitions, model_path: captured.setdefault("path", model_path) or {},
+        )
+        monkeypatch.setattr(WanInitializer, "_init_models", lambda *args, **kwargs: None)
+        monkeypatch.setattr(WanInitializer, "_load_and_apply_weights", lambda *args, **kwargs: None)
+        monkeypatch.setattr(WanInitializer, "_apply_lora", lambda *args, **kwargs: None)
+        monkeypatch.setattr(WanInitializer, "_apply_svi_loras", lambda *args, **kwargs: None)
+
+        WanInitializer.init(model=model, model_config=config, quantize=None)
+
+        assert captured["path"] == str(tokenizer_root)
 
     def test_incomplete_factor_root_fails_without_cache_substitution(self, monkeypatch, tmp_path):
         config = self._config()

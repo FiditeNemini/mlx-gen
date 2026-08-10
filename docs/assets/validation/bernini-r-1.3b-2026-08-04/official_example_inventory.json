@@ -1,0 +1,127 @@
+{
+  "source_revision": "2d2b4591ac053ec25c6371b01a5a6746679e5793",
+  "source_root": "https://github.com/bytedance/Bernini",
+  "scope_date": "2026-08-10",
+  "model_scope": "ByteDance/Bernini-R-1.3B-Diffusers public official examples",
+  "cases": [
+    {
+      "case_path": "assets/testcases/t2i/t2i.json",
+      "task_type": "t2i",
+      "group": "t2i",
+      "inputs": [],
+      "output": "assets/testcases/t2i/t2i_out.png",
+      "official_script": "scripts/bernini_r/run_t2i.sh",
+      "notes": "Single-frame image generation; official script forces --num_frames 1."
+    },
+    {
+      "case_path": "assets/testcases/i2i/i2i.json",
+      "task_type": "i2i",
+      "group": "i2i",
+      "inputs": [
+        "assets/testcases/i2i/source.png"
+      ],
+      "output": "assets/testcases/i2i/i2i_out.png",
+      "official_script": "scripts/bernini_r/run_i2i.sh",
+      "notes": "Single-frame image editing; official script forces --num_frames 1."
+    },
+    {
+      "case_path": "assets/testcases/t2v/t2v.json",
+      "task_type": "t2v",
+      "group": "t2v",
+      "inputs": [],
+      "output": "assets/testcases/t2v/t2v_out.mp4",
+      "official_script": "scripts/bernini_r/run_t2v.sh",
+      "notes": "Official multi-GPU renderer-only text-to-video example."
+    },
+    {
+      "case_path": "assets/testcases/v2v/v2v_case1.json",
+      "task_type": "v2v",
+      "group": "v2v",
+      "inputs": [
+        "assets/testcases/v2v/source_case1.mp4"
+      ],
+      "output": "assets/testcases/v2v/v2v_case1_out.mp4",
+      "official_script": "scripts/bernini_r/run_v2v.sh",
+      "notes": "Add a snowman while preserving source motion."
+    },
+    {
+      "case_path": "assets/testcases/v2v/v2v_case2.json",
+      "task_type": "mv2v",
+      "group": "mv2v",
+      "inputs": [
+        "assets/testcases/v2v/source_case2.mp4"
+      ],
+      "output": "assets/testcases/v2v/v2v_case2_out.mp4",
+      "official_script": "scripts/bernini_r/run_v2v.sh",
+      "notes": "Official motion-changing video edit; script comments call this the mv2v case."
+    },
+    {
+      "case_path": "assets/testcases/v2v/v2v_case3.json",
+      "task_type": "v2v",
+      "group": "v2v",
+      "inputs": [
+        "assets/testcases/v2v/source_case3.mp4"
+      ],
+      "output": "assets/testcases/v2v/v2v_case3_out.mp4",
+      "official_script": null,
+      "notes": "Public testcase and output exist in the official tree, but the helper script does not launch it."
+    },
+    {
+      "case_path": "assets/testcases/r2v/r2v.json",
+      "task_type": "r2v",
+      "group": "r2v",
+      "inputs": [
+        "assets/testcases/r2v/source_img0.png",
+        "assets/testcases/r2v/source_img1.png",
+        "assets/testcases/r2v/source_img2.png",
+        "assets/testcases/r2v/source_img3.png",
+        "assets/testcases/r2v/source_img4.png"
+      ],
+      "output": "assets/testcases/r2v/r2v_out.mp4",
+      "official_script": "scripts/bernini_r/run_r2v.sh",
+      "notes": "Five-reference public reference-to-video case."
+    },
+    {
+      "case_path": "assets/testcases/r2v/r2v_case2.json",
+      "task_type": "r2v",
+      "group": "r2v",
+      "inputs": [
+        "assets/testcases/r2v/source_img0.png",
+        "assets/testcases/r2v/source_img1.png",
+        "assets/testcases/r2v/source_img2.png",
+        "assets/testcases/r2v/source_img3.png",
+        "assets/testcases/r2v/source_img4.png",
+        "assets/testcases/r2v/source_img5.png",
+        "assets/testcases/r2v/source_img6.png",
+        "assets/testcases/r2v/source_img7.png"
+      ],
+      "output": "assets/testcases/r2v/r2v_case2_out.mp4",
+      "official_script": "scripts/bernini_r/run_r2v.sh",
+      "notes": "Eight-reference public reference-to-video case; this is the current local proof row."
+    },
+    {
+      "case_path": "assets/testcases/rv2v/rv2v_case1.json",
+      "task_type": "rv2v",
+      "group": "rv2v",
+      "inputs": [
+        "assets/testcases/rv2v/source_case1.mp4",
+        "assets/testcases/rv2v/ref_case1.jpg"
+      ],
+      "output": "assets/testcases/rv2v/rv2v_case1_out.mp4",
+      "official_script": "scripts/bernini_r/run_rv2v.sh",
+      "notes": "Public garment replacement example."
+    },
+    {
+      "case_path": "assets/testcases/rv2v/rv2v_case2.json",
+      "task_type": "ads2v",
+      "group": "ads2v",
+      "inputs": [
+        "assets/testcases/rv2v/source_case2.mp4",
+        "assets/testcases/rv2v/source_ref_case2.mp4"
+      ],
+      "output": "assets/testcases/rv2v/rv2v_case2_out.mp4",
+      "official_script": "scripts/bernini_r/run_rv2v.sh",
+      "notes": "Two-video insertion example stored under rv2v; official script overrides to 121 frames, 24 fps, and max_image_size 1280."
+    }
+  ]
+}

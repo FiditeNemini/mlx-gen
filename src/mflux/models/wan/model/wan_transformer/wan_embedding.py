@@ -91,9 +91,24 @@ class WanTimeTextImageEmbedding(nn.Module):
             timestep = timestep.reshape(-1, timestep_seq_len, timestep.shape[-1])
         timestep = timestep.astype(self.time_embedder.linear_1.weight.dtype)
         temb = self.time_embedder(timestep).astype(encoder_hidden_states.dtype)
-        timestep_proj = self.time_proj(nn.silu(temb))
+        timestep_proj = self._apply_torch_low_precision_linear(self.time_proj, WanActivation.silu(temb))
         encoder_hidden_states = self.text_embedder(encoder_hidden_states)
         return temb, timestep_proj, encoder_hidden_states
+
+    @staticmethod
+    def _apply_torch_low_precision_linear(linear: nn.Linear, hidden_states: mx.array) -> mx.array:
+        if hidden_states.dtype not in WanActivation.LOW_PRECISION_DTYPES:
+            return linear(hidden_states)
+
+        weight = getattr(linear, "weight", None)
+        bias = getattr(linear, "bias", None)
+        if weight is None:
+            return linear(hidden_states.astype(mx.float32)).astype(hidden_states.dtype)
+
+        output = hidden_states.astype(mx.float32) @ mx.transpose(weight.astype(mx.float32))
+        if bias is not None:
+            output = output + bias.astype(mx.float32)
+        return output.astype(hidden_states.dtype)
 
 
 class WanRotaryPosEmbed(nn.Module):

@@ -96,6 +96,72 @@ def test_wan_cli_selects_bernini_and_forwards_role_aware_guidance(monkeypatch, t
     assert observed["generate"]["video_strength"] is None
 
 
+def test_wan_cli_applies_bernini_renderer_role_guidance_defaults_when_not_explicit(monkeypatch, tmp_path):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {}
+    reference = tmp_path / "reference.png"
+    Image.new("RGB", (32, 48), "red").save(reference)
+
+    class FakeVideo:
+        task = "text-to-video"
+        fps = 8
+        width = 64
+        height = 48
+        num_frames = 5
+        steps = 2
+
+        def save(self, path, **kwargs):
+            observed["save"] = {"path": Path(path), **kwargs}
+            return Path(path)
+
+    class FakeBernini:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "BerniniRenderer", FakeBernini)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "bernini-r-1.3b",
+            "--prompt",
+            "place the referenced sculpture in a gallery",
+            "--reference-image",
+            str(reference),
+            "--width",
+            "64",
+            "--height",
+            "48",
+            "--frames",
+            "5",
+            "--steps",
+            "2",
+            "--fps",
+            "8",
+            "--seed",
+            "91",
+            "--quantize",
+            "4",
+            "--output",
+            str(tmp_path / "out.mp4"),
+            "--no-progress",
+        ],
+    )
+
+    wan_generate.main()
+
+    assert observed["generate"]["reference_guidance"] == 4.5
+    assert observed["generate"]["source_guidance"] == 1.25
+    assert observed["generate"]["flow_shift"] == 5.0
+
+
 def test_wan_cli_bernini_metadata_replay_restores_reference_contract(tmp_path):
     from mflux.models.wan.cli import wan_generate
 

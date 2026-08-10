@@ -5630,6 +5630,7 @@ def test_wan_cli_low_ram_releases_denoisers_before_decode_and_sets_cache_limit(m
     monkeypatch.setattr(wan_generate.mx, "set_cache_limit", lambda value: observed.update(cache_limit=value))
     monkeypatch.setattr(wan_generate.mx, "clear_cache", lambda: observed.update(cache_cleared=True))
     monkeypatch.setattr(wan_generate.mx, "reset_peak_memory", lambda: observed.update(peak_reset=True))
+    monkeypatch.setattr(wan_generate, "_probe_source_video", lambda **kwargs: None)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -5664,6 +5665,61 @@ def test_wan_cli_low_ram_releases_denoisers_before_decode_and_sets_cache_limit(m
     assert observed["generate"]["release_denoisers_before_decode"] is True
     assert observed["generate"]["clear_cache_each_step"] is True
     assert observed["generate"]["clear_cache_each_transformer_block"] is True
+
+
+def test_bernini_cli_low_ram_uses_step_cache_without_block_flush(monkeypatch):
+    from mflux.models.wan.cli import wan_generate
+
+    observed = {"cache_limit": None, "cache_cleared": False, "peak_reset": False}
+
+    class FakeVideo:
+        def save(self, **kwargs):
+            observed["save"] = kwargs
+
+    class FakeBernini:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_video(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeVideo()
+
+    monkeypatch.setattr(wan_generate, "BerniniRenderer", FakeBernini)
+    monkeypatch.setattr(
+        wan_generate,
+        "_resolve_model",
+        lambda _model: (wan_generate.ModelConfig.bernini_r_1_3b(), Path("/tmp/bernini-r-1.3b")),
+    )
+    monkeypatch.setattr(wan_generate.mx, "set_cache_limit", lambda value: observed.update(cache_limit=value))
+    monkeypatch.setattr(wan_generate.mx, "clear_cache", lambda: observed.update(cache_cleared=True))
+    monkeypatch.setattr(wan_generate.mx, "reset_peak_memory", lambda: observed.update(peak_reset=True))
+    monkeypatch.setattr(wan_generate, "_probe_source_video", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mlxgen-generate-wan",
+            "--model",
+            "bernini-r-1.3b",
+            "--prompt",
+            "make the person crouch down beside the dog",
+            "--seed",
+            "123",
+            "--video-path",
+            "input.mp4",
+            "--low-ram",
+            "--no-progress",
+        ],
+    )
+    monkeypatch.setattr(wan_generate.Path, "exists", lambda self: True)
+
+    wan_generate.main()
+
+    assert observed["cache_cleared"] is True
+    assert observed["peak_reset"] is True
+    assert observed["generate"]["release_denoisers_before_decode"] is True
+    assert observed["generate"]["clear_cache_each_step"] is True
+    assert observed["generate"]["clear_cache_each_transformer_block"] is False
 
 
 def test_wan_cli_cache_limit_without_low_ram_sets_allocator_only(monkeypatch):
@@ -6359,16 +6415,11 @@ def test_download_command_uses_pinned_factored_bernini_sources(monkeypatch):
 
     mlx_gen._download_model(["--model", "bernini-r-1.3b"])
 
-    assert [call[0] for call in calls] == [
-        "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
-        "ByteDance/Bernini-R-1.3B-Diffusers",
-    ]
-    assert calls[0][2] == "ec4d2cb062b548996b179d493fdd05340de702a1"
-    assert calls[1][2] == "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+    assert [call[0] for call in calls] == ["ByteDance/Bernini-R-1.3B-Diffusers"]
+    assert calls[0][2] == "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
     assert "text_encoder/*.safetensors" in calls[0][1]
-    assert "transformer/*.safetensors" not in calls[0][1]
-    assert "transformer/*.safetensors" in calls[1][1]
-    assert "text_encoder/*.safetensors" not in calls[1][1]
+    assert "transformer/*.safetensors" in calls[0][1]
+    assert "vae/*.safetensors" in calls[0][1]
     assert all(call[3] is True for call in calls)
 
 
@@ -6382,7 +6433,7 @@ def test_download_command_rejects_all_files_for_factored_bernini(monkeypatch, ca
     assert exc.value.code == 2
     assert calls == []
     error = capsys.readouterr().err
-    assert "two pinned factored sources" in error
+    assert "pinned component subset" in error
     assert "Omit --all-files" in error
 
 
@@ -6400,7 +6451,7 @@ def test_download_command_rejects_cold_bernini_install_without_headroom(monkeypa
     assert exc.value.code == 2
     error = capsys.readouterr().err
     assert "Insufficient free space" in error
-    assert "18.36 GiB" in error
+    assert "28.94 GiB" in error
     assert "Already complete pinned sources are not counted" in error
 
 
@@ -6409,8 +6460,8 @@ def test_download_command_skips_cached_bernini_sources_in_space_preflight(monkey
     disk_usage = type("DiskUsage", (), {"free": 10 * 1024**3})()
 
     def fake_find(repo_id, patterns, revision=None):
-        if repo_id == "Wan-AI/Wan2.1-VACE-1.3B-diffusers":
-            return Path("/cached/base")
+        if repo_id == "ByteDance/Bernini-R-1.3B-Diffusers":
+            return Path("/cached/bernini")
         return None
 
     def fake_snapshot_download(*, repo_id, allow_patterns, revision=None):
@@ -6426,7 +6477,7 @@ def test_download_command_skips_cached_bernini_sources_in_space_preflight(monkey
 
     mlx_gen._download_model(["--model", "bernini-r-1.3b"])
 
-    assert calls == ["Wan-AI/Wan2.1-VACE-1.3B-diffusers", "ByteDance/Bernini-R-1.3B-Diffusers"]
+    assert calls == ["ByteDance/Bernini-R-1.3B-Diffusers"]
 
 
 def test_prepare_command_routes_to_save_with_downloads_enabled(monkeypatch):

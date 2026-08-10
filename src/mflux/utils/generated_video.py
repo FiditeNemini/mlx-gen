@@ -49,16 +49,24 @@ class GeneratedVideo:
         extra_metadata: dict | None = None,
         frame_batches_factory: Callable[[], Iterable[list[PIL.Image.Image]]] | None = None,
         frame_count: int | None = None,
+        trim_leading_frames: int = 0,
     ):
         if not frames and frame_batches_factory is None:
             raise ValueError("GeneratedVideo requires frames or a frame batch factory.")
+        if trim_leading_frames < 0:
+            raise ValueError("trim_leading_frames must be greater than or equal to zero.")
         if frames:
             frame_count = len(frames)
         if frame_count is None or frame_count <= 0:
             raise ValueError("GeneratedVideo requires at least one frame.")
+        if trim_leading_frames >= frame_count:
+            raise ValueError("trim_leading_frames must leave at least one frame.")
+        if frames and trim_leading_frames:
+            frames = frames[trim_leading_frames:]
         self._frames = frames
         self._frame_batches_factory = frame_batches_factory
-        self._frame_count = frame_count
+        self._frame_count = frame_count - trim_leading_frames
+        self.trim_leading_frames = trim_leading_frames
         self.fps = fps
         self.model_config = model_config
         self.seed = seed
@@ -94,8 +102,7 @@ class GeneratedVideo:
     @property
     def frames(self) -> list[PIL.Image.Image]:
         if self._frames is None:
-            assert self._frame_batches_factory is not None
-            self._frames = list(chain.from_iterable(self._frame_batches_factory()))
+            self._frames = list(chain.from_iterable(self._iter_frame_batches()))
         return self._frames
 
     @property
@@ -126,7 +133,7 @@ class GeneratedVideo:
             metadata["health_check"] = "skipped"
         if self._frames is None and self._frame_batches_factory is not None:
             return VideoUtil.save_video_batches(
-                frame_batches=self._frame_batches_factory(),
+                frame_batches=self._iter_frame_batches(),
                 path=path,
                 fps=self.fps,
                 metadata=metadata,
@@ -148,11 +155,37 @@ class GeneratedVideo:
 
     def first_frame(self) -> PIL.Image.Image:
         if self._frames is None and self._frame_batches_factory is not None:
-            first_batch = next(iter(self._frame_batches_factory()), None)
+            first_batch = next(iter(self._iter_frame_batches()), None)
             if not first_batch:
                 raise ValueError("GeneratedVideo frame batch factory returned no frames.")
             return first_batch[0]
         return self.frames[0]
+
+    def _iter_frame_batches(self) -> Iterable[list[PIL.Image.Image]]:
+        assert self._frame_batches_factory is not None
+        if self.trim_leading_frames == 0:
+            return self._frame_batches_factory()
+        return GeneratedVideo._trim_frame_batches(
+            frame_batches=self._frame_batches_factory(),
+            trim_leading_frames=self.trim_leading_frames,
+        )
+
+    @staticmethod
+    def _trim_frame_batches(
+        *,
+        frame_batches: Iterable[list[PIL.Image.Image]],
+        trim_leading_frames: int,
+    ) -> Iterable[list[PIL.Image.Image]]:
+        remaining = trim_leading_frames
+        for batch in frame_batches:
+            if remaining >= len(batch):
+                remaining -= len(batch)
+                continue
+            if remaining > 0:
+                batch = batch[remaining:]
+                remaining = 0
+            if batch:
+                yield batch
 
     def _get_metadata(self) -> dict:
         return GeneratedVideo.build_metadata(
@@ -184,6 +217,7 @@ class GeneratedVideo:
             lora_paths=self.lora_paths,
             lora_scales=self.lora_scales,
             extra_metadata=self.extra_metadata,
+            trim_leading_frames=self.trim_leading_frames,
         )
 
     @staticmethod
@@ -217,6 +251,7 @@ class GeneratedVideo:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         extra_metadata: dict | None = None,
+        trim_leading_frames: int = 0,
     ) -> dict:
         metadata = {
             "metadata_schema_version": MetadataSchema.VERSION,
@@ -255,6 +290,8 @@ class GeneratedVideo:
             "lora_scales": [round(scale, 2) for scale in lora_scales] if lora_scales else None,
             "runtime_memory": RuntimeMemory.snapshot("video-metadata").to_metadata(),
         }
+        if trim_leading_frames > 0:
+            metadata["trim_leading_frames"] = trim_leading_frames
         if extra_metadata:
             metadata.update(extra_metadata)
         return metadata

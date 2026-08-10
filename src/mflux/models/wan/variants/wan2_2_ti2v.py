@@ -1095,7 +1095,7 @@ class Wan2_2_TI2V(nn.Module):
             return None
         if self._prompt_embed_fingerprint is None:
             self._prompt_embed_fingerprint = WanPromptEmbedStore.compute_text_encoder_fingerprint(
-                self.root_path / "text_encoder"
+                self._component_subdir_path("text_encoder")
             )
         encoder_fingerprint = self._prompt_embed_fingerprint
         precision_policy_id = WanTextEncoderLoader.precision_policy_id(getattr(self, "model_config", None))
@@ -1118,7 +1118,7 @@ class Wan2_2_TI2V(nn.Module):
         except ImportError as exc:
             raise RuntimeError("Wan prompt encoding requires torch and transformers.") from exc
 
-        text_encoder_path = self.root_path / "text_encoder"
+        text_encoder_path = self._component_subdir_path("text_encoder")
         if not text_encoder_path.exists():
             raise FileNotFoundError(
                 f"Wan text encoder files were not found in {text_encoder_path}. "
@@ -1529,7 +1529,7 @@ class Wan2_2_TI2V(nn.Module):
     def _copy_runtime_assets(self, base_path: str) -> None:
         target = Path(base_path)
         for subdir in ("text_encoder", "scheduler"):
-            source = self.root_path / subdir
+            source = self._component_subdir_path(subdir)
             if source.exists():
                 shutil.copytree(source, target / subdir, dirs_exist_ok=True)
         model_index = self.root_path / "model_index.json"
@@ -1790,6 +1790,13 @@ class Wan2_2_TI2V(nn.Module):
             self._raise_denoisers_released()
         if self.transformer is None and not self._can_reload_high_noise_denoiser():
             self._raise_denoisers_released()
+
+    def _component_subdir_path(self, name: str) -> Path:
+        component_root = getattr(self, "component_roots", {}).get(name, self.root_path)
+        component_path = component_root / name
+        if component_path.exists():
+            return component_path
+        return component_root
 
     @staticmethod
     def _raise_denoisers_released() -> None:

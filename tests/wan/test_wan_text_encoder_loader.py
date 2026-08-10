@@ -12,15 +12,14 @@ from mflux.models.wan.variants.wan2_2_ti2v import Wan2_2_TI2V
 from mflux.models.wan.wan_text_encoder_loader import WanTextEncoderLoader
 
 
-def test_bernini_precision_scope_removes_only_wo_and_restores_exact_object():
+def test_bernini_precision_scope_preserves_upstream_keep_set_and_exact_object():
     original = ["wo", "other-protected-module"]
 
     class FakeEncoder:
         _keep_in_fp32_modules = original
 
     with WanTextEncoderLoader._precision_scope(FakeEncoder, bernini_compatibility=True):
-        assert FakeEncoder._keep_in_fp32_modules == ["other-protected-module"]
-        assert FakeEncoder._keep_in_fp32_modules is not original
+        assert FakeEncoder._keep_in_fp32_modules is original
 
     assert FakeEncoder._keep_in_fp32_modules is original
 
@@ -33,7 +32,7 @@ def test_bernini_precision_scope_restores_after_failure():
 
     with pytest.raises(RuntimeError, match="load failed"):
         with WanTextEncoderLoader._precision_scope(FakeEncoder, bernini_compatibility=True):
-            assert FakeEncoder._keep_in_fp32_modules == []
+            assert FakeEncoder._keep_in_fp32_modules is original
             raise RuntimeError("load failed")
 
     assert FakeEncoder._keep_in_fp32_modules is original
@@ -62,8 +61,8 @@ def test_bernini_precision_scope_restores_inherited_attribute_shape():
         pass
 
     with WanTextEncoderLoader._precision_scope(DerivedEncoder, bernini_compatibility=True):
-        assert DerivedEncoder._keep_in_fp32_modules == ["base-protected-module"]
-        assert "_keep_in_fp32_modules" in vars(DerivedEncoder)
+        assert DerivedEncoder._keep_in_fp32_modules is original
+        assert "_keep_in_fp32_modules" not in vars(DerivedEncoder)
 
     assert "_keep_in_fp32_modules" not in vars(DerivedEncoder)
     assert DerivedEncoder._keep_in_fp32_modules is original
@@ -107,7 +106,7 @@ def test_all_wan_load_scopes_serialize_around_bernini_mutation():
     assert not bernini_thread.is_alive()
     assert not ordinary_thread.is_alive()
     assert observed == {
-        "bernini": ["other-protected-module"],
+        "bernini": ["wo", "other-protected-module"],
         "ordinary": ["wo", "other-protected-module"],
     }
     assert FakeEncoder._keep_in_fp32_modules is original
@@ -115,7 +114,7 @@ def test_all_wan_load_scopes_serialize_around_bernini_mutation():
 
 @pytest.mark.parametrize(
     ("bernini_compatibility", "expected_during_load"),
-    [(False, ["wo"]), (True, [])],
+    [(False, ["wo"]), (True, ["wo"])],
 )
 def test_loader_applies_scoped_v5_policy_and_restores(
     monkeypatch, tmp_path, bernini_compatibility, expected_during_load
@@ -151,7 +150,7 @@ def test_loader_restores_v5_policy_after_load_failure(monkeypatch, tmp_path):
     original = UMT5EncoderModel._keep_in_fp32_modules
 
     def failing_from_pretrained(cls, path, **kwargs):
-        assert cls._keep_in_fp32_modules == []
+        assert cls._keep_in_fp32_modules == ["wo"]
         raise RuntimeError("load failed")
 
     monkeypatch.setattr(UMT5EncoderModel, "from_pretrained", classmethod(failing_from_pretrained))
@@ -197,6 +196,7 @@ def test_bernini_prompt_load_retains_shared_embedding_tie(monkeypatch, tmp_path)
         model_config=ModelConfig.bernini_r_1_3b(),
         _resident_text_encoder=None,
         _keep_text_encoder_resident=False,
+        _component_subdir_path=lambda component: tmp_path / component,
     )
     text_inputs = {
         "input_ids": np.array([[1, 2]], dtype=np.int64),

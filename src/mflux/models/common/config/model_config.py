@@ -997,11 +997,11 @@ AVAILABLE_MODELS = {
             "max_reference_images": 8,
             "max_condition_size": 848,
             "max_condition_size_limit": 1280,
-            # The stock components are compatible with Bernini and are resolved
-            # independently so bounded hosts do not download the 22.7 GB FP32
-            # text encoder duplicated in the renderer repository (ADR 0007).
-            "component_base_model": "Wan-AI/Wan2.1-VACE-1.3B-diffusers",
-            "expected_component_base_revision": "ec4d2cb062b548996b179d493fdd05340de702a1",
+            # Exact public-example parity requires the official Bernini text
+            # encoder and tokenizer. The VAE is byte-identical to Wan VACE, but
+            # the public Bernini text encoder weights are not.
+            "component_base_model": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "expected_component_base_revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
             "expected_transformer_revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce",
             "expected_renderer_config": {
                 "model_type": "bernini_renderer",
@@ -1012,7 +1012,7 @@ AVAILABLE_MODELS = {
                 "use_unipc": True,
                 "use_src_id_rotary_emb": True,
             },
-            "expected_component_base_download_bytes": 11_890_921_787,
+            "expected_component_base_download_bytes": 23_252_742_299,
             "expected_transformer_download_bytes": 5_676_148_056,
             "download_headroom_bytes": 2 * 1024**3,
             "default_width": 848,

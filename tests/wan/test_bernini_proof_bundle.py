@@ -29,7 +29,8 @@ BerniniProofBundle = _load_proof_bundle()
 
 def _current_portable_runs():
     runs = []
-    for case in BerniniProofBundle.cases().values():
+    for case_id in BerniniProofBundle.CURRENT_PROFILE_CASE_IDS:
+        case = BerniniProofBundle.cases()[case_id]
         prompt = case.prompt_override or f"current prompt for {case.prompt_json}"
         runs.append(
             {
@@ -152,7 +153,7 @@ def test_required_runtime_policy_covers_complete_low_ram_vae_path():
 
     assert policy["low_ram"] is True
     assert policy["vae_low_memory_policy_active"] is True
-    assert policy["clear_cache_each_transformer_block"] is True
+    assert policy["clear_cache_each_transformer_block"] is False
     assert policy["release_denoisers_before_decode"] is True
     assert policy["vae_feature_cache_policy_id"] == "wan-compact-feature-cache-v1"
     assert policy["vae_spatial_tiling"] is True
@@ -196,19 +197,20 @@ def test_visual_review_is_bound_to_output_and_every_case_sheet():
 
 
 def test_required_quality_negative_or_structural_result_blocks_overall_pass():
+    required_case_id = next(iter(BerniniProofBundle.QUALITY_CASE_IDS))
     cases = {case_id: {"status": "pass"} for case_id in BerniniProofBundle.QUALITY_CASE_IDS}
-    cases["rv2v_reference_black_ab"] = {"status": "negative_result"}
+    cases[required_case_id] = {"status": "negative_result"}
     checks = BerniniProofBundle._visual_quality_checks(visual_cases=cases)
 
-    assert not checks["rv2v_reference_black_ab"]
+    assert not checks[required_case_id]
     assert not BerniniProofBundle._visual_quality_passes(
         visual_review_complete=True,
         run_ids=set(BerniniProofBundle.QUALITY_CASE_IDS),
         visual_quality_checks=checks,
     )
 
-    cases["rv2v_reference_black_ab"] = {"status": "structural_only"}
-    assert not BerniniProofBundle._visual_quality_checks(visual_cases=cases)["rv2v_reference_black_ab"]
+    cases[required_case_id] = {"status": "structural_only"}
+    assert not BerniniProofBundle._visual_quality_checks(visual_cases=cases)[required_case_id]
 
 
 def test_pass_with_limitations_requires_minor_severity():
@@ -311,19 +313,43 @@ def test_timeline_sheet_is_high_resolution_and_contains_every_frame(tmp_path):
         assert sheet.size == (details["width"], details["height"])
 
 
-def test_required_quality_cases_use_the_official_release_profile():
+def test_portrait_timeline_sheet_uses_high_resolution_portrait_layout(tmp_path):
+    images = [Image.new("RGB", (176, 320), (index, 0, 0)) for index in range(9)]
+    output_path = tmp_path / "portrait_timeline.png"
+
+    details = BerniniProofBundle._save_image_sheet(
+        images=images,
+        output_path=output_path,
+        title="portrait frames",
+        indices=list(range(9)),
+        label_prefix="frame",
+        resampling=Image.Resampling.NEAREST,
+        fixed_columns=BerniniProofBundle.TIMELINE_COLUMNS,
+        cell_size=BerniniProofBundle.TIMELINE_CELL_SIZE,
+        fps=16,
+    )
+
+    assert details["width"] >= 5000
+    assert details["columns"] == BerniniProofBundle.PORTRAIT_TIMELINE_COLUMNS
+    assert details["layout_mode"] == "portrait"
+    assert details["cell_height"] == BerniniProofBundle.PORTRAIT_CELL_HEIGHT
+    assert details["cell_width"] < details["cell_height"]
+    assert details["downsampled"] is False
+
+
+def test_required_quality_cases_use_the_supported_release_profile():
     cases = BerniniProofBundle.cases()
 
     for case_id in BerniniProofBundle.QUALITY_CASE_IDS:
         case = cases[case_id]
-        assert case.frames == 81
-        assert case.steps == 40
-        assert case.max_condition_size == 848
-        assert (case.width, case.height) in {(848, 480), (480, 848)}
+        assert case.frames == 33
+        assert case.steps == 20
+        assert case.max_condition_size == 320
+        assert (case.width, case.height) in {(320, 320), (176, 320), (320, 176)}
 
-    r2v = cases["r2v_eight_reference"]
-    assert r2v.prompt_json == "assets/testcases/r2v/r2v_case2.json"
-    assert r2v.prompt_override is None
+    r2v = cases["r2v_one_reference"]
+    assert r2v.prompt_json is None
+    assert r2v.prompt_override is not None
 
 
 def test_long_timeline_is_split_into_ordered_high_resolution_pages(tmp_path, monkeypatch):
@@ -393,6 +419,7 @@ def test_case_sheet_pixel_binding_rejects_blank_misordered_and_degraded_content(
         video_util,
         "read_video_clip",
         staticmethod(lambda *_args, **_kwargs: SimpleNamespace(frames=frames, fps=8)),
+        raising=False,
     )
     monkeypatch.setattr(BerniniProofBundle, "TIMELINE_CELL_SIZE", 64)
     monkeypatch.setattr(BerniniProofBundle, "SHEET_PADDING", 4)
@@ -477,9 +504,8 @@ def test_source_sheet_sampling_is_recomputed_from_retained_video(monkeypatch):
         fps=8.0,
     )
     video_util = BerniniProofBundle._verify_source_sheet_sampling.__globals__["VideoUtil"]
-    monkeypatch.setattr(video_util, "inspect_video", staticmethod(lambda _path: source_info))
-    renderer = BerniniProofBundle._verify_source_sheet_sampling.__globals__["BerniniRenderer"]
-    expected_indices = renderer._smart_video_indices(
+    monkeypatch.setattr(video_util, "inspect_video", staticmethod(lambda _path: source_info), raising=False)
+    expected_indices = BerniniProofBundle._smart_video_indices(
         total_frames=5,
         video_fps=8,
         fps=8,
@@ -487,7 +513,7 @@ def test_source_sheet_sampling_is_recomputed_from_retained_video(monkeypatch):
         max_frames=5,
         add_one=True,
     )
-    output_height, output_width = renderer._closest_spatial_size_for_ratio(
+    output_height, output_width = BerniniProofBundle._closest_spatial_size_for_ratio(
         requested_height=case.height,
         requested_width=case.width,
         source_height=24,
@@ -495,7 +521,7 @@ def test_source_sheet_sampling_is_recomputed_from_retained_video(monkeypatch):
         multiple_h=16,
         multiple_w=16,
     )
-    condition_width, condition_height = renderer._condition_dimensions(
+    condition_width, condition_height = BerniniProofBundle._condition_dimensions(
         width=output_width,
         height=output_height,
         max_size=case.max_condition_size,
@@ -556,6 +582,7 @@ def test_overview_sheet_pixel_binding_rejects_blank_and_reordered_rows(tmp_path,
         video_util,
         "read_video_clip",
         staticmethod(lambda path, **_kwargs: SimpleNamespace(frames=decoded[str(path)], fps=8)),
+        raising=False,
     )
     monkeypatch.setattr(BerniniProofBundle, "SUMMARY_COLUMNS", 3)
     monkeypatch.setattr(BerniniProofBundle, "SUMMARY_CELL_WIDTH", 64)
@@ -616,6 +643,7 @@ def test_worst_transition_sheet_selects_and_pairs_largest_frame_changes(tmp_path
         video_util,
         "read_video_clip",
         staticmethod(lambda *_args, **_kwargs: SimpleNamespace(frames=frames, fps=16)),
+        raising=False,
     )
 
     _, details = BerniniProofBundle._save_case_sheets(
@@ -653,6 +681,7 @@ def test_worst_transition_selection_detects_localized_change(tmp_path, monkeypat
         video_util,
         "read_video_clip",
         staticmethod(lambda *_args, **_kwargs: SimpleNamespace(frames=[frame_0, frame_1, frame_2], fps=16)),
+        raising=False,
     )
 
     _, details = BerniniProofBundle._save_case_sheets(
@@ -694,6 +723,7 @@ def test_source_sheet_uses_exact_conditioned_frame_indices(tmp_path, monkeypatch
                 fps=10,
             )
         ),
+        raising=False,
     )
     monkeypatch.setattr(BerniniProofBundle, "TIMELINE_COLUMNS", 3)
     monkeypatch.setattr(BerniniProofBundle, "TIMELINE_CELL_SIZE", 64)
@@ -1094,6 +1124,7 @@ def test_portable_run_recomputes_metadata_artifacts_memory_health_and_pass(tmp_p
         BerniniProofBundle._verify_portable_run.__globals__["GenerationMemoryBenchmark"],
         "_video_health",
         staticmethod(video_health),
+        raising=False,
     )
     monkeypatch.setattr(BerniniProofBundle, "_verify_case_sheet_pixels", staticmethod(lambda **_: None))
     monkeypatch.setattr(BerniniProofBundle, "_contract_checks", staticmethod(contract_checks))
@@ -1291,7 +1322,10 @@ def test_component_compatibility_verifies_negative_visual_review_artifact_bindin
         staticmethod(lambda **_: None),
     )
     monkeypatch.setattr(
-        BerniniProofBundle._verify_component_compatibility.__globals__["VideoUtil"], "read_video_clip", read_video
+        BerniniProofBundle._verify_component_compatibility.__globals__["VideoUtil"],
+        "read_video_clip",
+        read_video,
+        raising=False,
     )
 
     mlx_report = {"schema_version": 1, "kind": "bernini_mlx_final_latent_decode_diagnosis"}

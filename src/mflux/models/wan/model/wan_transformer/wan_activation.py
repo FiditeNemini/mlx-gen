@@ -1,13 +1,18 @@
-import math
-
 import mlx.core as mx
+from mlx import nn
 
 
 class WanActivation:
+    LOW_PRECISION_DTYPES = (mx.float16, mx.bfloat16)
+
+    @staticmethod
+    def silu(x: mx.array) -> mx.array:
+        if x.dtype in WanActivation.LOW_PRECISION_DTYPES:
+            return nn.silu(x.astype(mx.float32)).astype(x.dtype)
+        return nn.silu(x)
+
     @staticmethod
     def gelu_tanh(x: mx.array) -> mx.array:
-        x_float = x.astype(mx.float32)
-        activated = 0.5 * x_float * (
-            1.0 + mx.tanh(math.sqrt(2.0 / math.pi) * (x_float + 0.044715 * mx.power(x_float, 3)))
-        )
-        return activated.astype(x.dtype)
+        if x.dtype in WanActivation.LOW_PRECISION_DTYPES:
+            return nn.gelu_approx(x.astype(mx.float32)).astype(x.dtype)
+        return nn.gelu_approx(x)

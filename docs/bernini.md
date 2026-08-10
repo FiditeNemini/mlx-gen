@@ -4,10 +4,24 @@ MLX-Gen supports ByteDance's Bernini-R 1.3B renderer for reference-guided video 
 editing on Apple Silicon. The integration is deliberately renderer-only: it exposes the useful
 reference and source-video paths without bundling the optional Qwen2.5-VL semantic planner.
 
-> **Experimental — visual release gate failed.** The routes execute and the checked numerical
-> components closely match their references, but every required model-backed visual case failed.
-> Current outputs can be nearly static, miss requested references, jump at four-latent-slice
-> boundaries, and corrupt their final frames. Do not use this route for production work yet.
+> **Experimental — not yet promoted.** The original 2026-08-04 release-quality bundle failed, but
+> the later official public 1.3B parity pass now has accepted qualitative evidence for `i2i`,
+> `t2i`, `t2v`, and `r2v`. Several official rows are still open, with `rv2v_case1` the next full
+> row to judge. Do not use this route for production work yet.
+
+Upstream public Bernini examples are broader than the currently proven mlx-gen surface. The strict
+official-example target is tracked separately in the
+[official public 1.3B example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md).
+
+As of Monday, August 10, 2026, the accepted current official-case rows are:
+
+- `i2i` — accepted with a minor wall-texture caveat against the official image
+- `t2i`
+- `t2v`
+- `r2v`
+
+The next row is `rv2v_case1` (official garment replacement), which already has a full current-run
+artifact and needs only the same final qualitative decision.
 
 Use Bernini when ordinary images should act as reusable visual references, or when a source video
 should be edited with those references. Continue using Wan VACE for learned mask/control workflows
@@ -25,6 +39,11 @@ The renderer does not currently expose Bernini's planner, T2I/I2I convenience ro
 video masks, warm-start strength, first/last frame anchors, multi-frame continuation, or multiple
 source videos. Motion-changing prompts can be used on V2V, but MLX-Gen does not claim the full
 planner-driven MV2V workflow.
+
+Internally, the Bernini runtime also accepts the official upstream `task_type` values `t2i`,
+`i2i`, `t2v`, `r2v`, `rv2v`, `v2v`, `mv2v`, and `ads2v` so the public cases can be replayed
+faithfully. Those typed rows are part of the parity harness; the stable user-facing guide here
+remains focused on the documented video workflows above.
 
 ## Download And Capacity
 
@@ -161,7 +180,7 @@ video = renderer.generate_video(
     num_inference_steps=20,
     max_condition_size=256,
     clear_cache_each_step=True,
-    clear_cache_each_transformer_block=True,
+    clear_cache_each_transformer_block=False,
 )
 video.save("referenced.mp4", export_json_metadata=True)
 ```
@@ -178,10 +197,20 @@ isolation.
 ## Proof And Known Limits
 
 The implementation passes scheduler/source-ID tests, APG edge cases, focused FP32/runtime-BF16
-transformer comparisons, VAE encode/decode comparisons, and framework regression tests. Those are
-necessary implementation checks; they do not override failed output quality. The schema-v3 proof
-bundle records `machine_contract_passed=true`, `visual_review_complete=true`,
-`visual_quality_passed=false`, and `passed=false`.
+transformer comparisons, VAE encode/decode comparisons, and framework regression tests. The older
+schema-v3 proof bundle below is still a failed historical release-quality artifact; it is no longer
+the whole story for current official-example status.
+
+The current accepted official public 1.3B rows are:
+
+- `i2i`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/mlx_sheet.png`
+- `t2i`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/mlx_sheet.png`
+- `t2v`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v/mlx_sheet.png`
+- `r2v`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/mlx_sheet.png`
+
+The next row is:
+
+- `rv2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
 
 The proof uses 5K-wide lossless-nearest MLX sheets, ordered 5K pages for long timelines, exact
 conditioned-source timelines, localized-change transition pairs, hashes, playable MP4s, and a
@@ -208,8 +237,8 @@ model-backed route MP4s.
 The original committed media profile uses 17 frames, 20 steps, reduced canvases, and reduced
 condition sizes. Full-frame inspection found nearly static motion, missed reference properties,
 cadence-aligned discontinuities, and severe corruption across frames 13-16 in the garment and
-snowman cases. The pinstripe/black A/B proves only that the renderer is sensitive to some
-reference content; it does not prove faithful control.
+snowman cases. That historical bundle is still useful for release-gate provenance, but the later
+official public-case reruns supersede it for the accepted `i2i`, `t2i`, `t2v`, and `r2v` rows.
 
 Controlled diagnostics did not rescue the claim:
 
@@ -223,7 +252,6 @@ Controlled diagnostics did not rescue the claim:
 - the upstream comparison clips do not attest their producing checkpoint or inference recipe.
   They are qualitative targets, not Bernini-R 1.3B parity baselines.
 
-The next required work is a real-input, first-step/full-trajectory Diffusers parity fixture using
-exported prompt embeddings, reference latents, noise, timestep, and sigma, followed by a
-metadata-bearing official 1.3B quality baseline. Until that work passes, keep Bernini experimental
-and fail closed in release validation.
+The next required work is to close the remaining official public matrix, starting with
+`rv2v_case1`, then the unresolved `v2v`, `r2v_case2`, and `ads2v` rows. Until that work passes,
+keep Bernini experimental and fail closed in release validation.

@@ -81,7 +81,8 @@ class WanInitializer:
         # high-noise expert can be rebuilt exactly as at init (model.bits only
         # records the resolved level, which loses the stored-vs-requested source).
         model.quantize_arg = quantize
-        WanInitializer._init_tokenizers(model, str(sources.root_path), weight_definition)
+        tokenizer_root = sources.component_roots.get("tokenizer", sources.root_path)
+        WanInitializer._init_tokenizers(model, str(tokenizer_root), weight_definition)
         WanInitializer._init_models(model, model_config)
         WanInitializer._load_and_apply_weights(model, sources.root_path, quantize, weight_definition)
         WanInitializer._apply_lora(

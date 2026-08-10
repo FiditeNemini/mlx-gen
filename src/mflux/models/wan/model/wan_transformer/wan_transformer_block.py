@@ -6,6 +6,7 @@ from mlx import nn
 
 from mflux.models.wan.model.wan_transformer.wan_activation import WanActivation
 from mflux.models.wan.model.wan_transformer.wan_attention import WanAttention
+from mflux.models.wan.model.wan_transformer.wan_fp32_layer_norm import FP32LayerNorm
 from mflux.utils.tensor_health import TensorHealth
 
 
@@ -39,7 +40,7 @@ class WanVACETransformerBlock(nn.Module):
     ):
         super().__init__()
         self.proj_in = nn.Linear(dim, dim, bias=True) if apply_input_projection else None
-        self.norm1 = nn.LayerNorm(dim, eps=eps, affine=False)
+        self.norm1 = FP32LayerNorm(dim, eps=eps, affine=False)
         self.attn1 = WanAttention(
             dim=dim,
             heads=num_heads,
@@ -55,9 +56,9 @@ class WanVACETransformerBlock(nn.Module):
             added_kv_proj_dim=added_kv_proj_dim,
             cross_attention_dim_head=dim // num_heads,
         )
-        self.norm2 = nn.LayerNorm(dim, eps=eps, affine=True) if cross_attn_norm else None
+        self.norm2 = FP32LayerNorm(dim, eps=eps, affine=True) if cross_attn_norm else None
         self.ffn = WanFeedForward(dim, ffn_dim)
-        self.norm3 = nn.LayerNorm(dim, eps=eps, affine=False)
+        self.norm3 = FP32LayerNorm(dim, eps=eps, affine=False)
         self.proj_out = nn.Linear(dim, dim, bias=True)
         self.scale_shift_table = mx.random.normal((1, 6, dim)) / dim**0.5
 
@@ -112,7 +113,7 @@ class WanTransformerBlock(nn.Module):
         added_kv_proj_dim: int | None = None,
     ):
         super().__init__()
-        self.norm1 = nn.LayerNorm(dim, eps=eps, affine=False)
+        self.norm1 = FP32LayerNorm(dim, eps=eps, affine=False)
         self.attn1 = WanAttention(
             dim=dim,
             heads=num_heads,
@@ -128,9 +129,9 @@ class WanTransformerBlock(nn.Module):
             added_kv_proj_dim=added_kv_proj_dim,
             cross_attention_dim_head=dim // num_heads,
         )
-        self.norm2 = nn.LayerNorm(dim, eps=eps, affine=True) if cross_attn_norm else None
+        self.norm2 = FP32LayerNorm(dim, eps=eps, affine=True) if cross_attn_norm else None
         self.ffn = WanFeedForward(dim, ffn_dim)
-        self.norm3 = nn.LayerNorm(dim, eps=eps, affine=False)
+        self.norm3 = FP32LayerNorm(dim, eps=eps, affine=False)
         self.scale_shift_table = mx.random.normal((1, 6, dim)) / dim**0.5
 
     def __call__(

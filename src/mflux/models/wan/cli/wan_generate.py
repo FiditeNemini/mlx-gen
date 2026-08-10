@@ -73,6 +73,7 @@ def main() -> None:
         )
         single_seed = len(args.seed) == 1
         release_denoisers_before_decode = args.low_ram and single_seed
+        bernini_step_cache_only = bool(args.low_ram and is_bernini)
         # Single-seed CLI runs keep the pre-0089 rule: release the inactive
         # expert regardless of quantization — the process exits after one
         # item, so no reload can ever be paid and bf16 checkpoints lose
@@ -142,7 +143,10 @@ def main() -> None:
                     release_inactive_denoiser=release_inactive_denoiser_arg,
                     release_denoisers_before_decode=release_denoisers_before_decode,
                     clear_cache_each_step=args.low_ram,
-                    clear_cache_each_transformer_block=args.low_ram,
+                    # Bernini video rows stay within the low-RAM budget with
+                    # step-level cleanup, but per-transformer-block flushes
+                    # are disproportionately slow on the packed renderer path.
+                    clear_cache_each_transformer_block=(args.low_ram and not bernini_step_cache_only),
                     tensor_health_check_interval=args.tensor_health_check_interval,
                     compile_transformer=args.compile_transformer,
                 )

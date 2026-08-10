@@ -7,6 +7,7 @@ import mlx.core as mx
 from mlx import nn
 
 from mflux.models.wan.model.wan_transformer.wan_embedding import WanRotaryPosEmbed, WanTimeTextImageEmbedding
+from mflux.models.wan.model.wan_transformer.wan_fp32_layer_norm import FP32LayerNorm
 from mflux.models.wan.model.wan_transformer.wan_transformer_block import (
     WanTransformerBlock,
     WanVACETransformerBlock,
@@ -24,6 +25,8 @@ class WanBlockHealthContext:
 
 
 class WanTransformer(nn.Module):
+    LOW_PRECISION_DTYPES = (mx.float16, mx.bfloat16)
+
     def __init__(
         self,
         patch_size: tuple[int, int, int] = (1, 2, 2),
@@ -100,7 +103,7 @@ class WanTransformer(nn.Module):
                 )
                 for index in range(len(self.vace_layers))
             ]
-        self.norm_out = nn.LayerNorm(self.inner_dim, eps=eps, affine=False)
+        self.norm_out = FP32LayerNorm(self.inner_dim, eps=eps, affine=False)
         self.proj_out = nn.Linear(self.inner_dim, self.out_channels * math.prod(patch_size), bias=True)
         self.scale_shift_table = mx.random.normal((1, 2, self.inner_dim)) / self.inner_dim**0.5
 
@@ -387,10 +390,7 @@ class WanTransformer(nn.Module):
         return self._unpatch(target_tokens, latent_segments[target_segment_index].shape)
 
     def _patch_embed(self, hidden_states: mx.array) -> mx.array:
-        hidden_states = mx.transpose(hidden_states, (0, 2, 3, 4, 1))
-        hidden_states = self.patch_embedding(hidden_states)
-        batch_size, frames, height, width, channels = hidden_states.shape
-        return hidden_states.reshape(batch_size, frames * height * width, channels)
+        return self._apply_patch_embedding(self.patch_embedding, hidden_states, self.patch_size)
 
     def _unpatch(self, hidden_states: mx.array, latent_shape: tuple[int, ...]) -> mx.array:
         batch_size, _, num_frames, height, width = latent_shape
@@ -426,10 +426,7 @@ class WanTransformer(nn.Module):
                 f"Length of control_hidden_states_scale {len(scales)} must equal "
                 f"the number of VACE layers {len(self.vace_layers)}."
             )
-        control = mx.transpose(control_hidden_states, (0, 2, 3, 4, 1))
-        control = self.vace_patch_embedding(control)
-        batch_size, frames, height, width, channels = control.shape
-        control = control.reshape(batch_size, frames * height * width, channels)
+        control = self._apply_patch_embedding(self.vace_patch_embedding, control_hidden_states, self.patch_size)
         # The reference zero-pads the control sequence to the main sequence length so that
         # block 0's proj_in(control) + hidden_states is shape-compatible.
         padding = hidden_states.shape[1] - control.shape[1]
@@ -464,6 +461,43 @@ class WanTransformer(nn.Module):
             shift, scale = mx.split(self.scale_shift_table + temb[:, None, :], 2, axis=1)
         hidden_states = self.norm_out(hidden_states.astype(mx.float32)) * (1 + scale) + shift
         return self.proj_out(hidden_states.astype(temb.dtype))
+
+    @classmethod
+    def _apply_patch_embedding(
+        cls,
+        patch_embedding: nn.Conv3d,
+        hidden_states: mx.array,
+        patch_size: tuple[int, int, int],
+    ) -> mx.array:
+        if hidden_states.dtype != patch_embedding.weight.dtype:
+            hidden_states = hidden_states.astype(patch_embedding.weight.dtype)
+        batch_size, channels, num_frames, height, width = hidden_states.shape
+        p_t, p_h, p_w = patch_size
+        patches = hidden_states.reshape(
+            batch_size,
+            channels,
+            num_frames // p_t,
+            p_t,
+            height // p_h,
+            p_h,
+            width // p_w,
+            p_w,
+        )
+        patches = mx.transpose(patches, (0, 2, 4, 6, 3, 5, 7, 1))
+        patches = patches.reshape(
+            batch_size,
+            (num_frames // p_t) * (height // p_h) * (width // p_w),
+            p_t * p_h * p_w * channels,
+        )
+        output_dtype = hidden_states.dtype
+        accumulation_dtype = mx.float32 if output_dtype in cls.LOW_PRECISION_DTYPES else output_dtype
+        weight_matrix = patch_embedding.weight.astype(accumulation_dtype).reshape(patch_embedding.weight.shape[0], -1)
+        hidden_states = patches.astype(accumulation_dtype) @ mx.transpose(weight_matrix)
+        if patch_embedding.bias is not None:
+            hidden_states = hidden_states + patch_embedding.bias.astype(accumulation_dtype)
+        if hidden_states.dtype != output_dtype:
+            hidden_states = hidden_states.astype(output_dtype)
+        return hidden_states
 
     @staticmethod
     def _block_health_enabled() -> bool:

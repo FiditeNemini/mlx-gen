@@ -8,8 +8,10 @@ from mflux.models.wan.weights.wan_weight_mapping import WanWeightMapping
 
 
 class WanWeightDefinition:
-    BERNINI_TRANSFORMER_PRECISION_POLICY_ID = "bernini-transformer-final-modulation-fp32-v1"
+    BERNINI_TRANSFORMER_PRECISION_POLICY_ID = "bernini-transformer-official-keep-set-v5"
     BERNINI_TRANSFORMER_FP32_KEYS = ("scale_shift_table",)
+    BERNINI_TRANSFORMER_FP32_PREFIXES = ("condition_embedder.time_embedder.",)
+    BERNINI_TRANSFORMER_FP32_FRAGMENTS = (".scale_shift_table", ".norm1.", ".norm2.", ".norm3.")
 
     def __init__(self, model_config: ModelConfig | None = None):
         self.model_config = model_config or ModelConfig.wan2_2_ti2v_5b()
@@ -113,11 +115,13 @@ class WanWeightDefinition:
             return None
 
         def bernini_runtime_precision(key: str) -> mx.Dtype | None:
-            # The checkpoint's final modulation table is especially sensitive to
-            # BF16 rounding on MLX. Keeping the broader set that Diffusers protects
-            # in FP32 makes the recurrent MLX trajectory less faithful, so this is
-            # intentionally the narrower parity-proven backend policy.
-            return mx.float32 if key in WanWeightDefinition.BERNINI_TRANSFORMER_FP32_KEYS else None
+            if key in WanWeightDefinition.BERNINI_TRANSFORMER_FP32_KEYS:
+                return mx.float32
+            if any(key.startswith(prefix) for prefix in WanWeightDefinition.BERNINI_TRANSFORMER_FP32_PREFIXES):
+                return mx.float32
+            if any(fragment in key for fragment in WanWeightDefinition.BERNINI_TRANSFORMER_FP32_FRAGMENTS):
+                return mx.float32
+            return None
 
         return bernini_runtime_precision
 

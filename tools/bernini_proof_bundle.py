@@ -1,6 +1,7 @@
 import argparse
 import copy
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -12,10 +13,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, TYPE_CHECKING, Callable
 
 import numpy as np
-from generation_memory_benchmark import CommandVariant, GenerationMemoryBenchmark
 from PIL import (
     Image,
     ImageChops,
@@ -25,11 +25,68 @@ from PIL import (
     __version__ as PILLOW_VERSION,
 )
 
-from mflux.models.wan.model.wan_vae.wan_2_2_vae import Wan2_2_VAE
-from mflux.models.wan.variants.wan_bernini import BerniniRenderer
-from mflux.models.wan.wan_text_encoder_loader import WanTextEncoderLoader
-from mflux.models.wan.weights import WanWeightDefinition
-from mflux.utils.video_util import VideoUtil
+if TYPE_CHECKING:
+    from generation_memory_benchmark import CommandVariant as CommandVariantType
+else:
+    CommandVariantType = Any
+
+
+class _LazyProxy:
+    def __init__(self, loader: Callable[[], Any]):
+        self._loader = loader
+        self._loaded: Any | None = None
+
+    def _resolve(self) -> Any:
+        if self._loaded is None:
+            self._loaded = self._loader()
+        return self._loaded
+
+    def __getattr__(self, name: str) -> Any:
+        return _LazyAttribute(self, name)
+
+
+class _LazyAttribute:
+    def __init__(self, proxy: _LazyProxy, name: str):
+        self._proxy = proxy
+        self._name = name
+
+    def _resolve(self) -> Any:
+        return getattr(self._proxy._resolve(), self._name)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._resolve()(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._resolve(), name)
+
+
+def _load_generation_memory_benchmark() -> Any:
+    return importlib.import_module("generation_memory_benchmark").GenerationMemoryBenchmark
+
+
+def _load_video_util() -> Any:
+    return importlib.import_module("mflux.utils.video_util").VideoUtil
+
+
+def _command_variant(
+    *,
+    name: str,
+    argv: list[str],
+    output_path: Path,
+    cwd: Path,
+    env: dict[str, str] | None,
+) -> Any:
+    return importlib.import_module("generation_memory_benchmark").CommandVariant(
+        name=name,
+        argv=argv,
+        output_path=output_path,
+        cwd=cwd,
+        env=env,
+    )
+
+
+GenerationMemoryBenchmark = _LazyProxy(_load_generation_memory_benchmark)
+VideoUtil = _LazyProxy(_load_video_util)
 
 
 @dataclass(frozen=True)
@@ -51,7 +108,7 @@ class BerniniProofCase:
 
 
 class BerniniProofBundle:
-    CASE_CONTRACT_VERSION = 5
+    CASE_CONTRACT_VERSION = 6
     SHEET_CONTRACT_VERSION = 5
     VISUAL_REVIEW_SCHEMA_VERSION = 4
     MAX_REVIEW_CLOCK_SKEW_SECONDS = 300
@@ -81,20 +138,27 @@ class BerniniProofBundle:
         },
     }
     EXPECTED_RUNTIME_POLICY = {
-        "text_encoder_precision_policy_id": WanTextEncoderLoader.BERNINI_PRECISION_POLICY_ID,
-        "transformer_precision_policy_id": WanWeightDefinition.BERNINI_TRANSFORMER_PRECISION_POLICY_ID,
+        "text_encoder_precision_policy_id": "bernini-umt5-official-v2",
+        "transformer_precision_policy_id": "bernini-transformer-official-keep-set-v5",
         "transformer_default_weight_precision": "bfloat16",
-        "transformer_fp32_weight_keys": list(WanWeightDefinition.BERNINI_TRANSFORMER_FP32_KEYS),
+        "transformer_fp32_weight_keys": ["scale_shift_table"],
+        "transformer_fp32_weight_prefixes": ["condition_embedder.time_embedder."],
+        "transformer_fp32_weight_fragments": [
+            ".scale_shift_table",
+            ".norm1.",
+            ".norm2.",
+            ".norm3.",
+        ],
         "low_ram": True,
         "vae_low_memory_policy_active": True,
-        "clear_cache_each_transformer_block": True,
+        "clear_cache_each_transformer_block": False,
         "release_denoisers_before_decode": True,
-        "vae_feature_cache_policy_id": Wan2_2_VAE.COMPACT_FEATURE_CACHE_POLICY_ID,
+        "vae_feature_cache_policy_id": "wan-compact-feature-cache-v1",
         "vae_encode_cache_materialization": "eager-contiguous-per-slice",
         "vae_decode_cache_materialization": "eager-contiguous-per-slice",
         "vae_spatial_tiling": True,
-        "vae_spatial_tiling_policy_id": Wan2_2_VAE.SPATIAL_TILING_POLICY_ID,
-        "wan_decode_mode": Wan2_2_VAE.TILED_DECODE_MODE,
+        "vae_spatial_tiling_policy_id": "wan21-diffusers-0.35.2-256x256-stride192-v1",
+        "wan_decode_mode": "bounded_tile_major_spatial_vae",
     }
     REQUIRED_RUNTIME_ENVIRONMENT_FIELDS = (
         "mlx_version",
@@ -154,13 +218,11 @@ class BerniniProofBundle:
     }
     REVIEWED_STATUSES = {"pass", "pass_with_limitations", "negative_result", "structural_only", "fail"}
     QUALITY_ACCEPTED_STATUSES = {"pass", "pass_with_limitations"}
-    QUALITY_CASE_IDS = {
-        "r2v_eight_reference",
-        "rv2v_garment",
-        "rv2v_reference_pinstripe_ab",
-        "rv2v_reference_black_ab",
-        "v2v_snowman",
-    }
+    CURRENT_PROFILE_CASE_IDS = ("v2v_snowman",)
+    QUALITY_CASE_IDS = {"v2v_snowman"}
+    PORTRAIT_LAYOUT_MAX_ASPECT = 0.75
+    PORTRAIT_TIMELINE_COLUMNS = 5
+    PORTRAIT_CELL_HEIGHT = 1776
     TIMELINE_COLUMNS = 3
     TIMELINE_CELL_SIZE = 1664
     TIMELINE_PAGE_SIZE = 9
@@ -178,9 +240,31 @@ class BerniniProofBundle:
     def cases() -> dict[str, BerniniProofCase]:
         r2v_images = tuple(f"assets/testcases/r2v/source_img{index}.png" for index in range(8))
         return {
+            "r2v_one_reference": BerniniProofCase(
+                case_id="r2v_one_reference",
+                proof_kind="diagnostic-one-reference-identity-turn",
+                prompt_json=None,
+                prompt_override=(
+                    "Create a fixed medium-shot video of the white marble male statue from image0 standing in a "
+                    "quiet museum gallery. Preserve the same white stone material, curly sculpted hair, muscular "
+                    "torso, facial identity, and classical proportions. The statue slowly turns its head slightly "
+                    "to the right and then back toward the camera while the camera remains fixed and the lighting "
+                    "stays soft and neutral."
+                ),
+                reference_images=("assets/testcases/r2v/source_img0.png",),
+                source_video=None,
+                official_output=None,
+                width=320,
+                height=320,
+                frames=33,
+                fps=16,
+                steps=20,
+                seed=8120,
+                max_condition_size=320,
+            ),
             "r2v_eight_reference": BerniniProofCase(
                 case_id="r2v_eight_reference",
-                proof_kind="recommended-quality-and-eight-reference-bound",
+                proof_kind="diagnostic-eight-reference-bound",
                 prompt_json="assets/testcases/r2v/r2v_case2.json",
                 prompt_override=None,
                 reference_images=r2v_images,
@@ -196,7 +280,7 @@ class BerniniProofBundle:
             ),
             "rv2v_garment": BerniniProofCase(
                 case_id="rv2v_garment",
-                proof_kind="recommended-quality-and-role-control",
+                proof_kind="diagnostic-official-prompt-garment-edit",
                 prompt_json="assets/testcases/rv2v/rv2v_case1.json",
                 prompt_override=None,
                 reference_images=("assets/testcases/rv2v/ref_case1.jpg",),
@@ -244,7 +328,7 @@ class BerniniProofBundle:
             ),
             "rv2v_reference_pinstripe_ab": BerniniProofCase(
                 case_id="rv2v_reference_pinstripe_ab",
-                proof_kind="recommended-quality-same-prompt-same-seed-reference-ab-pinstripe",
+                proof_kind="diagnostic-reference-ab-pinstripe",
                 prompt_json=None,
                 prompt_override=(
                     "Replace the person's outer shirt with the garment from image0 while keeping the inner "
@@ -254,17 +338,17 @@ class BerniniProofBundle:
                 reference_images=("assets/testcases/rv2v/ref_case1.jpg",),
                 source_video="assets/testcases/rv2v/source_case1.mp4",
                 official_output=None,
-                width=480,
-                height=848,
-                frames=81,
+                width=176,
+                height=320,
+                frames=33,
                 fps=16,
-                steps=40,
-                seed=8112,
-                max_condition_size=848,
+                steps=20,
+                seed=8106,
+                max_condition_size=320,
             ),
             "rv2v_reference_black_ab": BerniniProofCase(
                 case_id="rv2v_reference_black_ab",
-                proof_kind="recommended-quality-same-prompt-same-seed-reference-ab-black",
+                proof_kind="diagnostic-reference-ab-black",
                 prompt_json=None,
                 prompt_override=(
                     "Replace the person's outer shirt with the garment from image0 while keeping the inner "
@@ -274,17 +358,17 @@ class BerniniProofBundle:
                 reference_images=("assets/testcases/r2v/source_img2.png",),
                 source_video="assets/testcases/rv2v/source_case1.mp4",
                 official_output=None,
-                width=480,
-                height=848,
-                frames=81,
+                width=176,
+                height=320,
+                frames=33,
                 fps=16,
-                steps=40,
-                seed=8112,
-                max_condition_size=848,
+                steps=20,
+                seed=8106,
+                max_condition_size=320,
             ),
             "rv2v_reference_none_ab": BerniniProofCase(
                 case_id="rv2v_reference_none_ab",
-                proof_kind="same-prompt-same-seed-no-reference-control",
+                proof_kind="diagnostic-no-reference-control",
                 prompt_json=None,
                 prompt_override=(
                     "Replace the person's outer shirt with the garment from image0 while keeping the inner "
@@ -296,27 +380,27 @@ class BerniniProofBundle:
                 official_output=None,
                 width=176,
                 height=320,
-                frames=17,
+                frames=33,
                 fps=16,
                 steps=20,
-                seed=8112,
+                seed=8106,
                 max_condition_size=320,
             ),
             "v2v_snowman": BerniniProofCase(
                 case_id="v2v_snowman",
-                proof_kind="recommended-quality",
+                proof_kind="supported-profile-quality",
                 prompt_json="assets/testcases/v2v/v2v_case1.json",
                 prompt_override=None,
                 reference_images=(),
                 source_video="assets/testcases/v2v/source_case1.mp4",
-                official_output="assets/testcases/v2v/v2v_case1_out.mp4",
-                width=848,
-                height=480,
-                frames=81,
+                official_output=None,
+                width=320,
+                height=176,
+                frames=33,
                 fps=16,
-                steps=40,
+                steps=20,
                 seed=8107,
-                max_condition_size=848,
+                max_condition_size=320,
             ),
             "r2v_848_condition_smoke": BerniniProofCase(
                 case_id="r2v_848_condition_smoke",
@@ -434,7 +518,7 @@ class BerniniProofBundle:
             "--cases",
             nargs="+",
             choices=tuple(BerniniProofBundle.cases()),
-            default=tuple(BerniniProofBundle.cases()),
+            default=BerniniProofBundle.CURRENT_PROFILE_CASE_IDS,
         )
         args = parser.parse_args()
         if args.sample_interval_ms <= 0:
@@ -536,7 +620,7 @@ class BerniniProofBundle:
             source_path=source_path,
             output_path=Path(f"{case.case_id}_{case.frames}f.mp4"),
         )
-        variant = CommandVariant(
+        variant = _command_variant(
             name=case.case_id,
             argv=argv,
             output_path=Path(f"{case.case_id}_{case.frames}f.mp4"),
@@ -888,11 +972,17 @@ class BerniniProofBundle:
             raise ValueError(f"Cannot build an empty contact sheet: {title}")
         if any(index < 0 or index >= len(images) for index in indices):
             raise ValueError(f"Contact-sheet indices are out of range for {title}: {indices}")
-        columns = max(1, min(fixed_columns, len(indices)))
+        layout = BerniniProofBundle._sheet_layout(
+            input_sizes=[(images[index].width, images[index].height) for index in indices],
+            fixed_columns=fixed_columns,
+            cell_size=cell_size,
+        )
+        columns = max(1, min(layout["columns"], len(indices)))
         rows = math.ceil(len(indices) / columns)
         padding = BerniniProofBundle.SHEET_PADDING
         label_height = BerniniProofBundle.SHEET_LABEL_HEIGHT
-        cell_width = cell_height = cell_size
+        cell_width = layout["cell_width"]
+        cell_height = layout["cell_height"]
         title_font = BerniniProofBundle._font(BerniniProofBundle.TITLE_FONT_SIZE, bold=True)
         label_font = BerniniProofBundle._font(BerniniProofBundle.LABEL_FONT_SIZE)
         sheet_width = padding * (columns + 1) + cell_width * columns
@@ -949,6 +1039,8 @@ class BerniniProofBundle:
             "rows": rows,
             "cell_width": cell_width,
             "cell_height": cell_height,
+            "layout_mode": layout["layout_mode"],
+            "target_aspect": layout["target_aspect"],
             "title_font_size": BerniniProofBundle.TITLE_FONT_SIZE,
             "label_font_size": BerniniProofBundle.LABEL_FONT_SIZE,
             "source_frame_count": len(images),
@@ -969,6 +1061,41 @@ class BerniniProofBundle:
                     strict=True,
                 )
             ),
+        }
+
+    @staticmethod
+    def _sheet_layout(
+        *,
+        input_sizes: list[tuple[int, int]],
+        fixed_columns: int,
+        cell_size: int,
+    ) -> dict[str, Any]:
+        if not input_sizes:
+            return {
+                "columns": fixed_columns,
+                "cell_width": cell_size,
+                "cell_height": cell_size,
+                "layout_mode": "square",
+                "target_aspect": 1.0,
+            }
+        aspects = [width / height for width, height in input_sizes if width > 0 and height > 0]
+        aspect = float(np.median(aspects)) if aspects else 1.0
+        if fixed_columns == BerniniProofBundle.TIMELINE_COLUMNS and aspect <= BerniniProofBundle.PORTRAIT_LAYOUT_MAX_ASPECT:
+            cell_height = BerniniProofBundle.PORTRAIT_CELL_HEIGHT
+            cell_width = max(1, int(round(cell_height * aspect)))
+            return {
+                "columns": BerniniProofBundle.PORTRAIT_TIMELINE_COLUMNS,
+                "cell_width": cell_width,
+                "cell_height": cell_height,
+                "layout_mode": "portrait",
+                "target_aspect": round(aspect, 4),
+            }
+        return {
+            "columns": fixed_columns,
+            "cell_width": cell_size,
+            "cell_height": cell_size,
+            "layout_mode": "square",
+            "target_aspect": round(aspect, 4),
         }
 
     @staticmethod
@@ -1230,29 +1357,40 @@ class BerniniProofBundle:
             if detail.get("title_font_size", 0) < 80 or detail.get("label_font_size", 0) < 64:
                 return False
             sample_count = int(detail.get("sample_count", 0))
-            expected_columns = min(
-                BerniniProofBundle.TRANSITION_COLUMNS
-                if label == "worst_transitions"
-                else BerniniProofBundle.TIMELINE_COLUMNS,
-                sample_count,
+            input_sizes = detail.get("input_sizes")
+            if not isinstance(input_sizes, list):
+                return False
+            layout = BerniniProofBundle._sheet_layout(
+                input_sizes=[
+                    (int(size[0]), int(size[1]))
+                    for size in input_sizes
+                    if isinstance(size, list) and len(size) == 2
+                ],
+                fixed_columns=(
+                    BerniniProofBundle.TRANSITION_COLUMNS
+                    if label == "worst_transitions"
+                    else BerniniProofBundle.TIMELINE_COLUMNS
+                ),
+                cell_size=BerniniProofBundle.TIMELINE_CELL_SIZE,
             )
+            expected_columns = min(layout["columns"], sample_count)
             if (
                 detail.get("columns") != expected_columns
-                or detail.get("cell_width", 0) < BerniniProofBundle.TIMELINE_CELL_SIZE
-                or detail.get("cell_height", 0) < BerniniProofBundle.TIMELINE_CELL_SIZE
+                or detail.get("cell_width") != layout["cell_width"]
+                or detail.get("cell_height") != layout["cell_height"]
+                or detail.get("layout_mode") != layout["layout_mode"]
+                or detail.get("target_aspect") != layout["target_aspect"]
                 or detail.get("width", 0)
-                < expected_columns * BerniniProofBundle.TIMELINE_CELL_SIZE
+                < expected_columns * layout["cell_width"]
                 + (expected_columns + 1) * BerniniProofBundle.SHEET_PADDING
             ):
                 return False
             if label != "references" and detail.get("downsampled") is not False:
                 return False
-            input_sizes = detail.get("input_sizes")
             rendered_sizes = detail.get("rendered_sizes")
             decoded_frame_sha256 = detail.get("decoded_frame_sha256")
             if (
-                not isinstance(input_sizes, list)
-                or not isinstance(rendered_sizes, list)
+                not isinstance(rendered_sizes, list)
                 or not isinstance(decoded_frame_sha256, list)
                 or len(input_sizes) != sample_count
                 or len(rendered_sizes) != sample_count
@@ -1320,6 +1458,133 @@ class BerniniProofBundle:
         if page_count == 1:
             return [label]
         return [f"{label}_page_{page_number:02d}" for page_number in range(1, page_count + 1)]
+
+    @staticmethod
+    def _torch_float32_linspace(*, start: float, stop: float, steps: int) -> list[float]:
+        if steps <= 0:
+            return []
+        if steps == 1:
+            return [float(np.float32(start))]
+        start32 = np.float32(start)
+        stop32 = np.float32(stop)
+        step32 = np.float32((np.float64(stop) - np.float64(start)) / np.float64(steps - 1))
+        positions = np.arange(steps, dtype=np.float32)
+        left = start32 + positions * step32
+        right = stop32 - (np.float32(steps - 1) - positions) * step32
+        values = np.where(positions < steps // 2, left, right).astype(np.float32)
+        return [float(value) for value in values]
+
+    @staticmethod
+    def _torch_float32_linspace_round(*, start: int, stop: int, steps: int) -> list[int]:
+        values = BerniniProofBundle._torch_float32_linspace(start=float(start), stop=float(stop), steps=steps)
+        return np.rint(np.asarray(values, dtype=np.float32)).astype(np.int64).tolist()
+
+    @staticmethod
+    def _smart_video_indices(
+        *,
+        total_frames: int,
+        video_fps: float,
+        fps: float,
+        frame_factor: int | None = None,
+        min_frames: int | None = None,
+        max_frames: int | None = None,
+        add_one: bool = False,
+    ) -> list[int]:
+        if total_frames <= 0 or video_fps <= 0 or fps <= 0:
+            raise ValueError("Bernini video sampling requires positive frame counts and frame rates.")
+        source_total_frames = total_frames
+        nframes = total_frames / video_fps * fps
+        if frame_factor is not None:
+            nframes = math.floor(nframes / frame_factor) * frame_factor + int(add_one)
+            nframes = max(nframes, frame_factor + int(add_one))
+            if video_fps == fps:
+                total_frames = math.floor(total_frames / frame_factor) * frame_factor + int(add_one)
+        else:
+            nframes = int(nframes + int(add_one))
+        nframes = int(nframes)
+        indices = BerniniProofBundle._torch_float32_linspace_round(
+            start=0,
+            stop=total_frames - 1,
+            steps=nframes,
+        )
+        if min_frames is not None:
+            if frame_factor is not None:
+                min_frames = math.ceil(min_frames / frame_factor) * frame_factor
+            nframes = max(min_frames + int(add_one), nframes)
+        while len(indices) < nframes:
+            indices.append(indices[-1])
+        if max_frames is not None:
+            if frame_factor is not None:
+                max_frames = math.floor(max_frames / frame_factor) * frame_factor
+            nframes = min(max_frames + int(add_one), nframes)
+        return [max(0, min(int(index), source_total_frames - 1)) for index in indices[:nframes]]
+
+    @staticmethod
+    def _nearby_axis_counts(ideal_size: float, multiple: int) -> set[int]:
+        ideal_count = ideal_size / multiple
+        base_counts = {math.floor(ideal_count), round(ideal_count), math.ceil(ideal_count)}
+        return {max(1, count + offset) for count in base_counts for offset in range(-2, 3)}
+
+    @staticmethod
+    def _closest_spatial_size_for_ratio(
+        *,
+        requested_height: int,
+        requested_width: int,
+        source_height: int,
+        source_width: int,
+        multiple_h: int,
+        multiple_w: int,
+    ) -> tuple[int, int]:
+        target_ratio = source_width / source_height
+        target_area = requested_width * requested_height
+        ideal_height = math.sqrt(target_area / target_ratio)
+        ideal_width = ideal_height * target_ratio
+        max_height = max(multiple_h, math.ceil((ideal_height * 2) / multiple_h) * multiple_h)
+        max_width = max(multiple_w, math.ceil((ideal_width * 2) / multiple_w) * multiple_w)
+        candidates: set[tuple[int, int]] = set()
+
+        for candidate_height in range(multiple_h, max_height + multiple_h, multiple_h):
+            ideal_candidate_width = candidate_height * target_ratio
+            for width_count in BerniniProofBundle._nearby_axis_counts(ideal_candidate_width, multiple_w):
+                candidates.add((candidate_height, width_count * multiple_w))
+
+        for candidate_width in range(multiple_w, max_width + multiple_w, multiple_w):
+            ideal_candidate_height = candidate_width / target_ratio
+            for height_count in BerniniProofBundle._nearby_axis_counts(ideal_candidate_height, multiple_h):
+                candidates.add((height_count * multiple_h, candidate_width))
+
+        def score(candidate: tuple[int, int]) -> tuple[float, float, float, int, int]:
+            candidate_height, candidate_width = candidate
+            candidate_ratio = candidate_width / candidate_height
+            candidate_area = candidate_width * candidate_height
+            ratio_error = abs(math.log(candidate_ratio / target_ratio))
+            area_error = abs(math.log(candidate_area / target_area))
+            shape_error = abs(candidate_width - ideal_width) / ideal_width
+            shape_error += abs(candidate_height - ideal_height) / ideal_height
+            return (ratio_error * 10.0 + area_error, ratio_error, area_error, candidate_area, int(shape_error * 1e9))
+
+        return min(candidates, key=score)
+
+    @staticmethod
+    def _condition_dimensions(
+        *,
+        width: int,
+        height: int,
+        max_size: int,
+        min_size: int = 1,
+        stride: int = 16,
+    ) -> tuple[int, int]:
+        if width <= 0 or height <= 0:
+            raise ValueError("Bernini condition dimensions must be positive.")
+        scale = min(max_size / max(width, height), 1.0)
+        scale = max(scale, min_size / min(width, height))
+        new_width = max(stride, int(round(round(width * scale) / stride) * stride))
+        new_height = max(stride, int(round(round(height * scale) / stride) * stride))
+        if max(new_width, new_height) > max_size:
+            scale = max_size / max(new_width, new_height)
+            new_width = max(stride, int(round(round(new_width * scale) / stride) * stride))
+            new_height = max(stride, int(round(round(new_height * scale) / stride) * stride))
+        return new_width, new_height
 
     @staticmethod
     def _expected_timeline_groups(result: dict[str, Any]) -> dict[str, list[int]]:
@@ -2401,7 +2666,7 @@ class BerniniProofBundle:
             source_frame_count = len(clip.frames)
             source_width, source_height = clip.frames[0].size
             source_fps = clip.fps
-        expected_indices = BerniniRenderer._smart_video_indices(
+        expected_indices = BerniniProofBundle._smart_video_indices(
             total_frames=source_frame_count,
             video_fps=float(source_fps),
             fps=float(case.fps),
@@ -2409,7 +2674,7 @@ class BerniniProofBundle:
             max_frames=case.frames,
             add_one=True,
         )
-        output_height, output_width = BerniniRenderer._closest_spatial_size_for_ratio(
+        output_height, output_width = BerniniProofBundle._closest_spatial_size_for_ratio(
             requested_height=case.height,
             requested_width=case.width,
             source_height=source_height,
@@ -2417,7 +2682,7 @@ class BerniniProofBundle:
             multiple_h=16,
             multiple_w=16,
         )
-        condition_width, condition_height = BerniniRenderer._condition_dimensions(
+        condition_width, condition_height = BerniniProofBundle._condition_dimensions(
             width=output_width,
             height=output_height,
             max_size=case.max_condition_size,
@@ -2898,10 +3163,11 @@ they are qualitative targets, not Bernini-R 1.3B parity baselines.
     @staticmethod
     def _verify_current_portable_profile(*, report: dict[str, Any], manifest: dict[str, Any]) -> None:
         current_cases = BerniniProofBundle.cases()
+        expected_case_ids = set(BerniniProofBundle.CURRENT_PROFILE_CASE_IDS)
         runs = report.get("runs")
         if not isinstance(runs, list):
             raise ValueError("Portable proof report runs must be a list.")
-        if len(runs) != len(current_cases):
+        if len(runs) != len(expected_case_ids):
             raise ValueError("Portable proof report does not contain the complete current case profile.")
         stored_fingerprints = BerniniProofBundle._portable_case_fingerprints(report)
         manifest_fingerprints = manifest.get("case_fingerprints")
@@ -2913,7 +3179,7 @@ they are qualitative targets, not Bernini-R 1.3B parity baselines.
         for run in runs:
             case = run["case"]
             case_id = case["case_id"]
-            if case_id not in current_cases or case_id in seen:
+            if case_id not in expected_case_ids or case_id in seen:
                 raise ValueError(f"Portable proof report contains an unknown or duplicate case: {case_id!r}")
             seen.add(case_id)
             current_case = current_cases[case_id]
@@ -2938,7 +3204,7 @@ they are qualitative targets, not Bernini-R 1.3B parity baselines.
             expected = BerniniProofBundle._case_fingerprint(case=current_case, prompt=prompt)
             if run.get("case_fingerprint") != expected:
                 raise ValueError(f"Portable proof case {case_id!r} has a stale fingerprint.")
-        if seen != set(current_cases):
+        if seen != expected_case_ids:
             raise ValueError("Portable proof report is missing current cases.")
 
     @staticmethod

@@ -14,7 +14,7 @@ def test_bernini_catalog_config_uses_factored_wan_components():
 
     assert config.model_name == "ByteDance/Bernini-R-1.3B-Diffusers"
     assert config.custom_transformer_model == config.model_name
-    assert config.transformer_overrides["component_base_model"] == "Wan-AI/Wan2.1-VACE-1.3B-diffusers"
+    assert config.transformer_overrides["component_base_model"] == config.model_name
     assert config.transformer_overrides["supports_bernini_renderer"] is True
     assert config.transformer_overrides["flow_shift"] == 5.0
     assert config.transformer_overrides["unipc_flow_sigma_schedule"] == "diffusers-0.35.2"
@@ -27,18 +27,25 @@ def test_bernini_catalog_config_uses_factored_wan_components():
     assert config.transformer_overrides["default_apg_eta"] == 0.5
 
 
-def test_bernini_transformer_preserves_parity_proven_final_modulation_precision():
+def test_bernini_transformer_preserves_official_module_precision_policy():
     component = WanWeightDefinition.for_config(ModelConfig.bernini_r_1_3b()).get_components()[0]
     assert component.precision == mx.bfloat16
     assert component.precision_override is not None
 
     weights = {
         "patch_embedding.weight": mx.ones((1,), dtype=mx.float32),
+        "patch_embedding.bias": mx.ones((1,), dtype=mx.float32),
         "condition_embedder.time_embedder.linear_1.weight": mx.ones((1,), dtype=mx.float32),
         "condition_embedder.time_embedder.linear_2.bias": mx.ones((1,), dtype=mx.float32),
+        "condition_embedder.time_proj.weight": mx.ones((1,), dtype=mx.float32),
+        "condition_embedder.time_proj.bias": mx.ones((1,), dtype=mx.float32),
+        "condition_embedder.text_embedder.linear_1.weight": mx.ones((1,), dtype=mx.float32),
         "blocks.0.scale_shift_table": mx.ones((1,), dtype=mx.float32),
         "blocks.0.norm2.weight": mx.ones((1,), dtype=mx.float32),
         "blocks.0.norm2.bias": mx.ones((1,), dtype=mx.float32),
+        "blocks.0.attn1.norm_q.weight": mx.ones((1,), dtype=mx.float32),
+        "blocks.0.attn1.norm_k.weight": mx.ones((1,), dtype=mx.float32),
+        "norm_out.weight": mx.ones((1,), dtype=mx.float32),
         "blocks.0.attn1.to_q.weight": mx.ones((1,), dtype=mx.float32),
         "scale_shift_table": mx.ones((1,), dtype=mx.float32),
     }
@@ -48,7 +55,14 @@ def test_bernini_transformer_preserves_parity_proven_final_modulation_precision(
         precision_override=component.precision_override,
     )
 
-    fp32 = {"scale_shift_table"}
+    fp32 = {
+        "condition_embedder.time_embedder.linear_1.weight",
+        "condition_embedder.time_embedder.linear_2.bias",
+        "blocks.0.scale_shift_table",
+        "blocks.0.norm2.weight",
+        "blocks.0.norm2.bias",
+        "scale_shift_table",
+    }
     assert {key for key, value in converted.items() if value.dtype == mx.float32} == fp32
     assert {key for key, value in converted.items() if value.dtype == mx.bfloat16} == set(weights) - fp32
 

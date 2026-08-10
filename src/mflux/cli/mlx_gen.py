@@ -611,20 +611,20 @@ def _download_model(argv: list[str]) -> None:
         and model_config.transformer_overrides.get("supports_bernini_renderer")
     ):
         parser.error(
-            "Bernini-R uses two pinned factored sources. Omit --all-files so MLX-Gen downloads "
-            "the complete bounded runtime set from both repositories."
+            "Bernini-R uses a pinned component subset. Omit --all-files so MLX-Gen downloads "
+            "only the required official runtime files."
         )
 
-    download_sources: list[tuple[str, list[str] | None, str | None]] = (
+    download_sources: list[tuple[str, list[str] | None, str | None, int | None]] = (
         _factored_download_sources(model_config) if not args.all_files else []
     )
     if not download_sources:
-        download_sources = [(repo_id, None if args.all_files else _download_patterns(model_config, repo_id), None)]
+        download_sources = [(repo_id, None if args.all_files else _download_patterns(model_config, repo_id), None, None)]
     elif model_config is not None:
         _preflight_factored_download_space(parser, model_config, download_sources)
     downloaded_paths = []
     with allow_downloads():
-        for source_repo, patterns, revision in download_sources:
+        for source_repo, patterns, revision, _expected_bytes in download_sources:
             revision_label = f" at {revision}" if revision is not None else ""
             print(f"Downloading {source_repo}{revision_label} into the Hugging Face cache...")
             if revision is None:
@@ -659,28 +659,21 @@ def _download_model(argv: list[str]) -> None:
 def _preflight_factored_download_space(
     parser: argparse.ArgumentParser,
     model_config: ModelConfig,
-    download_sources: list[tuple[str, list[str] | None, str | None]],
+    download_sources: list[tuple[str, list[str] | None, str | None, int | None]],
 ) -> None:
     from huggingface_hub.constants import HF_HUB_CACHE
 
     from mflux.models.common.resolution.path_resolution import PathResolution
 
     overrides = model_config.transformer_overrides
-    base_source = overrides.get("component_base_model")
-    transformer_source = model_config.custom_transformer_model
-    expected_bytes = {
-        base_source: overrides.get("expected_component_base_download_bytes"),
-        transformer_source: overrides.get("expected_transformer_download_bytes"),
-    }
     missing_bytes = 0
     missing_sources = []
-    for source_repo, patterns, revision in download_sources:
+    for source_repo, patterns, revision, expected_bytes in download_sources:
         if PathResolution._find_complete_cached_snapshot(source_repo, patterns, revision=revision) is not None:
             continue
-        source_bytes = expected_bytes.get(source_repo)
-        if not isinstance(source_bytes, int) or source_bytes <= 0:
+        if not isinstance(expected_bytes, int) or expected_bytes <= 0:
             return
-        missing_bytes += source_bytes
+        missing_bytes += expected_bytes
         missing_sources.append(source_repo)
 
     if not missing_sources:
@@ -707,7 +700,7 @@ def _preflight_factored_download_space(
     )
 
 
-def _factored_download_sources(model_config: ModelConfig | None) -> list[tuple[str, list[str], str | None]]:
+def _factored_download_sources(model_config: ModelConfig | None) -> list[tuple[str, list[str], str | None, int | None]]:
     if model_config is None:
         return []
     overrides = model_config.transformer_overrides
@@ -719,17 +712,36 @@ def _factored_download_sources(model_config: ModelConfig | None) -> list[tuple[s
     from mflux.models.wan.weights import WanWeightDefinition
 
     definition = WanWeightDefinition.for_config(model_config)
-    return [
+    grouped: dict[tuple[str, str | None], tuple[list[str], int | None]] = {}
+    for source, patterns, revision, expected_bytes in (
         (
             base_source,
             definition.get_base_download_patterns(),
             overrides.get("expected_component_base_revision"),
+            overrides.get("expected_component_base_download_bytes"),
         ),
         (
             transformer_source,
             definition.get_transformer_download_patterns(),
             overrides.get("expected_transformer_revision"),
+            overrides.get("expected_transformer_download_bytes"),
         ),
+    ):
+        key = (source, revision)
+        existing = grouped.get(key)
+        if existing is None:
+            grouped[key] = (list(patterns), expected_bytes if isinstance(expected_bytes, int) else None)
+            continue
+        merged_patterns, merged_bytes = existing
+        for pattern in patterns:
+            if pattern not in merged_patterns:
+                merged_patterns.append(pattern)
+        if isinstance(expected_bytes, int) and expected_bytes > 0:
+            merged_bytes = (merged_bytes or 0) + expected_bytes
+        grouped[key] = (merged_patterns, merged_bytes)
+    return [
+        (source, patterns, revision, expected_bytes)
+        for (source, revision), (patterns, expected_bytes) in grouped.items()
     ]
 
 

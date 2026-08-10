@@ -14,17 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt-guided video-to-video, and reference-guided video editing with `--video` plus
   references. The dedicated Wan-family runtime matches Bernini's packed source-aware RoPE,
   target-only extraction, source ordering, independent VAE conditioning, official UniPC schedule,
-  and task-specific chained APG/CFG semantics. Setup uses a bounded, revision-pinned factored
-  download from the Wan2.1 base components and official 1.3B renderer; `--all-files`, `prepare`,
-  runtime q4/q8, and LoRA are rejected because only the BF16 source route is numerically credible.
-  The route ships as **EXPERIMENTAL**: its machine/runtime contracts pass, but the schema-v3 visual
-  release gate fails every required case. The evidence includes focused numerical parity, eight real model-backed videos,
-  two maximum-condition structural smokes, a route-fixed alternate-reference A/B plus a disclosed
-  cross-branch no-reference context,
-  hash-bound 5K paged contact sheets, and measured whole-process physical peaks up to `9.45 GB` for
-  the bounded proof profiles. Review found weak motion, missed references, four-frame cadence
-  seams, and terminal corruption; an exact-upstream-prompt 33-frame diagnostic also failed. See
-  [Bernini-R 1.3B](docs/bernini.md) for commands, capacity limits, and evidence.
+  task-specific chained APG/CFG semantics, and the official upstream task taxonomy (`t2i`, `i2i`,
+  `t2v`, `r2v`, `rv2v`, `v2v`, `mv2v`, `ads2v`) used by the public-case parity harness. Setup
+  uses a bounded, revision-pinned factored download from the Wan2.1 base components and official
+  1.3B renderer; `--all-files`, `prepare`, runtime q4/q8, and LoRA are rejected because only the
+  BF16 source route is numerically credible. The route ships as **EXPERIMENTAL**: the original
+  2026-08-04 schema-v3 release bundle still fails its visual gate, but the later official-public
+  1.3B parity pass materially improved the row. Current accepted local evidence now covers the
+  official `i2i`, `t2i`, `t2v`, and `r2v` examples; `rv2v_case1` is the next full official row to
+  close, and the remaining public rows stay open in the parity matrix. The evidence includes
+  focused numerical parity, high-resolution proof sheets, exact-noise public-case reruns, and
+  measured whole-process physical peaks up to `9.45 GB` for the bounded proof profiles. See
+  [Bernini-R 1.3B](docs/bernini.md) for commands, capacity limits, current accepted rows, and the
+  remaining open matrix.
 
 - **Wan A14B i2v SVI 2.0 Pro conditioning (0103)**: `--svi-anchor-image`,
   `--svi-motion-latent`, `--svi-motion-latent-count`, `--svi-lora-high`,

@@ -475,6 +475,7 @@ class VideoUtil:
         lora_paths: list[str] | None = None,
         lora_scales: list[float] | None = None,
         extra_metadata: dict | None = None,
+        trim_leading_frames: int = 0,
     ):
         from mflux.utils.generated_video import GeneratedVideo
 
@@ -509,6 +510,7 @@ class VideoUtil:
             extra_metadata=extra_metadata,
             frame_batches_factory=frame_batches_factory,
             frame_count=frame_count,
+            trim_leading_frames=trim_leading_frames,
         )
 
     @staticmethod

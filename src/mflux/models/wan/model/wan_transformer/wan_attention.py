@@ -59,6 +59,7 @@ class WanAttention(nn.Module):
             image_context_length = encoder_hidden_states.shape[1] - 512
             encoder_hidden_states_img = encoder_hidden_states[:, :image_context_length]
             encoder_hidden_states = encoder_hidden_states[:, image_context_length:]
+        runtime_dtype = hidden_states.dtype
 
         query = self.to_q(hidden_states)
         key = self.to_k(encoder_hidden_states)
@@ -82,8 +83,10 @@ class WanAttention(nn.Module):
             context=block_health_context,
         )
 
-        query = self.norm_q(query).reshape(query.shape[0], query.shape[1], self.heads, self.dim_head)
-        key = self.norm_k(key).reshape(key.shape[0], key.shape[1], self.heads, self.dim_head)
+        query = self._apply_diffusers_rms_norm(query, self.norm_q)
+        key = self._apply_diffusers_rms_norm(key, self.norm_k)
+        query = query.reshape(query.shape[0], query.shape[1], self.heads, self.dim_head)
+        key = key.reshape(key.shape[0], key.shape[1], self.heads, self.dim_head)
         value = value.reshape(value.shape[0], value.shape[1], self.heads, self.dim_head)
         self._check_tensor_health(
             enabled=health_enabled,
@@ -117,7 +120,7 @@ class WanAttention(nn.Module):
         query = mx.transpose(query, (0, 2, 1, 3))
         key = mx.transpose(key, (0, 2, 1, 3))
         value = mx.transpose(value, (0, 2, 1, 3))
-        hidden_states = scaled_dot_product_attention(query, key, value, scale=self.scale)
+        hidden_states = scaled_dot_product_attention(query, key, value, scale=self.scale).astype(runtime_dtype)
         self._check_tensor_health(
             enabled=health_enabled,
             name=f"{attention_name}.sdpa",
@@ -169,7 +172,8 @@ class WanAttention(nn.Module):
         if self.add_k_proj is None or self.add_v_proj is None or self.norm_added_k is None:
             raise ValueError("Image attention requested without added key/value projections.")
         health_enabled = self._block_health_enabled()
-        key_img = self.norm_added_k(self.add_k_proj(encoder_hidden_states_img))
+        runtime_dtype = query.dtype
+        key_img = self._apply_diffusers_rms_norm(self.add_k_proj(encoder_hidden_states_img), self.norm_added_k)
         value_img = self.add_v_proj(encoder_hidden_states_img)
         self._check_tensor_health(
             enabled=health_enabled,
@@ -187,7 +191,12 @@ class WanAttention(nn.Module):
         value_img = value_img.reshape(value_img.shape[0], value_img.shape[1], self.heads, self.dim_head)
         key_img = mx.transpose(key_img, (0, 2, 1, 3))
         value_img = mx.transpose(value_img, (0, 2, 1, 3))
-        hidden_states = scaled_dot_product_attention(query, key_img, value_img, scale=self.scale)
+        hidden_states = scaled_dot_product_attention(
+            query,
+            key_img,
+            value_img,
+            scale=self.scale,
+        ).astype(runtime_dtype)
         self._check_tensor_health(
             enabled=health_enabled,
             name=f"{attention_name}.image_sdpa",
@@ -197,6 +206,26 @@ class WanAttention(nn.Module):
         return mx.transpose(hidden_states, (0, 2, 1, 3)).reshape(
             hidden_states.shape[0], hidden_states.shape[2], self.inner_dim
         )
+
+    @staticmethod
+    def _apply_diffusers_rms_norm(hidden_states: mx.array, norm_layer) -> mx.array:
+        if norm_layer is None:
+            return hidden_states
+        if not hasattr(norm_layer, "weight") or not hasattr(norm_layer, "eps"):
+            return norm_layer(hidden_states.astype(mx.float32))
+
+        variance = mx.mean(mx.square(hidden_states.astype(mx.float32)), axis=-1, keepdims=True)
+        normalized = hidden_states.astype(mx.float32) * mx.rsqrt(variance + float(norm_layer.eps))
+        weight = getattr(norm_layer, "weight", None)
+        bias = getattr(norm_layer, "bias", None)
+        if weight is not None:
+            if weight.dtype in (mx.float16, mx.bfloat16):
+                normalized = normalized.astype(weight.dtype)
+            normalized = normalized * weight
+            if bias is not None:
+                normalized = normalized + bias
+            return normalized
+        return normalized.astype(hidden_states.dtype)
 
     @staticmethod
     def _apply_rotary_emb(
@@ -210,7 +239,7 @@ class WanAttention(nn.Module):
         cos = freqs_cos[..., 0::2]
         sin = freqs_sin[..., 1::2]
         out = mx.stack([x1 * cos - x2 * sin, x1 * sin + x2 * cos], axis=-1)
-        return out.reshape(hidden_states.shape)
+        return out.reshape(hidden_states.shape).astype(hidden_states.dtype)
 
     @staticmethod
     def _block_health_enabled() -> bool:

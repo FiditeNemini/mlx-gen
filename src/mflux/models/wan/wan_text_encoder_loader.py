@@ -6,7 +6,7 @@ from typing import Any
 
 
 class WanTextEncoderLoader:
-    BERNINI_PRECISION_POLICY_ID = "bernini-umt5-wo-bf16-v1"
+    BERNINI_PRECISION_POLICY_ID = "bernini-umt5-official-v2"
 
     _load_lock = RLock()
     _missing = object()
@@ -34,18 +34,4 @@ class WanTextEncoderLoader:
     @contextmanager
     def _precision_scope(cls, model_class, *, bernini_compatibility: bool) -> Iterator[None]:
         with cls._load_lock:
-            if not bernini_compatibility:
-                yield
-                return
-
-            original = vars(model_class).get("_keep_in_fp32_modules", cls._missing)
-            inherited = getattr(model_class, "_keep_in_fp32_modules", None)
-            protected_modules = [] if inherited is None else list(inherited)
-            model_class._keep_in_fp32_modules = [name for name in protected_modules if name != "wo"]
-            try:
-                yield
-            finally:
-                if original is cls._missing:
-                    delattr(model_class, "_keep_in_fp32_modules")
-                else:
-                    model_class._keep_in_fp32_modules = original
+            yield

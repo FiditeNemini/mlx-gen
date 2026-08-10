@@ -6,6 +6,16 @@ inputs, official comparison clips, sidecars, commands, stdout/stderr logs, per-c
 whole-process memory samples, numerical parity tensors/reports, quantization diagnostics, exact
 hashes, and a hash-bound recorded visual inspection.
 
+This bundle is the initial Monday, August 4, 2026 release-quality proof. It remains historically
+accurate, but it is not the latest official-public-example status. Later local review accepted the
+current official `i2i`, `t2i`, `t2v`, and `r2v` 1.3B example reruns; use the
+[official example parity matrix](official_example_parity_matrix.md) for the current row-by-row
+status.
+
+The stricter "all public 1.3B examples" target is tracked separately in the
+[official example parity matrix](official_example_parity_matrix.md). The current bundle does not yet
+cover every public upstream example row.
+
 The model-backed report separates execution from quality:
 
 - machine contract: **PASS** for all ten cases;

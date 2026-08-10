@@ -9,6 +9,7 @@ from typing import Any
 import mlx.core as mx
 import numpy as np
 from PIL import Image
+from mlx.utils import tree_map
 
 from mflux.callbacks import ProgressCallback
 from mflux.models.common.config.model_config import ModelConfig
@@ -23,6 +24,7 @@ from mflux.utils.dimension_resolver import (
     RESIZE_MODE_RESIZE,
     DimensionResolver,
 )
+from mflux.utils.generated_image import GeneratedImage
 from mflux.utils.generated_video import GeneratedVideo
 from mflux.utils.image_util import ImageUtil
 from mflux.utils.runtime_memory import RuntimeMemory
@@ -47,14 +49,42 @@ class BerniniRenderer(Wan2_2_TI2V):
     RECOMMENDED_STEPS = 40
     RECOMMENDED_FPS = 16
     RECOMMENDED_MAX_CONDITION_SIZE = 848
-    MIN_PROVEN_CONVERGED_FRAMES = 17
+    MIN_PROVEN_CONVERGED_FRAMES = 25
     MAX_PROVEN_SHORT_DEBUG_STEPS = 12
     SYSTEM_PROMPTS = {
-        "r2v_apg": "You are a helpful assistant specialized in subject-to-video generation.",
+        "t2i": "You are a helpful assistant specialized in text-to-image generation.",
+        "t2v": "You are a helpful assistant specialized in text-to-video generation.",
+        "i2i": "You are a helpful assistant specialized in image editing.",
+        "v2v": "You are a helpful assistant specialized in video editing.",
+        "mv2v": (
+            "You are a helpful assistant for editing. You might need to adjust the video's style, lighting, "
+            "colors, textures, and the subject's pose or action."
+        ),
+        "r2v": "You are a helpful assistant specialized in subject-to-video generation.",
         "rv2v": "You are a helpful assistant specialized in video editing with reference.",
-        "v2v_apg": "You are a helpful assistant specialized in video editing.",
+        "ads2v": "You are a helpful assistant specialized in ads insertion.",
     }
-
+    GUIDANCE_MODE_BY_TASK = {
+        "t2i": "t2v_apg",
+        "t2v": "t2v_apg",
+        "i2i": "v2v",
+        "v2v": "v2v_apg",
+        "mv2v": "v2v_apg",
+        "r2v": "r2v_apg",
+        "rv2v": "rv2v",
+        "ads2v": "v2v_apg",
+    }
+    SUPPORTED_GUIDANCE_MODES = frozenset({"rv2v", "v2v", "r2v_apg", "v2v_apg", "t2v", "t2v_apg"})
+    ALLOWED_GUIDANCE_MODES_BY_TASK = {
+        "t2i": frozenset({"t2v", "t2v_apg"}),
+        "t2v": frozenset({"t2v", "t2v_apg"}),
+        "i2i": frozenset({"v2v"}),
+        "v2v": frozenset({"v2v", "v2v_apg"}),
+        "mv2v": frozenset({"v2v", "v2v_apg"}),
+        "r2v": frozenset({"r2v_apg"}),
+        "rv2v": frozenset({"rv2v"}),
+        "ads2v": frozenset({"rv2v", "v2v_apg"}),
+    }
     def __init__(
         self,
         quantize: int | None = None,
@@ -93,6 +123,7 @@ class BerniniRenderer(Wan2_2_TI2V):
             keep_text_encoder_resident=keep_text_encoder_resident,
             prompt_embed_disk_cache=prompt_embed_disk_cache,
         )
+        self._promote_vae_to_float32()
 
     def generate_video(  # noqa: PLR0915
         self,
@@ -118,6 +149,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         svi_motion_latent_count: int = 1,
         svi_motion_latent_export_path: Path | str | None = None,
         video_path: Path | str | None = None,
+        reference_video_paths: list[Path | str] | None = None,
         video_strength: float | None = None,
         video_mask_path: Path | str | None = None,
         canvas_policy: str | None = None,
@@ -138,11 +170,18 @@ class BerniniRenderer(Wan2_2_TI2V):
         apg_momentum: float | None = None,
         max_condition_size: int = RECOMMENDED_MAX_CONDITION_SIZE,
         system_prompt: str | None = None,
+        guidance_mode: str | None = None,
+        task_type: str | None = None,
     ) -> GeneratedVideo:
         start_time = time.time()
+        image_path = Path(image_path) if image_path is not None else None
         reference_image_paths = [Path(path) for path in (reference_image_paths or [])]
+        reference_video_paths = [Path(path) for path in (reference_video_paths or [])]
         video_path = Path(video_path) if video_path is not None else None
-        if video_path is None:
+        has_primary_image = image_path is not None
+        has_primary_video = video_path is not None
+        has_any_video_condition = has_primary_video or bool(reference_video_paths)
+        if not has_any_video_condition:
             normalized_canvas_policy = (
                 CANVAS_POLICY_EXACT_RESIZE
                 if canvas_policy is None
@@ -155,6 +194,22 @@ class BerniniRenderer(Wan2_2_TI2V):
             canvas_policy = CANVAS_POLICY_EXACT_RESIZE
         else:
             canvas_policy = DimensionResolver.normalize_canvas_policy(canvas_policy)
+        guidance_mode = self._resolved_guidance_mode(
+            guidance_mode=guidance_mode,
+            task_type=task_type,
+            has_video=has_primary_video,
+            has_image=has_primary_image,
+            num_reference_images=len(reference_image_paths),
+            num_reference_videos=len(reference_video_paths),
+        )
+        task_type = self._resolved_task_type(
+            task_type=task_type,
+            guidance_mode=guidance_mode,
+            has_video=has_primary_video,
+            has_image=has_primary_image,
+            num_reference_images=len(reference_image_paths),
+            num_reference_videos=len(reference_video_paths),
+        )
         self._validate_bernini_request(
             num_inference_steps=num_inference_steps,
             fps=fps,
@@ -169,6 +224,7 @@ class BerniniRenderer(Wan2_2_TI2V):
             svi_motion_latent_count=svi_motion_latent_count,
             svi_motion_latent_export_path=svi_motion_latent_export_path,
             video_path=video_path,
+            reference_video_paths=reference_video_paths,
             video_strength=video_strength,
             video_mask_path=video_mask_path,
             reference_image_paths=reference_image_paths,
@@ -177,11 +233,11 @@ class BerniniRenderer(Wan2_2_TI2V):
             max_condition_size=max_condition_size,
             max_sequence_length=max_sequence_length,
             tensor_health_check_interval=tensor_health_check_interval,
+            guidance_mode=guidance_mode,
         )
         del (
             guidance_2,
             denoising_step_list,
-            image_path,
             last_image_path,
             context_image_paths,
             context_noise,
@@ -212,20 +268,23 @@ class BerniniRenderer(Wan2_2_TI2V):
             if num_inference_steps is not None
             else self._wan_config("default_steps", self.RECOMMENDED_STEPS)
         )
-        text_guidance = self._resolved_finite_float(
+        text_guidance = self._resolved_task_or_config_float(
             guidance,
+            task_default=None,
             config_key="default_guidance",
             fallback=4.0,
             label="guidance",
         )
-        reference_guidance = self._resolved_finite_float(
+        reference_guidance = self._resolved_task_or_config_float(
             reference_guidance,
+            task_default=None,
             config_key="default_reference_guidance",
             fallback=4.5,
             label="reference_guidance",
         )
-        source_guidance = self._resolved_finite_float(
+        source_guidance = self._resolved_task_or_config_float(
             source_guidance,
+            task_default=None,
             config_key="default_source_guidance",
             fallback=1.25,
             label="source_guidance",
@@ -261,16 +320,13 @@ class BerniniRenderer(Wan2_2_TI2V):
             raise ValueError("Bernini-R currently supports only the unipc solver used by the official renderer.")
         negative_prompt = self._resolve_negative_prompt(negative_prompt)
 
-        guidance_mode = self._guidance_mode(
-            has_video=video_path is not None,
-            num_reference_images=len(reference_image_paths),
-        )
         system_prompt = self._resolved_system_prompt(
             guidance_mode=guidance_mode,
             system_prompt=system_prompt,
+            task_type=task_type,
         )
-        effective_prompt = system_prompt + self._prompt_clean(prompt)
-        task = "video-to-video" if video_path is not None else "text-to-video"
+        effective_prompt = self._effective_prompt(system_prompt=system_prompt, prompt=prompt)
+        task = self._public_task(task_type=task_type, has_video=has_primary_video)
         scheduler = self._create_scheduler(flow_shift=flow_shift, solver=solver)
         scheduler.set_timesteps(num_inference_steps)
         timesteps = scheduler.timesteps.tolist()
@@ -287,10 +343,11 @@ class BerniniRenderer(Wan2_2_TI2V):
         height = int(condition_plan["output_height"])
         width = int(condition_plan["output_width"])
         num_frames = int(condition_plan["output_frames"])
-        self._validate_supported_frame_step_domain(
-            num_frames=num_frames,
-            num_inference_steps=total_steps,
-        )
+        if task not in {"text-to-image", "image-to-image"}:
+            self._validate_supported_frame_step_domain(
+                num_frames=num_frames,
+                num_inference_steps=total_steps,
+            )
         progress_registry = getattr(self, "callbacks", None)
         self._emit_progress(
             progress_callback,
@@ -321,8 +378,10 @@ class BerniniRenderer(Wan2_2_TI2V):
             name="negative_prompt_embeds",
         )
 
-        video_condition, reference_conditions, condition_metadata = self._prepare_condition_latents(
+        prepared_conditions = self._prepare_condition_latents(
+            image_path=image_path,
             video_path=video_path,
+            reference_video_paths=reference_video_paths,
             reference_image_paths=reference_image_paths,
             requested_height=requested_height,
             requested_width=requested_width,
@@ -334,7 +393,17 @@ class BerniniRenderer(Wan2_2_TI2V):
             clear_cache=clear_cache_each_step,
             condition_plan=condition_plan,
         )
+        if len(prepared_conditions) == 3:
+            video_condition, reference_conditions, condition_metadata = prepared_conditions
+            reference_video_conditions = []
+        else:
+            video_condition, reference_video_conditions, reference_conditions, condition_metadata = prepared_conditions
         self._require_condition_plan_match(condition_plan=condition_plan, condition_metadata=condition_metadata)
+        combined_conditions = self._combined_condition_segments(
+            video_condition=video_condition,
+            reference_video_conditions=reference_video_conditions,
+            reference_conditions=reference_conditions,
+        )
 
         latents = self.prepare_latents(
             seed=seed,
@@ -344,7 +413,11 @@ class BerniniRenderer(Wan2_2_TI2V):
             num_frames=num_frames,
         )
         self._require_tensor_health(latents, phase="prepare-latents", name="latents")
-        branch_cache_clear = clear_cache_each_step or clear_cache_each_transformer_block
+        # Whole-step cleanup already handles the ordinary low-RAM path.
+        # Clearing again after every guidance branch adds a large sync penalty
+        # on video cases, so keep branch-level cache flushes only for the
+        # per-transformer-block emergency policy.
+        branch_cache_clear = clear_cache_each_transformer_block
         r2v_buffers = (
             [_MomentumBuffer(apg_momentum), _MomentumBuffer(apg_momentum)] if guidance_mode == "r2v_apg" else None
         )
@@ -383,16 +456,23 @@ class BerniniRenderer(Wan2_2_TI2V):
             elif guidance_mode == "rv2v":
                 noise_pred = self._rv2v_noise_prediction(
                     video_condition=video_condition,
+                    reference_video_conditions=reference_video_conditions,
                     reference_conditions=reference_conditions,
                     source_guidance=source_guidance,
                     reference_guidance=reference_guidance,
                     text_guidance=text_guidance,
                     **branch_kwargs,
                 )
+            elif guidance_mode in {"v2v", "t2v"}:
+                noise_pred = self._cfg_noise_prediction(
+                    condition_segments=combined_conditions,
+                    text_guidance=text_guidance,
+                    **branch_kwargs,
+                )
             else:
                 sigma = self._apg_sigma(scheduler=scheduler, fallback_index=step_index)
-                noise_pred = self._v2v_noise_prediction(
-                    video_condition=video_condition,
+                noise_pred = self._single_condition_apg_noise_prediction(
+                    condition_segments=combined_conditions,
                     text_guidance=text_guidance,
                     sigma=sigma,
                     buffer=v2v_buffer,
@@ -439,9 +519,17 @@ class BerniniRenderer(Wan2_2_TI2V):
             del noise_pred
             self._cleanup_step_cache(clear_cache=clear_cache_each_step)
 
-        condition_shapes = self._condition_shapes(video_condition, reference_conditions)
-        source_ids = self._configured_source_ids(len(reference_conditions) + (1 if video_condition is not None else 0))
-        del prompt_embeds, negative_prompt_embeds, scheduler, video_condition, reference_conditions
+        condition_shapes = self._condition_shapes(combined_conditions)
+        source_ids = self._configured_source_ids(len(combined_conditions))
+        del (
+            prompt_embeds,
+            negative_prompt_embeds,
+            scheduler,
+            video_condition,
+            reference_video_conditions,
+            reference_conditions,
+            combined_conditions,
+        )
         gc.collect()
         mx.synchronize()
         mx.clear_cache()
@@ -481,6 +569,7 @@ class BerniniRenderer(Wan2_2_TI2V):
             **self._bernini_extra_metadata(
                 guidance_mode=guidance_mode,
                 reference_image_paths=reference_image_paths,
+                reference_video_paths=reference_video_paths,
                 text_guidance=text_guidance,
                 reference_guidance=reference_guidance,
                 source_guidance=source_guidance,
@@ -499,6 +588,7 @@ class BerniniRenderer(Wan2_2_TI2V):
                 vae_low_memory_policy_active=clear_cache_each_step,
                 clear_cache_each_transformer_block=clear_cache_each_transformer_block,
                 release_denoisers_before_decode=release_denoisers_before_decode,
+                task_type=task_type,
             ),
         }
         video = VideoUtil.to_video_from_frame_batches(
@@ -542,6 +632,98 @@ class BerniniRenderer(Wan2_2_TI2V):
             registry=progress_registry,
         )
         return video
+
+    def generate_image(
+        self,
+        *,
+        seed: int,
+        prompt: str,
+        num_inference_steps: int | None = None,
+        height: int = RECOMMENDED_HEIGHT,
+        width: int = RECOMMENDED_WIDTH,
+        guidance: float | None = None,
+        flow_shift: float | None = None,
+        solver: str | None = None,
+        negative_prompt: str | None = None,
+        image_path: Path | str | None = None,
+        canvas_policy: str | None = None,
+        resize_mode: str = "resize",
+        max_sequence_length: int = 512,
+        progress_callback: ProgressCallback | None = None,
+        clear_cache_each_step: bool = False,
+        clear_cache_each_transformer_block: bool = False,
+        tensor_health_check_interval: int | None = None,
+        compile_transformer: bool = False,
+        reference_guidance: float | None = None,
+        source_guidance: float | None = None,
+        apg_eta: float | None = None,
+        apg_norm_threshold: float | None = None,
+        apg_momentum: float | None = None,
+        max_condition_size: int = RECOMMENDED_MAX_CONDITION_SIZE,
+        system_prompt: str | None = None,
+        guidance_mode: str | None = None,
+        task_type: str | None = None,
+    ) -> GeneratedImage:
+        resolved_task_type = task_type or ("i2i" if image_path is not None else "t2i")
+        artifact = self.generate_video(
+            seed=seed,
+            prompt=prompt,
+            num_inference_steps=num_inference_steps,
+            height=height,
+            width=width,
+            num_frames=1,
+            fps=1,
+            guidance=guidance,
+            flow_shift=flow_shift,
+            solver=solver,
+            negative_prompt=negative_prompt,
+            image_path=image_path,
+            canvas_policy=canvas_policy,
+            resize_mode=resize_mode,
+            max_sequence_length=max_sequence_length,
+            progress_callback=progress_callback,
+            clear_cache_each_step=clear_cache_each_step,
+            clear_cache_each_transformer_block=clear_cache_each_transformer_block,
+            tensor_health_check_interval=tensor_health_check_interval,
+            compile_transformer=compile_transformer,
+            reference_guidance=reference_guidance,
+            source_guidance=source_guidance,
+            apg_eta=apg_eta,
+            apg_norm_threshold=apg_norm_threshold,
+            apg_momentum=apg_momentum,
+            max_condition_size=max_condition_size,
+            system_prompt=system_prompt,
+            guidance_mode=guidance_mode,
+            task_type=resolved_task_type,
+        )
+        source_image_width = None
+        source_image_height = None
+        if image_path is not None:
+            source = ImageUtil.load_image(image_path)
+            source_image_width = source.width
+            source_image_height = source.height
+        return GeneratedImage(
+            image=artifact.first_frame(),
+            model_config=self.model_config,
+            seed=seed,
+            prompt=prompt,
+            steps=artifact.steps,
+            guidance=artifact.guidance,
+            precision=artifact.precision,
+            quantization=artifact.quantization,
+            generation_time=artifact.generation_time,
+            height=artifact.height,
+            width=artifact.width,
+            image_path=image_path,
+            negative_prompt=artifact.negative_prompt,
+            canvas_policy=artifact.canvas_policy,
+            resize_mode=artifact.resize_mode,
+            requested_width=artifact.requested_width,
+            requested_height=artifact.requested_height,
+            source_image_width=source_image_width,
+            source_image_height=source_image_height,
+            extra_metadata=artifact.extra_metadata,
+        )
 
     def _predict_branch(
         self,
@@ -600,6 +782,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         *,
         target: mx.array,
         video_condition: mx.array,
+        reference_video_conditions: list[mx.array] | None = None,
         reference_conditions: list[mx.array],
         prompt_embeds: mx.array,
         negative_prompt_embeds: mx.array,
@@ -608,7 +791,11 @@ class BerniniRenderer(Wan2_2_TI2V):
         text_guidance: float,
         **branch_kwargs,
     ) -> mx.array:
-        combined = [video_condition, *reference_conditions]
+        combined = [
+            video_condition,
+            *(reference_video_conditions or []),
+            *reference_conditions,
+        ]
         combined_ids = self._configured_source_ids(len(combined))
         empty = self._predict_branch(
             role="rv2v-empty",
@@ -684,14 +871,18 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=negative_prompt_embeds,
             **branch_kwargs,
         )
-        guided_v = empty_v + reference_guidance * self._normalize_diff(
-            reference_v - empty_v,
-            reference_v,
+        noisy_target = target.astype(mx.float32)
+        sigma_value = sigma.astype(mx.float32)
+        empty_sample = noisy_target - sigma_value * empty_v
+        reference_sample = noisy_target - sigma_value * reference_v
+        guided_sample = empty_sample + reference_guidance * self._normalize_diff(
+            reference_sample - empty_sample,
+            reference_sample,
             momentum_buffer=buffers[0],
             eta=eta,
             norm_threshold=norm_threshold,
         )
-        mx.eval(guided_v)
+        mx.eval(guided_sample)
         del empty_v
         text_v = self._predict_branch(
             role="r2v-references-text",
@@ -701,16 +892,18 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=prompt_embeds,
             **branch_kwargs,
         )
-        guided_v = guided_v + text_guidance * self._normalize_diff(
-            text_v - reference_v,
-            text_v,
+        text_sample = noisy_target - sigma_value * text_v
+        guided_sample = guided_sample + text_guidance * self._normalize_diff(
+            text_sample - reference_sample,
+            text_sample,
             momentum_buffer=buffers[1],
             eta=eta,
             norm_threshold=norm_threshold,
         )
-        mx.eval(guided_v)
+        noise_pred = (noisy_target - guided_sample) / sigma_value
+        mx.eval(noise_pred)
         del reference_v, text_v
-        return guided_v
+        return noise_pred
 
     def _v2v_noise_prediction(
         self,
@@ -742,16 +935,21 @@ class BerniniRenderer(Wan2_2_TI2V):
             text_embeds=prompt_embeds,
             **branch_kwargs,
         )
-        guided_v = uncond_v + text_guidance * self._normalize_diff(
-            cond_v - uncond_v,
-            cond_v,
+        noisy_target = target.astype(mx.float32)
+        sigma_value = sigma.astype(mx.float32)
+        uncond_sample = noisy_target - sigma_value * uncond_v
+        cond_sample = noisy_target - sigma_value * cond_v
+        guided_sample = uncond_sample + text_guidance * self._normalize_diff(
+            cond_sample - uncond_sample,
+            cond_sample,
             momentum_buffer=buffer,
             eta=eta,
             norm_threshold=norm_threshold,
         )
-        mx.eval(guided_v)
+        noise_pred = (noisy_target - guided_sample) / sigma_value
+        mx.eval(noise_pred)
         del uncond_v, cond_v
-        return guided_v
+        return noise_pred
 
     @staticmethod
     def _normalize_diff(
@@ -764,30 +962,33 @@ class BerniniRenderer(Wan2_2_TI2V):
     ) -> mx.array:
         if momentum_buffer is not None:
             diff = momentum_buffer.update(diff)
-        diff = diff.astype(mx.float32)
-        base_pred = base_pred.astype(mx.float32)
         reduction_axes = (1, 3, 4) if diff.ndim == 5 else tuple(range(1, diff.ndim))
+        diff_np = np.asarray(diff)
         if norm_threshold > 0:
-            diff_norm = mx.sqrt(mx.sum(mx.square(diff), axis=reduction_axes, keepdims=True))
-            scale = mx.minimum(mx.ones_like(diff), norm_threshold / diff_norm)
-            diff = diff * scale
-        base_scale = mx.max(mx.abs(base_pred), axis=reduction_axes, keepdims=True)
-        safe_base_scale = mx.where(base_scale > 0, base_scale, mx.ones_like(base_scale))
-        scaled_base = base_pred / safe_base_scale
-        scaled_base_norm = mx.sqrt(mx.sum(mx.square(scaled_base), axis=reduction_axes, keepdims=True))
-        normalized_base = mx.where(
-            base_scale > 0,
-            scaled_base / mx.maximum(scaled_base_norm, mx.array(1e-12, dtype=mx.float32) / safe_base_scale),
-            mx.zeros_like(scaled_base),
-        )
-        parallel = mx.sum(diff * normalized_base, axis=reduction_axes, keepdims=True) * normalized_base
-        orthogonal = diff - parallel
-        return orthogonal + eta * parallel
+            diff_norm = np.sqrt(np.sum(np.square(diff_np), axis=reduction_axes, keepdims=True))
+            scale = np.divide(
+                norm_threshold,
+                diff_norm,
+                out=np.full_like(diff_norm, np.inf),
+                where=diff_norm != 0,
+            )
+            diff_np = diff_np * np.minimum(np.ones_like(diff_np), scale)
+        base_np = np.asarray(base_pred)
+        diff64 = diff_np.astype(np.float64, copy=False)
+        base64 = base_np.astype(np.float64, copy=False)
+        base_norm = np.sqrt(np.sum(np.square(base64), axis=reduction_axes, keepdims=True))
+        unit_base = base64 / np.maximum(base_norm, np.float64(1e-12))
+        parallel64 = np.sum(diff64 * unit_base, axis=reduction_axes, keepdims=True) * unit_base
+        parallel = parallel64.astype(diff_np.dtype, copy=False)
+        orthogonal = (diff64 - parallel64).astype(diff_np.dtype, copy=False)
+        return mx.array(orthogonal + eta * parallel, dtype=diff.dtype)
 
     def _prepare_condition_latents(
         self,
         *,
+        image_path: Path | None,
         video_path: Path | None,
+        reference_video_paths: list[Path],
         reference_image_paths: list[Path],
         requested_height: int,
         requested_width: int,
@@ -798,13 +999,14 @@ class BerniniRenderer(Wan2_2_TI2V):
         max_condition_size: int,
         clear_cache: bool,
         condition_plan: dict | None = None,
-    ) -> tuple[mx.array | None, list[mx.array], dict]:
+    ) -> tuple[mx.array | None, list[mx.array], list[mx.array], dict]:
         metadata: dict = {
             "output_height": requested_height,
             "output_width": requested_width,
             "output_frames": requested_frames,
         }
         video_condition = None
+        reference_video_conditions = []
         if video_path is not None:
             video_pixels, video_metadata = self._preprocess_video_condition(
                 video_path=video_path,
@@ -825,7 +1027,42 @@ class BerniniRenderer(Wan2_2_TI2V):
             )
             del video_pixels
 
+        reference_video_pixel_shapes = []
+        reference_video_metadata = []
+        for index, path in enumerate(reference_video_paths):
+            pixels, video_metadata = self._preprocess_video_condition(
+                video_path=path,
+                requested_height=requested_height,
+                requested_width=requested_width,
+                requested_frames=requested_frames,
+                fps=fps,
+                canvas_policy=canvas_policy,
+                resize_mode=resize_mode,
+                max_condition_size=max_condition_size,
+            )
+            reference_video_pixel_shapes.append([int(value) for value in pixels.shape])
+            reference_video_metadata.append(video_metadata)
+            reference_video_conditions.append(
+                self._encode_condition_pixels(
+                    pixels,
+                    name=f"reference_video_{index}",
+                    clear_cache=clear_cache,
+                )
+            )
+            del pixels
+
         reference_conditions = []
+        if image_path is not None:
+            source_pixels = self._preprocess_reference_image(image_path, max_condition_size=max_condition_size)
+            metadata["source_image_pixel_shape"] = [int(value) for value in source_pixels.shape]
+            reference_conditions.append(
+                self._encode_condition_pixels(
+                    source_pixels,
+                    name="source_image",
+                    clear_cache=clear_cache,
+                )
+            )
+            del source_pixels
         reference_pixel_shapes = []
         for index, path in enumerate(reference_image_paths):
             pixels = self._preprocess_reference_image(path, max_condition_size=max_condition_size)
@@ -838,8 +1075,10 @@ class BerniniRenderer(Wan2_2_TI2V):
                 )
             )
             del pixels
+        metadata["reference_video_pixel_shapes"] = reference_video_pixel_shapes
+        metadata["reference_video_metadata"] = reference_video_metadata
         metadata["reference_pixel_shapes"] = reference_pixel_shapes
-        return video_condition, reference_conditions, metadata
+        return video_condition, reference_video_conditions, reference_conditions, metadata
 
     def _plan_condition_metadata(
         self,
@@ -1201,6 +1440,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         svi_motion_latent_count: int,
         svi_motion_latent_export_path: Path | str | None,
         video_path: Path | None,
+        reference_video_paths: list[Path],
         video_strength: float | None,
         video_mask_path: Path | str | None,
         reference_image_paths: list[Path],
@@ -1209,13 +1449,12 @@ class BerniniRenderer(Wan2_2_TI2V):
         max_condition_size: int,
         max_sequence_length: int,
         tensor_health_check_interval: int | None,
+        guidance_mode: str,
     ) -> None:
         if guidance_2 is not None:
             raise ValueError("guidance_2 is not supported on Bernini-R; it has one renderer transformer.")
         if denoising_step_list is not None:
             raise ValueError("Bernini-R does not support denoising_step_list; use num_inference_steps.")
-        if image_path is not None:
-            raise ValueError("Bernini-R does not use image_path; pass ordinary references via reference_image_paths.")
         if last_image_path is not None:
             raise ValueError("Bernini-R does not support last_image_path bracket conditioning.")
         if context_image_paths:
@@ -1240,10 +1479,39 @@ class BerniniRenderer(Wan2_2_TI2V):
             raise ValueError("Bernini-R has one renderer transformer; release_inactive_denoiser is not applicable.")
         if compile_transformer:
             raise ValueError("compile_transformer is not validated for heterogeneous Bernini packed branches.")
-        if video_path is None and not reference_image_paths:
-            raise ValueError("Bernini-R requires a source video and/or at least one reference image.")
+        if guidance_mode not in self.SUPPORTED_GUIDANCE_MODES:
+            raise ValueError(
+                f"Unknown Bernini-R guidance mode {guidance_mode!r}. "
+                f"Expected one of: {', '.join(sorted(self.SUPPORTED_GUIDANCE_MODES))}."
+            )
+        has_image = image_path is not None
+        has_video = video_path is not None
+        has_reference_video = bool(reference_video_paths)
+        has_reference_image = bool(reference_image_paths)
+        if has_image and (has_video or has_reference_video or has_reference_image):
+            raise ValueError(
+                "Bernini-R source-image editing currently accepts exactly one source image and no other "
+                "conditioning sources."
+            )
+        if has_reference_video and not has_video:
+            raise ValueError("Bernini-R reference video conditioning currently requires a primary source video.")
+        if guidance_mode == "rv2v" and not (has_video and (has_reference_video or has_reference_image)):
+            raise ValueError("Bernini-R rv2v guidance requires a source video and at least one extra reference.")
+        if guidance_mode == "r2v_apg" and (has_video or has_reference_video or has_image or not has_reference_image):
+            raise ValueError("Bernini-R r2v_apg requires one or more reference images and no source video.")
+        if guidance_mode in {"v2v", "v2v_apg"} and not (
+            has_video or has_reference_video or has_reference_image or has_image
+        ):
+            raise ValueError("Bernini-R v2v guidance requires at least one conditioning source.")
+        if guidance_mode in {"t2v", "t2v_apg"} and (has_video or has_reference_video or has_reference_image or has_image):
+            raise ValueError("Bernini-R t2v guidance does not accept source videos or references.")
+        if image_path is not None and (not Path(image_path).exists() or not Path(image_path).is_file()):
+            raise ValueError(f"Bernini-R source image does not exist or is not a file: {image_path}")
         if video_path is not None and (not video_path.exists() or not video_path.is_file()):
             raise ValueError(f"Bernini-R source video does not exist or is not a file: {video_path}")
+        for path in reference_video_paths:
+            if not path.exists() or not path.is_file():
+                raise ValueError(f"Bernini-R reference video does not exist or is not a file: {path}")
         for path in reference_image_paths:
             if not path.exists() or not path.is_file():
                 raise ValueError(f"Bernini-R reference image does not exist or is not a file: {path}")
@@ -1259,6 +1527,8 @@ class BerniniRenderer(Wan2_2_TI2V):
             raise ValueError("max_condition_size must be a multiple of 16 pixels for Bernini packed latents.")
         if len(reference_image_paths) > 8:
             raise ValueError("Bernini-R currently supports at most 8 reference images, the largest official case.")
+        if len(reference_video_paths) > 1:
+            raise ValueError("Bernini-R currently supports at most 1 extra reference video, matching ads2v.")
         if max_sequence_length != 512:
             raise ValueError("Bernini-R requires max_sequence_length=512, matching the official renderer.")
         self._validate_tensor_health_check_interval(tensor_health_check_interval)
@@ -1288,6 +1558,25 @@ class BerniniRenderer(Wan2_2_TI2V):
             raise ValueError(f"{label} must be finite, got {resolved!r}.")
         return resolved
 
+    def _resolved_task_or_config_float(
+        self,
+        value: float | None,
+        *,
+        task_default: float | None,
+        config_key: str,
+        fallback: float,
+        label: str,
+    ) -> float:
+        if value is not None:
+            resolved = float(value)
+        elif task_default is not None:
+            resolved = float(task_default)
+        else:
+            resolved = float(self._wan_config(config_key, fallback))
+        if not math.isfinite(resolved):
+            raise ValueError(f"{label} must be finite, got {resolved!r}.")
+        return resolved
+
     @staticmethod
     def _source_ids(
         count: int,
@@ -1313,15 +1602,112 @@ class BerniniRenderer(Wan2_2_TI2V):
             interpolate_source_ids=bool(self._wan_config("interpolate_source_ids", True)),
         )
 
-    @staticmethod
-    def _guidance_mode(*, has_video: bool, num_reference_images: int) -> str:
-        if has_video and num_reference_images:
+    @classmethod
+    def _guidance_mode(
+        cls,
+        *,
+        has_video: bool,
+        has_image: bool,
+        num_reference_images: int,
+        num_reference_videos: int = 0,
+    ) -> str:
+        if has_video and num_reference_videos and not num_reference_images:
+            return "v2v_apg"
+        if has_video and (num_reference_images or num_reference_videos):
             return "rv2v"
         if has_video:
             return "v2v_apg"
+        if has_image:
+            return "v2v"
         if num_reference_images:
             return "r2v_apg"
-        raise ValueError("Bernini-R requires a source video and/or reference images.")
+        return "t2v_apg"
+
+    @classmethod
+    def _resolved_guidance_mode(
+        cls,
+        *,
+        guidance_mode: str | None,
+        task_type: str | None,
+        has_video: bool,
+        has_image: bool,
+        num_reference_images: int,
+        num_reference_videos: int,
+    ) -> str:
+        resolved = guidance_mode or (
+            cls.GUIDANCE_MODE_BY_TASK[task_type]
+            if task_type is not None
+            else cls._guidance_mode(
+                has_video=has_video,
+                has_image=has_image,
+                num_reference_images=num_reference_images,
+                num_reference_videos=num_reference_videos,
+            )
+        )
+        if resolved not in cls.SUPPORTED_GUIDANCE_MODES:
+            raise ValueError(
+                f"Unsupported Bernini-R guidance mode {resolved!r}. "
+                f"Expected one of: {', '.join(sorted(cls.SUPPORTED_GUIDANCE_MODES))}."
+            )
+        if task_type is not None and resolved not in cls.ALLOWED_GUIDANCE_MODES_BY_TASK[task_type]:
+            raise ValueError(
+                f"Bernini-R task_type={task_type!r} does not support guidance_mode={resolved!r}. "
+                f"Allowed modes: {sorted(cls.ALLOWED_GUIDANCE_MODES_BY_TASK[task_type])}."
+            )
+        return resolved
+
+    @classmethod
+    def _resolved_task_type(
+        cls,
+        *,
+        task_type: str | None,
+        guidance_mode: str,
+        has_video: bool,
+        has_image: bool,
+        num_reference_images: int,
+        num_reference_videos: int,
+    ) -> str:
+        if task_type is not None:
+            if task_type not in cls.SYSTEM_PROMPTS:
+                raise ValueError(
+                    f"Unsupported Bernini-R task_type {task_type!r}. "
+                    f"Expected one of: {', '.join(sorted(cls.SYSTEM_PROMPTS))}."
+                )
+            if guidance_mode not in cls.ALLOWED_GUIDANCE_MODES_BY_TASK[task_type]:
+                raise ValueError(
+                    f"Bernini-R task_type={task_type!r} does not support guidance_mode={guidance_mode!r}. "
+                    f"Allowed modes: {sorted(cls.ALLOWED_GUIDANCE_MODES_BY_TASK[task_type])}."
+                )
+            return task_type
+        if has_image:
+            return "i2i"
+        if has_video and num_reference_videos and not num_reference_images:
+            return "ads2v"
+        if has_video and (num_reference_images or num_reference_videos):
+            return "rv2v"
+        if has_video:
+            return "v2v"
+        if num_reference_images:
+            return "r2v"
+        return "t2v"
+
+    @staticmethod
+    def _public_task(*, task_type: str, has_video: bool) -> str:
+        if task_type == "t2i":
+            return "text-to-image"
+        if task_type == "i2i":
+            return "image-to-image"
+        if has_video or task_type in {"v2v", "mv2v", "rv2v", "ads2v"}:
+            return "video-to-video"
+        return "text-to-video"
+
+    def _promote_vae_to_float32(self) -> None:
+        self.vae.update(
+            tree_map(
+                lambda value: value.astype(mx.float32) if isinstance(value, mx.array) else value,
+                self.vae.parameters(),
+            )
+        )
 
     @staticmethod
     def _guidance_parameter_activity(guidance_mode: str) -> tuple[list[str], list[str]]:
@@ -1342,7 +1728,10 @@ class BerniniRenderer(Wan2_2_TI2V):
                 "apg_momentum",
             },
             "rv2v": {"text_guidance", "reference_guidance", "source_guidance"},
+            "v2v": {"text_guidance"},
             "v2v_apg": {"text_guidance", "apg_eta", "apg_norm_threshold", "apg_momentum"},
+            "t2v": {"text_guidance"},
+            "t2v_apg": {"text_guidance", "apg_eta", "apg_norm_threshold", "apg_momentum"},
         }
         if guidance_mode not in active_by_mode:
             raise ValueError(f"Unknown Bernini-R guidance mode: {guidance_mode!r}.")
@@ -1353,10 +1742,64 @@ class BerniniRenderer(Wan2_2_TI2V):
         )
 
     @classmethod
-    def _resolved_system_prompt(cls, *, guidance_mode: str, system_prompt: str | None) -> str:
+    def _resolved_system_prompt(
+        cls,
+        *,
+        guidance_mode: str,
+        system_prompt: str | None,
+        task_type: str | None = None,
+    ) -> str:
         if system_prompt:
             return system_prompt
-        return cls.SYSTEM_PROMPTS[guidance_mode]
+        if task_type is not None:
+            return cls.SYSTEM_PROMPTS[task_type]
+        default_task_type = {
+            "rv2v": "rv2v",
+            "v2v": "v2v",
+            "r2v_apg": "r2v",
+            "v2v_apg": "v2v",
+            "t2v": "t2v",
+            "t2v_apg": "t2v",
+        }[guidance_mode]
+        return cls.SYSTEM_PROMPTS[default_task_type]
+
+    def _effective_prompt(self, *, system_prompt: str, prompt: str) -> str:
+        cleaned = self._prompt_clean(prompt)
+        if not system_prompt:
+            return cleaned
+        if not cleaned:
+            return system_prompt
+        return f"{system_prompt}{cleaned}"
+
+    def _trim_bernini_text_embeddings(
+        self,
+        *,
+        prompt_embeds: mx.array,
+        negative_prompt_embeds: mx.array | None,
+        prompt: str,
+        negative_prompt: str | None,
+        max_sequence_length: int,
+    ) -> tuple[mx.array, mx.array | None]:
+        tokenizers = getattr(self, "tokenizers", None)
+        if not tokenizers or "wan" not in tokenizers:
+            return prompt_embeds, negative_prompt_embeds
+        text_inputs = self._tokenize_prompts(
+            cleaned=[prompt, negative_prompt or ""],
+            max_sequence_length=max_sequence_length,
+        )
+        attention_mask = np.asarray(text_inputs["attention_mask"])
+        if attention_mask.ndim != 2 or attention_mask.shape[0] != 2:
+            return prompt_embeds, negative_prompt_embeds
+        seq_lens = np.clip(attention_mask.sum(axis=1).astype(int), 1, max_sequence_length)
+        trimmed_prompt = prompt_embeds[:, : min(int(seq_lens[0]), int(prompt_embeds.shape[1])), :]
+        if negative_prompt_embeds is None:
+            return trimmed_prompt, None
+        trimmed_negative = negative_prompt_embeds[
+            :,
+            : min(int(seq_lens[1]), int(negative_prompt_embeds.shape[1])),
+            :,
+        ]
+        return trimmed_prompt, trimmed_negative
 
     @staticmethod
     def _apg_sigma(*, scheduler, fallback_index: int) -> mx.array:
@@ -1370,11 +1813,95 @@ class BerniniRenderer(Wan2_2_TI2V):
         return mx.array(sigma_value, dtype=mx.float32)
 
     @staticmethod
-    def _condition_shapes(
+    def _combined_condition_segments(
+        *,
         video_condition: mx.array | None,
+        reference_video_conditions: list[mx.array],
         reference_conditions: list[mx.array],
-    ) -> list[list[int]]:
-        conditions = ([] if video_condition is None else [video_condition]) + reference_conditions
+    ) -> list[mx.array]:
+        return ([] if video_condition is None else [video_condition]) + reference_video_conditions + reference_conditions
+
+    def _cfg_noise_prediction(
+        self,
+        *,
+        target: mx.array,
+        condition_segments: list[mx.array],
+        prompt_embeds: mx.array,
+        negative_prompt_embeds: mx.array,
+        text_guidance: float,
+        **branch_kwargs,
+    ) -> mx.array:
+        source_ids = self._configured_source_ids(len(condition_segments))
+        uncond = self._predict_branch(
+            role="cfg-uncond",
+            target=target,
+            condition_segments=condition_segments,
+            source_ids=source_ids,
+            text_embeds=negative_prompt_embeds,
+            **branch_kwargs,
+        )
+        cond = self._predict_branch(
+            role="cfg-cond",
+            target=target,
+            condition_segments=condition_segments,
+            source_ids=source_ids,
+            text_embeds=prompt_embeds,
+            **branch_kwargs,
+        )
+        result = uncond + text_guidance * (cond - uncond)
+        mx.eval(result)
+        del uncond, cond
+        return result
+
+    def _single_condition_apg_noise_prediction(
+        self,
+        *,
+        target: mx.array,
+        condition_segments: list[mx.array],
+        prompt_embeds: mx.array,
+        negative_prompt_embeds: mx.array,
+        text_guidance: float,
+        sigma: mx.array,
+        buffer: _MomentumBuffer | None,
+        eta: float,
+        norm_threshold: float,
+        **branch_kwargs,
+    ) -> mx.array:
+        source_ids = self._configured_source_ids(len(condition_segments))
+        uncond_v = self._predict_branch(
+            role="apg-uncond",
+            target=target,
+            condition_segments=condition_segments,
+            source_ids=source_ids,
+            text_embeds=negative_prompt_embeds,
+            **branch_kwargs,
+        )
+        cond_v = self._predict_branch(
+            role="apg-cond",
+            target=target,
+            condition_segments=condition_segments,
+            source_ids=source_ids,
+            text_embeds=prompt_embeds,
+            **branch_kwargs,
+        )
+        noisy_target = target.astype(mx.float32)
+        sigma_value = sigma.astype(mx.float32)
+        uncond_sample = noisy_target - sigma_value * uncond_v
+        cond_sample = noisy_target - sigma_value * cond_v
+        guided_sample = uncond_sample + text_guidance * self._normalize_diff(
+            cond_sample - uncond_sample,
+            cond_sample,
+            momentum_buffer=buffer,
+            eta=eta,
+            norm_threshold=norm_threshold,
+        )
+        noise_pred = (noisy_target - guided_sample) / sigma_value
+        mx.eval(noise_pred)
+        del uncond_v, cond_v
+        return noise_pred
+
+    @staticmethod
+    def _condition_shapes(conditions: list[mx.array]) -> list[list[int]]:
         return [[int(value) for value in condition.shape] for condition in conditions]
 
     @staticmethod
@@ -1382,6 +1909,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         *,
         guidance_mode: str,
         reference_image_paths: list[Path],
+        reference_video_paths: list[Path],
         text_guidance: float,
         reference_guidance: float,
         source_guidance: float,
@@ -1400,10 +1928,11 @@ class BerniniRenderer(Wan2_2_TI2V):
         vae_low_memory_policy_active: bool = False,
         clear_cache_each_transformer_block: bool = False,
         release_denoisers_before_decode: bool = False,
+        task_type: str | None = None,
     ) -> dict:
         active_parameters, inactive_parameters = BerniniRenderer._guidance_parameter_activity(guidance_mode)
-        complete_low_ram_policy = (
-            vae_low_memory_policy_active and clear_cache_each_transformer_block and release_denoisers_before_decode
+        low_ram_effective = (
+            vae_low_memory_policy_active or clear_cache_each_transformer_block or release_denoisers_before_decode
         )
         return {
             "bernini_guidance_mode": guidance_mode,
@@ -1418,6 +1947,8 @@ class BerniniRenderer(Wan2_2_TI2V):
             "transformer_precision_policy_id": WanWeightDefinition.BERNINI_TRANSFORMER_PRECISION_POLICY_ID,
             "transformer_default_weight_precision": "bfloat16",
             "transformer_fp32_weight_keys": list(WanWeightDefinition.BERNINI_TRANSFORMER_FP32_KEYS),
+            "transformer_fp32_weight_prefixes": list(WanWeightDefinition.BERNINI_TRANSFORMER_FP32_PREFIXES),
+            "transformer_fp32_weight_fragments": list(WanWeightDefinition.BERNINI_TRANSFORMER_FP32_FRAGMENTS),
             "source_conditioning": "independent-vae-packed-segments",
             "source_video_warm_start": False,
             "branch_evaluation": "sequential",
@@ -1430,20 +1961,23 @@ class BerniniRenderer(Wan2_2_TI2V):
             "active_guidance_parameters": active_parameters,
             "inactive_guidance_parameters": inactive_parameters,
             "apg_reduction_axes": [1, 3, 4],
-            "apg_accumulator_precision": "stable-float32",
+            "apg_accumulator_precision": "float64-projection",
             "apg_reference_accumulator_precision": "float64",
             "system_prompt": system_prompt,
             "effective_prompt": effective_prompt,
+            "bernini_task_type": task_type,
             "unipc_flow_sigma_schedule": unipc_flow_sigma_schedule,
             "reference_image_paths": [str(path) for path in reference_image_paths],
             "reference_image_count": len(reference_image_paths),
+            "reference_video_paths": [str(path) for path in reference_video_paths],
+            "reference_video_count": len(reference_video_paths),
             "condition_source_ids": [float(source_id) for source_id in source_ids],
             "condition_latent_shapes": condition_shapes,
             "max_condition_size": int(max_condition_size),
             "condition_resize_backend": "pillow-bicubic",
             "component_source_provenance": dict(component_source_provenance or {}),
             "factored_component_sources": bool(factored_component_sources),
-            "low_ram": bool(complete_low_ram_policy),
+            "low_ram": bool(low_ram_effective),
             "vae_low_memory_policy_active": bool(vae_low_memory_policy_active),
             "clear_cache_each_transformer_block": bool(clear_cache_each_transformer_block),
             "release_denoisers_before_decode": bool(release_denoisers_before_decode),

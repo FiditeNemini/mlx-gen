@@ -12,7 +12,7 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 15 |
-| Proposed | 25 |
+| Proposed | 26 |
 | Completed | 64 |
 | Deprecated | 1 |
 | Recurrent | 1 |
@@ -21,6 +21,7 @@ Counts are item files (recounted 2026-08-04 after adding item 0106; the
 2026-07-25 release hygiene had moved 0093-0095, 0097-0099, and release
 item 0101 to completed/), including topic-track items under
 `planned/memory/`; the completed `planned/runtime_contracts/` track holds only its index.
+Item 0107 was added on 2026-08-10 for the larger Bernini-model capacity/scope gate.
 Items 0086-0090 came from a 2026-07-22 adversarial performance audit of the
 BlackPixel embedding host traced end-to-end against the 0.23.1 release.
 Items 0093-0095 came from the 2026-07-23 follow-up audit of image-to-image

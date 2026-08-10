@@ -46,19 +46,23 @@ class Wan2_2_Resample(nn.Module):
             if self.mode == "upsample3d" and self.time_conv is not None:
                 if feat_cache is not None and feat_idx is not None:
                     idx = feat_idx[0]
-                    cache_arg = None if feat_cache[idx] is None or feat_cache[idx] == "Rep" else feat_cache[idx]
-                    cache_x = x[:, :, -2:, :, :]
-                    if cache_x.shape[2] < 2 and (feat_cache[idx] is None or feat_cache[idx] == "Rep"):
-                        cache_x = mx.concatenate([mx.zeros_like(cache_x), cache_x], axis=2)
-                    elif cache_x.shape[2] < 2:
-                        cache_x = mx.concatenate([feat_cache[idx][:, :, -1:, :, :], cache_x], axis=2)
-                    x = self.time_conv(x, cache_arg)
-                    feat_cache[idx] = cache_x
-                    feat_idx[0] += 1
-                    x = mx.reshape(x, (b, 2, c, t, h, w))
-                    x = mx.transpose(x, (0, 2, 3, 1, 4, 5))
-                    x = mx.reshape(x, (b, c, t * 2, h, w))
-                    t = t * 2
+                    if feat_cache[idx] is None:
+                        feat_cache[idx] = "Rep"
+                        feat_idx[0] += 1
+                    else:
+                        cache_x = x[:, :, -2:, :, :]
+                        if cache_x.shape[2] < 2 and feat_cache[idx] == "Rep":
+                            cache_x = mx.concatenate([mx.zeros_like(cache_x), cache_x], axis=2)
+                        elif cache_x.shape[2] < 2:
+                            cache_x = mx.concatenate([feat_cache[idx][:, :, -1:, :, :], cache_x], axis=2)
+                        cache_arg = None if feat_cache[idx] == "Rep" else feat_cache[idx]
+                        x = self.time_conv(x, cache_arg)
+                        feat_cache[idx] = cache_x
+                        feat_idx[0] += 1
+                        x = mx.reshape(x, (b, 2, c, t, h, w))
+                        x = mx.transpose(x, (0, 2, 3, 1, 4, 5))
+                        x = mx.reshape(x, (b, c, t * 2, h, w))
+                        t = t * 2
                 else:
                     x = self.time_conv(x)
                     x = mx.reshape(x, (b, 2, c, t, h, w))
