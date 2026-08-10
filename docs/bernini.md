@@ -6,8 +6,8 @@ reference and source-video paths without bundling the optional Qwen2.5-VL semant
 
 > **Experimental — not yet promoted.** The original 2026-08-04 release-quality bundle failed, but
 > the later official public 1.3B parity pass now has accepted qualitative evidence for `i2i`,
-> `t2i`, `t2v`, and `r2v`. Several official rows are still open, with `rv2v_case1` the next full
-> row to judge. Do not use this route for production work yet.
+> `t2i`, `t2v`, `r2v`, and `rv2v_case1`. Several official rows are still open, with `v2v_case1`
+> the next full row to judge. Do not use this route for production work yet.
 
 Upstream public Bernini examples are broader than the currently proven mlx-gen surface. The strict
 official-example target is tracked separately in the
@@ -19,9 +19,11 @@ As of Monday, August 10, 2026, the accepted current official-case rows are:
 - `t2i`
 - `t2v`
 - `r2v`
+- `rv2v_case1` — accepted with a prompt-fidelity caveat: the shirt stays more closed than the
+  official example, so less undershirt is exposed, but the garment replacement, fit, and temporal
+  stability are qualitatively good
 
-The next row is `rv2v_case1` (official garment replacement), which already has a full current-run
-artifact and needs only the same final qualitative decision.
+The next row is `v2v_case1` (official snowman insertion).
 
 Use Bernini when ordinary images should act as reusable visual references, or when a source video
 should be edited with those references. Continue using Wan VACE for learned mask/control workflows
@@ -207,10 +209,13 @@ The current accepted official public 1.3B rows are:
 - `t2i`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/mlx_sheet.png`
 - `t2v`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v/mlx_sheet.png`
 - `r2v`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/mlx_sheet.png`
+- `rv2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
+  - accepted with the narrow caveat that the shirt sits more closed than the official output, so
+    less of the undershirt remains visible
 
 The next row is:
 
-- `rv2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
+- `v2v_case1`
 
 The proof uses 5K-wide lossless-nearest MLX sheets, ordered 5K pages for long timelines, exact
 conditioned-source timelines, localized-change transition pairs, hashes, playable MP4s, and a
@@ -238,7 +243,8 @@ The original committed media profile uses 17 frames, 20 steps, reduced canvases,
 condition sizes. Full-frame inspection found nearly static motion, missed reference properties,
 cadence-aligned discontinuities, and severe corruption across frames 13-16 in the garment and
 snowman cases. That historical bundle is still useful for release-gate provenance, but the later
-official public-case reruns supersede it for the accepted `i2i`, `t2i`, `t2v`, and `r2v` rows.
+official public-case reruns supersede it for the accepted `i2i`, `t2i`, `t2v`, `r2v`, and
+`rv2v_case1` rows.
 
 Controlled diagnostics did not rescue the claim:
 
@@ -253,5 +259,5 @@ Controlled diagnostics did not rescue the claim:
   They are qualitative targets, not Bernini-R 1.3B parity baselines.
 
 The next required work is to close the remaining official public matrix, starting with
-`rv2v_case1`, then the unresolved `v2v`, `r2v_case2`, and `ads2v` rows. Until that work passes,
-keep Bernini experimental and fail closed in release validation.
+`v2v_case1`, then `v2v_case3`, `v2v_case2` / `mv2v`, `r2v_case2`, and `ads2v`. Until that work
+passes, keep Bernini experimental and fail closed in release validation.

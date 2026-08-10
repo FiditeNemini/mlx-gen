@@ -8,7 +8,7 @@ hashes, and a hash-bound recorded visual inspection.
 
 This bundle is the initial Monday, August 4, 2026 release-quality proof. It remains historically
 accurate, but it is not the latest official-public-example status. Later local review accepted the
-current official `i2i`, `t2i`, `t2v`, and `r2v` 1.3B example reruns; use the
+current official `i2i`, `t2i`, `t2v`, `r2v`, and `rv2v_case1` 1.3B example reruns; use the
 [official example parity matrix](official_example_parity_matrix.md) for the current row-by-row
 status.
 

@@ -48,11 +48,11 @@ Bernini parity defects, and which are intrinsic limits of the weaker public cond
 
 Evidence update from Monday, August 10, 2026: the stricter target has been made explicit in the
 official public 1.3B example matrix. That matrix now has accepted qualitative local evidence for
-four official rows (`t2i`, `i2i`, `t2v`, `r2v`). `rv2v_case1` now has a full current official run
-and is the next row to judge. The remaining open rows are `v2v_case1`, `v2v_case2` / `mv2v`,
-`v2v_case3`, `r2v_case2`, and `ads2v`. The parity item therefore has two subproblems:
+five official rows (`t2i`, `i2i`, `t2v`, `r2v`, `rv2v_case1`). The remaining open rows are
+`v2v_case1`, `v2v_case2` / `mv2v`, `v2v_case3`, `r2v_case2`, and `ads2v`. The parity item therefore
+has two subproblems:
 
-1. close or explicitly reject the remaining open public rows, starting with `rv2v_case1`; and
+1. close or explicitly reject the remaining open public rows, starting with `v2v_case1`; and
 2. only after the matrix is current, decide whether the older release-bundle failures still point
    to an implementation gap, a scope gap, or simply an earlier bounded proof slice.
 

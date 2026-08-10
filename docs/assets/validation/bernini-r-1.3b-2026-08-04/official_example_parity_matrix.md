@@ -35,19 +35,18 @@ The public 1.3B model card, testcase tree, and helper scripts expose these examp
 | V2V case 3 | `assets/testcases/v2v/v2v_case3.json` | replace humanoid robot with robotic dog | Open | Promote beyond the existing step-1 probe to a full current official-case run. |
 | R2V case 1 | `assets/testcases/r2v/r2v.json` | five-reference statue-on-bench case | Accepted | Keep as accepted current parity evidence. |
 | R2V case 2 | `assets/testcases/r2v/r2v_case2.json` | eight-reference statue-with-cup case | Open | Re-run or re-review as a distinct official row; the older bounded bundle is not enough. |
-| RV2V case 1 | `assets/testcases/rv2v/rv2v_case1.json` | garment replacement | Surfaced, pending final decision | Review the full current official run next. |
+| RV2V case 1 | `assets/testcases/rv2v/rv2v_case1.json` | garment replacement | Accepted | Keep as accepted current parity evidence; shirt closure differs slightly from the official clip, but the garment transfer and body fit now read correctly. |
 | ADS2V case 1 | `assets/testcases/rv2v/rv2v_case2.json` | two-video insertion at `121` frames, `24` fps, `1280` max image size | Open | Run a full current official-case pass; typed `ads2v` support exists internally but is not yet proven here. |
 
 ## Current gap, stated plainly
 
 As of Monday, August 10, 2026:
 
-- 4 official public rows are accepted on current local review:
+- 5 official public rows are accepted on current local review:
   - `i2i`
   - `t2i`
   - `t2v`
   - `r2v`
-- 1 official public row already has a full current official run and is the next decision point:
   - `rv2v_case1`
 - 5 official public rows are still open:
   - `v2v_case1`
@@ -59,8 +58,7 @@ As of Monday, August 10, 2026:
 So the honest current state is no longer "only old failed bounded proofs exist." The current state
 is:
 
-- four official rows are qualitatively accepted;
-- one official row is queued for immediate final review;
+- five official rows are qualitatively accepted;
 - the rest still need current official-case proof.
 
 ## Accepted evidence on Monday, August 10, 2026
@@ -77,12 +75,16 @@ is:
 - `r2v`
   - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/mlx_sheet.png`
   - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/official_sheet.png`
-
-## Next row
-
 - `rv2v_case1`
   - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
   - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/official_sheet.png`
+  - Note: the mlx-gen shirt stays more closed than the official output, so less undershirt is
+    visible, but the replacement is stable and fits correctly on-body.
+
+## Next row
+
+- `v2v_case1`
+  - next full official rerun target
 
 ## Known upstream ambiguities that must be resolved explicitly
 
@@ -110,15 +112,14 @@ eight-GPU launcher is therefore an execution recipe, not by itself a different s
 
 ## Immediate execution order
 
-1. Review the full current `rv2v_case1` run.
-2. Re-run or re-review the unresolved current video rows:
+1. Re-run or re-review the unresolved current video rows:
    - `v2v_case1`
-   - `v2v_case2` / `mv2v`
    - `v2v_case3`
-3. Close the remaining distinct reference rows:
+   - `v2v_case2` / `mv2v`
+2. Close the remaining distinct reference rows:
    - `r2v_case2`
    - `ads2v`
-4. Only after the 1.3B public matrix is current, decide whether larger Bernini rows are justified.
+3. Only after the 1.3B public matrix is current, decide whether larger Bernini rows are justified.
 
 ## Why this matters
 

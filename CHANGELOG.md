@@ -21,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   BF16 source route is numerically credible. The route ships as **EXPERIMENTAL**: the original
   2026-08-04 schema-v3 release bundle still fails its visual gate, but the later official-public
   1.3B parity pass materially improved the row. Current accepted local evidence now covers the
-  official `i2i`, `t2i`, `t2v`, and `r2v` examples; `rv2v_case1` is the next full official row to
-  close, and the remaining public rows stay open in the parity matrix. The evidence includes
+  official `i2i`, `t2i`, `t2v`, `r2v`, and `rv2v_case1` examples; the remaining public rows
+  (`v2v_case1`, `v2v_case2` / `mv2v`, `v2v_case3`, `r2v_case2`, and `ads2v`) stay open in the
+  parity matrix. The evidence includes
   focused numerical parity, high-resolution proof sheets, exact-noise public-case reruns, and
   measured whole-process physical peaks up to `9.45 GB` for the bounded proof profiles. See
   [Bernini-R 1.3B](docs/bernini.md) for commands, capacity limits, current accepted rows, and the
