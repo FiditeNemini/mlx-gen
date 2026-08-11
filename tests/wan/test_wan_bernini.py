@@ -997,7 +997,7 @@ def test_bernini_ads2v_defaults_to_public_renderer_rv2v_mode():
     ) == "rv2v"
     assert BerniniRenderer._resolved_task_type(
         task_type=None,
-        guidance_mode="v2v_apg",
+        guidance_mode="rv2v",
         has_video=True,
         has_image=False,
         num_reference_images=0,

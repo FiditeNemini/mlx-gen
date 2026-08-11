@@ -73,7 +73,6 @@ def test_ordinary_wan_transformers_keep_blanket_runtime_precision():
     assert component.precision == mx.bfloat16
     assert component.precision_override is None
 
-
 @pytest.mark.parametrize(
     "model_name",
     [
