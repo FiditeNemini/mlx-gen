@@ -507,6 +507,72 @@ def test_bernini_v2v_apg_keeps_video_in_both_text_branches(monkeypatch):
     assert calls[1]["text_embeds"] is positive
 
 
+def test_bernini_single_condition_apg_reuses_prepared_packed_branch(monkeypatch):
+    target_np = np.linspace(-2.0, 2.0, 16, dtype=np.float32).reshape(1, 2, 2, 2, 2)
+    predictions = {
+        "apg-uncond": np.full(target_np.shape, -1.5, dtype=np.float32),
+        "apg-cond": np.full(target_np.shape, 0.75, dtype=np.float32),
+    }
+    model = BerniniRenderer.__new__(BerniniRenderer)
+    model.model_config = ModelConfig.bernini_r_1_3b()
+    target = mx.array(target_np, dtype=mx.float32)
+    video = mx.zeros((1, 2, 3, 4, 4), dtype=mx.float32)
+    positive = mx.ones((1, 4, 3), dtype=mx.float32)
+    negative = mx.zeros((1, 4, 3), dtype=mx.float32)
+    prepared = SimpleNamespace(target_shape=tuple(int(value) for value in target.shape))
+    prepare_calls = []
+    branch_calls = []
+
+    class FakeTransformer:
+        def prepare_packed_segments(self, **kwargs):
+            prepare_calls.append(kwargs)
+            return prepared
+
+    model.transformer = FakeTransformer()
+
+    def fake_predict(self, *, role, prepared, text_embeds, **kwargs):
+        branch_calls.append({"role": role, "prepared": prepared, "text_embeds": text_embeds})
+        return mx.array(predictions[role], dtype=mx.float32)
+
+    monkeypatch.setattr(BerniniRenderer, "_predict_prepacked_branch", fake_predict)
+
+    actual = model._single_condition_apg_noise_prediction(
+        target=target,
+        condition_segments=[video],
+        prompt_embeds=positive,
+        negative_prompt_embeds=negative,
+        text_guidance=3.0,
+        sigma=mx.array(0.4),
+        buffer=_MomentumBuffer(0.0),
+        eta=1.0,
+        norm_threshold=0.0,
+        timestep=500,
+        step_number=1,
+        total_steps=2,
+        clear_cache_each_block=False,
+        clear_branch_cache=False,
+        check_tensors=False,
+    )
+
+    expected = _numpy_v2v_apg_noise_prediction(
+        target=target_np,
+        uncond=predictions["apg-uncond"],
+        cond=predictions["apg-cond"],
+        text_guidance=3.0,
+        sigma=0.4,
+        eta=1.0,
+        norm_threshold=0.0,
+    )
+    np.testing.assert_allclose(np.asarray(actual), expected, rtol=1e-6, atol=1e-6)
+    assert len(prepare_calls) == 1
+    assert prepare_calls[0]["source_ids"] == [1.0, 0.0]
+    assert len(prepare_calls[0]["latent_segments"]) == 2
+    assert [call["role"] for call in branch_calls] == ["apg-uncond", "apg-cond"]
+    assert all(call["prepared"] is prepared for call in branch_calls)
+    assert branch_calls[0]["text_embeds"] is negative
+    assert branch_calls[1]["text_embeds"] is positive
+
+
 def test_bernini_predict_branch_orders_video_refs_then_target_id_zero(monkeypatch):
     model = BerniniRenderer.__new__(BerniniRenderer)
     observed = {}
@@ -912,7 +978,7 @@ def test_bernini_text_only_modes_are_now_valid_backend_shapes():
     ) == "t2v"
 
 
-def test_bernini_ads2v_defaults_to_official_v2v_apg_mode():
+def test_bernini_ads2v_defaults_to_public_renderer_rv2v_mode():
     assert BerniniRenderer._resolved_guidance_mode(
         guidance_mode=None,
         task_type="ads2v",
@@ -920,7 +986,7 @@ def test_bernini_ads2v_defaults_to_official_v2v_apg_mode():
         has_image=False,
         num_reference_images=0,
         num_reference_videos=1,
-    ) == "v2v_apg"
+    ) == "rv2v"
     assert BerniniRenderer._resolved_guidance_mode(
         guidance_mode=None,
         task_type=None,
@@ -928,7 +994,7 @@ def test_bernini_ads2v_defaults_to_official_v2v_apg_mode():
         has_image=False,
         num_reference_images=0,
         num_reference_videos=1,
-    ) == "v2v_apg"
+    ) == "rv2v"
     assert BerniniRenderer._resolved_task_type(
         task_type=None,
         guidance_mode="v2v_apg",

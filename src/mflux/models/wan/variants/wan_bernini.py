@@ -72,7 +72,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         "mv2v": "v2v_apg",
         "r2v": "r2v_apg",
         "rv2v": "rv2v",
-        "ads2v": "v2v_apg",
+        "ads2v": "rv2v",
     }
     SUPPORTED_GUIDANCE_MODES = frozenset({"rv2v", "v2v", "r2v_apg", "v2v_apg", "t2v", "t2v_apg"})
     ALLOWED_GUIDANCE_MODES_BY_TASK = {
@@ -758,6 +758,65 @@ class BerniniRenderer(Wan2_2_TI2V):
             timestep=self._batch_timestep(batch_size=int(target.shape[0]), timestep=timestep),
             encoder_hidden_states=text_embeds,
             target_segment_index=-1,
+            clear_cache_each_block=clear_cache_each_block,
+            block_health_context=block_context,
+        ).astype(mx.float32)
+        mx.eval(prediction)
+        if check_tensors:
+            self._require_tensor_health(
+                prediction,
+                phase="branch-denoise-prediction",
+                name=f"noise_pred.{role}",
+                step=step_number,
+                total_steps=total_steps,
+                timestep=timestep,
+                denoiser=f"bernini-{role}",
+            )
+        if clear_branch_cache:
+            mx.synchronize()
+            mx.clear_cache()
+        return prediction
+
+    def _prepare_packed_branch(
+        self,
+        *,
+        target: mx.array,
+        condition_segments: list[mx.array],
+        source_ids: list[float],
+    ):
+        return self.transformer.prepare_packed_segments(
+            latent_segments=[
+                *(segment.astype(ModelConfig.precision) for segment in condition_segments),
+                target.astype(ModelConfig.precision),
+            ],
+            source_ids=[*source_ids, 0.0],
+            target_segment_index=-1,
+        )
+
+    def _predict_prepacked_branch(
+        self,
+        *,
+        role: str,
+        prepared,
+        text_embeds: mx.array,
+        timestep: int | float,
+        step_number: int,
+        total_steps: int,
+        clear_cache_each_block: bool,
+        clear_branch_cache: bool,
+        check_tensors: bool,
+    ) -> mx.array:
+        block_context = WanBlockHealthContext(
+            step=step_number,
+            total_steps=total_steps,
+            timestep=timestep,
+            denoiser=f"bernini-{role}",
+            guidance=None,
+        )
+        prediction = self.transformer.forward_prepacked(
+            prepared=prepared,
+            timestep=self._batch_timestep(batch_size=int(prepared.target_shape[0]), timestep=timestep),
+            encoder_hidden_states=text_embeds,
             clear_cache_each_block=clear_cache_each_block,
             block_health_context=block_context,
         ).astype(mx.float32)
@@ -1612,7 +1671,7 @@ class BerniniRenderer(Wan2_2_TI2V):
         num_reference_videos: int = 0,
     ) -> str:
         if has_video and num_reference_videos and not num_reference_images:
-            return "v2v_apg"
+            return "rv2v"
         if has_video and (num_reference_images or num_reference_videos):
             return "rv2v"
         if has_video:
@@ -1868,19 +1927,20 @@ class BerniniRenderer(Wan2_2_TI2V):
         **branch_kwargs,
     ) -> mx.array:
         source_ids = self._configured_source_ids(len(condition_segments))
-        uncond_v = self._predict_branch(
-            role="apg-uncond",
+        prepared = self._prepare_packed_branch(
             target=target,
             condition_segments=condition_segments,
             source_ids=source_ids,
+        )
+        uncond_v = self._predict_prepacked_branch(
+            role="apg-uncond",
+            prepared=prepared,
             text_embeds=negative_prompt_embeds,
             **branch_kwargs,
         )
-        cond_v = self._predict_branch(
+        cond_v = self._predict_prepacked_branch(
             role="apg-cond",
-            target=target,
-            condition_segments=condition_segments,
-            source_ids=source_ids,
+            prepared=prepared,
             text_embeds=prompt_embeds,
             **branch_kwargs,
         )

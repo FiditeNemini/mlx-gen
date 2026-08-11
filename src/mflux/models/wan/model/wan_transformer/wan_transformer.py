@@ -24,6 +24,16 @@ class WanBlockHealthContext:
     guidance: float | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class WanPreparedPackedSegments:
+    hidden_states: mx.array
+    rotary_emb: tuple[mx.array, mx.array]
+    segment_lengths: tuple[int, ...]
+    target_segment_index: int
+    target_shape: tuple[int, ...]
+    batch_size: int
+
+
 class WanTransformer(nn.Module):
     LOW_PRECISION_DTYPES = (mx.float16, mx.bfloat16)
 
@@ -242,6 +252,26 @@ class WanTransformer(nn.Module):
         clear_cache_each_block: bool = False,
         block_health_context: WanBlockHealthContext | None = None,
     ) -> mx.array:
+        prepared = self.prepare_packed_segments(
+            latent_segments=latent_segments,
+            source_ids=source_ids,
+            target_segment_index=target_segment_index,
+        )
+        return self.forward_prepacked(
+            prepared=prepared,
+            timestep=timestep,
+            encoder_hidden_states=encoder_hidden_states,
+            clear_cache_each_block=clear_cache_each_block,
+            block_health_context=block_health_context,
+        )
+
+    def prepare_packed_segments(
+        self,
+        *,
+        latent_segments: Sequence[mx.array],
+        source_ids: Sequence[float],
+        target_segment_index: int = -1,
+    ) -> WanPreparedPackedSegments:
         if self.vace_layers is not None:
             raise ValueError("Packed Wan execution is not supported by transformers configured with VACE layers.")
         if not latent_segments:
@@ -299,16 +329,6 @@ class WanTransformer(nn.Module):
                     f"latent_segments[{index}] shape {segment.shape[2:]} must be divisible by patch size "
                     f"{self.patch_size}."
                 )
-        if timestep.ndim != 1 or timestep.shape[0] != batch_size:
-            raise ValueError(
-                f"Packed Wan execution requires one scalar timestep per batch item, got {timestep.shape} "
-                f"for batch size {batch_size}."
-            )
-        if encoder_hidden_states.shape[0] != batch_size:
-            raise ValueError(
-                f"encoder_hidden_states batch size {encoder_hidden_states.shape[0]} does not match "
-                f"the packed latent batch size {batch_size}."
-            )
 
         packed_segments = []
         rotary_cos = []
@@ -327,6 +347,38 @@ class WanTransformer(nn.Module):
             mx.concatenate(rotary_cos, axis=1),
             mx.concatenate(rotary_sin, axis=1),
         )
+        mx.eval(hidden_states, rotary_emb[0], rotary_emb[1])
+        return WanPreparedPackedSegments(
+            hidden_states=hidden_states,
+            rotary_emb=rotary_emb,
+            segment_lengths=tuple(segment_lengths),
+            target_segment_index=target_segment_index,
+            target_shape=tuple(int(value) for value in latent_segments[target_segment_index].shape),
+            batch_size=int(batch_size),
+        )
+
+    def forward_prepacked(
+        self,
+        *,
+        prepared: WanPreparedPackedSegments,
+        timestep: mx.array,
+        encoder_hidden_states: mx.array,
+        clear_cache_each_block: bool = False,
+        block_health_context: WanBlockHealthContext | None = None,
+    ) -> mx.array:
+        if timestep.ndim != 1 or timestep.shape[0] != prepared.batch_size:
+            raise ValueError(
+                f"Packed Wan execution requires one scalar timestep per batch item, got {timestep.shape} "
+                f"for batch size {prepared.batch_size}."
+            )
+        if encoder_hidden_states.shape[0] != prepared.batch_size:
+            raise ValueError(
+                f"encoder_hidden_states batch size {encoder_hidden_states.shape[0]} does not match "
+                f"the packed latent batch size {prepared.batch_size}."
+            )
+
+        hidden_states = prepared.hidden_states
+        rotary_emb = prepared.rotary_emb
         self._check_block_health(
             enabled=self._block_health_enabled(),
             name="packed.patch_embedding",
@@ -338,7 +390,7 @@ class WanTransformer(nn.Module):
             timestep=timestep,
             encoder_hidden_states=encoder_hidden_states,
         )
-        timestep_proj = timestep_proj.reshape(batch_size, 6, -1)
+        timestep_proj = timestep_proj.reshape(prepared.batch_size, 6, -1)
         block_health_enabled = self._block_health_enabled()
         self._check_block_health(
             enabled=block_health_enabled,
@@ -384,10 +436,10 @@ class WanTransformer(nn.Module):
             tensor=hidden_states,
             context=block_health_context,
         )
-        target_start = sum(segment_lengths[:target_segment_index])
-        target_end = target_start + segment_lengths[target_segment_index]
+        target_start = sum(prepared.segment_lengths[: prepared.target_segment_index])
+        target_end = target_start + prepared.segment_lengths[prepared.target_segment_index]
         target_tokens = hidden_states[:, target_start:target_end]
-        return self._unpatch(target_tokens, latent_segments[target_segment_index].shape)
+        return self._unpatch(target_tokens, prepared.target_shape)
 
     def _patch_embed(self, hidden_states: mx.array) -> mx.array:
         return self._apply_patch_embedding(self.patch_embedding, hidden_states, self.patch_size)

@@ -36,7 +36,7 @@ The public 1.3B model card, testcase tree, and helper scripts expose these examp
 | R2V case 1 | `assets/testcases/r2v/r2v.json` | five-reference statue-on-bench case | Accepted | Keep as accepted current parity evidence. |
 | R2V case 2 | `assets/testcases/r2v/r2v_case2.json` | eight-reference statue-with-cup case | Open | Re-run or re-review as a distinct official row; the older bounded bundle is not enough. |
 | RV2V case 1 | `assets/testcases/rv2v/rv2v_case1.json` | garment replacement | Accepted | Keep as accepted current parity evidence; shirt closure differs slightly from the official clip, but the garment transfer and body fit now read correctly. |
-| ADS2V case 1 | `assets/testcases/rv2v/rv2v_case2.json` | two-video insertion at `121` frames, `24` fps, `1280` max image size | Open | Run a full current official-case pass; typed `ads2v` support exists internally but is not yet proven here. |
+| ADS2V case 1 | `assets/testcases/rv2v/rv2v_case2.json` | two-video insertion at `121` frames, `24` fps, `1280` max image size | Open | Run a full current official-case pass using the shipped renderer script contract for this row: `guidance_mode=rv2v`. |
 
 ## Current gap, stated plainly
 
@@ -109,6 +109,12 @@ therefore treat them as two distinct official rows rather than treating one as a
 The public docs show the video examples with `torchrun --nproc-per-node 8 --ulysses 8`, but the
 same docs also state that the single-GPU and multi-GPU scripts take the same inputs. The
 eight-GPU launcher is therefore an execution recipe, not by itself a different semantic contract.
+
+### 4. ADS2V guidance-mode mismatch inside upstream public materials
+
+The shipped public renderer script for the `ads2v` testcase uses `guidance_mode=rv2v`, while the
+Gradio renderer defaults map `ads2v` to `v2v_apg`. For exact public-example parity, treat the
+scripted example contract as the target for this row and run `rv2v`.
 
 ## Immediate execution order
 

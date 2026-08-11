@@ -298,6 +298,33 @@ def test_bernini_packed_single_target_matches_ordinary_wan_forward():
     np.testing.assert_array_equal(np.asarray(packed), np.asarray(ordinary))
 
 
+def test_bernini_prepacked_single_target_matches_forward_packed():
+    mx.random.seed(37)
+    model = _tiny_transformer(num_layers=2)
+    latent = mx.random.normal((1, 4, 2, 4, 6), dtype=mx.float32)
+    timestep = mx.array([650.0], dtype=mx.float32)
+    encoder_hidden_states = mx.random.normal((1, 5, 12), dtype=mx.float32)
+
+    prepared = model.prepare_packed_segments(
+        latent_segments=[latent],
+        source_ids=[0.0],
+    )
+    prepacked = model.forward_prepacked(
+        prepared=prepared,
+        timestep=timestep,
+        encoder_hidden_states=encoder_hidden_states,
+    )
+    packed = model.forward_packed(
+        latent_segments=[latent],
+        source_ids=[0.0],
+        timestep=timestep,
+        encoder_hidden_states=encoder_hidden_states,
+    )
+    mx.eval(prepacked, packed)
+
+    np.testing.assert_array_equal(np.asarray(prepacked), np.asarray(packed))
+
+
 def test_bernini_packed_heterogeneous_segments_extract_and_unpatch_only_target():
     mx.random.seed(47)
     model = _tiny_transformer(num_layers=0)
@@ -318,6 +345,34 @@ def test_bernini_packed_heterogeneous_segments_extract_and_unpatch_only_target()
 
     assert packed.shape == target.shape
     np.testing.assert_array_equal(np.asarray(packed), np.asarray(target_only))
+
+
+def test_bernini_prepacked_heterogeneous_segments_match_forward_packed():
+    mx.random.seed(49)
+    model = _tiny_transformer(num_layers=1)
+    reference = mx.random.normal((1, 4, 1, 4, 4), dtype=mx.float32)
+    target = mx.random.normal((1, 4, 2, 4, 6), dtype=mx.float32)
+    timestep = mx.array([480.0], dtype=mx.float32)
+    encoder_hidden_states = mx.random.normal((1, 5, 12), dtype=mx.float32)
+
+    prepared = model.prepare_packed_segments(
+        latent_segments=[reference, target],
+        source_ids=[1.0, 0.0],
+    )
+    prepacked = model.forward_prepacked(
+        prepared=prepared,
+        timestep=timestep,
+        encoder_hidden_states=encoder_hidden_states,
+    )
+    packed = model.forward_packed(
+        latent_segments=[reference, target],
+        source_ids=[1.0, 0.0],
+        timestep=timestep,
+        encoder_hidden_states=encoder_hidden_states,
+    )
+    mx.eval(prepacked, packed)
+
+    np.testing.assert_array_equal(np.asarray(prepacked), np.asarray(packed))
 
 
 def test_bernini_packed_heterogeneous_segments_run_through_attention():
