@@ -1195,25 +1195,24 @@ class BerniniRenderer(Wan2_2_TI2V):
             )
             output_width, output_height = requested_width, requested_height
         else:
-            output_height, output_width = self._closest_spatial_size_for_ratio(
-                requested_height=requested_height,
-                requested_width=requested_width,
-                source_height=int(source_height),
-                source_width=int(source_width),
-                multiple_h=16,
-                multiple_w=16,
-            )
-            output_width, output_height = self._condition_dimensions(
-                width=output_width,
-                height=output_height,
+            # Official renderer contract (bernini/data_utils.py
+            # MaxLongEdgeMinShortEdgeResize + pipeline.py __call__): a source
+            # video is resized so its long edge fits max_image_size, never
+            # upscaled, snapped to stride 16, and that size IS the output
+            # canvas. Requested --width/--height do not override video-driven
+            # output; use --max-condition-size to control the canvas.
+            condition_width, condition_height = self._condition_dimensions(
+                width=int(source_width),
+                height=int(source_height),
                 max_size=max_condition_size,
             )
-            condition_width, condition_height = output_width, output_height
+            output_width, output_height = condition_width, condition_height
             if (output_height, output_width) != (requested_height, requested_width):
                 print(
-                    "Bernini-R source-aspect output preserves the source ratio while treating "
-                    "--width/--height as an area target and --max-condition-size as a hard side cap: "
-                    f"({requested_height}, {requested_width}) -> ({output_height}, {output_width})."
+                    "Bernini-R source-aspect output follows the official renderer rule: the source "
+                    "video's long edge is capped at --max-condition-size (never upscaled) and that "
+                    "resolves the canvas: "
+                    f"requested ({requested_height}, {requested_width}) -> ({output_height}, {output_width})."
                 )
         metadata.update(
             source_width=int(source_width),

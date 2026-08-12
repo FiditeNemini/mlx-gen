@@ -779,7 +779,7 @@ def test_bernini_condition_plan_resolves_incomplete_probe_metadata_once(monkeypa
     assert metadata["output_frames"] == 5
 
 
-def test_bernini_source_aspect_plan_uses_requested_area_and_condition_cap(monkeypatch, tmp_path):
+def test_bernini_source_aspect_plan_matches_official_long_edge_cap(monkeypatch, tmp_path):
     source = tmp_path / "portrait.mp4"
     source.touch()
     monkeypatch.setattr(
@@ -813,8 +813,11 @@ def test_bernini_source_aspect_plan_uses_requested_area_and_condition_cap(monkey
         max_condition_size=320,
     )
 
-    assert (small["output_width"], small["output_height"]) == (48, 80)
-    assert (small["video_condition_width"], small["video_condition_height"]) == (48, 80)
+    # Official renderer rule: the source video's long edge is capped at
+    # max_condition_size and never upscaled; requested width/height do not
+    # shrink or override a video-driven canvas.
+    assert (small["output_width"], small["output_height"]) == (480, 848)
+    assert (small["video_condition_width"], small["video_condition_height"]) == (480, 848)
     assert (small["requested_output_width"], small["requested_output_height"]) == (64, 64)
     assert (capped["output_width"], capped["output_height"]) == (176, 320)
     assert (capped["video_condition_width"], capped["video_condition_height"]) == (176, 320)

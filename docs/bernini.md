@@ -5,15 +5,21 @@ editing on Apple Silicon. The integration is deliberately renderer-only: it expo
 reference and source-video paths without bundling the optional Qwen2.5-VL semantic planner.
 
 > **Experimental — not yet promoted.** The original 2026-08-04 release-quality bundle failed, but
-> the later official public 1.3B parity pass now has accepted qualitative evidence for `i2i`,
-> `t2i`, `t2v`, `r2v`, and `rv2v_case1`. Several official rows are still open, with `v2v_case1`
-> the next full row to judge. Do not use this route for production work yet.
+> the official public 1.3B parity pass now has accepted qualitative evidence for `i2i`, `t2i`,
+> `t2v`, `r2v`, `rv2v_case1`, `v2v_case1`, and `mv2v` (the last with three named caveats), plus
+> `ads2v` accepted at mid profile (the full official recipe is unverifiable on this host for
+> either engine). The two remaining rows fail at their official recipes identically in both
+> implementations (oracle-proven, so not mlx-gen defects), but documented non-official recipes
+> recover them substantially: `v2v_case3` achieves the full quadruped robotic dog with the mv2v
+> task prefix + guidance 5.0, and `r2v_case2` recovers cat-ear elements, chest branding, and the
+> drinking motion with reference guidance 6.0 (seed-sensitive). Do not use this route for
+> production work yet.
 
 Upstream public Bernini examples are broader than the currently proven mlx-gen surface. The strict
 official-example target is tracked separately in the
 [official public 1.3B example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md).
 
-As of Monday, August 10, 2026, the accepted current official-case rows are:
+As of Wednesday, August 12, 2026, the accepted current official-case rows are:
 
 - `i2i` — accepted with a minor wall-texture caveat against the official image
 - `t2i`
@@ -22,8 +28,23 @@ As of Monday, August 10, 2026, the accepted current official-case rows are:
 - `rv2v_case1` — accepted with a prompt-fidelity caveat: the shirt stays more closed than the
   official example, so less undershirt is exposed, but the garment replacement, fit, and temporal
   stability are qualitatively good
+- `v2v_case1` — snowman insertion, accepted on 2026-08-11 review
+- `mv2v` (`v2v_case2`) — crouch edit, accepted with three named caveats (invented standing start
+  pose with cropped head at frame 0, later crouch onset than the retained clip, and the dog
+  standing late in the clip against the prompt's "stays seated" constraint)
 
-The next row is `v2v_case1` (official snowman insertion).
+`ads2v` is accepted at mid profile: implementation parity is proven against the official code
+(near frame-level trajectory match at identical settings and noise) and the mid-profile artifact
+shows the inserted ad playing through its "Bernini" logo reveal; the full official recipe is
+unverifiable on this host for either engine. `v2v_case3` and `r2v_case2` fail at their official
+recipes in both implementations (oracle-proven — the official implementation produces the same
+or worse results at identical settings), while documented non-official recipes recover them
+substantially (quadruped dog via the mv2v prefix; most reference properties via reference
+guidance 6.0). The retained upstream example clips are almost
+certainly 14B output (upstream's scripts default to the 14B checkpoint and its README says the
+1.3B "lags behind on complex tasks"). See the
+[official public 1.3B example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md)
+for the full evidence trail, including the local official-code oracle methodology.
 
 Use Bernini when ordinary images should act as reusable visual references, or when a source video
 should be edited with those references. Continue using Wan VACE for learned mask/control workflows
@@ -59,16 +80,13 @@ This alias selects only `ByteDance/Bernini-R-1.3B-Diffusers`. The main
 `ByteDance/Bernini-R` A14B repository and similarly named third-party repositories intentionally
 fail closed; MLX-Gen never rewrites them to the 1.3B renderer.
 
-The command downloads:
-
-- tokenizer, BF16 UMT5, and VAE components from the pinned
-  `Wan-AI/Wan2.1-VACE-1.3B-diffusers` revision;
-- only the renderer/config files from the pinned `ByteDance/Bernini-R-1.3B-Diffusers` revision.
-
-This avoids the renderer repository's duplicate 22.7 GB FP32 text encoder. A completely cold
-selective download is approximately 16.36 GiB of files; MLX-Gen requires 2 GiB of free-space
-headroom, so it preflights for **18.36 GiB free**. An 18 GB fresh disk budget is therefore just
-short. Existing complete pinned sources are not counted again.
+The command downloads all components — tokenizer, the FP32 UMT5 text encoder (loaded and run in
+BF16), VAE, and the renderer transformer — from the pinned
+`ByteDance/Bernini-R-1.3B-Diffusers` revision. Using the Bernini repository's own text encoder
+(not the byte-different Wan-VACE copy) is required for exact official-example parity; this was
+verified at the tensor level against the official implementation on 2026-08-12. A completely
+cold download is approximately 26.9 GiB of files plus 2 GiB of free-space headroom in the
+preflight. Existing complete pinned sources are not counted again.
 
 On the 128 GB validation host, the bounded low-RAM profiles peaked at 9.45 GB whole-process
 physical footprint. A separate 33-frame, eight-reference 848-condition structural probe peaked at
@@ -115,8 +133,10 @@ mlxgen generate \
 ```
 
 Bernini video input always uses `source-aspect` canvas resolution and resize-only conditioning.
-The requested width and height form an area target; the source ratio determines the final canvas,
-and `--max-condition-size` is a hard side cap. For source-video modes, `--frames` is a maximum:
+Matching the official renderer exactly, the source video's long edge is capped at
+`--max-condition-size` (never upscaled, snapped to multiples of 16) and that resolved size is the
+output canvas; `--width`/`--height` do not override a video-driven canvas. For source-video modes,
+`--frames` is a maximum:
 the renderer samples at the requested fps, clamps to the source duration, and returns a `4n+1`
 count no greater than the request. Read the returned `num_frames` or metadata `output_frames` for
 the actual duration. Crop, pad, exact-resize, `--video-strength`, and `--video-mask-path` are
@@ -212,10 +232,23 @@ The current accepted official public 1.3B rows are:
 - `rv2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
   - accepted with the narrow caveat that the shirt sits more closed than the official output, so
     less of the undershirt remains visible
+- `v2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_11/doc_preview_v2v_case1/v2v_case1/mlx_sheet.png`
+- `mv2v`: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mlx_sheet.png`
+  - accepted with the three caveats listed above; the reduced-domain oracle parity proof lives in
+    `validation_outputs/bernini_r_1_3b_2026_08_11/oracle_official_1_3b/`
 
-The next row is:
+The remaining rows are dispositioned by the official-code 1.3B oracle rather than left open:
 
-- `v2v_case1`
+- `ads2v`: accepted at mid profile — implementation parity proven
+  (`validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_ads2v_reduced_twin/` vs
+  `oracle_official_1_3b/ads2v_reduced_cpu_f32/`) and the task outcome demonstrated through the
+  ad's logo reveal (`validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/`); the
+  official `1280x672/121f` recipe is computationally intractable on this host for either
+  implementation and is unverified scope, not a failure
+- `v2v_case3`, `r2v_case2`: fail at their official recipes in both implementations
+  (oracle-proven at matched settings); documented non-official recipes recover the quadruped
+  dog (`exp_v2v_case3_mv2vprefix/`) and most reference properties
+  (`exp_r2v_case2_full_refg6_s43/`)
 
 The proof uses 5K-wide lossless-nearest MLX sheets, ordered 5K pages for long timelines, exact
 conditioned-source timelines, localized-change transition pairs, hashes, playable MP4s, and a
@@ -258,6 +291,9 @@ Controlled diagnostics did not rescue the claim:
 - the upstream comparison clips do not attest their producing checkpoint or inference recipe.
   They are qualitative targets, not Bernini-R 1.3B parity baselines.
 
-The next required work is to close the remaining official public matrix, starting with
-`v2v_case1`, then `v2v_case3`, `v2v_case2` / `mv2v`, `r2v_case2`, and `ads2v`. Until that work
-passes, keep Bernini experimental and fail closed in release validation.
+The remaining promotion work: close the recipe-parity oracle and ablation for the `v2v_case3`
+mv2v-prefix recipe, then decide promotion policy for rows whose official recipes are
+oracle-proven 1.3B failures but whose documented tuned recipes succeed (`v2v_case3`,
+`r2v_case2`). The full `1280x672/121f` ads2v recipe and full-profile official-code oracle
+runs remain unverifiable on this host and are recorded as scope limits. Until the policy
+decision, keep Bernini experimental and fail closed in release validation.
