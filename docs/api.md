@@ -140,9 +140,11 @@ path, and reviewer notes. Route support and visual validation are intentionally 
 `mlxgen capabilities --model briaai/Fibo-Edit` exposes no unified public generation capability,
 while `mlxgen validation --model AbstractFramework/qwen-image-edit-2511-8bit` reports the
 published Qwen 2511 edit proof rows.
-The Bernini profile reports three experimental BF16 video routes and links each failed row to its
-playable MP4. Its overall status is `FAIL`: machine/runtime contracts pass, but the required visual
-quality gate does not. The unmeasured official 848x480x81 profile is not implied.
+The Bernini profile reports three experimental BF16 video routes from the historical schema-v3
+bundle and links each failed row to its playable MP4. Its overall status is `FAIL` for that
+bounded bundle. Accepted official public 1.3B example proof with full prompts and contact sheets
+lives in `docs/assets/validation/bernini-r-1.3b-2026-08-11/`. The unmeasured official
+848x480x81 profile is not implied.
 
 For LoRA routes, pass the exact `lora_validation_profile` value surfaced by `mlxgen capabilities`
 when you want the accepted proof row for that route:
@@ -687,8 +689,10 @@ output best-effort and the outcome is recorded as `audio_copied` / `audio_copy_m
 `bernini-r-1.3b` routes the official ByteDance 1.3B renderer through the Wan backend with three
 distinct input contracts:
 
-This surface is **experimental**. Its numerical/runtime contracts pass, but its schema-v3 visual
-release gate fails all required cases. Use these commands for diagnosis and development, not
+This surface is **experimental**. Its numerical/runtime contracts pass, and seven official public
+1.3B example rows plus `ads2v` at mid profile are qualitatively accepted with committed proof in
+`docs/assets/validation/bernini-r-1.3b-2026-08-11/`. The historical schema-v3 release bundle still
+fails at the bounded 17-frame profile. Use these commands for diagnosis and development, not
 production output.
 
 ```sh

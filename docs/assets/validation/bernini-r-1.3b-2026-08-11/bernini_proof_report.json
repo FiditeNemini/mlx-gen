@@ -1,0 +1,214 @@
+{
+  "kind": "bernini_r_1_3b_official_public_parity_bundle",
+  "created_at": "2026-08-13T01:55:37+02:00",
+  "required_case_ids": [
+    "t2i",
+    "i2i",
+    "t2v",
+    "v2v_case1",
+    "mv2v",
+    "r2v",
+    "rv2v_case1",
+    "ads2v"
+  ],
+  "included_case_ids": [
+    "t2i",
+    "i2i",
+    "t2v",
+    "v2v_case1",
+    "mv2v",
+    "r2v",
+    "rv2v_case1",
+    "ads2v",
+    "r2v_case2_official",
+    "r2v_case2_tuned",
+    "v2v_case3_official",
+    "v2v_case3_mv2vprefix"
+  ],
+  "missing_case_ids": [],
+  "reviewed_case_ids": [
+    "t2i",
+    "i2i",
+    "t2v",
+    "v2v_case1",
+    "mv2v",
+    "r2v",
+    "rv2v_case1",
+    "ads2v",
+    "r2v_case2_official",
+    "r2v_case2_tuned",
+    "v2v_case3_official",
+    "v2v_case3_mv2vprefix"
+  ],
+  "passed": true,
+  "cases": [
+    {
+      "id": "t2i",
+      "title": "T2I Van Gogh corgi",
+      "task_type": "t2i",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/t2i",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/t2i.png",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/t2i/t2i_out.png",
+      "observed_result": [
+        "A single corgi image is generated with the red ball and strong Van Gogh-style brushstroke texture.",
+        "The main subject, color palette, and swirling-sky style match the official task outcome.",
+        "Manual review on Tuesday, August 11, 2026 accepted this row as working."
+      ],
+      "bundle_output": "t2i.png",
+      "bundle_metadata": "t2i.metadata.json"
+    },
+    {
+      "id": "i2i",
+      "title": "I2I bicycle removal",
+      "task_type": "i2i",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/i2i",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/i2i.png",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/i2i/i2i_out.png",
+      "observed_result": [
+        "The bicycle is removed cleanly from the foreground.",
+        "The window frame, wall, and ground continue plausibly through the removed area.",
+        "Manual review on Tuesday, August 11, 2026 accepted this row as working, with a minor caveat that the wall texture reads slightly more patterned than the official image."
+      ],
+      "bundle_output": "i2i.png",
+      "bundle_metadata": "i2i.metadata.json"
+    },
+    {
+      "id": "t2v",
+      "title": "T2V polar bear guitar",
+      "task_type": "t2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/t2v",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v/t2v.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/t2v/t2v_out.mp4",
+      "observed_result": [
+        "A polar bear remains the main subject in the snowy daylight scene.",
+        "Guitar strumming and body sway are visible across the clip.",
+        "Manual review on Tuesday, August 11, 2026 accepted this row as working."
+      ],
+      "bundle_output": "t2v.mp4",
+      "bundle_metadata": "t2v.metadata.json"
+    },
+    {
+      "id": "v2v_case1",
+      "title": "V2V add snowman",
+      "task_type": "v2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_v2v_case1_launchd_round3/v2v_case1",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/v2v_case1",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_v2v_case1_launchd_round3/v2v_case1/v2v_case1.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case1_out.mp4",
+      "observed_result": [
+        "A realistic snowman appears on the right side of the snowy path.",
+        "The dog and winter scene stay intact while the snowman remains stable in position and scale.",
+        "Manual review on Tuesday, August 11, 2026 accepted this row as working."
+      ],
+      "bundle_output": "v2v_case1.mp4",
+      "bundle_metadata": "v2v_case1.metadata.json"
+    },
+    {
+      "id": "mv2v",
+      "title": "MV2V crouching beside dog",
+      "task_type": "mv2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/mv2v",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mv2v.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case2_out.mp4",
+      "observed_result": null,
+      "bundle_output": "mv2v.mp4",
+      "bundle_metadata": "mv2v.metadata.json"
+    },
+    {
+      "id": "r2v",
+      "title": "R2V statue on bench",
+      "task_type": "r2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/r2v",
+      "output": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/r2v.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/r2v/r2v_out.mp4",
+      "observed_result": [
+        "The statue, bench scene, headphones, shirt, and shorts are all present and recognizable.",
+        "The subject stays seated facing the camera with gentle music-like motion.",
+        "Manual review on Tuesday, August 11, 2026 accepted this row as working."
+      ],
+      "bundle_output": "r2v.mp4",
+      "bundle_metadata": "r2v.metadata.json"
+    },
+    {
+      "id": "rv2v_case1",
+      "title": "RV2V garment replacement",
+      "task_type": "rv2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/rv2v_case1",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/rv2v_case1.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/rv2v/rv2v_case1_out.mp4",
+      "observed_result": [
+        "The outer shirt is replaced by the white pinstripe button-up while the person, pose, and scene stay intact.",
+        "The shirt stays slightly more closed than in the official output, so less undershirt remains visible, but the fit and temporal stability are correct.",
+        "Manual review on Tuesday, August 11, 2026 accepted this row as working."
+      ],
+      "bundle_output": "rv2v_case1.mp4",
+      "bundle_metadata": "rv2v_case1.metadata.json"
+    },
+    {
+      "id": "ads2v",
+      "title": "ADS2V insert video on computer",
+      "task_type": "ads2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/ads2v",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/ads2v.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/rv2v/rv2v_case2_out.mp4",
+      "observed_result": null,
+      "bundle_output": "ads2v.mp4",
+      "bundle_metadata": "ads2v.metadata.json"
+    },
+    {
+      "id": "r2v_case2_official",
+      "title": "R2V statue with cup",
+      "task_type": "r2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/head_r2v_case2_full_v2/r2v_case2",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/r2v_case2_official",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_r2v_case2_full_v2/r2v_case2/r2v_case2.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/r2v/r2v_case2_out.mp4",
+      "observed_result": null,
+      "bundle_output": "r2v_case2.mp4",
+      "bundle_metadata": "r2v_case2.metadata.json"
+    },
+    {
+      "id": "r2v_case2_tuned",
+      "title": "R2V statue with cup",
+      "task_type": "r2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/exp_r2v_case2_full_refg6_s43/r2v_case2",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/r2v_case2_tuned",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_11/exp_r2v_case2_full_refg6_s43/r2v_case2/r2v_case2.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/r2v/r2v_case2_out.mp4",
+      "observed_result": null,
+      "bundle_output": "r2v_case2.mp4",
+      "bundle_metadata": "r2v_case2.metadata.json"
+    },
+    {
+      "id": "v2v_case3_official",
+      "title": "V2V robot to robotic dog",
+      "task_type": "v2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/v2v_case3_official",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/v2v_case3.mp4",
+      "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case3_out.mp4",
+      "observed_result": null,
+      "bundle_output": "v2v_case3.mp4",
+      "bundle_metadata": "v2v_case3.metadata.json"
+    },
+    {
+      "id": "v2v_case3_mv2vprefix",
+      "title": "V2V robot to robotic dog (mv2v-prefix recovery)",
+      "task_type": "mv2v",
+      "source_dir": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/exp_v2v_case3_mv2vprefix",
+      "bundle_dir": "/Users/albou/projects/gh/mlx-gen/docs/assets/validation/bernini-r-1.3b-2026-08-11/v2v_case3_mv2vprefix",
+      "output": "validation_outputs/bernini_r_1_3b_2026_08_11/exp_v2v_case3_mv2vprefix/v2v_case3_mv2vprefix.mp4",
+      "official_output": null,
+      "observed_result": null,
+      "bundle_output": "v2v_case3_mv2vprefix.mp4",
+      "bundle_metadata": "v2v_case3_mv2vprefix.metadata.json"
+    }
+  ]
+}

@@ -1,0 +1,300 @@
+{
+    "metadata_schema_version": 2,
+    "mflux_version": "0.25.0",
+    "model": "ByteDance/Bernini-R-1.3B-Diffusers",
+    "base_model": "None",
+    "task": "text-to-video",
+    "seed": 42,
+    "steps": 40,
+    "guidance": 4.0,
+    "guidance_2": null,
+    "flow_shift": 5.0,
+    "solver": "unipc",
+    "height": 480,
+    "width": 848,
+    "requested_height": 480,
+    "requested_width": 848,
+    "canvas_policy": null,
+    "resize_mode": null,
+    "source_image_height": null,
+    "source_image_width": null,
+    "frames": 81,
+    "fps": 16,
+    "duration_seconds": 5.062,
+    "precision": "mlx.core.bfloat16",
+    "quantize": null,
+    "generation_time_seconds": 5278.75,
+    "created_at": "2026-08-12T05:27:58.233365",
+    "image_path": null,
+    "video_path": null,
+    "prompt": "Place the male marble sculpture from image0, image5, and image6 on the bench in image4, wearing the pink cat-ear headphones from image1, the black T-shirt from image2, and the floral shorts from image3, holding the cup from image7 and slowly drinking from it with no steam visible, always facing the camera and gently moving to the music in a fixed medium shot. Generate a video where the male marble sculpture from image0, image5, and image6 appears as the main subject, maintaining the same white stone material, curly sculpted hair, muscular torso, and serious classical facial features seen in the reference images. He is dressed with the pink over-ear cat-ear headphones from image1, featuring soft pink ear cups and glowing-style cat ear shapes on top, along with the black short-sleeve T-shirt from image2 with the word \"bernini\" written across the chest in white, and the bright tropical floral shorts from image3 with large red, yellow, and white flowers, blue-green leaves, and a white drawstring. He is seated on the wooden bench from image4 in a seaside setting at sunset, with the bench centered on a paved path, palm trees rising on the left, low coastal plants and bushes around the foreground, and the beach, ocean, and glowing sun stretching across the background under a pink, orange, and purple sky. The lighting is warm and golden, consistent with sunset, casting a soft, relaxing atmosphere over the whole scene. The sculpture should always remain visible in the frame, seated on the bench and facing directly toward the camera. He holds the cup from image7 the entire time, matching its rounded brown ceramic appearance and handle, but do not show any steam coming from it. At the start of the video, he sits upright on the bench in a calm pose, already holding the cup near his torso, with a subtle rhythmic sway in his shoulders and upper body as if responding to music. Then he slowly lifts the cup toward his mouth in a natural, controlled motion, keeping his body mostly facing front. After that, he gently tilts the cup and takes a sip, with slow, realistic movement suitable for a statue brought to life. Then he lowers the cup slightly while continuing a soft, music-like bobbing motion of the head and torso. Throughout the video, the camera remains fixed in a medium shot, the motions stay slow and smooth, and all visual details of the sculpture, clothing, headphones, bench, and cup remain consistent with the reference images.",
+    "negative_prompt": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a\uff0c\u5012\u7740\u8d70",
+    "lora_paths": null,
+    "lora_scales": null,
+    "runtime_memory": {
+        "phase": "video-save-complete",
+        "timestamp": 1786505390.481293,
+        "pid": 22581,
+        "platform": "macOS-26.3-arm64-arm-64bit",
+        "synchronized": true,
+        "mlx_active_memory_bytes": 526662888,
+        "mlx_peak_memory_bytes": 8988509540,
+        "mlx_cache_memory_bytes": 431227008,
+        "process_rss_bytes": 1146306560,
+        "process_peak_rss_bytes": 1359953920,
+        "darwin_physical_footprint_bytes": 1922976264,
+        "errors": {},
+        "darwin_peak_physical_footprint_bytes": 10181937696
+    },
+    "prompt_tokens": 571,
+    "prompt_truncated": true,
+    "negative_prompt_tokens": 126,
+    "negative_prompt_truncated": false,
+    "bernini_guidance_mode": "r2v_apg",
+    "bernini_renderer_only": true,
+    "mlx_version": "0.31.0",
+    "python_version": "3.10.20",
+    "python_implementation": "CPython",
+    "runtime_platform": "macOS-26.3-arm64-arm-64bit",
+    "numpy_version": "2.2.6",
+    "python_executable": "/Users/albou/projects/gh/mlx-gen/.venv/bin/python3",
+    "text_encoder_precision_policy_id": "bernini-umt5-official-v2",
+    "transformer_precision_policy_id": "bernini-transformer-official-keep-set-v5",
+    "transformer_default_weight_precision": "bfloat16",
+    "transformer_fp32_weight_keys": [
+        "scale_shift_table"
+    ],
+    "transformer_fp32_weight_prefixes": [
+        "condition_embedder.time_embedder."
+    ],
+    "transformer_fp32_weight_fragments": [
+        ".scale_shift_table",
+        ".norm1.",
+        ".norm2.",
+        ".norm3."
+    ],
+    "source_conditioning": "independent-vae-packed-segments",
+    "source_video_warm_start": false,
+    "branch_evaluation": "sequential",
+    "text_guidance": 4.0,
+    "reference_guidance": 4.5,
+    "source_guidance": 1.25,
+    "apg_eta": 0.5,
+    "apg_norm_threshold": 50.0,
+    "apg_momentum": 0.0,
+    "active_guidance_parameters": [
+        "text_guidance",
+        "reference_guidance",
+        "apg_eta",
+        "apg_norm_threshold",
+        "apg_momentum"
+    ],
+    "inactive_guidance_parameters": [
+        "source_guidance"
+    ],
+    "apg_reduction_axes": [
+        1,
+        3,
+        4
+    ],
+    "apg_accumulator_precision": "float64-projection",
+    "apg_reference_accumulator_precision": "float64",
+    "system_prompt": "You are a helpful assistant specialized in subject-to-video generation.",
+    "effective_prompt": "You are a helpful assistant specialized in subject-to-video generation.Place the male marble sculpture from image0, image5, and image6 on the bench in image4, wearing the pink cat-ear headphones from image1, the black T-shirt from image2, and the floral shorts from image3, holding the cup from image7 and slowly drinking from it with no steam visible, always facing the camera and gently moving to the music in a fixed medium shot. Generate a video where the male marble sculpture from image0, image5, and image6 appears as the main subject, maintaining the same white stone material, curly sculpted hair, muscular torso, and serious classical facial features seen in the reference images. He is dressed with the pink over-ear cat-ear headphones from image1, featuring soft pink ear cups and glowing-style cat ear shapes on top, along with the black short-sleeve T-shirt from image2 with the word \"bernini\" written across the chest in white, and the bright tropical floral shorts from image3 with large red, yellow, and white flowers, blue-green leaves, and a white drawstring. He is seated on the wooden bench from image4 in a seaside setting at sunset, with the bench centered on a paved path, palm trees rising on the left, low coastal plants and bushes around the foreground, and the beach, ocean, and glowing sun stretching across the background under a pink, orange, and purple sky. The lighting is warm and golden, consistent with sunset, casting a soft, relaxing atmosphere over the whole scene. The sculpture should always remain visible in the frame, seated on the bench and facing directly toward the camera. He holds the cup from image7 the entire time, matching its rounded brown ceramic appearance and handle, but do not show any steam coming from it. At the start of the video, he sits upright on the bench in a calm pose, already holding the cup near his torso, with a subtle rhythmic sway in his shoulders and upper body as if responding to music. Then he slowly lifts the cup toward his mouth in a natural, controlled motion, keeping his body mostly facing front. After that, he gently tilts the cup and takes a sip, with slow, realistic movement suitable for a statue brought to life. Then he lowers the cup slightly while continuing a soft, music-like bobbing motion of the head and torso. Throughout the video, the camera remains fixed in a medium shot, the motions stay slow and smooth, and all visual details of the sculpture, clothing, headphones, bench, and cup remain consistent with the reference images.",
+    "bernini_task_type": "r2v",
+    "unipc_flow_sigma_schedule": "diffusers-0.35.2",
+    "reference_image_paths": [
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img0.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img1.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img2.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img3.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img4.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img5.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img6.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img7.png"
+    ],
+    "reference_image_count": 8,
+    "reference_video_paths": [],
+    "reference_video_count": 0,
+    "condition_source_ids": [
+        1.0,
+        1.5714285373687744,
+        2.142857074737549,
+        2.7142858505249023,
+        3.2857141494750977,
+        3.857142925262451,
+        4.4285712242126465,
+        5.0
+    ],
+    "condition_latent_shapes": [
+        [
+            1,
+            16,
+            1,
+            106,
+            76
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            80,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            82
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            70
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ]
+    ],
+    "max_condition_size": 848,
+    "condition_resize_backend": "pillow-bicubic",
+    "component_source_provenance": {
+        "text_encoder": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "base",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        },
+        "tokenizer": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "base",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        },
+        "vae": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "base",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        },
+        "transformer": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "transformer",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        }
+    },
+    "factored_component_sources": true,
+    "low_ram": true,
+    "vae_low_memory_policy_active": true,
+    "clear_cache_each_transformer_block": false,
+    "release_denoisers_before_decode": true,
+    "vae_feature_cache_policy_id": "wan-compact-feature-cache-v1",
+    "vae_encode_cache_materialization": "eager-contiguous-per-slice",
+    "vae_decode_cache_materialization": "eager-contiguous-per-slice",
+    "vae_spatial_tiling": true,
+    "vae_spatial_tiling_policy_id": "wan21-diffusers-0.35.2-256x256-stride192-v1",
+    "wan_decode_mode": "bounded_tile_major_spatial_vae",
+    "output_height": 480,
+    "output_width": 848,
+    "output_frames": 81,
+    "reference_video_pixel_shapes": [],
+    "reference_video_metadata": [],
+    "reference_pixel_shapes": [
+        [
+            1,
+            3,
+            1,
+            848,
+            608
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            640,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            656
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            560
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ]
+    ],
+    "video_health": {
+        "file": {
+            "source": "validation_outputs/bernini_r_1_3b_2026_08_11/head_r2v_case2_full_v2/r2v_case2/r2v_case2.mp4",
+            "frame_count": 81,
+            "width": 848,
+            "height": 480,
+            "fps": 16.0,
+            "luma_min": 0.0,
+            "luma_max": 255.0,
+            "luma_mean": 105.40859938256534,
+            "mean_temporal_delta": 1.959847767651081
+        }
+    },
+    "save_time_seconds": 112.2,
+    "total_generation_time_seconds": 5390.95
+}

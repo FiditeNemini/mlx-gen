@@ -1,0 +1,54 @@
+{
+  "id": "ads2v",
+  "title": "ADS2V insert video on computer",
+  "task_type": "ads2v",
+  "prompt": "Add the video on the computer.",
+  "case_json": "/private/tmp/bernini_official_20260810/assets/testcases/rv2v/rv2v_case2.json",
+  "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/rv2v/rv2v_case2_out.mp4",
+  "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/ads2v.mp4",
+  "metadata": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/ads2v.metadata.json",
+  "image_path": null,
+  "video_path": "/private/tmp/bernini_official_20260810/assets/testcases/rv2v/source_case2.mp4",
+  "reference_video_paths": [
+    "/private/tmp/bernini_official_20260810/assets/testcases/rv2v/source_ref_case2.mp4"
+  ],
+  "reference_image_paths": [],
+  "expected": [
+    "The inserted video appears on the computer screen.",
+    "The source scene stays intact outside the insertion region.",
+    "The inserted content follows the screen area instead of taking over the whole scene."
+  ],
+  "requested_width": 1280,
+  "requested_height": 672,
+  "requested_frames": 61,
+  "requested_fps": 24,
+  "width": 480,
+  "height": 256,
+  "frames": 61,
+  "fps": 24,
+  "seed": 42,
+  "initial_noise_path": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/initial_noise.npy",
+  "initial_noise_shape": [
+    1,
+    16,
+    16,
+    32,
+    60
+  ],
+  "initial_noise_source": "torch-cpu-manual-seed",
+  "steps": 40,
+  "guidance_mode": "rv2v",
+  "low_ram": true,
+  "clear_cache_each_step": true,
+  "clear_cache_each_transformer_block": false,
+  "release_denoisers_before_decode": true,
+  "mlx_cache_limit_gb": null,
+  "input_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/input_sheet.png",
+  "official_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/official_sheet.png",
+  "mlx_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/mlx_sheet.png",
+  "reproduce_command": "uv run python validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/run_official_public_cases.py --official-root /private/tmp/bernini_official_20260810 --out-dir validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f --case ads2v --seed 42 --steps 40 --max-condition-size 480 --override-fps 24 --override-frames 61 --low-ram",
+  "bundled_artifacts": {
+    "output": "ads2v.mp4",
+    "metadata": "ads2v.metadata.json"
+  }
+}

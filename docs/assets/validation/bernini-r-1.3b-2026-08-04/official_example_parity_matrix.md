@@ -119,42 +119,27 @@ identical late-clip failure with bit-identical noise).
 
 ## Accepted evidence on Monday, August 10, 2026
 
-- `i2i`
-  - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/mlx_sheet.png`
-  - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/official_sheet.png`
-- `t2i`
-  - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/mlx_sheet.png`
-  - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/official_sheet.png`
-- `t2v`
-  - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v/mlx_sheet.png`
-  - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v/official_sheet.png`
-- `r2v`
-  - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/mlx_sheet.png`
-  - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/official_sheet.png`
-- `rv2v_case1`
-  - MLX: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
-  - Official: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/official_sheet.png`
-  - Note: the mlx-gen shirt stays more closed than the official output, so less undershirt is
-    visible, but the replacement is stable and fits correctly on-body.
+Committed proof with full prompts and contact sheets lives in
+[docs/assets/validation/bernini-r-1.3b-2026-08-11/](../bernini-r-1.3b-2026-08-11/README.md):
+
+- `i2i` — [i2i/README.md](../bernini-r-1.3b-2026-08-11/i2i/README.md)
+- `t2i` — [t2i/README.md](../bernini-r-1.3b-2026-08-11/t2i/README.md)
+- `t2v` — [t2v/README.md](../bernini-r-1.3b-2026-08-11/t2v/README.md)
+- `r2v` — [r2v/README.md](../bernini-r-1.3b-2026-08-11/r2v/README.md)
+- `rv2v_case1` — [rv2v_case1/README.md](../bernini-r-1.3b-2026-08-11/rv2v_case1/README.md)
+  - accepted with the narrow caveat that the shirt stays more closed than the official output, so
+    less undershirt is visible, but the replacement is stable and fits correctly on-body.
 
 ## Accepted evidence added on Tuesday-Wednesday, August 11-12, 2026
 
-- `v2v_case1`
-  - `validation_outputs/bernini_r_1_3b_2026_08_11/doc_preview_v2v_case1/v2v_case1/mlx_sheet.png`
-- `mv2v` (`v2v_case2`)
-  - MLX full profile: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mlx_sheet.png`
-  - Oracle parity: `validation_outputs/bernini_r_1_3b_2026_08_11/oracle_official_1_3b/mv2v_reduced_cpu_f32/`
-- `ads2v` (implementation parity + mid-profile outcome)
-  - MLX twin: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_ads2v_reduced_twin/ads2v/mlx_sheet.png`
-  - Oracle: `validation_outputs/bernini_r_1_3b_2026_08_11/oracle_official_1_3b/ads2v_reduced_cpu_f32/`
-  - Outcome (logo reveal): `validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v/mlx_sheet.png`
-- `v2v_case3` / `r2v_case2` (model-limitation evidence)
-  - Oracles: `validation_outputs/bernini_r_1_3b_2026_08_11/oracle_official_1_3b/{v2v_case3,r2v_case2}_reduced_cpu_f32/`
-    plus the mid-profile gate `oracle_official_1_3b/v2v_case3_mid480_49f_cpu_f32/`
-  - MLX twins: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_{v2v_case3,r2v_case2}_reduced_twin/`
-  - MLX full-profile reruns on the fixed code:
-    `validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/`,
-    `validation_outputs/bernini_r_1_3b_2026_08_11/head_r2v_case2_full_v2/`
+- `v2v_case1` — [v2v_case1/README.md](../bernini-r-1.3b-2026-08-11/v2v_case1/README.md)
+- `mv2v` (`v2v_case2`) — [mv2v/README.md](../bernini-r-1.3b-2026-08-11/mv2v/README.md)
+- `ads2v` (mid profile) — [ads2v/README.md](../bernini-r-1.3b-2026-08-11/ads2v/README.md)
+- `v2v_case3` / `r2v_case2` (oracle-dispositioned and tuned recovery recipes)
+  - official: [v2v_case3_official](../bernini-r-1.3b-2026-08-11/v2v_case3_official/README.md),
+    [r2v_case2_official](../bernini-r-1.3b-2026-08-11/r2v_case2_official/README.md)
+  - tuned recovery: [v2v_case3_mv2vprefix](../bernini-r-1.3b-2026-08-11/v2v_case3_mv2vprefix/README.md),
+    [r2v_case2_tuned](../bernini-r-1.3b-2026-08-11/r2v_case2_tuned/README.md)
 
 ## Remaining scope
 
@@ -197,17 +182,6 @@ eight-GPU launcher is therefore an execution recipe, not by itself a different s
 The shipped public renderer script for the `ads2v` testcase uses `guidance_mode=rv2v`, while the
 Gradio renderer defaults map `ads2v` to `v2v_apg`. For exact public-example parity, treat the
 scripted example contract as the target for this row and run `rv2v`.
-
-## Immediate execution order
-
-1. Re-run or re-review the unresolved current video rows:
-   - `v2v_case1`
-   - `v2v_case3`
-   - `v2v_case2` / `mv2v`
-2. Close the remaining distinct reference rows:
-   - `r2v_case2`
-   - `ads2v`
-3. Only after the 1.3B public matrix is current, decide whether larger Bernini rows are justified.
 
 ## Why this matters
 

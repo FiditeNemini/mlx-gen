@@ -518,8 +518,10 @@ mlxgen generate \
 
 Add one `--video source.mp4` to edit a source clip with the references, or use the video without
 references for prompt-guided V2V. Bernini is BF16-only: omit `--quantize`. It is also experimental:
-the tested shapes peaked at 9.45 GB on the 128 GB validation host, but every required visual-quality
-case failed. A completely cold selective download needs 18.36 GiB free including headroom. See
+the tested shapes peaked at 9.45 GB on the 128 GB validation host. Seven official public 1.3B rows
+plus `ads2v` at mid profile are qualitatively accepted with committed proof (full prompts and
+contact sheets). The historical schema-v3 bundle still fails at the bounded 17-frame profile. A
+completely cold selective download needs 18.36 GiB free including headroom. See
 [Bernini-R 1.3B](bernini.md) for exact role, memory, failure, and proof boundaries.
 For Bernini source-video modes, `--width`/`--height` are a source-aspect area target and
 `--frames` is a maximum; inspect output metadata for the resolved canvas and actual frame count.

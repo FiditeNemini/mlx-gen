@@ -1,7 +1,7 @@
 {
   "source_revision": "2d2b4591ac053ec25c6371b01a5a6746679e5793",
   "source_root": "https://github.com/bytedance/Bernini",
-  "scope_date": "2026-08-10",
+  "scope_date": "2026-08-12",
   "model_scope": "ByteDance/Bernini-R-1.3B-Diffusers public official examples",
   "cases": [
     {

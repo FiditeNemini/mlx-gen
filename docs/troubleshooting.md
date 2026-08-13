@@ -198,11 +198,14 @@ invalid overexposed latent-like output; nominal q8 quantized zero Bernini transf
 layers while labeling the run q8. Current MLX-Gen releases reject both instead of silently
 returning a broken or misleading result.
 
-The BF16 route itself is experimental. Current schema-v3 evidence fails visual quality across
-R2V, RV2V, alternate-reference A/B, and V2V. Weak motion, missed references, four-frame cadence
-jumps, or corruption from roughly frame 13 are known blockers, not settings that the current docs
-claim to solve. Preserve the MP4 and metadata and compare them with the paged proof bundle before
-assuming a successful exit means a successful edit.
+The BF16 route itself is experimental and not yet promoted. Seven official public 1.3B example rows
+plus `ads2v` at mid profile are qualitatively accepted with committed proof in
+`docs/assets/validation/bernini-r-1.3b-2026-08-11/`. The historical schema-v3 bundle from 2026-08-04
+still fails visual quality at the bounded 17-frame profile. Weak motion, missed references,
+four-frame cadence jumps, or corruption from roughly frame 13 are known blockers on that historical
+profile, not settings that the current docs claim to solve. Preserve the MP4 and metadata and
+compare them with the committed parity bundle before assuming a successful exit means a successful
+edit.
 
 For a memory-constrained host, keep `--low-ram` enabled. The bounded model-backed proof peaked at
 9.45 GB whole-process physical footprint on the 128 GB validation host, which predicts a useful

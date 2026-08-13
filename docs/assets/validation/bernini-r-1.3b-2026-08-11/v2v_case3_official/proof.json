@@ -1,0 +1,53 @@
+{
+  "id": "v2v_case3",
+  "title": "V2V robot to robotic dog",
+  "task_type": "v2v",
+  "prompt": "Replace the white humanoid robot standing on the dark reflective surface with a sleek robotic dog in the same position and scale, preserving the dark studio background, lighting, reflections, and camera framing. The new subject should be a futuristic four-legged mechanical dog with a white outer shell, black joint details, subtle glowing eyes, and articulated metal legs. Match the original motion by having the robotic dog perform a comparable animated pose sequence, with natural mechanical movement and consistent shadows and reflections on the floor.",
+  "case_json": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case3.json",
+  "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case3_out.mp4",
+  "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/v2v_case3.mp4",
+  "metadata": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/v2v_case3.metadata.json",
+  "image_path": null,
+  "video_path": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/source_case3.mp4",
+  "reference_video_paths": [],
+  "reference_image_paths": [],
+  "expected": [
+    "The humanoid robot is replaced by a robotic dog.",
+    "The dog stays in the same position and scale.",
+    "Studio lighting, reflections, and camera framing stay consistent."
+  ],
+  "requested_width": 848,
+  "requested_height": 480,
+  "requested_frames": 81,
+  "requested_fps": 16,
+  "width": 848,
+  "height": 480,
+  "frames": 81,
+  "fps": 16,
+  "seed": 42,
+  "initial_noise_path": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/initial_noise.npy",
+  "initial_noise_shape": [
+    1,
+    16,
+    21,
+    60,
+    106
+  ],
+  "initial_noise_source": "torch-cpu-manual-seed",
+  "steps": 40,
+  "guidance_mode": "v2v_apg",
+  "low_ram": true,
+  "clear_cache_each_step": true,
+  "clear_cache_each_transformer_block": false,
+  "release_denoisers_before_decode": true,
+  "mlx_cache_limit_gb": null,
+  "input_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/input_sheet.png",
+  "official_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/official_sheet.png",
+  "mlx_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3/mlx_sheet.png",
+  "reproduce_command": "uv run python validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/run_official_public_cases.py --official-root /private/tmp/bernini_official_20260810 --out-dir validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2 --case v2v_case3 --seed 42 --steps 40 --max-condition-size 848 --low-ram",
+  "bundle_id": "v2v_case3_official",
+  "bundled_artifacts": {
+    "output": "v2v_case3.mp4",
+    "metadata": "v2v_case3.metadata.json"
+  }
+}

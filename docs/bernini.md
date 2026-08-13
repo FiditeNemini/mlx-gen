@@ -68,6 +68,40 @@ Internally, the Bernini runtime also accepts the official upstream `task_type` v
 faithfully. Those typed rows are part of the parity harness; the stable user-facing guide here
 remains focused on the documented video workflows above.
 
+## Official Public 1.3B Examples
+
+Committed proof for every upstream public example row lives in the
+[official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md). Each case
+directory contains the **full upstream prompt**, input/official/mlx contact sheets, reproduce
+command, generated artifact, and metadata when available. Row status follows the
+[official example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md).
+
+| Row | Upstream case | Status | Proof (prompt + sheets) |
+| --- | --- | --- | --- |
+| `t2i` | `assets/testcases/t2i/t2i.json` | Accepted | [t2i](assets/validation/bernini-r-1.3b-2026-08-11/t2i/README.md) |
+| `i2i` | `assets/testcases/i2i/i2i.json` | Accepted (minor wall-texture caveat) | [i2i](assets/validation/bernini-r-1.3b-2026-08-11/i2i/README.md) |
+| `t2v` | `assets/testcases/t2v/t2v.json` | Accepted | [t2v](assets/validation/bernini-r-1.3b-2026-08-11/t2v/README.md) |
+| `r2v` | `assets/testcases/r2v/r2v.json` | Accepted | [r2v](assets/validation/bernini-r-1.3b-2026-08-11/r2v/README.md) |
+| `rv2v_case1` | `assets/testcases/rv2v/rv2v_case1.json` | Accepted (shirt-closure caveat) | [rv2v_case1](assets/validation/bernini-r-1.3b-2026-08-11/rv2v_case1/README.md) |
+| `v2v_case1` | `assets/testcases/v2v/v2v_case1.json` | Accepted | [v2v_case1](assets/validation/bernini-r-1.3b-2026-08-11/v2v_case1/README.md) |
+| `mv2v` | `assets/testcases/v2v/v2v_case2.json` | Accepted (three named caveats) | [mv2v](assets/validation/bernini-r-1.3b-2026-08-11/mv2v/README.md) |
+| `ads2v` | `assets/testcases/rv2v/rv2v_case2.json` | Accepted at mid profile | [ads2v](assets/validation/bernini-r-1.3b-2026-08-11/ads2v/README.md) |
+
+Oracle-dispositioned rows (official recipe fails at 1.3B in both implementations; tuned recipes
+recover substantially):
+
+| Row | Recipe | Status | Proof (prompt + sheets) |
+| --- | --- | --- | --- |
+| `r2v_case2` | Official (`r2v_case2.json`) | Partial at official recipe | [r2v_case2_official](assets/validation/bernini-r-1.3b-2026-08-11/r2v_case2_official/README.md) |
+| `r2v_case2` | Tuned (`--reference-guidance 6.0`, seed 43) | Substantial recovery | [r2v_case2_tuned](assets/validation/bernini-r-1.3b-2026-08-11/r2v_case2_tuned/README.md) |
+| `v2v_case3` | Official (`v2v_case3.json`) | Official recipe fails at 1.3B | [v2v_case3_official](assets/validation/bernini-r-1.3b-2026-08-11/v2v_case3_official/README.md) |
+| `v2v_case3` | Recovery (`mv2v` task prefix, guidance 5.0) | Quadruped dog outcome | [v2v_case3_mv2vprefix](assets/validation/bernini-r-1.3b-2026-08-11/v2v_case3_mv2vprefix/README.md) |
+
+The `r2v_case2` upstream prompt is 571+ UMT5 tokens and truncates to 512 on both engines. The
+`ads2v` accepted proof uses the mid profile (`480` condition cap, `61` frames, `24` fps) because
+the official `1280x672/121f` recipe is computationally intractable on the validation host for
+either implementation.
+
 ## Download And Capacity
 
 Download the two pinned, factored sources explicitly:
@@ -85,18 +119,18 @@ BF16), VAE, and the renderer transformer — from the pinned
 `ByteDance/Bernini-R-1.3B-Diffusers` revision. Using the Bernini repository's own text encoder
 (not the byte-different Wan-VACE copy) is required for exact official-example parity; this was
 verified at the tensor level against the official implementation on 2026-08-12. A completely
-cold download is approximately 26.9 GiB of files plus 2 GiB of free-space headroom in the
+cold download is approximately 16.36 GiB of selected files plus 2 GiB of free-space headroom in the
 preflight. Existing complete pinned sources are not counted again.
 
 On the 128 GB validation host, the bounded low-RAM profiles peaked at 9.45 GB whole-process
 physical footprint. A separate 33-frame, eight-reference 848-condition structural probe peaked at
 8.17 GB, so those tested shapes fit inside an 18 GB memory envelope. This is not a direct 18 GB
-host measurement, and it does not make the outputs usable: the visual-quality gate still fails.
-The full 848x480, 81-frame, 40-step profile remains unmeasured.
+host measurement. Capacity is separate from the official-example acceptance status above.
 
 ## Generate From References
 
-The following commands are diagnostic examples, not known-good quality recipes.
+The following commands are diagnostic bounded-profile examples. For official full-profile prompts
+and settings, use the [official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md).
 
 Reference order is semantic. The prompt names the first image `image0`, the next `image1`, and so
 on. Keep each reference focused on the subject or property it is meant to contribute.
@@ -219,48 +253,36 @@ isolation.
 ## Proof And Known Limits
 
 The implementation passes scheduler/source-ID tests, APG edge cases, focused FP32/runtime-BF16
-transformer comparisons, VAE encode/decode comparisons, and framework regression tests. The older
-schema-v3 proof bundle below is still a failed historical release-quality artifact; it is no longer
-the whole story for current official-example status.
+transformer comparisons, VAE encode/decode comparisons, and framework regression tests.
 
-The current accepted official public 1.3B rows are:
+### Current official-example evidence
 
-- `i2i`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/mlx_sheet.png`
-- `t2i`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/mlx_sheet.png`
-- `t2v`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v/mlx_sheet.png`
-- `r2v`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/mlx_sheet.png`
-- `rv2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1/mlx_sheet.png`
-  - accepted with the narrow caveat that the shirt sits more closed than the official output, so
-    less of the undershirt remains visible
-- `v2v_case1`: `validation_outputs/bernini_r_1_3b_2026_08_11/doc_preview_v2v_case1/v2v_case1/mlx_sheet.png`
-- `mv2v`: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mlx_sheet.png`
-  - accepted with the three caveats listed above; the reduced-domain oracle parity proof lives in
-    `validation_outputs/bernini_r_1_3b_2026_08_11/oracle_official_1_3b/`
+The committed
+[official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md) holds every
+accepted and dispositioned row with full prompts, contact sheets, and generated artifacts. Use the
+[official example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md)
+for the row-by-row status, caveats, and oracle methodology.
 
-The remaining rows are dispositioned by the official-code 1.3B oracle rather than left open:
+### Historical schema-v3 release bundle (FAIL)
 
-- `ads2v`: accepted at mid profile — implementation parity proven
-  (`validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_ads2v_reduced_twin/` vs
-  `oracle_official_1_3b/ads2v_reduced_cpu_f32/`) and the task outcome demonstrated through the
-  ad's logo reveal (`validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/`); the
-  official `1280x672/121f` recipe is computationally intractable on this host for either
-  implementation and is unverified scope, not a failure
-- `v2v_case3`, `r2v_case2`: fail at their official recipes in both implementations
-  (oracle-proven at matched settings); documented non-official recipes recover the quadruped
-  dog (`exp_v2v_case3_mv2vprefix/`) and most reference properties
-  (`exp_r2v_case2_full_refg6_s43/`)
+The older
+[schema-v3 validation bundle](assets/validation/bernini-r-1.3b-2026-08-04/README.md) from
+2026-08-04 remains historically accurate but superseded for official-example status. It used a
+bounded 17-frame/20-step profile and failed visual quality on every required row:
 
-The proof uses 5K-wide lossless-nearest MLX sheets, ordered 5K pages for long timelines, exact
-conditioned-source timelines, localized-change transition pairs, hashes, playable MP4s, and a
-review record bound to every artifact:
-
-- [Bernini validation bundle](assets/validation/bernini-r-1.3b-2026-08-04/README.md)
 - [Summary contact sheet](assets/validation/bernini-r-1.3b-2026-08-04/bundle/output_summary_contact_sheet.png)
 - [Role-control contact sheet](assets/validation/bernini-r-1.3b-2026-08-04/bundle/role_control_contact_sheet.png)
 - [Eight-reference MP4](assets/validation/bernini-r-1.3b-2026-08-04/bundle/cases/run_1/r2v_eight_reference/r2v_eight_reference_17f.mp4)
 - [Reference-guided edit MP4](assets/validation/bernini-r-1.3b-2026-08-04/bundle/cases/run_1/rv2v_garment/rv2v_garment_17f.mp4)
 - [Prompt-guided edit MP4](assets/validation/bernini-r-1.3b-2026-08-04/bundle/cases/run_1/v2v_snowman/v2v_snowman_17f.mp4)
 - [Quantization comparison](assets/validation/bernini-r-1.3b-2026-08-04/bundle/diagnostics/quantization_comparison.png)
+
+That bundle found nearly static motion, missed reference properties, cadence-aligned
+discontinuities, and severe corruption across frames 13-16 in the garment and snowman cases.
+Controlled diagnostics did not rescue the claim: 40 steps retained the 17-frame snowman corruption;
+33-frame garment and snowman clips avoided terminal collapse but remained semantically incomplete;
+and the exact-upstream-prompt 33-frame eight-reference run collapsed from about frame 13 after
+571-token truncation.
 
 The failed experimental route rows are discoverable through the framework validation registry:
 
@@ -270,16 +292,13 @@ mlxgen validation --model bernini-r-1.3b
 
 That command returns `bernini_r_1_3b_2026_08_04` with overall `FAIL`, the exact BF16 package
 identity, route-scoped failure notes, upstream input references, and direct paths to the three
-model-backed route MP4s.
+model-backed route MP4s from the historical schema-v3 bundle.
 
 The original committed media profile uses 17 frames, 20 steps, reduced canvases, and reduced
-condition sizes. Full-frame inspection found nearly static motion, missed reference properties,
-cadence-aligned discontinuities, and severe corruption across frames 13-16 in the garment and
-snowman cases. That historical bundle is still useful for release-gate provenance, but the later
-official public-case reruns supersede it for the accepted `i2i`, `t2i`, `t2v`, `r2v`, and
-`rv2v_case1` rows.
+condition sizes. Later official-public-case reruns at full profile supersede it for the accepted
+rows listed in the parity matrix and parity bundle above.
 
-Controlled diagnostics did not rescue the claim:
+Controlled diagnostics on the historical bundle did not rescue the claim:
 
 - 40 steps retained the 17-frame snowman corruption;
 - 33-frame garment and snowman clips avoided the same terminal collapse but remained semantically

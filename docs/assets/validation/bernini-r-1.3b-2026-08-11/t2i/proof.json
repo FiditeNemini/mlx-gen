@@ -1,0 +1,48 @@
+{
+  "id": "t2i",
+  "title": "T2I Van Gogh corgi",
+  "task_type": "t2i",
+  "case_json": "/private/tmp/bernini_official_20260810/assets/testcases/t2i/t2i.json",
+  "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/t2i/t2i_out.png",
+  "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/t2i.png",
+  "metadata": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/t2i.metadata.json",
+  "image_path": null,
+  "video_path": null,
+  "reference_video_paths": [],
+  "reference_image_paths": [],
+  "expected": [
+    "A single image, not a video.",
+    "A corgi mid-leap toward a red ball.",
+    "Strong Van Gogh-style brushstroke texture and swirling sky."
+  ],
+  "width": 848,
+  "height": 480,
+  "frames": 1,
+  "fps": 16,
+  "seed": 42,
+  "initial_noise_path": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/initial_noise.npy",
+  "initial_noise_shape": [
+    1,
+    16,
+    1,
+    60,
+    106
+  ],
+  "initial_noise_source": "torch-cpu-manual-seed",
+  "steps": 40,
+  "guidance_mode": "t2v_apg",
+  "input_sheet": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/input_sheet.png",
+  "official_sheet": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/official_sheet.png",
+  "mlx_sheet": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i/mlx_sheet.png",
+  "observed_result": [
+    "A single corgi image is generated with the red ball and strong Van Gogh-style brushstroke texture.",
+    "The main subject, color palette, and swirling-sky style match the official task outcome.",
+    "Manual review on Tuesday, August 11, 2026 accepted this row as working."
+  ],
+  "prompt": "Van Gogh style painting. A cute, happy Corgi with fluffy golden and white fur, short sturdy legs, and a wide open mouth with its pink tongue hanging out. The dog is captured mid-leap above a grassy park, frozen in the air as it reaches toward a small red ball suspended just ahead of it, its large ears swept backward. The background features thick, expressive, swirling oil brushstrokes. The sky above is a vibrant, clear deep blue filled with swirling patterns, transitioning into bright orange and yellow sunset hues near the horizon. Green trees with twisted trunks and tall yellow flowers lean to one side as if caught in the wind.",
+  "reproduce_command": "uv run python validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/run_official_public_cases.py --official-root /private/tmp/bernini_official_20260810 --out-dir validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i --case t2i --seed 42 --steps 40",
+  "bundled_artifacts": {
+    "output": "t2i.png",
+    "metadata": "t2i.metadata.json"
+  }
+}

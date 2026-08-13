@@ -68,8 +68,10 @@ The main capabilities are:
   source-only prompt-guided video editing. The route uses pinned factored Wan/Bernini components,
   supports the unified CLI and Python runtime, and is BF16-only because model-backed validation
   rejected generic Wan q4 and exposed nominal q8 as a no-op. **Experimental:** component/runtime
-  checks pass, but the schema-v3 visual release gate fails all required cases because of weak
-  motion, missed reference fidelity, cadence seams, and tail corruption;
+  checks pass, and seven official public 1.3B example rows plus `ads2v` at mid profile are
+  qualitatively accepted with committed proof (full prompts and contact sheets in
+  `docs/assets/validation/bernini-r-1.3b-2026-08-11/`). The historical schema-v3 release bundle
+  still fails at the bounded 17-frame profile;
 - SeedVR2 image and video restoration through `mlxgen upscale`, with official 3B/7B source
   support including the dedicated `seedvr2-7b-sharp` route, published q8/q4 packages,
   shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, streamed restore for

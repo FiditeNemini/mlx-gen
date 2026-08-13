@@ -26,6 +26,14 @@ class BerniniOfficialParityBundle:
     )
     COPY_FILES = ("README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png")
     REQUIRED_PROOF_FILES = ("proof.json", "README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png")
+    # Oracle-dispositioned rows and tuned recovery recipes that sit outside the public
+    # 1.3B model-card manifest but are documented in the parity matrix.
+    DISPOSITIONED_VARIANTS: tuple[tuple[str, str], ...] = (
+        ("r2v_case2_official", "validation_outputs/bernini_r_1_3b_2026_08_11/head_r2v_case2_full_v2/r2v_case2"),
+        ("r2v_case2_tuned", "validation_outputs/bernini_r_1_3b_2026_08_11/exp_r2v_case2_full_refg6_s43/r2v_case2"),
+        ("v2v_case3_official", "validation_outputs/bernini_r_1_3b_2026_08_11/head_v2v_case3_full_v2/v2v_case3"),
+        ("v2v_case3_mv2vprefix", "validation_outputs/bernini_r_1_3b_2026_08_11/exp_v2v_case3_mv2vprefix"),
+    )
 
     @staticmethod
     def main() -> None:
@@ -86,6 +94,19 @@ class BerniniOfficialParityBundle:
             manifest["cases"].append(copied_case)
             copied_cases.append(copied_case)
 
+        if args.include_dispositioned:
+            for bundle_id, source_rel in BerniniOfficialParityBundle.DISPOSITIONED_VARIANTS:
+                copied_case = BerniniOfficialParityBundle._copy_dispositioned_variant(
+                    workspace_root=workspace_root,
+                    output_dir=output_dir,
+                    bundle_id=bundle_id,
+                    source_rel=source_rel,
+                )
+                if copied_case is None:
+                    continue
+                manifest["cases"].append(copied_case)
+                copied_cases.append(copied_case)
+
         (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         report = BerniniOfficialParityBundle._build_report(
             selected_case_ids=selected_case_ids,
@@ -114,6 +135,11 @@ class BerniniOfficialParityBundle:
             "--output-dir",
             type=Path,
             default=Path("docs/assets/validation/bernini-r-1.3b-2026-08-11"),
+        )
+        parser.add_argument(
+            "--include-dispositioned",
+            action="store_true",
+            help="Also export oracle-dispositioned rows and tuned recovery recipes.",
         )
         return parser.parse_args()
 
@@ -262,6 +288,128 @@ class BerniniOfficialParityBundle:
                 return candidate
         return None
 
+    @classmethod
+    def _copy_dispositioned_variant(
+        cls,
+        *,
+        workspace_root: Path,
+        output_dir: Path,
+        bundle_id: str,
+        source_rel: str,
+    ) -> dict[str, Any] | None:
+        source_dir = (workspace_root / source_rel).resolve()
+        if not source_dir.exists():
+            return None
+        case_target_dir = output_dir / bundle_id
+        case_target_dir.mkdir(parents=True, exist_ok=True)
+        proof_path = source_dir / "proof.json"
+        if proof_path.exists() and cls._is_complete_case_dir(source_dir):
+            proof = json.loads(proof_path.read_text())
+            for filename in cls.COPY_FILES:
+                source_path = source_dir / filename
+                if source_path.exists():
+                    shutil.copy2(source_path, case_target_dir / filename)
+            bundled_artifacts = cls._copy_case_artifacts(
+                workspace_root=workspace_root,
+                case_source_dir=source_dir,
+                case_target_dir=case_target_dir,
+                proof=proof,
+            )
+            proof_copy = dict(proof)
+            proof_copy["bundle_id"] = bundle_id
+            if bundled_artifacts:
+                proof_copy["bundled_artifacts"] = bundled_artifacts
+            (case_target_dir / "proof.json").write_text(json.dumps(proof_copy, indent=2) + "\n")
+            return {
+                "id": bundle_id,
+                "title": proof.get("title", bundle_id),
+                "task_type": proof.get("task_type"),
+                "source_dir": str(source_dir),
+                "bundle_dir": str(case_target_dir),
+                "output": proof.get("output"),
+                "official_output": proof.get("official_output"),
+                "observed_result": proof.get("observed_result"),
+                "bundle_output": bundled_artifacts.get("output"),
+                "bundle_metadata": bundled_artifacts.get("metadata"),
+            }
+        return cls._copy_sparse_mv2v_recovery_case(
+            workspace_root=workspace_root,
+            source_dir=source_dir,
+            case_target_dir=case_target_dir,
+            bundle_id=bundle_id,
+        )
+
+    @staticmethod
+    def _copy_sparse_mv2v_recovery_case(
+        *,
+        workspace_root: Path,
+        source_dir: Path,
+        case_target_dir: Path,
+        bundle_id: str,
+    ) -> dict[str, Any] | None:
+        mlx_sheet = source_dir / "mlx_sheet.png"
+        output_candidates = sorted(source_dir.glob("*.mp4"))
+        metadata_candidates = sorted(source_dir.glob("*.metadata.json"))
+        if not mlx_sheet.exists() or not output_candidates:
+            return None
+        shutil.copy2(mlx_sheet, case_target_dir / "mlx_sheet.png")
+        output_path = output_candidates[0]
+        shutil.copy2(output_path, case_target_dir / output_path.name)
+        metadata_path = metadata_candidates[0] if metadata_candidates else None
+        if metadata_path is not None:
+            shutil.copy2(metadata_path, case_target_dir / metadata_path.name)
+            metadata = json.loads(metadata_path.read_text())
+        else:
+            metadata = {}
+        prompt = str(metadata.get("prompt") or "")
+        proof = {
+            "id": bundle_id,
+            "title": "V2V robot to robotic dog (mv2v-prefix recovery)",
+            "task_type": "mv2v",
+            "prompt": prompt,
+            "bundle_id": bundle_id,
+            "output": str(output_path.relative_to(workspace_root)),
+            "bundled_artifacts": {
+                "output": output_path.name,
+                "metadata": metadata_path.name if metadata_path is not None else None,
+            },
+        }
+        (case_target_dir / "proof.json").write_text(json.dumps(proof, indent=2) + "\n")
+        readme_lines = [
+            "# V2V robot to robotic dog (mv2v-prefix recovery)",
+            "",
+            "This row uses the official `mv2v` task prefix with text guidance `5.0` to recover the",
+            "quadruped robotic dog outcome that the official `v2v` recipe fails to produce at 1.3B.",
+            "",
+            "## Request",
+            "",
+            f"- task: `mv2v`",
+            f"- prompt: {prompt}",
+            "",
+            "## mlx-gen output",
+            "",
+            "![mlx-gen](mlx_sheet.png)",
+            "",
+            "## Artifacts",
+            "",
+            f"- output: `{output_path.name}`",
+        ]
+        if metadata_path is not None:
+            readme_lines.append(f"- metadata: `{metadata_path.name}`")
+        (case_target_dir / "README.md").write_text("\n".join(readme_lines) + "\n")
+        return {
+            "id": bundle_id,
+            "title": proof["title"],
+            "task_type": proof["task_type"],
+            "source_dir": str(source_dir),
+            "bundle_dir": str(case_target_dir),
+            "output": proof.get("output"),
+            "official_output": None,
+            "observed_result": None,
+            "bundle_output": output_path.name,
+            "bundle_metadata": metadata_path.name if metadata_path is not None else None,
+        }
+
     @staticmethod
     def _write_readme(*, output_dir: Path, copied_cases: list[dict[str, Any]]) -> None:
         lines = [
@@ -271,6 +419,9 @@ class BerniniOfficialParityBundle:
             "Each case directory contains the human-readable case README, prompt, expected result, actual result,",
             "reproduce command, high-resolution input/official/mlx-gen contact sheets, and the generated mlx artifact",
             "(video or image) with metadata when available.",
+            "",
+            "Dispositioned rows (`r2v_case2_*`, `v2v_case3_*`) document oracle-proven 1.3B limits and the",
+            "tuned recovery recipes described in the parity matrix.",
             "",
             "## Included rows",
             "",

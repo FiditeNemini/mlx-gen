@@ -1,0 +1,248 @@
+{
+    "metadata_schema_version": 2,
+    "mflux_version": "0.25.0",
+    "model": "ByteDance/Bernini-R-1.3B-Diffusers",
+    "base_model": "None",
+    "task": "text-to-video",
+    "seed": 42,
+    "steps": 40,
+    "guidance": 4.0,
+    "guidance_2": null,
+    "flow_shift": 5.0,
+    "solver": "unipc",
+    "height": 480,
+    "width": 848,
+    "requested_height": 480,
+    "requested_width": 848,
+    "canvas_policy": null,
+    "resize_mode": null,
+    "source_image_height": null,
+    "source_image_width": null,
+    "frames": 81,
+    "fps": 16,
+    "duration_seconds": 5.062,
+    "precision": "mlx.core.bfloat16",
+    "quantize": null,
+    "generation_time_seconds": 1249.96,
+    "created_at": "2026-08-10T23:28:03.489256",
+    "image_path": null,
+    "video_path": null,
+    "prompt": "The marble statue from image0, wearing the black T-shirt from image2, the tropical floral shorts from image3, and the pink cat-ear headphones from image1, sits on the wooden bench in the beach sunset setting from image4, facing the camera and gently bobbing and swaying to the music in a medium shot. Generate a video where the marble statue from image0 is the main subject, with the same muscular stone body, curly sculpted hair, and classical carved appearance, now humorously dressed in the black short-sleeve T-shirt from image2 with the white word \"bernini\" across the chest, the bright blue tropical floral shorts from image3 with large red, orange, and yellow flowers and green leaves, and the pink over-ear cat-ear headphones from image1 with soft padded earcups and glowing cat-face details on the sides. He is seated on the wooden bench from image4, centered in the frame and facing directly toward the camera in a medium shot. Keep the environment unchanged from image4: a seaside promenade with the wooden bench in the foreground, sandy beach and calm ocean behind it, palm trees rising on the left, low shrubs and flowers along the walkway, and a vivid sunset sky glowing with warm orange, pink, and purple tones as the sun sits low near the horizon. At the start, the statue is already seated upright on the bench, facing the camera, with his body proportions and physique unchanged from image0 and the beach scene composition preserved from image4. Then he begins moving subtly and rhythmically as if listening to music through the headphones, gently nodding his head, swaying his upper body slightly, and rocking side to side in a natural music-driven motion. After that, he continues the relaxed groove with small head tilts, light shoulder movement, and a steady seated bounce, always remaining seated on the bench and facing the camera. The motion should feel smooth, playful, and realistic, without exaggerated deformation, while keeping the bench, sunset beach background, and overall scene from image4 unchanged.",
+    "negative_prompt": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a\uff0c\u5012\u7740\u8d70",
+    "lora_paths": null,
+    "lora_scales": null,
+    "runtime_memory": {
+        "phase": "video-save-complete",
+        "timestamp": 1786397779.197201,
+        "pid": 11315,
+        "platform": "macOS-26.3-arm64-arm-64bit",
+        "synchronized": true,
+        "mlx_active_memory_bytes": 306053864,
+        "mlx_peak_memory_bytes": 7997442344,
+        "mlx_cache_memory_bytes": 431227008,
+        "process_rss_bytes": 1224425472,
+        "process_peak_rss_bytes": 1373159424,
+        "darwin_physical_footprint_bytes": 1783089072,
+        "errors": {},
+        "darwin_peak_physical_footprint_bytes": 16596797480
+    },
+    "bernini_guidance_mode": "r2v_apg",
+    "bernini_renderer_only": true,
+    "mlx_version": "0.31.0",
+    "python_version": "3.10.20",
+    "python_implementation": "CPython",
+    "runtime_platform": "macOS-26.3-arm64-arm-64bit",
+    "numpy_version": "2.2.6",
+    "python_executable": "/Users/albou/projects/gh/mlx-gen/.venv/bin/python3",
+    "text_encoder_precision_policy_id": "bernini-umt5-official-v2",
+    "transformer_precision_policy_id": "bernini-transformer-official-keep-set-v5",
+    "transformer_default_weight_precision": "bfloat16",
+    "transformer_fp32_weight_keys": [
+        "scale_shift_table"
+    ],
+    "transformer_fp32_weight_prefixes": [
+        "condition_embedder.time_embedder."
+    ],
+    "transformer_fp32_weight_fragments": [
+        ".scale_shift_table",
+        ".norm1.",
+        ".norm2.",
+        ".norm3."
+    ],
+    "source_conditioning": "independent-vae-packed-segments",
+    "source_video_warm_start": false,
+    "branch_evaluation": "sequential",
+    "text_guidance": 4.0,
+    "reference_guidance": 4.5,
+    "source_guidance": 1.25,
+    "apg_eta": 0.5,
+    "apg_norm_threshold": 50.0,
+    "apg_momentum": 0.0,
+    "active_guidance_parameters": [
+        "text_guidance",
+        "reference_guidance",
+        "apg_eta",
+        "apg_norm_threshold",
+        "apg_momentum"
+    ],
+    "inactive_guidance_parameters": [
+        "source_guidance"
+    ],
+    "apg_reduction_axes": [
+        1,
+        3,
+        4
+    ],
+    "apg_accumulator_precision": "float64-projection",
+    "apg_reference_accumulator_precision": "float64",
+    "system_prompt": "You are a helpful assistant specialized in subject-to-video generation.",
+    "effective_prompt": "You are a helpful assistant specialized in subject-to-video generation.The marble statue from image0, wearing the black T-shirt from image2, the tropical floral shorts from image3, and the pink cat-ear headphones from image1, sits on the wooden bench in the beach sunset setting from image4, facing the camera and gently bobbing and swaying to the music in a medium shot. Generate a video where the marble statue from image0 is the main subject, with the same muscular stone body, curly sculpted hair, and classical carved appearance, now humorously dressed in the black short-sleeve T-shirt from image2 with the white word \"bernini\" across the chest, the bright blue tropical floral shorts from image3 with large red, orange, and yellow flowers and green leaves, and the pink over-ear cat-ear headphones from image1 with soft padded earcups and glowing cat-face details on the sides. He is seated on the wooden bench from image4, centered in the frame and facing directly toward the camera in a medium shot. Keep the environment unchanged from image4: a seaside promenade with the wooden bench in the foreground, sandy beach and calm ocean behind it, palm trees rising on the left, low shrubs and flowers along the walkway, and a vivid sunset sky glowing with warm orange, pink, and purple tones as the sun sits low near the horizon. At the start, the statue is already seated upright on the bench, facing the camera, with his body proportions and physique unchanged from image0 and the beach scene composition preserved from image4. Then he begins moving subtly and rhythmically as if listening to music through the headphones, gently nodding his head, swaying his upper body slightly, and rocking side to side in a natural music-driven motion. After that, he continues the relaxed groove with small head tilts, light shoulder movement, and a steady seated bounce, always remaining seated on the bench and facing the camera. The motion should feel smooth, playful, and realistic, without exaggerated deformation, while keeping the bench, sunset beach background, and overall scene from image4 unchanged.",
+    "bernini_task_type": "r2v",
+    "unipc_flow_sigma_schedule": "diffusers-0.35.2",
+    "reference_image_paths": [
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img0.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img1.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img2.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img3.png",
+        "/private/tmp/bernini_official_20260810/assets/testcases/r2v/source_img4.png"
+    ],
+    "reference_image_count": 5,
+    "reference_video_paths": [],
+    "reference_video_count": 0,
+    "condition_source_ids": [
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0
+    ],
+    "condition_latent_shapes": [
+        [
+            1,
+            16,
+            1,
+            106,
+            76
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            106,
+            106
+        ],
+        [
+            1,
+            16,
+            1,
+            80,
+            106
+        ]
+    ],
+    "max_condition_size": 848,
+    "condition_resize_backend": "pillow-bicubic",
+    "component_source_provenance": {
+        "text_encoder": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "base",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        },
+        "tokenizer": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "base",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        },
+        "vae": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "base",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        },
+        "transformer": {
+            "source": "ByteDance/Bernini-R-1.3B-Diffusers",
+            "source_role": "transformer",
+            "revision": "ff4c5d4d2d31365c2ffeb30e9753065ee18f58ce"
+        }
+    },
+    "factored_component_sources": true,
+    "low_ram": true,
+    "vae_low_memory_policy_active": true,
+    "clear_cache_each_transformer_block": false,
+    "release_denoisers_before_decode": true,
+    "vae_feature_cache_policy_id": "wan-compact-feature-cache-v1",
+    "vae_encode_cache_materialization": "eager-contiguous-per-slice",
+    "vae_decode_cache_materialization": "eager-contiguous-per-slice",
+    "vae_spatial_tiling": true,
+    "vae_spatial_tiling_policy_id": "wan21-diffusers-0.35.2-256x256-stride192-v1",
+    "wan_decode_mode": "bounded_tile_major_spatial_vae",
+    "output_height": 480,
+    "output_width": 848,
+    "output_frames": 81,
+    "reference_video_pixel_shapes": [],
+    "reference_video_metadata": [],
+    "reference_pixel_shapes": [
+        [
+            1,
+            3,
+            1,
+            848,
+            608
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            848,
+            848
+        ],
+        [
+            1,
+            3,
+            1,
+            640,
+            848
+        ]
+    ],
+    "video_health": {
+        "file": {
+            "source": "/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v/r2v.mp4",
+            "frame_count": 81,
+            "width": 848,
+            "height": 480,
+            "fps": 16.0,
+            "luma_min": 0.0,
+            "luma_max": 255.0,
+            "luma_mean": 101.08508931854625,
+            "mean_temporal_delta": 4.088551659882069
+        }
+    },
+    "save_time_seconds": 495.61,
+    "total_generation_time_seconds": 1745.57
+}

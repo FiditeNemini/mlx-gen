@@ -1,0 +1,48 @@
+{
+  "id": "i2i",
+  "title": "I2I bicycle removal",
+  "task_type": "i2i",
+  "case_json": "/private/tmp/bernini_official_20260810/assets/testcases/i2i/i2i.json",
+  "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/i2i/i2i_out.png",
+  "output": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/i2i.png",
+  "metadata": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/i2i.metadata.json",
+  "image_path": "/private/tmp/bernini_official_20260810/assets/testcases/i2i/source.png",
+  "video_path": null,
+  "reference_video_paths": [],
+  "reference_image_paths": [],
+  "expected": [
+    "The bicycle is removed.",
+    "Window frame, wall, and ground continue cleanly through the removed region.",
+    "Everything else in the scene stays unchanged."
+  ],
+  "width": 848,
+  "height": 848,
+  "frames": 1,
+  "fps": 16,
+  "seed": 42,
+  "initial_noise_path": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/initial_noise.npy",
+  "initial_noise_shape": [
+    1,
+    16,
+    1,
+    106,
+    106
+  ],
+  "initial_noise_source": "torch-cpu-manual-seed",
+  "steps": 40,
+  "guidance_mode": "v2v",
+  "input_sheet": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/input_sheet.png",
+  "official_sheet": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/official_sheet.png",
+  "mlx_sheet": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i/mlx_sheet.png",
+  "observed_result": [
+    "The bicycle is removed cleanly from the foreground.",
+    "The window frame, wall, and ground continue plausibly through the removed area.",
+    "Manual review on Tuesday, August 11, 2026 accepted this row as working, with a minor caveat that the wall texture reads slightly more patterned than the official image."
+  ],
+  "prompt": "Delete the bicycle parked in front of the window. Fill in the area behind it with the continuation of the window frame, wall, and ground that surround it, matching the existing perspective, lighting direction, and shadow softness so the removal is seamless. The window itself, the wall, the ground, and all other objects in the scene remain completely unchanged.",
+  "reproduce_command": "uv run python validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/run_official_public_cases.py --official-root /private/tmp/bernini_official_20260810 --out-dir validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i --case i2i --seed 42 --steps 40",
+  "bundled_artifacts": {
+    "output": "i2i.png",
+    "metadata": "i2i.metadata.json"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "id": "mv2v",
+  "title": "MV2V crouching beside dog",
+  "task_type": "mv2v",
+  "prompt": "Change the person's motion so that the person crouches down naturally beside the dog, with bent knees and a lowered body posture instead of remaining bent over from standing, while preserving the same person, black winter jacket, black pants, boots, position on the right side of the frame, interaction with the seated dog, camera framing, outdoor lighting, background, ground texture, shadows, and all other scene elements unchanged. A clear daytime mountain landscape remains in the background with a bright blue sky, snow-covered peaks, distant fields and houses, and a grassy patch with scattered snow in the foreground; the black, white, and gray dog stays seated near the center-left facing the person, while the person on the right is now squatting close to the dog at a similar distance, leaning slightly forward to interact, with realistic body proportions, natural balance, and consistent contact with the ground, and the overall video motion stays smooth and realistic.",
+  "case_json": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case2.json",
+  "official_output": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case2_out.mp4",
+  "output": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mv2v.mp4",
+  "metadata": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mv2v.metadata.json",
+  "image_path": null,
+  "video_path": "/private/tmp/bernini_official_20260810/assets/testcases/v2v/source_case2.mp4",
+  "reference_video_paths": [],
+  "reference_image_paths": [],
+  "expected": [
+    "The same person and dog stay in the same scene.",
+    "The person crouches down instead of staying bent over standing.",
+    "Background, lighting, and framing stay consistent."
+  ],
+  "requested_width": 848,
+  "requested_height": 480,
+  "requested_frames": 81,
+  "requested_fps": 16,
+  "width": 848,
+  "height": 480,
+  "frames": 81,
+  "fps": 16,
+  "seed": 42,
+  "initial_noise_path": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/initial_noise.npy",
+  "initial_noise_shape": [
+    1,
+    16,
+    21,
+    60,
+    106
+  ],
+  "initial_noise_source": "torch-cpu-manual-seed",
+  "steps": 40,
+  "guidance_mode": "v2v_apg",
+  "low_ram": true,
+  "clear_cache_each_step": true,
+  "clear_cache_each_transformer_block": false,
+  "release_denoisers_before_decode": true,
+  "mlx_cache_limit_gb": null,
+  "input_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/input_sheet.png",
+  "official_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/official_sheet.png",
+  "mlx_sheet": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mlx_sheet.png",
+  "reproduce_command": "uv run python validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/run_official_public_cases.py --official-root /private/tmp/bernini_official_20260810 --out-dir validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2 --case mv2v --seed 42 --steps 40 --max-condition-size 848 --low-ram",
+  "bundled_artifacts": {
+    "output": "mv2v.mp4",
+    "metadata": "mv2v.metadata.json"
+  }
+}

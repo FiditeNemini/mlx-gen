@@ -343,9 +343,9 @@ Pass `video_path=...` as well for RV2V, or pass a video without references for V
 without `quantize`; Bernini is BF16-only. It rejects LoRA and the ordinary Wan image/strength/mask/
 continuation controls. Applications can inspect `bernini.reference-video`,
 `bernini.reference-video-edit`, and `bernini.video-edit` through the same capability planner before
-loading weights. These capabilities advertise executable experimental routes, not a visual-quality
-pass; the current validation profile is `FAIL`. See [Bernini-R 1.3B](bernini.md) for the exact input,
-memory, and failure contract.
+loading weights. These capabilities advertise executable experimental routes, not a production
+promotion; see the committed official parity bundle and [Bernini-R 1.3B](bernini.md) for the exact
+input, memory, and failure contract.
 Set `release_denoisers_before_decode=True` only for a one-shot low-memory call: it makes that
 renderer instance unusable for a second generation. The unified CLI applies it only to single-seed
 low-RAM jobs.
