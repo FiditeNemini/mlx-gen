@@ -21,7 +21,7 @@
 - `docs/reframe-outpaint.md`: reframe/outpaint workflows, exact commands, the mixed June 8 profile, the current FLUX.2 Klein base source-model starship proof, and the related validation profile ids.
 - `docs/lora.md`: route-specific LoRA capability fields, explicit adapter download, strict scale matching, exact adapter/base-model compatibility, source/no-LoRA/with-LoRA validation, exact public proof rows for current Qwen, Z-Image, FLUX.2, ERNIE, and Wan routes, including base Qwen latent, the exact `AbstractFramework/z-image-turbo-8bit` latent children's-drawing row, Qwen 2511 multi-reference/reframe/outpaint, FLUX.2 Klein 9B multi-reference, FLUX.2 Klein base 4B outpaint, direct `lightx2v/Wan2.2-Lightning` download, and explicit guidance that the validated Lightning target is the MLX-Gen q8 package rather than an arbitrary external FP8 checkpoint.
 - `docs/wan-video.md`: practical Wan2.2 T2V/I2V guidance, plain and masked prompt-guided A14B video-to-video with the exact reproducible proof commands and included artifacts, output canvas and source mapping (`--canvas-policy`, `--resize-mode`), repeat-run and application performance options (prompt-embed disk cache, resident text encoder, health-check opt-out, opt-in compiled transformer, A14B inactive-expert release), broader A14B target size families, and `101`-frame, 20 fps M5 Max comparison clips for A14B and TI2V-5B.
-- `docs/bernini.md`: experimental Bernini-R 1.3B reference-to-video and video-edit routes, pinned factored BF16 setup, 18 GB capacity boundaries, the committed official public parity bundle with full prompts and contact sheets per upstream example row, and the historical schema-v3 proof that failed visual quality at the bounded 17-frame profile.
+- `docs/bernini.md`: experimental Bernini-R 1.3B reference-to-video and video-edit routes, pinned BF16 runtime setup and download sizes, the committed official public parity bundle with full prompts and contact sheets per upstream example row, and task-specific recipes for many-reference binding and structure-changing edits.
 - `docs/recommendations.md`: conservative model recommendations for `18 GB`, `24 GB`, `32 GB`, `64 GB`, and `128+ GB` Macs based on published MLX-Gen memory measurements.
 - `docs/examples/spaceship-snow.md`: complete model-backed workflow across T2I, I2I edit, multi-reference I2I, T2V A14B, and I2V A14B.
 - `docs/model-management.md`: explicit `download` and `prepare`, local packages, factored Bernini setup and disk preflight, matching Hugging Face handle resolution, and `DownloadRequiredError`.
@@ -462,11 +462,11 @@ Committed proof with **full upstream prompts and contact sheets** per row:
 `docs/assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md`.
 
 Accepted rows: `t2i`, `i2i`, `t2v`, `r2v`, `rv2v_case1`, `v2v_case1`, `mv2v` (three caveats),
-`ads2v` at mid profile. Oracle-dispositioned rows: `r2v_case2` and `v2v_case3` fail at their
-official recipes in both implementations; tuned recovery recipes are documented in the parity
-bundle (`r2v_case2_tuned`, `v2v_case3_mv2vprefix`).
+`ads2v` at mid profile. `r2v_case2` and `v2v_case3` need tuned settings for their best results;
+the recipes and worked examples are documented in `docs/bernini.md` (Task-Specific Recipes) and
+the parity bundle (`r2v_case2_tuned`, `v2v_case3_mv2vprefix`).
 
-Download the pinned, factored BF16 runtime set explicitly:
+Download the pinned model explicitly:
 
 ```sh
 mlxgen download --model bernini-r-1.3b
@@ -476,11 +476,11 @@ This exact catalog alias selects `ByteDance/Bernini-R-1.3B-Diffusers`. The main
 `ByteDance/Bernini-R` A14B repository and similarly named third-party repositories fail closed;
 they are never silently rewritten to the 1.3B renderer.
 
-The selected files total about 16.36 GiB on a cold cache. The command requires 18.36 GiB free,
-including 2 GiB of headroom, and omits sources already present at their pinned revisions. Do not
-pass `--all-files`; Bernini needs selected files from two repositories. `mlxgen prepare` and every
-runtime `--quantize` value are rejected because only the factored BF16 route is numerically
-credible. BF16 itself is not production-quality validated.
+All components come from the pinned `ByteDance/Bernini-R-1.3B-Diffusers` revision. The checkpoint
+ships in FP32, so a cold download is approximately 27 GiB plus 2 GiB free-space headroom; sources
+already present at their pinned revisions are not re-downloaded. At run time the text encoder and
+transformer execute in BF16 (with a small FP32 keep-set) and the VAE in FP32. Quantized variants
+are not supported: `--quantize` values are rejected for this model.
 
 Example R2V request (diagnostic bounded profile; see the parity bundle for official full prompts):
 
@@ -498,25 +498,24 @@ mlxgen generate \
 
 Official quality defaults are 848x480, 81 frames, 16 fps, 40 steps, UniPC, and flow shift 5. The
 maximum condition side defaults to 848; its accepted range is 16-1280 in multiples of 16.
-Source-video modes preserve the source aspect ratio, accept resize-only conditioning, treat the
-requested canvas as an area target, and hard-cap the final side at the condition limit. Their
-`--frames` value is a maximum because source duration/fps may clamp the actual `4n+1` output;
-metadata `output_frames` is authoritative. Prompts have a hard 512-token UMT5 budget. R2V uses
-text guidance 4.0 and reference guidance 4.5 with APG; RV2V adds source guidance 1.25 and uses
-chained CFG; V2V uses text guidance 4.0 with APG.
+Source-video modes preserve the source aspect ratio with resize-only conditioning: the source
+video's long edge is capped at the condition limit (never upscaled, snapped to multiples of 16)
+and that resolved size is the output canvas. Their `--frames` value is a maximum because source
+duration/fps may clamp the actual `4n+1` output; metadata `output_frames` is authoritative.
+Prompts have a hard 512-token UMT5 budget. R2V uses text guidance 4.0 and reference guidance 4.5
+with APG; RV2V adds source guidance 1.25 and uses chained CFG; V2V uses text guidance 4.0 with
+APG. Tuned recipes for many-reference binding (`--reference-guidance 6.0`, seed variation) and
+structure-changing edits (Python API `task_type="mv2v"`, guidance 5.0) are documented in
+`docs/bernini.md`.
 
 The bounded low-RAM matrix peaks at 9.45 GB whole-process physical footprint on the 128 GB
 validation host, so the tested shapes fit an 18 GB-class envelope; this is not a direct 18 GB-host
-proof. The historical schema-v3 bundle from 2026-08-04 still fails at the bounded 17-frame profile;
-see `docs/assets/validation/bernini-r-1.3b-2026-08-04/README.md`.
-
-Discover the historical schema-v3 route rows through the framework registry:
+proof. The earlier schema-v3 bundle used a bounded 17-frame profile and is superseded by the
+full-profile parity bundle; it stays discoverable through the framework registry:
 
 ```sh
 mlxgen validation --model bernini-r-1.3b
 ```
-
-The returned `bernini_r_1_3b_2026_08_04` profile is `FAIL` for the historical bounded bundle.
 
 See `docs/bernini.md` for the full CLI/Python contract, guidance table, capacity limits, official
 example catalog, and proof links.

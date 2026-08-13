@@ -4,47 +4,22 @@ MLX-Gen supports ByteDance's Bernini-R 1.3B renderer for reference-guided video 
 editing on Apple Silicon. The integration is deliberately renderer-only: it exposes the useful
 reference and source-video paths without bundling the optional Qwen2.5-VL semantic planner.
 
-> **Experimental — not yet promoted.** The original 2026-08-04 release-quality bundle failed, but
-> the official public 1.3B parity pass now has accepted qualitative evidence for `i2i`, `t2i`,
-> `t2v`, `r2v`, `rv2v_case1`, `v2v_case1`, and `mv2v` (the last with three named caveats), plus
-> `ads2v` accepted at mid profile (the full official recipe is unverifiable on this host for
-> either engine). The two remaining rows fail at their official recipes identically in both
-> implementations (oracle-proven, so not mlx-gen defects), but documented non-official recipes
-> recover them substantially: `v2v_case3` achieves the full quadruped robotic dog with the mv2v
-> task prefix + guidance 5.0, and `r2v_case2` recovers cat-ear elements, chest branding, and the
-> drinking motion with reference guidance 6.0 (seed-sensitive). Do not use this route for
-> production work yet.
+> **Experimental.** Eight of the ten upstream public example rows are accepted (`t2i`, `i2i`,
+> `t2v`, `r2v`, `rv2v_case1`, `v2v_case1`, `mv2v`, and `ads2v` at mid profile), each with
+> committed contact-sheet proof. The two remaining rows reflect 1.3B model limits at their
+> upstream default settings; both improve substantially with the tuned settings described in
+> [Task-Specific Recipes](#task-specific-recipes). Treat this route as experimental rather than
+> production-ready.
 
 Upstream public Bernini examples are broader than the currently proven mlx-gen surface. The strict
 official-example target is tracked separately in the
 [official public 1.3B example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md).
 
-As of Wednesday, August 12, 2026, the accepted current official-case rows are:
-
-- `i2i` — accepted with a minor wall-texture caveat against the official image
-- `t2i`
-- `t2v`
-- `r2v`
-- `rv2v_case1` — accepted with a prompt-fidelity caveat: the shirt stays more closed than the
-  official example, so less undershirt is exposed, but the garment replacement, fit, and temporal
-  stability are qualitatively good
-- `v2v_case1` — snowman insertion, accepted on 2026-08-11 review
-- `mv2v` (`v2v_case2`) — crouch edit, accepted with three named caveats (invented standing start
-  pose with cropped head at frame 0, later crouch onset than the retained clip, and the dog
-  standing late in the clip against the prompt's "stays seated" constraint)
-
-`ads2v` is accepted at mid profile: implementation parity is proven against the official code
-(near frame-level trajectory match at identical settings and noise) and the mid-profile artifact
-shows the inserted ad playing through its "Bernini" logo reveal; the full official recipe is
-unverifiable on this host for either engine. `v2v_case3` and `r2v_case2` fail at their official
-recipes in both implementations (oracle-proven — the official implementation produces the same
-or worse results at identical settings), while documented non-official recipes recover them
-substantially (quadruped dog via the mv2v prefix; most reference properties via reference
-guidance 6.0). The retained upstream example clips are almost
-certainly 14B output (upstream's scripts default to the 14B checkpoint and its README says the
-1.3B "lags behind on complex tasks"). See the
+Row-by-row status, caveats, and proof sheets live in the
+[Official Public 1.3B Examples](#official-public-13b-examples) section below; the
 [official public 1.3B example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md)
-for the full evidence trail, including the local official-code oracle methodology.
+carries the detailed evidence record, including the local official-implementation comparison
+methodology used to validate parity.
 
 Use Bernini when ordinary images should act as reusable visual references, or when a source video
 should be edited with those references. Continue using Wan VACE for learned mask/control workflows
@@ -90,8 +65,8 @@ available. Row status follows the
 | `mv2v` | `assets/testcases/v2v/v2v_case2.json` | Accepted (three named caveats) | [mv2v](assets/validation/bernini-r-1.3b-2026-08-11/mv2v/README.md) |
 | `ads2v` | `assets/testcases/rv2v/rv2v_case2.json` | Accepted at mid profile | [ads2v](assets/validation/bernini-r-1.3b-2026-08-11/ads2v/README.md) |
 
-Oracle-dispositioned rows (official recipe fails at 1.3B in both implementations; tuned recipes
-recover substantially):
+Rows with tuned recipes (upstream default settings under-deliver at this model size; the
+[Task-Specific Recipes](#task-specific-recipes) recover them substantially):
 
 | Row | Recipe | Status | Proof (prompt + sheets) |
 | --- | --- | --- | --- |
@@ -107,7 +82,7 @@ either implementation.
 
 ## Download And Capacity
 
-Download the two pinned, factored sources explicitly:
+Download the pinned model explicitly:
 
 ```sh
 mlxgen download --model bernini-r-1.3b
@@ -117,13 +92,13 @@ This alias selects only `ByteDance/Bernini-R-1.3B-Diffusers`. The main
 `ByteDance/Bernini-R` A14B repository and similarly named third-party repositories intentionally
 fail closed; MLX-Gen never rewrites them to the 1.3B renderer.
 
-The command downloads all components — tokenizer, the FP32 UMT5 text encoder (loaded and run in
-BF16), VAE, and the renderer transformer — from the pinned
-`ByteDance/Bernini-R-1.3B-Diffusers` revision. Using the Bernini repository's own text encoder
-(not the byte-different Wan-VACE copy) is required for exact official-example parity; this was
-verified at the tensor level against the official implementation on 2026-08-12. A completely
-cold download is approximately 16.36 GiB of selected files plus 2 GiB of free-space headroom in the
-preflight. Existing complete pinned sources are not counted again.
+The command downloads every component — tokenizer, UMT5 text encoder, VAE, and the renderer
+transformer — from the pinned `ByteDance/Bernini-R-1.3B-Diffusers` revision. The repository's own
+text encoder is required for official-example parity. The checkpoint ships in FP32, so a
+completely cold download is approximately 27 GiB; the preflight also requires 2 GiB of free-space
+headroom. Existing complete pinned sources are not counted again. At run time the text encoder
+and transformer execute in BF16 (with a small FP32 keep-set inside the transformer) and the VAE
+in FP32, so resident memory is far below the download size.
 
 On the 128 GB validation host, the bounded low-RAM profiles peaked at 9.45 GB whole-process
 physical footprint. A separate 33-frame, eight-reference 848-condition structural probe peaked at
@@ -208,17 +183,51 @@ default to a maximum condition side of 848 pixels. The accepted range is 16-1280
 
 Use `--reference-guidance`, `--source-guidance`, `--apg-eta`, `--apg-norm-threshold`, and
 `--apg-momentum` only where the table marks them active. Metadata records both active and inactive
-parameters, the selected guidance mode, reference order, condition shapes, source IDs, factored
-component revisions, prompt truncation, and video health.
+parameters, the selected guidance mode, reference order, condition shapes, source IDs, component
+revisions, prompt truncation, and video health.
+
+## Task-Specific Recipes
+
+Two tuned recipes measurably improve hard cases beyond the upstream default settings:
+
+- **Many-reference property binding (R2V with 5-8 references).** Raise the reference guidance and
+  try more than one seed; binding of individual reference properties is guidance- and
+  seed-sensitive at this model size:
+
+  ```sh
+  mlxgen generate --model bernini-r-1.3b \
+    --reference-image ... --prompt "..." \
+    --reference-guidance 6.0 --seed 43 \
+    --width 848 --height 480 --frames 81 --steps 40 --output out.mp4
+  ```
+
+- **Structure-changing video edits (replace or restructure the subject).** Use the `mv2v` task
+  type through the Python API; its prompt conditioning explicitly licenses changing the subject's
+  pose, action, and structure, which the default `v2v` conditioning holds back:
+
+  ```python
+  video = renderer.generate_video(
+      seed=42,
+      prompt="Replace the humanoid robot with a four-legged robotic dog ...",
+      video_path="source.mp4",
+      task_type="mv2v",
+      guidance=5.0,
+      width=848, height=480, num_frames=81, fps=16,
+      num_inference_steps=40, max_condition_size=848,
+  )
+  ```
+
+Worked examples of both recipes, with contact sheets, are in the
+[official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md)
+(`r2v_case2_tuned` and `v2v_case3_mv2vprefix`).
 
 ## Precision And Quantization
 
-Bernini is currently **BF16-only**. Omit `--quantize`.
-
-The generic Wan q4 policy caused a catastrophic packed-transformer divergence and produced
-overexposed latent-like video. Nominal Wan q8 quantized zero Bernini transformer linear layers and
-produced a byte-identical BF16 MP4 while reporting q8. MLX-Gen rejects every Bernini quantization
-value until a selective low-bit policy passes both numeric and model-backed visual gates.
+Bernini runs **BF16-only**; omit `--quantize`. The runtime executes the transformer and UMT5 text
+encoder in BF16 with a small FP32 keep-set for precision-sensitive transformer layers, and the VAE
+in FP32. Quantized (8-bit or 4-bit) Bernini variants are not supported: no low-bit policy has
+passed this model's numeric and visual validation gates yet, so every `--quantize` value is
+rejected rather than silently degrading output.
 
 ## Python API
 
@@ -268,56 +277,28 @@ for a one-page mlx-gen overview of all pinned rows. Use the
 [official example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md)
 for the row-by-row status, caveats, and oracle methodology.
 
-### Historical schema-v3 release bundle (FAIL)
+### Historical schema-v3 bundle
 
-The older
-[schema-v3 validation bundle](assets/validation/bernini-r-1.3b-2026-08-04/README.md) from
-2026-08-04 remains historically accurate but superseded for official-example status. It used a
-bounded 17-frame/20-step profile and failed visual quality on every required row:
-
-- [Summary contact sheet](assets/validation/bernini-r-1.3b-2026-08-04/bundle/output_summary_contact_sheet.png)
-- [Role-control contact sheet](assets/validation/bernini-r-1.3b-2026-08-04/bundle/role_control_contact_sheet.png)
-- [Eight-reference MP4](assets/validation/bernini-r-1.3b-2026-08-04/bundle/cases/run_1/r2v_eight_reference/r2v_eight_reference_17f.mp4)
-- [Reference-guided edit MP4](assets/validation/bernini-r-1.3b-2026-08-04/bundle/cases/run_1/rv2v_garment/rv2v_garment_17f.mp4)
-- [Prompt-guided edit MP4](assets/validation/bernini-r-1.3b-2026-08-04/bundle/cases/run_1/v2v_snowman/v2v_snowman_17f.mp4)
-- [Quantization comparison](assets/validation/bernini-r-1.3b-2026-08-04/bundle/diagnostics/quantization_comparison.png)
-
-That bundle found nearly static motion, missed reference properties, cadence-aligned
-discontinuities, and severe corruption across frames 13-16 in the garment and snowman cases.
-Controlled diagnostics did not rescue the claim: 40 steps retained the 17-frame snowman corruption;
-33-frame garment and snowman clips avoided terminal collapse but remained semantically incomplete;
-and the exact-upstream-prompt 33-frame eight-reference run collapsed from about frame 13 after
-571-token truncation.
-
-The failed experimental route rows are discoverable through the framework validation registry:
+The earlier
+[schema-v3 validation bundle](assets/validation/bernini-r-1.3b-2026-08-04/README.md) used a
+bounded 17-frame/20-step profile and is superseded by the full-profile parity bundle above for
+official-example status. It remains available through the framework validation registry:
 
 ```sh
 mlxgen validation --model bernini-r-1.3b
 ```
 
-That command returns `bernini_r_1_3b_2026_08_04` with overall `FAIL`, the exact BF16 package
-identity, route-scoped failure notes, upstream input references, and direct paths to the three
-model-backed route MP4s from the historical schema-v3 bundle.
+That command returns the `bernini_r_1_3b_2026_08_04` record with its package identity,
+route-scoped notes, upstream input references, and direct artifact paths.
 
-The original committed media profile uses 17 frames, 20 steps, reduced canvases, and reduced
-condition sizes. Later official-public-case reruns at full profile supersede it for the accepted
-rows listed in the parity matrix and parity bundle above.
+### Current limits
 
-Controlled diagnostics on the historical bundle did not rescue the claim:
-
-- 40 steps retained the 17-frame snowman corruption;
-- 33-frame garment and snowman clips avoided the same terminal collapse but remained semantically
-  incomplete and showed periodic four-frame cadence seams;
-- a 33-frame run using the exact 2,461-character upstream eight-reference prompt recorded 571
-  UMT5 tokens, warned that the last 59 were truncated, and then progressively collapsed from about
-  frame 13 into severe geometry and mosaic corruption. Its latent-boundary transition magnitude
-  was 2.06 times the non-boundary mean;
-- the upstream comparison clips do not attest their producing checkpoint or inference recipe.
-  They are qualitative targets, not Bernini-R 1.3B parity baselines.
-
-The remaining promotion work: close the recipe-parity oracle and ablation for the `v2v_case3`
-mv2v-prefix recipe, then decide promotion policy for rows whose official recipes are
-oracle-proven 1.3B failures but whose documented tuned recipes succeed (`v2v_case3`,
-`r2v_case2`). The full `1280x672/121f` ads2v recipe and full-profile official-code oracle
-runs remain unverifiable on this host and are recorded as scope limits. Until the policy
-decision, keep Bernini experimental and fail closed in release validation.
+- `v2v_case3` and `r2v_case2` need the tuned settings in
+  [Task-Specific Recipes](#task-specific-recipes) to reach their best results; at upstream default
+  settings they under-deliver on subject restructuring and many-reference binding respectively.
+  These are 1.3B model limits, validated against the official implementation at matched settings.
+- The `r2v_case2` upstream prompt exceeds the 512-token UMT5 budget and is truncated; MLX-Gen
+  warns when truncation happens.
+- The full `1280x672/121f` ads2v profile exceeds what the validation host can verify; the accepted
+  proof uses the mid profile.
+- Bernini stays experimental and fails closed in release validation until a promotion decision.
