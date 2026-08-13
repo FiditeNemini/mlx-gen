@@ -25,7 +25,7 @@ class _FakeFlux2VAE:
         self.bn = _FakeBatchNorm()
 
 
-def test_flux2_reference_conditioning_uses_per_image_native_dimensions_and_crop(monkeypatch, tmp_path):
+def test_flux2_reference_conditioning_canvas_primary_and_native_secondaries(monkeypatch, tmp_path):
     tall = tmp_path / "tall.png"
     wide = tmp_path / "wide.png"
     Image.new("RGB", (640, 1280), color="white").save(tall)
@@ -52,8 +52,12 @@ def test_flux2_reference_conditioning_uses_per_image_native_dimensions_and_crop(
         batch_size=1,
     )
 
+    # The primary (edited) image is conditioned at the generation canvas
+    # with a plain resize so reference and target grids match and no source
+    # sliver is cropped away per pass; secondary references keep their own
+    # per-image native sizing.
     assert captured == [
-        (tall, 640, 1280, "crop"),
+        (tall, 1024, 1024, "resize"),
         (wide, 1440, 720, "crop"),
     ]
     assert image_latents.shape[0] == 1
@@ -61,6 +65,37 @@ def test_flux2_reference_conditioning_uses_per_image_native_dimensions_and_crop(
     assert image_latents.shape[1] == image_latent_ids.shape[1]
     assert image_latent_ids[0, 0, 0].item() == 10
     assert image_latent_ids[0, -1, 0].item() == 20
+
+
+def test_flux2_reference_conditioning_inpaint_references_keep_native_dims(monkeypatch, tmp_path):
+    # Inpaint passes secondary content references only (the edited source is
+    # conditioned separately at the canvas), so no image follows the canvas.
+    ref = tmp_path / "ref.png"
+    Image.new("RGB", (640, 1280), color="white").save(ref)
+    captured: list[tuple[Path | str, int, int, str]] = []
+
+    def fake_encode_image(*, vae, image_path, height, width, tiling_config, resize_mode, **kwargs):
+        del vae, tiling_config, kwargs
+        captured.append((image_path, width, height, resize_mode))
+        return mx.zeros((1, 32, max(2, height // 8), max(2, width // 8)), dtype=mx.float32)
+
+    monkeypatch.setattr(
+        "mflux.models.flux2.variants.edit.flux2_klein_edit_helpers.LatentCreator.encode_image",
+        staticmethod(fake_encode_image),
+    )
+
+    _Flux2KleinEditHelpers.prepare_reference_image_conditioning(
+        vae=_FakeFlux2VAE(),
+        tiling_config=None,
+        image_paths=[ref],
+        height=1024,
+        width=1024,
+        batch_size=1,
+        t_coord_start=20,
+        canvas_image_index=None,
+    )
+
+    assert captured == [(ref, 640, 1280, "crop")]
 
 
 def test_flux2_outpaint_mask_preserves_full_source_window():

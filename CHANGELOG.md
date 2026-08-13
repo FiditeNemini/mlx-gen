@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-08-13
+
+Bernini-R 1.3B BF16 package and Qwen image-edit geometry-stability release.
+
+### Added
+
+- **Bernini-R 1.3B BF16 package (`bernini-r-1.3b-bf16`)**: new catalog entry for
+  `AbstractFramework/bernini-r-1.3B-diffusers-bf16`, a runtime-dtype repack of the pinned
+  ByteDance source (BF16 text encoder and transformer with their FP32 keep-sets preserved,
+  FP32 VAE). The download is ~15.6 GiB instead of ~27 GiB, revision-pinned with byte-count
+  preflights, and produces bit-identical output to the FP32 source package (verified on image
+  and video use cases at identical settings and seed). Aliases: `bernini-r-1.3b-bf16`,
+  `bernini-bf16`.
+
+### Fixed
+
+- **Image-edit geometry drift across iterative edit chains (Qwen edit and FLUX.2 Klein edit)**:
+  the edited source image is now conditioned at the resolved generation canvas in both
+  families, so the reference and target position grids always match and no source pixels are
+  lost per pass. Qwen edit previously conditioned at the area-normalized ~1MP size regardless
+  of the requested output size; any mismatch pulled every edit toward a zoom-crop of its own
+  input (measured up to 18% horizontal warp in a single 614x512 edit). FLUX.2 Klein edit
+  previously conditioned at source-derived floor-16 dimensions with a center crop, losing a
+  sliver of the source every pass (+0.5% horizontal drift per iteration in edit chains).
+  Iterative edits on both families are now registration-stable (scale 1.000, 0px translation
+  across three-edit chains). Automatic-canvas single edits are unchanged (Qwen bit-identical),
+  inpaint paths keep their existing contracts, and additional reference images keep per-image
+  sizing. The Qwen change is a deliberate geometry-stability deviation from the upstream
+  pipeline, which keeps the mismatch at explicit sizes.
+
+### Changed
+
+- `docs/bernini.md` recommends the BF16 package for download and documents both packages'
+  sizes and runtime precision; `README.md` and `llms-full.txt` updated to match.
+- `docs/image-edit-modes.md` documents the iterative-edit geometry-stability contract.
+
 ## [0.26.0] - 2026-08-13
 
 Bernini-R 1.3B renderer and Wan conditioning release. Ships the experimental

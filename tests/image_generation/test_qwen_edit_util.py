@@ -116,3 +116,84 @@ def test_blend_inpaint_latents_preserves_unmasked_region():
 
     assert bool(mx.allclose(blended[:, :2], mx.ones((1, 2, 64), dtype=mx.float32)).item())
     assert bool(mx.allclose(blended[:, 2:], mx.ones((1, 2, 64), dtype=mx.float32) * 9).item())
+
+
+def test_canvas_reference_image_is_conditioned_at_generation_canvas(tmp_path, monkeypatch):
+    # A 614x512 source with a 608x512 resolved canvas must be conditioned at
+    # the canvas so reference and target RoPE grids match (the mismatch is the
+    # compounding zoom-crop drift defect).
+    source_path = tmp_path / "portrait.png"
+    Image.new("RGB", (614, 512)).save(source_path)
+    captured = []
+
+    def fake_encode_image(vae, image_path, height, width, tiling_config):
+        captured.append((height, width))
+        return mx.zeros((1, height // 8, width // 8, 16))
+
+    monkeypatch.setattr(qwen_edit_util_module.LatentCreator, "encode_image", fake_encode_image)
+
+    _, _, cond_image_grid, _ = QwenEditUtil.create_image_conditioning_latents(
+        vae=object(),
+        height=None,
+        width=None,
+        image_paths=str(source_path),
+        tiling_config=None,
+        canvas_size=(608, 512),
+        canvas_image_index=0,
+    )
+
+    assert captured == [(512, 608)]
+    assert cond_image_grid == [(1, 32, 38)]
+
+
+def test_canvas_size_applies_only_to_the_canvas_reference_image(tmp_path, monkeypatch):
+    primary_path = tmp_path / "primary.png"
+    style_path = tmp_path / "style.png"
+    Image.new("RGB", (614, 512)).save(primary_path)
+    Image.new("RGB", (512, 512)).save(style_path)
+    captured = []
+
+    def fake_encode_image(vae, image_path, height, width, tiling_config):
+        captured.append((height, width))
+        return mx.zeros((1, height // 8, width // 8, 16))
+
+    monkeypatch.setattr(qwen_edit_util_module.LatentCreator, "encode_image", fake_encode_image)
+
+    QwenEditUtil.create_image_conditioning_latents(
+        vae=object(),
+        height=None,
+        width=None,
+        image_paths=[str(primary_path), str(style_path)],
+        tiling_config=None,
+        canvas_size=(608, 512),
+        canvas_image_index=0,
+    )
+
+    # Primary at the canvas; the style reference keeps its own 1MP dims.
+    assert captured[0] == (512, 608)
+    assert captured[1] == (1024, 1024)
+
+
+def test_explicit_width_height_still_condition_every_image(tmp_path, monkeypatch):
+    # The inpaint path passes explicit dims; canvas_size must not override it.
+    source_path = tmp_path / "inpaint.png"
+    Image.new("RGB", (614, 512)).save(source_path)
+    captured = []
+
+    def fake_encode_image(vae, image_path, height, width, tiling_config):
+        captured.append((height, width))
+        return mx.zeros((1, height // 8, width // 8, 16))
+
+    monkeypatch.setattr(qwen_edit_util_module.LatentCreator, "encode_image", fake_encode_image)
+
+    QwenEditUtil.create_image_conditioning_latents(
+        vae=object(),
+        height=512,
+        width=608,
+        image_paths=str(source_path),
+        tiling_config=None,
+        canvas_size=None,
+        canvas_image_index=0,
+    )
+
+    assert captured == [(512, 608)]

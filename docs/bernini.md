@@ -82,23 +82,32 @@ either implementation.
 
 ## Download And Capacity
 
-Download the pinned model explicitly:
+Two pinned packages are available. The BF16 package is the recommended download — it ships the
+exact runtime dtypes and is 42% smaller:
+
+```sh
+mlxgen download --model bernini-r-1.3b-bf16
+```
+
+This alias selects the pinned `AbstractFramework/bernini-r-1.3B-diffusers-bf16` revision
+(approximately 15.6 GiB cold). It stores the dtypes the runtime uses — BF16 text encoder and
+transformer with their FP32 keep-sets preserved, FP32 VAE — and produces bit-identical output to
+the FP32 source package at the same settings and seed (verified on image and video use cases).
+
+The FP32 source package remains available:
 
 ```sh
 mlxgen download --model bernini-r-1.3b
 ```
 
-This alias selects only `ByteDance/Bernini-R-1.3B-Diffusers`. The main
-`ByteDance/Bernini-R` A14B repository and similarly named third-party repositories intentionally
-fail closed; MLX-Gen never rewrites them to the 1.3B renderer.
+This alias selects only the pinned `ByteDance/Bernini-R-1.3B-Diffusers` revision (approximately
+27 GiB cold, since the upstream checkpoint ships in FP32). The main `ByteDance/Bernini-R` A14B
+repository and similarly named third-party repositories intentionally fail closed; MLX-Gen never
+rewrites them to the 1.3B renderer.
 
-The command downloads every component — tokenizer, UMT5 text encoder, VAE, and the renderer
-transformer — from the pinned `ByteDance/Bernini-R-1.3B-Diffusers` revision. The repository's own
-text encoder is required for official-example parity. The checkpoint ships in FP32, so a
-completely cold download is approximately 27 GiB; the preflight also requires 2 GiB of free-space
-headroom. Existing complete pinned sources are not counted again. At run time the text encoder
-and transformer execute in BF16 (with a small FP32 keep-set inside the transformer) and the VAE
-in FP32, so resident memory is far below the download size.
+Both packages preflight with 2 GiB of free-space headroom, skip sources already present at their
+pinned revisions, and execute identically at run time: text encoder and transformer in BF16 (with
+small FP32 keep-sets), VAE in FP32, so resident memory is far below the download size.
 
 On the 128 GB validation host, the bounded low-RAM profiles peaked at 9.45 GB whole-process
 physical footprint. A separate 33-frame, eight-reference 848-condition structural probe peaked at

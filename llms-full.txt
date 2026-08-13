@@ -466,21 +466,21 @@ Accepted rows: `t2i`, `i2i`, `t2v`, `r2v`, `rv2v_case1`, `v2v_case1`, `mv2v` (th
 the recipes and worked examples are documented in `docs/bernini.md` (Task-Specific Recipes) and
 the parity bundle (`r2v_case2_tuned`, `v2v_case3_mv2vprefix`).
 
-Download the pinned model explicitly:
+Download the recommended BF16 package (runtime dtypes, 42% smaller, bit-identical output):
 
 ```sh
-mlxgen download --model bernini-r-1.3b
+mlxgen download --model bernini-r-1.3b-bf16
 ```
 
-This exact catalog alias selects `ByteDance/Bernini-R-1.3B-Diffusers`. The main
+This alias selects the pinned `AbstractFramework/bernini-r-1.3B-diffusers-bf16` revision
+(approximately 15.6 GiB cold). The FP32 source package remains available via
+`mlxgen download --model bernini-r-1.3b`, selecting the pinned
+`ByteDance/Bernini-R-1.3B-Diffusers` revision (approximately 27 GiB cold). The main
 `ByteDance/Bernini-R` A14B repository and similarly named third-party repositories fail closed;
-they are never silently rewritten to the 1.3B renderer.
-
-All components come from the pinned `ByteDance/Bernini-R-1.3B-Diffusers` revision. The checkpoint
-ships in FP32, so a cold download is approximately 27 GiB plus 2 GiB free-space headroom; sources
-already present at their pinned revisions are not re-downloaded. At run time the text encoder and
-transformer execute in BF16 (with a small FP32 keep-set) and the VAE in FP32. Quantized variants
-are not supported: `--quantize` values are rejected for this model.
+they are never silently rewritten to the 1.3B renderer. Both packages preflight with 2 GiB of
+free-space headroom and execute identically at run time: text encoder and transformer in BF16
+(with small FP32 keep-sets) and the VAE in FP32. Quantized variants are not supported:
+`--quantize` values are rejected for this model.
 
 Example R2V request (diagnostic bounded profile; see the parity bundle for official full prompts):
 

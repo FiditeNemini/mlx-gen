@@ -52,6 +52,21 @@ keeps the output ratio close to the source, and `--resize-mode` (`resize` | `cro
 chooses how source pixels map onto a canvas whose ratio differs. See
 [docs/api.md](api.md) for the full contract.
 
+Edits are geometry-stable across iterations: the source image is conditioned at the resolved
+generation canvas, so the subject keeps its position and proportions when you feed an edit's
+output back in as the next edit's input, at any requested output size. This holds for explicit
+`--width`/`--height` values as well as the automatic canvas. For iterative workflows, keep
+feeding the generated file forward unchanged; resizing outputs to sizes that are not multiples
+of 16 between steps reintroduces a small resampling distortion outside the pipeline.
+
+Attribute changes can spill beyond the instructed region: instruction-driven editors regenerate
+the whole image, so a color or style instruction can pull semantically adjacent content with it
+(for example, a tie-color change tinting the suit). Pin the attributes you want kept by naming
+them in the instruction — "change the tie color to red, keeping the suit exactly the same blue
+color and everything else unchanged" — which measurably holds off-target colors in place. For a
+hard guarantee, use masked editing (`--mask-path`), which locks pixels outside the mask to the
+source.
+
 Example:
 
 ```sh

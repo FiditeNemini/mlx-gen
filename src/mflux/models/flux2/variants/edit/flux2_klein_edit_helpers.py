@@ -145,6 +145,7 @@ class _Flux2KleinEditHelpers:
         width: int,
         batch_size: int = 1,
         t_coord_start: int = 10,
+        canvas_image_index: int | None = 0,
     ):
         if not image_paths:
             return None, None
@@ -152,14 +153,28 @@ class _Flux2KleinEditHelpers:
         packed_latents_list: list[mx.array] = []
         ids_list: list[mx.array] = []
         for i, p in enumerate(image_paths):
-            encode_width, encode_height = _Flux2KleinEditHelpers.reference_condition_dimensions(image_path=p)
+            if i == canvas_image_index:
+                # The primary (edited) image is conditioned at the resolved
+                # generation canvas with a plain resize: reference and target
+                # grids share the same top-left-anchored extent, and no source
+                # pixels are cropped away. Conditioning it at source-derived
+                # dims instead loses a floor-16 sliver per pass ("crop"), which
+                # compounds into visible horizontal drift across iterative
+                # edit chains.
+                encode_width, encode_height = width, height
+                reference_resize_mode = "resize"
+            else:
+                # Secondary references keep their own per-image sizing; they
+                # describe content, not the output geometry.
+                encode_width, encode_height = _Flux2KleinEditHelpers.reference_condition_dimensions(image_path=p)
+                reference_resize_mode = "crop"
             encoded = LatentCreator.encode_image(
                 vae=vae,
                 image_path=p,
                 height=encode_height,
                 width=encode_width,
                 tiling_config=tiling_config,
-                resize_mode="crop",
+                resize_mode=reference_resize_mode,
             )
             encoded = _Flux2KleinEditHelpers.ensure_4d_latents(encoded)
             encoded = _Flux2KleinEditHelpers.crop_to_even_spatial(encoded)

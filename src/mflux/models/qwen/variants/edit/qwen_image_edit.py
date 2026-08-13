@@ -113,7 +113,13 @@ class QwenImageEdit(nn.Module):
             encode_negative=do_true_cfg,
         )
 
-        # 3. Generate image conditioning latents
+        # 3. Generate image conditioning latents. The dimension-reference image
+        # is conditioned at the resolved generation canvas so its RoPE grid
+        # matches the target grid exactly (see create_image_conditioning_latents
+        # for why a mismatch causes compounding zoom-crop drift). This is a
+        # deliberate geometry-stability deviation from the upstream pipeline,
+        # which keeps conditioning at the area-normalized size even when the
+        # requested output size differs.
         conditioning_width = config.width if mask_path is not None else None
         conditioning_height = config.height if mask_path is not None else None
         static_image_latents, qwen_image_ids, cond_image_grid, _ = QwenEditUtil.create_image_conditioning_latents(
@@ -122,6 +128,8 @@ class QwenImageEdit(nn.Module):
             height=conditioning_height,
             image_paths=image_paths,
             tiling_config=self.tiling_config,
+            canvas_size=None if mask_path is not None else (config.width, config.height),
+            canvas_image_index=0,
         )
         mask_latents = None
         if mask_path is not None:

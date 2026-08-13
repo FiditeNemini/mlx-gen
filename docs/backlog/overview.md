@@ -12,7 +12,7 @@ outside chat history.
 | State | Count |
 | --- | ---: |
 | Planned | 15 |
-| Proposed | 26 |
+| Proposed | 30 |
 | Completed | 64 |
 | Deprecated | 1 |
 | Recurrent | 1 |
@@ -419,6 +419,10 @@ memory follow-up state.
 | 0102 | [Wan A14B i2v multi-frame context head conditioning](proposed/0102_wan_context_frame_head_conditioning.md) | Wan video, storyboard continue seams, momentum carry | Implemented 2026-07-27 (EXPERIMENTAL, unreleased): `--context-frames`/`--context-noise` extend the i2v conditioned head to K in {5,9,13} frames (the 0097 non-goal, now gated per the BlackPixel frame-consistency blueprint); zero-shot probe measured momentum carry (K=5 seam magnitude ratio 0.90 vs single-frame 1.90) with a mild boundary flare; capabilities `schema_version` 6 adds `supports_context_frames`. |
 | 0103 | [Wan A14B i2v SVI 2.0 Pro conditioning](proposed/0103_wan_svi_pro_conditioning.md) | Wan video, storyboard chains, identity anchor + latent motion handover | Implemented 2026-07-27 (EXPERIMENTAL, unreleased): `--svi-anchor-image`/`--svi-motion-latent`/`--svi-lora-high`/`--svi-lora-low` port Stable Video Infinity 2.0 Pro chain conditioning (`[anchor, motion latent, zero-latents]` + error-recycling LoRA pair under a strict `unmatched_key_count == 0` contract, 800/800 verified) to the A14B i2v route per the BlackPixel consistency-redo doctrine (mechanism 4, probe-gated); capabilities `schema_version` 7 adds `supports_svi`. |
 | 0104 | [MiniMax H3 joint audio-video license-blocked watch](proposed/0104_minimax_h3_joint_audio_video_watch.md) | Joint audio-video generation, licensing, new artifact contract | Promote only after the EU license gate clears, stable official upstream semantics exist, a target-Mac resource envelope is credible, and a generated joint audio-video contract ADR is accepted. |
+| 0108 | [Bernini-R 1.3B selective 8-bit package](proposed/0108_bernini_selective_8bit_package.md) | Bernini, quantization, published packages | Promote after a selective q8 policy passes the step-0 tensor probe, same-seed reduced comparison, and full-profile contact-sheet gates against the BF16 baseline. |
+| 0109 | [Bernini task-type and guidance-mode CLI exposure](proposed/0109_bernini_task_type_cli_exposure.md) | Bernini, CLI surface | Promote when the mv2v structure-changing recipe should be CLI-reachable; low risk, surfaces existing runtime parameters. |
+| 0110 | [Bernini-R 1.3B promotion policy decision](proposed/0110_bernini_promotion_policy_decision.md) | Bernini, release policy, ADR | Promote when the team is ready to decide the tuned-recipe promotion standard; requires an ADR and reconciling backlog 0106. |
+| 0111 | [Qwen image edit instruction-scope leakage](proposed/0111_qwen_image_edit_instruction_scope_leakage.md) | Image editing, quality investigation | Promote after a controlled reproduction measures off-target change and splits model behavior from implementation drift. |
 ## Completed ledger
 
 | ID | Item | Area | Completed | Outcome |

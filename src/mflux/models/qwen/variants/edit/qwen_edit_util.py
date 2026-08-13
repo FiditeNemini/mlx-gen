@@ -18,14 +18,30 @@ class QwenEditUtil:
         width: int | None,
         image_paths: list[str] | str,
         tiling_config: TilingConfig | None = None,
+        canvas_size: tuple[int, int] | None = None,
+        canvas_image_index: int = 0,
     ) -> tuple[mx.array, mx.array, list[tuple[int, int, int]], int]:
         if not isinstance(image_paths, list):
             image_paths = [str(image_paths)]
 
         all_image_latents = []
         all_image_grids = []
-        for image_path in image_paths:
-            calc_w, calc_h = QwenEditUtil._conditioning_vae_size(image_path=image_path, width=width, height=height)
+        all_image_ids = []
+        for index, image_path in enumerate(image_paths):
+            if canvas_size is not None and width is None and height is None and index == canvas_image_index:
+                # The image that defined the output canvas must be conditioned
+                # at that exact canvas: reference and target RoPE grids are
+                # center-anchored integer windows with no cross-grid rescaling,
+                # so a size mismatch maps the target onto a central sub-window
+                # of the reference and every edit drifts toward a zoom-crop
+                # (compounding across iterative edits). Other reference images
+                # keep their own area-normalized size, matching the official
+                # per-image conditioning semantics.
+                calc_w, calc_h = canvas_size
+            else:
+                calc_w, calc_h = QwenEditUtil._conditioning_vae_size(
+                    image_path=image_path, width=width, height=height
+                )
             input_image = LatentCreator.encode_image(
                 vae=vae,
                 image_path=image_path,
@@ -42,17 +58,9 @@ class QwenEditUtil:
             )
             all_image_latents.append(image_latents)
             all_image_grids.append((1, calc_h // 16, calc_w // 16))
+            all_image_ids.append(QwenEditUtil._create_image_ids(height=calc_h, width=calc_w))
 
         image_latents = mx.concatenate(all_image_latents, axis=1)
-
-        all_image_ids = []
-        for image_path in image_paths:
-            calc_w, calc_h = QwenEditUtil._conditioning_vae_size(image_path=image_path, width=width, height=height)
-            image_ids = QwenEditUtil._create_image_ids(
-                height=calc_h,
-                width=calc_w,
-            )
-            all_image_ids.append(image_ids)
         image_ids = mx.concatenate(all_image_ids, axis=1)
 
         num_images = len(image_paths)

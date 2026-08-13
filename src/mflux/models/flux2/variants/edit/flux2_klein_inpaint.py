@@ -128,6 +128,9 @@ class Flux2KleinInpaint(nn.Module):
             width=config.width,
             batch_size=latents.shape[0],
             t_coord_start=20,
+            # Inpaint references are secondary content references; the edited
+            # source is conditioned separately at the canvas via clean_latents.
+            canvas_image_index=None,
         )
         if reference_latents is not None:
             image_latents = mx.concatenate([image_latents, reference_latents.astype(image_latents.dtype)], axis=1)

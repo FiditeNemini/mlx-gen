@@ -65,13 +65,13 @@ The main capabilities are:
   proof bundle;
 - ByteDance Bernini-R 1.3B renderer support (`bernini-r-1.3b`): generate video from one to eight
   ordered ordinary reference images, edit one source video with those references, or run
-  source-only prompt-guided video editing. The route uses pinned factored Wan/Bernini components,
-  supports the unified CLI and Python runtime, and is BF16-only because model-backed validation
-  rejected generic Wan q4 and exposed nominal q8 as a no-op. **Experimental:** component/runtime
-  checks pass, and seven official public 1.3B example rows plus `ads2v` at mid profile are
+  source-only prompt-guided video editing through the unified CLI and Python runtime. Download
+  the recommended BF16 package (`bernini-r-1.3b-bf16`, ~15.6 GiB, bit-identical output) or the
+  FP32 source package (~27 GiB); the route runs BF16 and does not support `--quantize`.
+  **Experimental:** seven official public 1.3B example rows plus `ads2v` at mid profile are
   qualitatively accepted with committed proof (full prompts and contact sheets in
-  `docs/assets/validation/bernini-r-1.3b-2026-08-11/`). The historical schema-v3 release bundle
-  still fails at the bounded 17-frame profile;
+  `docs/assets/validation/bernini-r-1.3b-2026-08-11/`), and tuned recipes for the remaining
+  rows are documented in `docs/bernini.md`;
 - SeedVR2 image and video restoration through `mlxgen upscale`, with official 3B/7B source
   support including the dedicated `seedvr2-7b-sharp` route, published q8/q4 packages,
   shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, streamed restore for
