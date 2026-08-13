@@ -3,6 +3,19 @@ import json
 import sys
 from pathlib import Path
 
+OFFICIAL_PUBLIC_CASE_IDS = (
+    "t2i",
+    "i2i",
+    "t2v",
+    "v2v_case1",
+    "mv2v",
+    "v2v_case3",
+    "r2v",
+    "r2v_case2",
+    "rv2v_case1",
+    "ads2v",
+)
+
 
 def _load_bundle_module():
     tools_dir = Path(__file__).resolve().parents[1] / "tools"
@@ -16,22 +29,6 @@ def _load_bundle_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
-
-
-def _load_runner_module():
-    runner_path = (
-        Path(__file__).resolve().parents[1]
-        / "validation_outputs"
-        / "bernini_r_1_3b_2026_08_10"
-        / "official_parity"
-        / "run_official_public_cases.py"
-    )
-    spec = importlib.util.spec_from_file_location("run_official_public_cases", runner_path)
-    assert spec is not None and spec.loader is not None
-    runner_module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = runner_module
-    spec.loader.exec_module(runner_module)
-    return runner_module
 
 
 def test_official_parity_bundle_copies_generated_output_and_metadata(tmp_path, monkeypatch):
@@ -112,80 +109,65 @@ def test_official_public_case_manifest_matches_documented_1_3b_release_rows():
     module = _load_bundle_module()
     bundle = module.BerniniOfficialParityBundle
 
-    runner_module = _load_runner_module()
-
-    expected_ids = (
+    inventory_path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/assets/validation/bernini-r-1.3b-2026-08-04/official_example_inventory.json"
+    )
+    inventory = json.loads(inventory_path.read_text())
+    inventory_groups = tuple(case["group"] for case in inventory["cases"])
+    expected_groups = (
         "t2i",
         "i2i",
         "t2v",
-        "v2v_case1",
+        "v2v",
         "mv2v",
-        "v2v_case3",
+        "v2v",
         "r2v",
-        "r2v_case2",
-        "rv2v_case1",
+        "r2v",
+        "rv2v",
         "ads2v",
     )
-
-    manifest_ids = tuple(entry["id"] for entry in runner_module.OfficialPublicBerniniCases.MANIFEST)
-    assert manifest_ids == expected_ids
-    assert bundle.CASE_IDS == expected_ids
+    assert inventory_groups == expected_groups
+    assert bundle.CASE_IDS == OFFICIAL_PUBLIC_CASE_IDS
 
 
-def test_official_public_cases_resolve_source_aspect_output_for_exact_noise():
-    runner_module = _load_runner_module()
-    cases = runner_module.OfficialPublicBerniniCases
+def test_bernini_source_aspect_video_resolution_matches_official_parity_harness(monkeypatch):
+    from mflux.models.wan.variants.wan_bernini import BerniniRenderer
+    from mflux.utils.dimension_resolver import CANVAS_POLICY_SOURCE_ASPECT
 
-    class DummyModel:
-        @staticmethod
-        def _plan_condition_metadata(
-            *,
-            video_path,
-            requested_height,
-            requested_width,
-            requested_frames,
-            fps,
-            canvas_policy,
-            max_condition_size,
-        ):
-            assert video_path == Path("/tmp/source.mp4")
-            assert requested_width == 848
-            assert requested_height == 480
-            assert requested_frames == 81
-            assert fps == 16
-            assert canvas_policy == "source-aspect"
-            assert max_condition_size == 848
-            return {
-                "output_width": 848,
-                "output_height": 448,
-                "output_frames": 81,
-            }
+    model = BerniniRenderer.__new__(BerniniRenderer)
 
-    media_spec = {
-        "kind": "video",
-        "width": 848,
-        "height": 480,
-        "frames": 81,
-        "fps": 16,
-    }
-    resolved = cases._resolved_media_spec(
-        model=DummyModel(),
-        media_spec=media_spec,
+    class FakeVideoInfo:
+        source_frame_count = 81
+        source_width = 1920
+        source_height = 1080
+        fps = 16.0
+
+    monkeypatch.setattr(
+        "mflux.models.wan.variants.wan_bernini.VideoUtil.inspect_video",
+        lambda path: FakeVideoInfo(),
+    )
+    monkeypatch.setattr(
+        BerniniRenderer,
+        "_smart_video_indices",
+        lambda self, **kwargs: list(range(kwargs["max_frames"])),
+    )
+
+    plan = model._plan_condition_metadata(
         video_path=Path("/tmp/source.mp4"),
+        requested_height=480,
+        requested_width=848,
+        requested_frames=81,
+        fps=16,
+        canvas_policy=CANVAS_POLICY_SOURCE_ASPECT,
         max_condition_size=848,
     )
 
-    assert resolved == {
-        "kind": "video",
-        "width": 848,
-        "height": 448,
-        "frames": 81,
-        "fps": 16,
-    }
-    assert media_spec == {
-        "kind": "video",
-        "width": 848,
-        "height": 480,
-        "frames": 81,
-        "fps": 16,
-    }
+    expected_width, expected_height = BerniniRenderer._condition_dimensions(
+        width=1920,
+        height=1080,
+        max_size=848,
+    )
+    assert plan["output_width"] == expected_width
+    assert plan["output_height"] == expected_height
+    assert plan["output_frames"] == 81
