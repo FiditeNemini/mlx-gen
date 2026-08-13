@@ -489,7 +489,7 @@ class WanTransformer(nn.Module):
             )
         if padding > 0:
             control = mx.concatenate(
-                [control, mx.zeros((batch_size, padding, channels), dtype=control.dtype)],
+                [control, mx.zeros((control.shape[0], padding, control.shape[2]), dtype=control.dtype)],
                 axis=1,
             )
         hints: dict[int, tuple[mx.array, float]] = {}

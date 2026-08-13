@@ -1120,12 +1120,6 @@ def test_bernini_validates_effective_video_frames_before_prompt_encoding(monkeyp
         vace_layers = None
 
         def forward_packed(self, **kwargs):
-            return kwargs["latent_segments"][-1]
-
-        def forward_packed(self, **kwargs):
-            return kwargs["latent_segments"][-1]
-
-        def forward_packed(self, **kwargs):
             raise AssertionError("the unsupported request must fail before denoising")
 
     class FakeVae:

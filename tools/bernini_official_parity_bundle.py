@@ -16,7 +16,9 @@ class BerniniOfficialParityBundle:
         "t2v",
         "v2v_case1",
         "mv2v",
+        "v2v_case3",
         "r2v",
+        "r2v_case2",
         "rv2v_case1",
         "ads2v",
     )

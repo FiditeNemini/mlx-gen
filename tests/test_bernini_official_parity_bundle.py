@@ -120,7 +120,9 @@ def test_official_public_case_manifest_matches_documented_1_3b_release_rows():
         "t2v",
         "v2v_case1",
         "mv2v",
+        "v2v_case3",
         "r2v",
+        "r2v_case2",
         "rv2v_case1",
         "ads2v",
     )

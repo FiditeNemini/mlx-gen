@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-08-13
+
+Bernini-R 1.3B renderer and Wan conditioning release. Ships the experimental
+Bernini reference-to-video / video-edit renderer (0105), Wan A14B multi-frame
+context head conditioning (0102), and Wan A14B SVI 2.0 Pro chain conditioning
+(0103). Capabilities `schema_version` advances 5 -> 7 for the new Wan fields.
+
 ### Added
 
 - **Bernini-R 1.3B reference video renderer (0105)**: the unified `mlxgen generate` command and
@@ -18,16 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `t2v`, `r2v`, `rv2v`, `v2v`, `mv2v`, `ads2v`) used by the public-case parity harness. Setup
   uses a bounded, revision-pinned factored download from the Wan2.1 base components and official
   1.3B renderer; `--all-files`, `prepare`, runtime q4/q8, and LoRA are rejected because only the
-  BF16 source route is numerically credible. The route ships as **EXPERIMENTAL**: the original
-  2026-08-04 schema-v3 release bundle still fails its visual gate, but the later official-public
-  1.3B parity pass materially improved the row. Current accepted local evidence now covers the
-  official `i2i`, `t2i`, `t2v`, `r2v`, and `rv2v_case1` examples; the remaining public rows
-  (`v2v_case1`, `v2v_case2` / `mv2v`, `v2v_case3`, `r2v_case2`, and `ads2v`) stay open in the
-  parity matrix. The evidence includes
-  focused numerical parity, high-resolution proof sheets, exact-noise public-case reruns, and
-  measured whole-process physical peaks up to `9.45 GB` for the bounded proof profiles. See
-  [Bernini-R 1.3B](docs/bernini.md) for commands, capacity limits, current accepted rows, and the
-  remaining open matrix.
+  BF16 source route is numerically credible. The route ships as **EXPERIMENTAL** and is not yet
+  promoted: the historical 2026-08-04 schema-v3 bundle still fails at its bounded 17-frame profile,
+  but seven official public 1.3B rows plus `ads2v` at mid profile are qualitatively accepted with
+  committed proof (full prompts and contact sheets in
+  `docs/assets/validation/bernini-r-1.3b-2026-08-11/`). Oracle-dispositioned rows `r2v_case2` and
+  `v2v_case3` fail at their official recipes in both implementations; documented tuned recovery
+  recipes are bundled separately. See [Bernini-R 1.3B](docs/bernini.md) for commands, capacity
+  limits, the official example catalog, and the parity matrix.
 
 - **Wan A14B i2v SVI 2.0 Pro conditioning (0103)**: `--svi-anchor-image`,
   `--svi-motion-latent`, `--svi-motion-latent-count`, `--svi-lora-high`,

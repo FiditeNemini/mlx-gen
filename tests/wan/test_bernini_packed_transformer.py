@@ -3,8 +3,10 @@ import numpy as np
 import pytest
 import torch
 
-from mflux.models.wan.model.wan_transformer import WanTransformer
-from mflux.models.wan.model.wan_transformer import wan_attention as wan_attention_module
+from mflux.models.wan.model.wan_transformer import (
+    WanTransformer,
+    wan_attention as wan_attention_module,
+)
 from mflux.models.wan.model.wan_transformer.wan_attention import WanAttention
 from mflux.models.wan.model.wan_transformer.wan_embedding import WanRotaryPosEmbed, WanTimeTextImageEmbedding
 from mflux.models.wan.variants.wan_bernini import BerniniRenderer

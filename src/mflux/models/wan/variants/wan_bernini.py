@@ -8,8 +8,8 @@ from typing import Any
 
 import mlx.core as mx
 import numpy as np
-from PIL import Image
 from mlx.utils import tree_map
+from PIL import Image
 
 from mflux.callbacks import ProgressCallback
 from mflux.models.common.config.model_config import ModelConfig
