@@ -10,9 +10,13 @@ quadruped robotic dog outcome that the official `v2v` recipe fails to produce at
 
 ## mlx-gen output
 
-![mlx-gen](mlx_sheet.png)
+<img src="mlx_sheet_preview.png" alt="mlx-gen output contact sheet" width="100%" />
+
+Full resolution: [mlx_sheet.png](mlx_sheet.png)
 
 ## Artifacts
 
 - output: `v2v_case3_mv2vprefix.mp4`
 - metadata: `v2v_case3_mv2vprefix.metadata.json`
+- mlx sheet: [mlx_sheet.png](mlx_sheet.png)
+- source validation run: `/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/exp_v2v_case3_mv2vprefix` (local harness only)

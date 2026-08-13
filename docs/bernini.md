@@ -72,8 +72,9 @@ remains focused on the documented video workflows above.
 
 Committed proof for every upstream public example row lives in the
 [official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md). Each case
-directory contains the **full upstream prompt**, input/official/mlx contact sheets, reproduce
-command, generated artifact, and metadata when available. Row status follows the
+directory contains the **full upstream prompt**, GitHub-friendly preview contact sheets plus
+full-resolution input/official/mlx sheets, reproduce command, generated artifact, and metadata when
+available. Row status follows the
 [official example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md).
 
 | Row | Upstream case | Status | Proof (prompt + sheets) |

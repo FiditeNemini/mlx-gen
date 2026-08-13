@@ -4,7 +4,9 @@
 
 - source video: `/private/tmp/bernini_official_20260810/assets/testcases/v2v/source_case2.mp4`
 
-![input](input_sheet.png)
+<img src="input_sheet_preview.png" alt="Input contact sheet" width="100%" />
+
+Full resolution: [input_sheet.png](input_sheet.png)
 
 ## Request
 
@@ -39,17 +41,23 @@ uv run python validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/run_o
 
 ## Official reference output
 
-![official](official_sheet.png)
+<img src="official_sheet_preview.png" alt="Official reference contact sheet" width="100%" />
+
+Full resolution: [official_sheet.png](official_sheet.png)
 
 ## mlx-gen output
 
-![mlx-gen](mlx_sheet.png)
+<img src="mlx_sheet_preview.png" alt="mlx-gen output contact sheet" width="100%" />
+
+Full resolution: [mlx_sheet.png](mlx_sheet.png)
 
 ## Artifacts
 
-- output: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mv2v.mp4`
-- metadata: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/mv2v.metadata.json`
-- initial noise: `validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v/initial_noise.npy` (torch-cpu-manual-seed, seed=42)
-- runtime policy: `low_ram=True`, `clear_cache_each_step=True`, `clear_cache_each_transformer_block=False`, `release_denoisers_before_decode=True`
-- case json: `/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case2.json`
+- output: `mv2v.mp4`
+- metadata: `mv2v.metadata.json`
+- input sheet: [input_sheet.png](input_sheet.png)
+- official sheet: [official_sheet.png](official_sheet.png)
+- mlx sheet: [mlx_sheet.png](mlx_sheet.png)
+- initial noise: `initial_noise.npy` in the source validation run (not bundled)
 - official output: `/private/tmp/bernini_official_20260810/assets/testcases/v2v/v2v_case2_out.mp4`
+- source validation run: `/Users/albou/projects/gh/mlx-gen/validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v` (local harness only)

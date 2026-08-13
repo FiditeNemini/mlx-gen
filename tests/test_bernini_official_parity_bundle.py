@@ -3,6 +3,8 @@ import json
 import sys
 from pathlib import Path
 
+from PIL import Image
+
 OFFICIAL_PUBLIC_CASE_IDS = (
     "t2i",
     "i2i",
@@ -39,8 +41,13 @@ def test_official_parity_bundle_copies_generated_output_and_metadata(tmp_path, m
     case_dir = workspace_root / "validation_outputs" / "bernini_r_1_3b_2026_08_11" / "t2v_case_run" / "t2v"
     case_dir.mkdir(parents=True)
 
-    for name in ("README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png"):
-        (case_dir / name).write_bytes(b"stub")
+    for name in ("README.md",):
+        (case_dir / name).write_text(
+            "# T2V\n\n![mlx-gen](mlx_sheet.png)\n\n## Artifacts\n\n- output: `old`\n",
+            encoding="utf-8",
+        )
+    for name in ("input_sheet.png", "official_sheet.png", "mlx_sheet.png"):
+        Image.new("RGB", (1600, 200), color=(128, 64, 32)).save(case_dir / name, format="PNG")
 
     output_path = workspace_root / "validation_outputs" / "bernini_r_1_3b_2026_08_11" / "t2v_case_run" / "t2v" / "t2v.mp4"
     output_path.write_bytes(b"video")
@@ -87,6 +94,9 @@ def test_official_parity_bundle_copies_generated_output_and_metadata(tmp_path, m
         "output": "t2v.mp4",
         "metadata": "t2v.metadata.json",
     }
+    readme_text = (output_dir / "t2v" / "README.md").read_text()
+    assert '<img src="mlx_sheet_preview.png"' in readme_text
+    assert (output_dir / "t2v" / "mlx_sheet_preview.png").exists()
 
     manifest = json.loads((output_dir / "manifest.json").read_text())
     assert manifest["cases"] == [
@@ -103,6 +113,43 @@ def test_official_parity_bundle_copies_generated_output_and_metadata(tmp_path, m
             "bundle_metadata": "t2v.metadata.json",
         }
     ]
+
+
+def test_canonical_discovery_prefers_pinned_mv2v_source():
+    module = _load_bundle_module()
+    bundle = module.BerniniOfficialParityBundle
+    workspace_root = Path(__file__).resolve().parents[1]
+    discovered = bundle._discover_cases(
+        workspace_root=workspace_root,
+        case_ids=("mv2v",),
+        search_roots=[workspace_root / root for root in bundle.DEFAULT_SEARCH_ROOTS],
+        require_reviewed=True,
+    )
+    mv2v_dir = discovered.get("mv2v")
+    if mv2v_dir is None:
+        return
+    assert mv2v_dir.name == "mv2v"
+    assert mv2v_dir.parent.name == "head_canvasfix_mv2v_full_v2"
+
+
+def test_committed_bundle_readmes_embed_mlx_preview_sheets():
+    bundle_root = (
+        Path(__file__).resolve().parents[1]
+        / "docs/assets/validation/bernini-r-1.3b-2026-08-11"
+    )
+    if not bundle_root.exists():
+        return
+    case_dirs = sorted(path for path in bundle_root.iterdir() if path.is_dir())
+    assert case_dirs, "expected at least one committed bundle case directory"
+    for case_dir in case_dirs:
+        readme_path = case_dir / "README.md"
+        if not readme_path.exists():
+            continue
+        readme_text = readme_path.read_text()
+        if "mlx_sheet" not in readme_text:
+            continue
+        assert "mlx_sheet_preview.png" in readme_text, case_dir.name
+        assert (case_dir / "mlx_sheet_preview.png").exists(), case_dir.name
 
 
 def test_official_public_case_manifest_matches_documented_1_3b_release_rows():

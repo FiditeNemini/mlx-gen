@@ -2,8 +2,8 @@
 
 This bundle assembles the current official public-case proof rows from the local Bernini 1.3B validation runs.
 Each case directory contains the human-readable case README, prompt, expected result, actual result,
-reproduce command, high-resolution input/official/mlx-gen contact sheets, and the generated mlx artifact
-(video or image) with metadata when available.
+reproduce command, GitHub-friendly preview contact sheets plus full-resolution sheets, and the generated
+mlx artifact (video or image) with metadata when available.
 
 Dispositioned rows (`r2v_case2_*`, `v2v_case3_*`) document oracle-proven 1.3B limits and the
 tuned recovery recipes described in the parity matrix.

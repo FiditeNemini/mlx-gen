@@ -1,9 +1,12 @@
 import argparse
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 
 class BerniniOfficialParityBundle:
@@ -28,6 +31,25 @@ class BerniniOfficialParityBundle:
     )
     COPY_FILES = ("README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png")
     REQUIRED_PROOF_FILES = ("proof.json", "README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png")
+    SHEET_PREVIEW_MAX_WIDTH = 1200
+    SHEET_IMAGE_MARKDOWN: tuple[tuple[str, str, str], ...] = (
+        ("input_sheet.png", "input_sheet_preview.png", "Input contact sheet"),
+        ("official_sheet.png", "official_sheet_preview.png", "Official reference contact sheet"),
+        ("mlx_sheet.png", "mlx_sheet_preview.png", "mlx-gen output contact sheet"),
+    )
+    DISPOSITIONED_ONLY_CASE_IDS = frozenset({"r2v_case2", "v2v_case3"})
+    # Pinned accepted-case sources for the committed 2026-08-11 bundle. Heuristic
+    # discovery can pick newer ablations or rejected release candidates.
+    CANONICAL_CASE_SOURCES: dict[str, str] = {
+        "t2i": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2i/t2i",
+        "i2i": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_i2i/i2i",
+        "t2v": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity/exact_noise_t2v/t2v",
+        "v2v_case1": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_v2v_case1_launchd_round3/v2v_case1",
+        "mv2v": "validation_outputs/bernini_r_1_3b_2026_08_11/head_canvasfix_mv2v_full_v2/mv2v",
+        "r2v": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_segmented_r2v_40step_launchd_round7/r2v",
+        "rv2v_case1": "validation_outputs/bernini_r_1_3b_2026_08_10/official_parity_rv2v_case1_steps20_current_launchd_v1/rv2v_case1",
+        "ads2v": "validation_outputs/bernini_r_1_3b_2026_08_11/head_ads2v_mid480_61f/ads2v",
+    }
     # Oracle-dispositioned rows and tuned recovery recipes that sit outside the public
     # 1.3B model-card manifest but are documented in the parity matrix.
     DISPOSITIONED_VARIANTS: tuple[tuple[str, str], ...] = (
@@ -46,6 +68,12 @@ class BerniniOfficialParityBundle:
             shutil.rmtree(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         selected_case_ids = tuple(args.case_id) if args.case_id else BerniniOfficialParityBundle.CASE_IDS
+        if args.include_dispositioned:
+            selected_case_ids = tuple(
+                case_id
+                for case_id in selected_case_ids
+                if case_id not in BerniniOfficialParityBundle.DISPOSITIONED_ONLY_CASE_IDS
+            )
         discovered = BerniniOfficialParityBundle._discover_cases(
             workspace_root=workspace_root,
             case_ids=selected_case_ids,
@@ -80,6 +108,12 @@ class BerniniOfficialParityBundle:
             proof_copy = dict(proof)
             if bundled_artifacts:
                 proof_copy["bundled_artifacts"] = bundled_artifacts
+            BerniniOfficialParityBundle._finalize_case_bundle(
+                case_target_dir=case_target_dir,
+                proof=proof_copy,
+                bundled_artifacts=bundled_artifacts,
+                case_source_dir=case_source_dir,
+            )
             (case_target_dir / "proof.json").write_text(json.dumps(proof_copy, indent=2) + "\n")
             copied_case = {
                 "id": case_id,
@@ -145,8 +179,9 @@ class BerniniOfficialParityBundle:
         )
         return parser.parse_args()
 
-    @staticmethod
+    @classmethod
     def _discover_cases(
+        cls,
         *,
         workspace_root: Path,
         case_ids: tuple[str, ...],
@@ -167,15 +202,19 @@ class BerniniOfficialParityBundle:
                 if case_id not in requested:
                     continue
                 case_dir = proof_path.parent
-                if not BerniniOfficialParityBundle._is_complete_case_dir(case_dir):
+                if not cls._is_complete_case_dir(case_dir):
                     continue
-                if require_reviewed and not BerniniOfficialParityBundle._is_reviewed(proof):
+                if require_reviewed and not cls._is_accepted_for_bundle(proof):
                     continue
-                native_score = 1 if BerniniOfficialParityBundle._is_native_case_dir(case_dir, proof) else 0
+                native_score = 1 if cls._is_native_case_dir(case_dir, proof) else 0
                 score = (native_score, proof_path.stat().st_mtime)
                 candidates[case_id].append((score, case_dir))
         selected: dict[str, Path] = {}
         for case_id in case_ids:
+            canonical_dir = cls._resolve_canonical_case_dir(workspace_root=workspace_root, case_id=case_id)
+            if canonical_dir is not None:
+                selected[case_id] = canonical_dir
+                continue
             options = candidates.get(case_id, [])
             if not options:
                 continue
@@ -184,17 +223,42 @@ class BerniniOfficialParityBundle:
         return selected
 
     @classmethod
+    def _resolve_canonical_case_dir(cls, *, workspace_root: Path, case_id: str) -> Path | None:
+        source_rel = cls.CANONICAL_CASE_SOURCES.get(case_id)
+        if source_rel is None:
+            return None
+        case_dir = (workspace_root / source_rel).resolve()
+        if not cls._is_complete_case_dir(case_dir):
+            return None
+        return case_dir
+
+    @classmethod
     def _is_complete_case_dir(cls, case_dir: Path) -> bool:
         return all((case_dir / name).exists() for name in cls.REQUIRED_PROOF_FILES)
 
     @staticmethod
-    def _is_reviewed(proof: dict[str, Any]) -> bool:
+    def _observed_result_text(proof: dict[str, Any]) -> str:
         observed = proof.get("observed_result")
         if isinstance(observed, list):
-            return bool(observed)
+            return " ".join(str(item) for item in observed)
         if isinstance(observed, str):
-            return bool(observed.strip()) and "not yet manually reviewed" not in observed.lower()
-        return False
+            return observed
+        return ""
+
+    @classmethod
+    def _is_accepted_for_bundle(cls, proof: dict[str, Any]) -> bool:
+        text = cls._observed_result_text(proof).strip().lower()
+        if not text:
+            return False
+        if "not yet manually reviewed" in text:
+            return False
+        if "not acceptable" in text:
+            return False
+        return True
+
+    @staticmethod
+    def _is_reviewed(proof: dict[str, Any]) -> bool:
+        return BerniniOfficialParityBundle._is_accepted_for_bundle(proof)
 
     @staticmethod
     def _is_native_case_dir(case_dir: Path, proof: dict[str, Any]) -> bool:
@@ -321,6 +385,12 @@ class BerniniOfficialParityBundle:
             proof_copy["bundle_id"] = bundle_id
             if bundled_artifacts:
                 proof_copy["bundled_artifacts"] = bundled_artifacts
+            cls._finalize_case_bundle(
+                case_target_dir=case_target_dir,
+                proof=proof_copy,
+                bundled_artifacts=bundled_artifacts,
+                case_source_dir=source_dir,
+            )
             (case_target_dir / "proof.json").write_text(json.dumps(proof_copy, indent=2) + "\n")
             return {
                 "id": bundle_id,
@@ -399,6 +469,13 @@ class BerniniOfficialParityBundle:
         if metadata_path is not None:
             readme_lines.append(f"- metadata: `{metadata_path.name}`")
         (case_target_dir / "README.md").write_text("\n".join(readme_lines) + "\n")
+        bundled_artifacts = dict(proof["bundled_artifacts"])
+        BerniniOfficialParityBundle._finalize_case_bundle(
+            case_target_dir=case_target_dir,
+            proof=proof,
+            bundled_artifacts=bundled_artifacts,
+            case_source_dir=source_dir,
+        )
         return {
             "id": bundle_id,
             "title": proof["title"],
@@ -412,6 +489,107 @@ class BerniniOfficialParityBundle:
             "bundle_metadata": metadata_path.name if metadata_path is not None else None,
         }
 
+    @classmethod
+    def _finalize_case_bundle(
+        cls,
+        *,
+        case_target_dir: Path,
+        proof: dict[str, Any],
+        bundled_artifacts: dict[str, str],
+        case_source_dir: Path | None,
+    ) -> None:
+        cls._create_case_sheet_previews(case_target_dir)
+        cls._normalize_case_readme(
+            case_target_dir=case_target_dir,
+            proof=proof,
+            bundled_artifacts=bundled_artifacts,
+            case_source_dir=case_source_dir,
+        )
+
+    @classmethod
+    def _create_case_sheet_previews(cls, case_target_dir: Path) -> None:
+        for stem in ("input_sheet", "official_sheet", "mlx_sheet"):
+            source_path = case_target_dir / f"{stem}.png"
+            if not source_path.exists():
+                continue
+            target_path = case_target_dir / f"{stem}_preview.png"
+            cls._create_sheet_preview(source_path=source_path, target_path=target_path)
+
+    @staticmethod
+    def _create_sheet_preview(*, source_path: Path, target_path: Path) -> None:
+        max_width = BerniniOfficialParityBundle.SHEET_PREVIEW_MAX_WIDTH
+        with Image.open(source_path) as image:
+            rgb_image = image.convert("RGB")
+            if rgb_image.width <= max_width:
+                preview = rgb_image
+            else:
+                height = max(1, round(rgb_image.height * max_width / rgb_image.width))
+                preview = rgb_image.resize((max_width, height), Image.Resampling.LANCZOS)
+            preview.save(target_path, format="PNG", optimize=True)
+
+    @classmethod
+    def _normalize_case_readme(
+        cls,
+        *,
+        case_target_dir: Path,
+        proof: dict[str, Any],
+        bundled_artifacts: dict[str, str],
+        case_source_dir: Path | None,
+    ) -> None:
+        readme_path = case_target_dir / "README.md"
+        if not readme_path.exists():
+            return
+        text = readme_path.read_text()
+        for full_name, preview_name, alt in cls.SHEET_IMAGE_MARKDOWN:
+            pattern = re.compile(rf"!\[[^\]]*\]\({re.escape(full_name)}\)")
+            replacement = (
+                f'<img src="{preview_name}" alt="{alt}" width="100%" />\n\n'
+                f"Full resolution: [{full_name}]({full_name})"
+            )
+            text = pattern.sub(replacement, text)
+        text = cls._rewrite_artifacts_section(
+            text=text,
+            proof=proof,
+            bundled_artifacts=bundled_artifacts,
+            case_source_dir=case_source_dir,
+            case_target_dir=case_target_dir,
+        )
+        readme_path.write_text(text)
+
+    @staticmethod
+    def _rewrite_artifacts_section(
+        *,
+        text: str,
+        proof: dict[str, Any],
+        bundled_artifacts: dict[str, str],
+        case_source_dir: Path | None,
+        case_target_dir: Path,
+    ) -> str:
+        marker = "## Artifacts"
+        if marker not in text:
+            return text
+        prefix, _ = text.split(marker, 1)
+        lines = [marker, ""]
+        if bundled_artifacts.get("output"):
+            lines.append(f"- output: `{bundled_artifacts['output']}`")
+        if bundled_artifacts.get("metadata"):
+            lines.append(f"- metadata: `{bundled_artifacts['metadata']}`")
+        for sheet_name in ("input_sheet.png", "official_sheet.png", "mlx_sheet.png"):
+            if not (case_target_dir / sheet_name).exists():
+                continue
+            label = sheet_name.removesuffix(".png").replace("_", " ")
+            lines.append(f"- {label}: [{sheet_name}]({sheet_name})")
+        if case_source_dir is not None and (case_source_dir / "initial_noise.npy").exists():
+            lines.append(
+                "- initial noise: `initial_noise.npy` in the source validation run (not bundled)"
+            )
+        official_output = proof.get("official_output")
+        if official_output:
+            lines.append(f"- official output: `{official_output}`")
+        if case_source_dir is not None:
+            lines.append(f"- source validation run: `{case_source_dir}` (local harness only)")
+        return prefix.rstrip() + "\n\n" + "\n".join(lines) + "\n"
+
     @staticmethod
     def _write_readme(*, output_dir: Path, copied_cases: list[dict[str, Any]]) -> None:
         lines = [
@@ -419,8 +597,8 @@ class BerniniOfficialParityBundle:
             "",
             "This bundle assembles the current official public-case proof rows from the local Bernini 1.3B validation runs.",
             "Each case directory contains the human-readable case README, prompt, expected result, actual result,",
-            "reproduce command, high-resolution input/official/mlx-gen contact sheets, and the generated mlx artifact",
-            "(video or image) with metadata when available.",
+            "reproduce command, GitHub-friendly preview contact sheets plus full-resolution sheets, and the generated",
+            "mlx artifact (video or image) with metadata when available.",
             "",
             "Dispositioned rows (`r2v_case2_*`, `v2v_case3_*`) document oracle-proven 1.3B limits and the",
             "tuned recovery recipes described in the parity matrix.",
@@ -450,13 +628,20 @@ class BerniniOfficialParityBundle:
     def _build_report(*, selected_case_ids: tuple[str, ...], copied_cases: list[dict[str, Any]]) -> dict[str, Any]:
         included_case_ids = [str(case["id"]) for case in copied_cases]
         missing_case_ids = [case_id for case_id in selected_case_ids if case_id not in included_case_ids]
+        reviewed_case_ids = [
+            str(case["id"])
+            for case in copied_cases
+            if BerniniOfficialParityBundle._is_accepted_for_bundle(
+                {"observed_result": case.get("observed_result")}
+            )
+        ]
         return {
             "kind": "bernini_r_1_3b_official_public_parity_bundle",
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             "required_case_ids": list(selected_case_ids),
             "included_case_ids": included_case_ids,
             "missing_case_ids": missing_case_ids,
-            "reviewed_case_ids": included_case_ids,
+            "reviewed_case_ids": reviewed_case_ids,
             "passed": len(missing_case_ids) == 0,
             "cases": copied_cases,
         }

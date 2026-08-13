@@ -230,7 +230,7 @@ bug:
 
 For RV2V/V2V, Bernini requires source-aspect, resize-only video conditioning. It intentionally
 rejects crop, pad, exact-resize, `--video-strength`, masks, LoRA, and non-UniPC solvers. See
-[Bernini-R 1.3B](bernini.md) and its [validation bundle](assets/validation/bernini-r-1.3b-2026-08-04/README.md).
+[Bernini-R 1.3B](bernini.md) and its [validation bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md).
 
 ## `generate --path` Fails
 
