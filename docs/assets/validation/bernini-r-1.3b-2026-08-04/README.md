@@ -29,7 +29,12 @@ The model-backed report separates execution from quality:
 See the [schema-v3 report](bundle/bernini_proof_report.json), [visual inspection](bundle/visual_review.md),
 and [structured hash bindings](bundle/visual_review.json).
 
-## Visual summary
+## Visual summary (historical schema-v3 FAIL profile)
+
+These sheets are from the August 4, 2026 bounded 17-frame / 20-step release gate. They are **not**
+recomputed for the accepted official-public 1.3B rows. For current mlx-gen evidence, use the
+[2026-08-11 official public parity bundle](../bernini-r-1.3b-2026-08-11/README.md) and its
+[summary contact sheet](../bernini-r-1.3b-2026-08-11/official_public_summary_contact_sheet_preview.png).
 
 ![R2V, RV2V controls, V2V, and condition-bound outputs](bundle/output_summary_contact_sheet.png)
 

@@ -8,6 +8,15 @@ mlx artifact (video or image) with metadata when available.
 Dispositioned rows (`r2v_case2_*`, `v2v_case3_*`) document oracle-proven 1.3B limits and the
 tuned recovery recipes described in the parity matrix.
 
+## Overview
+
+<img src="official_public_summary_contact_sheet_preview.png" alt="Official public parity mlx-gen overview contact sheet" width="100%" />
+
+Full resolution: [official_public_summary_contact_sheet.png](official_public_summary_contact_sheet.png)
+
+Each row shows input, official reference, and mlx-gen contact sheets from the pinned accepted-case
+validation runs in this bundle (not the older 2026-08-04 schema-v3 FAIL profile).
+
 ## Included rows
 
 | Row | Task | Proof |

@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 
 class BerniniOfficialParityBundle:
@@ -31,6 +31,12 @@ class BerniniOfficialParityBundle:
     )
     COPY_FILES = ("README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png")
     REQUIRED_PROOF_FILES = ("proof.json", "README.md", "input_sheet.png", "official_sheet.png", "mlx_sheet.png")
+    SUMMARY_SHEET_NAME = "official_public_summary_contact_sheet.png"
+    SUMMARY_PREVIEW_NAME = "official_public_summary_contact_sheet_preview.png"
+    SUMMARY_ROW_TARGET_WIDTH = 1080
+    SUMMARY_LABEL_WIDTH = 220
+    SUMMARY_PADDING = 28
+    SUMMARY_GAP = 16
     SHEET_PREVIEW_MAX_WIDTH = 1200
     SHEET_IMAGE_MARKDOWN: tuple[tuple[str, str, str], ...] = (
         ("input_sheet.png", "input_sheet_preview.png", "Input contact sheet"),
@@ -150,6 +156,10 @@ class BerniniOfficialParityBundle:
         )
         (output_dir / "bernini_proof_report.json").write_text(json.dumps(report, indent=2) + "\n")
         BerniniOfficialParityBundle._write_readme(output_dir=output_dir, copied_cases=copied_cases)
+        BerniniOfficialParityBundle._write_summary_contact_sheet(
+            output_dir=output_dir,
+            copied_cases=copied_cases,
+        )
 
     @staticmethod
     def _parse_args() -> argparse.Namespace:
@@ -603,6 +613,17 @@ class BerniniOfficialParityBundle:
             "Dispositioned rows (`r2v_case2_*`, `v2v_case3_*`) document oracle-proven 1.3B limits and the",
             "tuned recovery recipes described in the parity matrix.",
             "",
+            "## Overview",
+            "",
+            f'<img src="{BerniniOfficialParityBundle.SUMMARY_PREVIEW_NAME}" '
+            'alt="Official public parity mlx-gen overview contact sheet" width="100%" />',
+            "",
+            f"Full resolution: [{BerniniOfficialParityBundle.SUMMARY_SHEET_NAME}]"
+            f"({BerniniOfficialParityBundle.SUMMARY_SHEET_NAME})",
+            "",
+            "Each row shows input, official reference, and mlx-gen contact sheets from the pinned accepted-case",
+            "validation runs in this bundle (not the older 2026-08-04 schema-v3 FAIL profile).",
+            "",
             "## Included rows",
             "",
             "| Row | Task | Proof |",
@@ -623,6 +644,126 @@ class BerniniOfficialParityBundle:
             ]
         )
         (output_dir / "README.md").write_text("\n".join(lines) + "\n")
+
+    @classmethod
+    def _write_summary_contact_sheet(
+        cls,
+        *,
+        output_dir: Path,
+        copied_cases: list[dict[str, Any]],
+    ) -> None:
+        panel_names = (
+            ("input", "input_sheet_preview.png"),
+            ("official", "official_sheet_preview.png"),
+            ("mlx", "mlx_sheet_preview.png"),
+        )
+        rows: list[tuple[str, str, list[tuple[str, Image.Image]]]] = []
+        for case in copied_cases:
+            case_id = str(case["id"])
+            title = str(case.get("title") or case_id)
+            case_dir = output_dir / case_id
+            panels: list[tuple[str, Image.Image]] = []
+            for panel_label, filename in panel_names:
+                sheet_path = case_dir / filename
+                if not sheet_path.exists():
+                    continue
+                with Image.open(sheet_path) as image:
+                    panels.append((panel_label, image.convert("RGB")))
+            if not panels:
+                continue
+            rows.append((case_id, title, panels))
+        if not rows:
+            return
+
+        label_font = cls._summary_font(size=22, bold=True)
+        title_font = cls._summary_font(size=34, bold=True)
+        subtitle_font = cls._summary_font(size=20, bold=False)
+        header_title = "Bernini-R 1.3B official public parity"
+        header_subtitle = (
+            "Pinned accepted-case validation runs · input / official / mlx-gen contact sheets"
+        )
+        content_width = cls.SUMMARY_LABEL_WIDTH + cls.SUMMARY_GAP + cls.SUMMARY_ROW_TARGET_WIDTH
+        sheet_width = content_width + (cls.SUMMARY_PADDING * 2)
+
+        row_heights: list[int] = []
+        for _case_id, _title, panels in rows:
+            scaled = cls._scale_summary_panels(panels=panels, target_width=cls.SUMMARY_ROW_TARGET_WIDTH)
+            row_heights.append(max(image.height for _label, image in scaled) + 34)
+
+        header_height = 110
+        sheet_height = (
+            cls.SUMMARY_PADDING
+            + header_height
+            + cls.SUMMARY_GAP
+            + sum(row_heights)
+            + ((len(rows) - 1) * cls.SUMMARY_GAP)
+            + cls.SUMMARY_PADDING
+        )
+        canvas = Image.new("RGB", (sheet_width, sheet_height), "#ffffff")
+        draw = ImageDraw.Draw(canvas)
+        y = cls.SUMMARY_PADDING
+        draw.text((cls.SUMMARY_PADDING, y), header_title, fill="#111827", font=title_font)
+        y += 42
+        draw.text((cls.SUMMARY_PADDING, y), header_subtitle, fill="#4b5563", font=subtitle_font)
+        y += header_height - 42
+
+        for row_index, (case_id, title, panels) in enumerate(rows):
+            scaled = cls._scale_summary_panels(panels=panels, target_width=cls.SUMMARY_ROW_TARGET_WIDTH)
+            row_height = max(image.height for _label, image in scaled)
+            label = f"{case_id}\n{title}"
+            draw.multiline_text(
+                (cls.SUMMARY_PADDING, y + 4),
+                label,
+                fill="#111827",
+                font=label_font,
+                spacing=4,
+            )
+            panel_x = cls.SUMMARY_PADDING + cls.SUMMARY_LABEL_WIDTH + cls.SUMMARY_GAP
+            cursor_x = panel_x
+            for panel_label, image in scaled:
+                canvas.paste(image, (cursor_x, y))
+                draw.text((cursor_x, y + row_height + 6), panel_label, fill="#6b7280", font=subtitle_font)
+                cursor_x += image.width + cls.SUMMARY_GAP
+            y += row_height + 34
+            if row_index < len(rows) - 1:
+                y += cls.SUMMARY_GAP
+
+        summary_path = output_dir / cls.SUMMARY_SHEET_NAME
+        preview_path = output_dir / cls.SUMMARY_PREVIEW_NAME
+        canvas.save(summary_path, format="PNG", optimize=True)
+        cls._create_sheet_preview(source_path=summary_path, target_path=preview_path)
+
+    @classmethod
+    def _scale_summary_panels(
+        cls,
+        *,
+        panels: list[tuple[str, Image.Image]],
+        target_width: int,
+    ) -> list[tuple[str, Image.Image]]:
+        gap_total = cls.SUMMARY_GAP * max(0, len(panels) - 1)
+        panel_width = max(1, (target_width - gap_total) // max(1, len(panels)))
+        scaled: list[tuple[str, Image.Image]] = []
+        for panel_label, image in panels:
+            if image.width <= panel_width:
+                scaled_image = image
+            else:
+                height = max(1, round(image.height * panel_width / image.width))
+                scaled_image = image.resize((panel_width, height), Image.Resampling.LANCZOS)
+            scaled.append((panel_label, scaled_image))
+        return scaled
+
+    @staticmethod
+    def _summary_font(*, size: int, bold: bool) -> ImageFont.ImageFont:
+        names = (
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/Library/Fonts/Arial Bold.ttf" if bold else "/Library/Fonts/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        )
+        for name in names:
+            path = Path(name)
+            if path.exists():
+                return ImageFont.truetype(str(path), size=size)
+        return ImageFont.load_default()
 
     @staticmethod
     def _build_report(*, selected_case_ids: tuple[str, ...], copied_cases: list[dict[str, Any]]) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 {
   "kind": "bernini_r_1_3b_official_public_parity_bundle",
-  "created_at": "2026-08-13T02:19:42+02:00",
+  "created_at": "2026-08-13T02:39:21+02:00",
   "required_case_ids": [
     "t2i",
     "i2i",
@@ -31,14 +31,8 @@
     "i2i",
     "t2v",
     "v2v_case1",
-    "mv2v",
     "r2v",
-    "rv2v_case1",
-    "ads2v",
-    "r2v_case2_official",
-    "r2v_case2_tuned",
-    "v2v_case3_official",
-    "v2v_case3_mv2vprefix"
+    "rv2v_case1"
   ],
   "passed": true,
   "cases": [

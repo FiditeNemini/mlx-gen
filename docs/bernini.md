@@ -71,8 +71,10 @@ remains focused on the documented video workflows above.
 ## Official Public 1.3B Examples
 
 Committed proof for every upstream public example row lives in the
-[official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md). Each case
-directory contains the **full upstream prompt**, GitHub-friendly preview contact sheets plus
+[official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md). The bundle
+includes a [summary contact sheet](assets/validation/bernini-r-1.3b-2026-08-11/official_public_summary_contact_sheet_preview.png)
+built from the pinned accepted-case validation runs (full profile, August 2026 official-public pass).
+Each case directory contains the **full upstream prompt**, GitHub-friendly preview contact sheets plus
 full-resolution input/official/mlx sheets, reproduce command, generated artifact, and metadata when
 available. Row status follows the
 [official example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md).
@@ -260,7 +262,9 @@ transformer comparisons, VAE encode/decode comparisons, and framework regression
 
 The committed
 [official public parity bundle](assets/validation/bernini-r-1.3b-2026-08-11/README.md) holds every
-accepted and dispositioned row with full prompts, contact sheets, and generated artifacts. Use the
+accepted and dispositioned row with full prompts, contact sheets, and generated artifacts. Start with
+the [summary contact sheet](assets/validation/bernini-r-1.3b-2026-08-11/official_public_summary_contact_sheet_preview.png)
+for a one-page mlx-gen overview of all pinned rows. Use the
 [official example parity matrix](assets/validation/bernini-r-1.3b-2026-08-04/official_example_parity_matrix.md)
 for the row-by-row status, caveats, and oracle methodology.
 

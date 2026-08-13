@@ -94,9 +94,12 @@ def test_official_parity_bundle_copies_generated_output_and_metadata(tmp_path, m
         "output": "t2v.mp4",
         "metadata": "t2v.metadata.json",
     }
+    bundle = module.BerniniOfficialParityBundle
     readme_text = (output_dir / "t2v" / "README.md").read_text()
     assert '<img src="mlx_sheet_preview.png"' in readme_text
     assert (output_dir / "t2v" / "mlx_sheet_preview.png").exists()
+    assert (output_dir / bundle.SUMMARY_SHEET_NAME).exists()
+    assert (output_dir / bundle.SUMMARY_PREVIEW_NAME).exists()
 
     manifest = json.loads((output_dir / "manifest.json").read_text())
     assert manifest["cases"] == [
