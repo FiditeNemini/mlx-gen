@@ -1,8 +1,12 @@
 name: Docs
 
 on:
-  release:
-    types: [published]
+  # Release tags are the deploy signal. The GitHub Release itself is created by the
+  # Release workflow's GITHUB_TOKEN, and GitHub does not start workflows from events
+  # raised by that token, so `release: published` never fires for our releases.
+  push:
+    tags:
+      - "v*"
   workflow_dispatch: {}
 
 concurrency:
