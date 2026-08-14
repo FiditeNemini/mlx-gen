@@ -40,3 +40,5 @@ logs/
 
 /models/
 untracked
+docs-site/
+site/

@@ -1,4 +1,6 @@
 import gc
+import logging
+import math
 import os
 import time
 from dataclasses import replace
@@ -26,6 +28,8 @@ from mflux.utils.runtime_memory import RuntimeMemory
 from mflux.utils.scale_factor import ScaleFactor
 from mflux.utils.video_health import VideoHealth
 from mflux.utils.video_util import AudioCopyResult, VideoStreamWriter, VideoUtil
+
+logger = logging.getLogger(__name__)
 
 
 class SeedVR2StreamedVideoNoiseProvider:
@@ -169,6 +173,10 @@ class SeedVR2(nn.Module):
             model_config=model_config,
         )
 
+    # Auto mode refines with this step count when the one-step output shows the measurable
+    # 8px-lattice noise residue that flat/dark content can produce (see docs/upscaling.md).
+    AUTO_REFINE_STEPS = 4
+
     def generate_image(
         self,
         seed: int,
@@ -176,7 +184,13 @@ class SeedVR2(nn.Module):
         resolution: int | ScaleFactor,
         softness: float = 0.0,
         color_correction_mode: str = "wavelet",
+        num_inference_steps: int | None = None,
     ) -> GeneratedImage:
+        if num_inference_steps is not None and num_inference_steps < 1:
+            raise ValueError("SeedVR2 image restoration requires at least 1 inference step.")
+        auto_steps = num_inference_steps is None
+        first_pass_steps = 1 if auto_steps else num_inference_steps
+
         # 0. Process and scale the input image
         processed_image, true_height, true_width = SeedVR2Util.preprocess_image(
             image_path=image_path,
@@ -185,24 +199,11 @@ class SeedVR2(nn.Module):
         )
         tiling_config = self._effective_tiling_config(true_height=true_height, true_width=true_width)
 
-        # 1. Create a new config based on the model type and input parameters
-        config = Config(
-            width=true_width,
-            height=true_height,
-            guidance=1.0,
-            num_inference_steps=1,
-            image_path=image_path,
-            scheduler="seedvr2_euler",
-            model_config=self.model_config,
-            dimension_multiple=2,
-        )
-
-        # 2. Create the initial latents and conditioning
+        # 1. Create the initial conditioning shared by every denoise pass
         initial_latent = VAEUtil.encode(vae=self.vae, image=processed_image, tiling_config=tiling_config)
         static_condition = SeedVR2LatentCreator.create_condition(encoded_latent=initial_latent)
-        latents = SeedVR2LatentCreator.create_noise_latents(seed=seed, height=initial_latent.shape[-2], width=initial_latent.shape[-1])  # fmt: off
 
-        # 3. Get the pre-computed text embeddings
+        # 2. Get the pre-computed text embeddings
         text_embedding = getattr(self, "text_embedding", None)
         txt_pos = (
             SeedVR2TextEmbeddings.prepare_positive(text_embedding)
@@ -210,40 +211,77 @@ class SeedVR2(nn.Module):
             else SeedVR2TextEmbeddings.load_positive()
         )
 
-        # 4. Create callback context and call before_loop
-        ctx = self.callbacks.start(seed=seed, prompt="", config=config, task="image-to-image")
-        ctx.before_loop(latents)
+        def denoise(config: Config, ctx) -> mx.array:
+            latents = SeedVR2LatentCreator.create_noise_latents(seed=seed, height=initial_latent.shape[-2], width=initial_latent.shape[-1])  # fmt: off
+            for t in config.time_steps:
+                model_input = mx.concatenate([latents, static_condition], axis=1)
+                noise = self.transformer(
+                    txt=txt_pos,
+                    vid=model_input,
+                    timestep=config.scheduler.timesteps[t],
+                )
+                latents = config.scheduler.step(noise=noise, timestep=t, latents=latents)
+                ctx.in_loop(t, latents)
+                mx.eval(latents)
+            return latents
 
-        for t in config.time_steps:
-            model_input = mx.concatenate([latents, static_condition], axis=1)
-
-            # 5.t Predict the noise
-            noise = self.transformer(
-                txt=txt_pos,
-                vid=model_input,
-                timestep=config.scheduler.timesteps[t],
+        def build_config(steps: int) -> Config:
+            return Config(
+                width=true_width,
+                height=true_height,
+                guidance=1.0,
+                num_inference_steps=steps,
+                image_path=image_path,
+                scheduler="seedvr2_euler",
+                model_config=self.model_config,
+                dimension_multiple=1,
             )
 
-            # 6.t Take one denoise step
-            latents = config.scheduler.step(noise=noise, timestep=t, latents=latents)
-
-            # 7.t Call subscribers in-loop
-            ctx.in_loop(t, latents)
-
-            mx.eval(latents)
-
-        # 8. Call subscribers after loop
-        ctx.after_loop(latents)
-
-        # 9. Decode the latents and return the image
+        # 3. First pass: manual step count, or the official single step in auto mode
+        config = build_config(first_pass_steps)
+        ctx = self.callbacks.start(seed=seed, prompt="", config=config, task="image-to-image")
         try:
+            ctx.before_loop(SeedVR2LatentCreator.create_noise_latents(seed=seed, height=initial_latent.shape[-2], width=initial_latent.shape[-1]))  # fmt: off
+            latents = denoise(config, ctx)
             decoded = VAEUtil.decode(vae=self.vae, latent=latents, tiling_config=tiling_config)
             decoded = decoded[:, :, :true_height, :true_width]
+
+            # 4. Auto mode: measure the one-step noise residue and refine when it is present
+            steps_mode = "manual" if not auto_steps else "auto"
+            residue_pct = float("nan")
+            if auto_steps:
+                residue_pct, reference_pct = SeedVR2Util.measure_latent_grid_residue(
+                    decoded=decoded,
+                    reference=processed_image[:, :, :true_height, :true_width],
+                )
+                if SeedVR2Util.one_step_residue_detected(residue_pct, reference_pct):
+                    logger.info(
+                        "SeedVR2: one-step noise residue detected (%.1f%% lattice energy); refining with %d steps.",
+                        residue_pct,
+                        SeedVR2.AUTO_REFINE_STEPS,
+                    )
+                    steps_mode = "auto-refined"
+                    config = build_config(SeedVR2.AUTO_REFINE_STEPS)
+                    latents = denoise(config, ctx)
+                    decoded = VAEUtil.decode(vae=self.vae, latent=latents, tiling_config=tiling_config)
+                    decoded = decoded[:, :, :true_height, :true_width]
+
+            ctx.after_loop(latents)
+
+            # 5. Color-correct the kept decode and return the image
             style = processed_image[:, :, :true_height, :true_width]
             decoded = SeedVR2Util.apply_color_correction(decoded, style, mode=color_correction_mode)
 
-            # 10. Read metadata from the original image if available
             init_metadata = MetadataReader.read_all_metadata(image_path) if image_path else None
+            extra_metadata = {
+                "resolution": str(resolution),
+                "softness": round(float(softness), 3),
+                "color_correction_mode": color_correction_mode,
+                "steps_mode": steps_mode,
+                **self._seedvr2_metadata(),
+            }
+            if auto_steps and math.isfinite(residue_pct):
+                extra_metadata["one_step_residue_pct"] = round(residue_pct, 2)
 
             generated_image = ImageUtil.to_image(
                 seed=seed,
@@ -254,12 +292,7 @@ class SeedVR2(nn.Module):
                 generation_time=config.time_steps.format_dict["elapsed"],
                 image_path=image_path,
                 init_metadata=init_metadata,
-                extra_metadata={
-                    "resolution": str(resolution),
-                    "softness": round(float(softness), 3),
-                    "color_correction_mode": color_correction_mode,
-                    **self._seedvr2_metadata(),
-                },
+                extra_metadata=extra_metadata,
             )
         except Exception:
             ctx.failed()

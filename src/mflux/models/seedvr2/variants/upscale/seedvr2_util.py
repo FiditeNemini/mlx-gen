@@ -555,6 +555,63 @@ class SeedVR2Util:
             out[i] = ref_sorted[inv].reshape(source.shape[1:]).astype(np.float32)
         return out
 
+    # One-step sampling leaves a measurable residue of the seed noise in the x0 estimate on
+    # flat/dark content, which the VAE decodes as a regular texture on its 8px stride grid.
+    # Detection thresholds: the artifact tile must clearly exceed both an absolute lattice share
+    # and the source's own lattice share (measured: defective outputs reach 5%+ while natural
+    # content stays at or below its source level, ~0.1-2.3%).
+    ONE_STEP_RESIDUE_MIN_LATTICE_PCT = 3.0
+    ONE_STEP_RESIDUE_MIN_SOURCE_RATIO = 2.0
+    _RESIDUE_TILE = 256
+
+    @staticmethod
+    def measure_latent_grid_residue(decoded: mx.array, reference: mx.array) -> tuple[float, float]:
+        """Max share (%) of high-pass tile energy on the VAE's 8px lattice, for output and reference."""
+        return (
+            SeedVR2Util._max_tile_lattice_pct(decoded),
+            SeedVR2Util._max_tile_lattice_pct(reference),
+        )
+
+    @staticmethod
+    def one_step_residue_detected(decoded_pct: float, reference_pct: float) -> bool:
+        if not np.isfinite(decoded_pct):
+            return False
+        threshold = max(
+            SeedVR2Util.ONE_STEP_RESIDUE_MIN_LATTICE_PCT,
+            SeedVR2Util.ONE_STEP_RESIDUE_MIN_SOURCE_RATIO * max(reference_pct, 0.5),
+        )
+        return decoded_pct > threshold
+
+    @staticmethod
+    def _max_tile_lattice_pct(image: mx.array) -> float:
+        size = SeedVR2Util._RESIDUE_TILE
+        array = np.asarray(image.astype(mx.float32))
+        if array.ndim == 4:
+            array = array[0]
+        luminance = array.mean(axis=0)
+        height, width = luminance.shape
+        if height < size or width < size:
+            return float("nan")
+        window = np.hanning(size)
+        fy, fx = np.mgrid[-size // 2 : size // 2, -size // 2 : size // 2]
+        high_pass = fy * fy + fx * fx >= size
+        on_lattice = ((np.abs(fy) % 32 <= 1) | (np.abs(fy) % 32 >= 31)) & (
+            (np.abs(fx) % 32 <= 1) | (np.abs(fx) % 32 >= 31)
+        )
+        best = float("nan")
+        for y0 in range(0, height - size + 1, size):
+            for x0 in range(0, width - size + 1, size):
+                patch = luminance[y0 : y0 + size, x0 : x0 + size]
+                patch = (patch - patch.mean()) * window[:, None] * window[None, :]
+                spectrum = np.abs(np.fft.fftshift(np.fft.fft2(patch))) ** 2
+                total = spectrum[high_pass].sum()
+                if total <= 0:
+                    continue
+                pct = 100.0 * spectrum[high_pass & on_lattice].sum() / total
+                if not np.isfinite(best) or pct > best:
+                    best = pct
+        return best
+
     @staticmethod
     def _resize_and_soften(
         *,
@@ -564,13 +621,14 @@ class SeedVR2Util:
     ) -> tuple[Image.Image, int, int]:
         w, h = image.size
         if isinstance(resolution, ScaleFactor):
-            target_res = resolution.get_scaled_value(min(w, h))
+            scale = float(resolution.value)
         else:
-            target_res = resolution
+            scale = resolution / min(w, h)
 
-        scale = target_res / min(w, h)
-        true_w = max(2, (int(w * scale) // 2) * 2)
-        true_h = max(2, (int(h * scale) // 2) * 2)
+        # The exact requested geometry is kept: network divisibility is handled by padding
+        # (images) or center-cropping (video), never by resizing to a snapped size.
+        true_w = max(2, round(w * scale))
+        true_h = max(2, round(h * scale))
         factor = 1.0 + (max(0.0, min(1.0, softness)) * 7.0)
 
         if factor <= 1.0 and true_w == w and true_h == h:
@@ -594,9 +652,12 @@ class SeedVR2Util:
         if pad_w == 0 and pad_h == 0:
             return image
 
-        padded = Image.new("RGB", (width + pad_w, height + pad_h), (0, 0, 0))
-        padded.paste(image, (0, 0))
-        return padded
+        # Reflect-pad instead of black-pad: a hard synthetic edge in the conditioning image
+        # bleeds into the restored content near the crop boundary.
+        arr = np.asarray(image)
+        mode = "reflect" if pad_h < arr.shape[0] and pad_w < arr.shape[1] else "edge"
+        padded = np.pad(arr, ((0, pad_h), (0, pad_w), (0, 0)), mode=mode)
+        return Image.fromarray(padded)
 
     @staticmethod
     def _center_crop_to_multiple(image: Image.Image, *, factor: int) -> Image.Image:

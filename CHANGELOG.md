@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-08-14
+
+Wan default shot length, SeedVR2 image-restoration geometry fidelity, and documentation-site
+release.
+
+### Fixed
+
+- **SeedVR2 image restoration returns the exact requested geometry.** Previously the shortest
+  edge was silently floored to a multiple of 16 before scaling, so `--resolution 1x` resampled
+  the whole image (for example `1451x1600` came back as `1440x1586`, displacing every feature
+  toward the top-left), and internal padding filled with black, bleeding a dark edge into the
+  restored content near the padded border. `1x` is now a pixel-exact identity on geometry
+  (output size equals input size, zero shift at every corner), integer shorter-edge targets
+  keep the exact aspect ratio, and internal padding is reflective and cropped away after
+  decoding. Video restoration keeps the official center-crop-to-16 behavior.
+
+### Added
+
+- **Automatic step selection for SeedVR2 image restoration, with a `--steps` override.** On
+  flat or dark content such as astrophotography or night scenes, the official one-step estimate
+  retains a measurable residue of the sampling noise that decodes as a regular 8-pixel mesh
+  texture and washes out the faintest structure, while on detail-rich content extra steps
+  instead synthesize texture that is not in the source. The default is now adaptive: MLX-Gen
+  runs the official single step, measures the mesh signature of the decoded output against the
+  source, and re-runs at 4 steps only when the artifact is present (validated across
+  astrophoto, portrait, super-resolution, and landscape content: only the astrophoto triggers
+  refinement). The decision is recorded in metadata (`steps_mode`, `one_step_residue_pct`), and
+  `--steps 1`-`4` forces a fixed count. See "Steps for Flat or Dark Content" in
+  `docs/upscaling.md`.
+- **Documentation site on GitHub Pages**: every published release now builds and deploys the
+  documentation with MkDocs (`.github/workflows/docs.yml`), staging the doc set with validation
+  media linked on GitHub instead of shipped in the site.
+
+### Changed
+
+- **Wan generation defaults to 81 frames across the family** (previously TI2V-5B and the shared
+  Python-API default used 121). The A14B models train at 81 frames, and longer single shots
+  drift toward a ping-pong ending that returns to the first frame; 81 keeps default shots inside
+  every model's stable range. TI2V-5B's native 121-frame shots stay available by passing
+  `--frames 121` (or `num_frames=121`) explicitly. `docs/wan-video.md` and the FAQ document the
+  recommendation and the continuation routes for longer clips.
+
 ## [0.27.0] - 2026-08-13
 
 Bernini-R 1.3B BF16 package and Qwen image-edit geometry-stability release.

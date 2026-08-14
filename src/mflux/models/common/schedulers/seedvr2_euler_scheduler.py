@@ -26,6 +26,11 @@ class SeedVR2EulerScheduler(BaseScheduler):
         return self._sigmas
 
     def _compute_timesteps_and_sigmas(self) -> tuple[mx.array, mx.array]:
+        # Uniform trailing schedule. The official SeedVR resolution-dependent timestep
+        # transform (shift toward sigma 1) belongs to the base 50-step SeedVR sampler and
+        # measurably degrades the adversarially distilled one-step SeedVR2 checkpoints when
+        # multi-stepping them: it defers most of the denoise to one large low-sigma jump the
+        # distillation never covered. Uniform spacing is the measured-best multi-step grid.
         step_size = self.T / self.num_inference_steps
         timesteps = []
         for i in range(self.num_inference_steps + 1):

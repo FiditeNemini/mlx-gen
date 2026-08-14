@@ -11,6 +11,14 @@ source-ID conditioning, guidance, precision, and canvas contracts.
 
 ## Current Practical Guidance
 
+Single shots default to `81` frames across the Wan family, and 81 is the recommended shot
+length: the A14B models train at 81 frames, and longer single shots drift toward a ping-pong
+ending that returns to the first frame (see the
+[FAQ entry on long image-to-video clips](faq.md#why-does-a-long-image-to-video-clip-return-to-its-first-frame)).
+For longer results, chain shots with SVI continuation or context-frame conditioning rather than
+raising `--frames` on one shot. TI2V-5B natively supports up to `121` frames; pass `--frames 121`
+explicitly for its full-length shots.
+
 Wan A14B is the stronger local option in the measured starship example below when you can accept a
 smaller canvas. On an Apple M5 Max, a 5.05 second clip at `480x240` or `240x480`, `101` frames,
 `20` fps, and `20` to `25` steps takes about 30 minutes in the local profiles below. For the

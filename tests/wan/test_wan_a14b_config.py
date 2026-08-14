@@ -42,7 +42,9 @@ def test_wan_ti2v_5b_config_matches_official_generation_defaults():
     assert config.transformer_overrides["default_guidance"] == 5.0
     assert config.transformer_overrides["default_steps"] == 50
     assert config.transformer_overrides["default_fps"] == 24
-    assert config.transformer_overrides["default_frames"] == 121
+    # Deliberate deviation from the official 121-frame native length: 81 is the
+    # family-wide default shot length (see the Wan FAQ long-shot guidance).
+    assert config.transformer_overrides["default_frames"] == 81
     assert "低质量" in config.transformer_overrides["default_negative_prompt"]
     assert config.transformer_overrides.get("default_guidance_2") is None
 

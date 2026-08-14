@@ -59,6 +59,20 @@ def test_seedvr2_resolution_scale_factor(seedvr2_upscale_parser, seedvr2_upscale
 
 
 @pytest.mark.fast
+def test_seedvr2_steps_default_is_auto(seedvr2_upscale_parser, seedvr2_upscale_minimal_argv):
+    with patch("sys.argv", seedvr2_upscale_minimal_argv):
+        args = seedvr2_upscale_parser.parse_args()
+        assert args.steps is None
+
+
+@pytest.mark.fast
+def test_seedvr2_steps_accepts_multi_step(seedvr2_upscale_parser, seedvr2_upscale_minimal_argv):
+    with patch("sys.argv", seedvr2_upscale_minimal_argv + ["--steps", "4"]):
+        args = seedvr2_upscale_parser.parse_args()
+        assert args.steps == 4
+
+
+@pytest.mark.fast
 def test_seedvr2_resolution_auto(seedvr2_upscale_parser, seedvr2_upscale_minimal_argv):
     with patch("sys.argv", seedvr2_upscale_minimal_argv + ["--resolution", "auto"]):
         args = seedvr2_upscale_parser.parse_args()
@@ -274,7 +288,9 @@ def test_seedvr2_main_passes_metadata_flag_to_save(monkeypatch, tmp_path):
             self.model_config = model_config
             self.tiling_config = None
 
-        def generate_image(self, *, seed, image_path, resolution, softness, color_correction_mode):
+        def generate_image(
+            self, *, seed, image_path, resolution, softness, color_correction_mode, num_inference_steps=None
+        ):
             saved["seed"] = seed
             saved["image_path"] = image_path
             saved["resolution"] = resolution
@@ -1144,7 +1160,9 @@ def test_seedvr2_main_enables_vae_tiling_when_requested(monkeypatch, tmp_path):
             self.tiling_config = None
             saved["model"] = self
 
-        def generate_image(self, *, seed, image_path, resolution, softness, color_correction_mode):
+        def generate_image(
+            self, *, seed, image_path, resolution, softness, color_correction_mode, num_inference_steps=None
+        ):
             saved["tiling_config"] = self.tiling_config
             saved["color_correction_mode"] = color_correction_mode
             return FakeResult()
@@ -1188,7 +1206,9 @@ def test_seedvr2_image_low_ram_preserves_default_tiling_without_flag(monkeypatch
             self.model_config = model_config
             self.tiling_config = TilingConfig(vae_encode_tiled=False, vae_decode_tiles_per_dim=0)
 
-        def generate_image(self, *, seed, image_path, resolution, softness, color_correction_mode):
+        def generate_image(
+            self, *, seed, image_path, resolution, softness, color_correction_mode, num_inference_steps=None
+        ):
             saved["tiling_config"] = self.tiling_config
             return FakeResult()
 

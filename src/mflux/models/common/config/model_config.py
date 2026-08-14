@@ -871,7 +871,7 @@ AVAILABLE_MODELS = {
             "supports_image_to_video": True,
             "default_width": 1280,
             "default_height": 704,
-            "default_frames": 121,
+            "default_frames": 81,
             "default_steps": 50,
             "default_fps": 24,
             "default_guidance": 5.0,

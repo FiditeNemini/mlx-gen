@@ -437,8 +437,12 @@ Use `ByteDance-Seed/SeedVR2-7B` and a `seedvr2-7b-*` path for 7B packages.
 | `--resolution 2x` | Preserve aspect ratio and scale the source by about 2x. | A `320x192` image becomes `640x384`. |
 | `--resolution 5x` | Preserve aspect ratio and scale the source by about 5x. | The included `133x113` source becomes `658x560`. |
 
-Final dimensions may be normalized to dimensions supported by the model/runtime. Metadata sidecars
-record the source size, requested resolution, and final output size.
+Image restoration preserves the requested geometry exactly: `--resolution 1x` returns the input
+dimensions pixel-for-pixel with no resampling, and integer shorter-edge targets keep the exact
+source aspect ratio. Network divisibility is satisfied internally with reflective edge padding
+that is cropped away after decoding, never by snapping or resizing the output. Video restoration
+center-crops each frame to the nearest multiple of 16, matching the official SeedVR2 pipeline.
+Metadata sidecars record the source size, requested resolution, and final output size.
 
 ## Quality Controls
 
@@ -451,6 +455,7 @@ Useful options:
 | Option | Use |
 | --- | --- |
 | `--quantize 8` | Runtime q8 quantization for the SeedVR2 model. |
+| `--steps 1` to `4` | Force a fixed step count for image restoration. Default is automatic: single step, plus a measured 4-step refinement only when the one-step noise texture is detected. |
 | `--softness 0.25` to `0.5` | Smooth noisy low-resolution conditioning before reconstruction. |
 | `--vae-tiling` | Force tiled VAE encode/decode for image runs. Video restore rejects it. |
 | `--color-correction wavelet` | Preferred long-video restore color mode on the checked-in Eiffel archival proof. |
@@ -470,3 +475,28 @@ smoother, less faithful reconstruction is acceptable.
 Use `--vae-tiling` only for image runs when you also want tiled VAE encoding, or when you want the
 same tiled path even for smaller outputs. Large image outputs automatically use tiled VAE decode
 even without this flag. Video restore rejects `--vae-tiling`; use `--low-ram` and chunking there.
+
+### Steps for Flat or Dark Content
+
+SeedVR2 is a one-step restoration model. On content dominated by smooth gradients or darkness —
+night scenes, astrophotography, fog, studio backdrops — the single-step estimate retains a small
+amount of the sampling noise, which decodes as a faint, regular mesh-like texture aligned to an
+8-pixel grid, together with a loss of the faintest real detail. On detail-rich content the same
+residue is fully masked, and extra steps instead begin to synthesize texture that is not in the
+source (measured on portrait, super-resolution, and landscape content), so no fixed step count is
+right for every image.
+
+By default `--steps` is therefore automatic: MLX-Gen runs the official single step, measures the
+8-pixel lattice signature of the decoded output against the source, and only when the artifact
+is actually present re-runs the restoration at 4 steps (a few extra seconds on a ~1500px image).
+The metadata sidecar records the decision (`steps_mode`: `auto` or `auto-refined`, with the
+measured `one_step_residue_pct`). Passing an explicit `--steps 1`-`4` forces a fixed count and
+skips the measurement.
+
+The 4-step refinement removes the regular mesh below the model's own reconstruction floor and
+retains faint real structure (dim stars, nebular wisps) noticeably better, replacing the pattern
+with irregular film-like grain. Content that far outside SeedVR2's training distribution keeps
+some synthesized micro-texture at any step count — for archival astrophotography a dedicated
+astronomical denoiser remains the better tool, while SeedVR2 is at its best restoring
+compressed, blurred, or low-resolution photographic and video content. `--steps` applies to
+image inputs only; video restoration always uses the official one-step path.

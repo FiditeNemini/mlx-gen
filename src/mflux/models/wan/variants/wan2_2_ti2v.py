@@ -52,7 +52,12 @@ class Wan2_2_TI2V(nn.Module):
     RECOMMENDED_WIDTH = 1280
     RECOMMENDED_HEIGHT = 704
     RECOMMENDED_AREA = RECOMMENDED_WIDTH * RECOMMENDED_HEIGHT
-    RECOMMENDED_FRAMES = 121
+    # 81 frames is the recommended default shot length across the Wan family:
+    # the A14B models train at 81 frames and drift toward a ping-pong ending
+    # beyond it, and 81 keeps single shots inside every model's stable range.
+    # TI2V-5B natively supports up to 121 frames; pass num_frames explicitly
+    # for its full-length shots.
+    RECOMMENDED_FRAMES = 81
     RECOMMENDED_STEPS = 50
     RECOMMENDED_FPS = 24
 

@@ -494,12 +494,14 @@ SeedVR2 uses `mlxgen upscale`. Its `--resolution` option supports two sizing sty
 
 | Form | Meaning | Example from `320x192` |
 | --- | --- | --- |
-| `--resolution 1024` | Set the shorter output edge to 1024px and preserve the source aspect ratio. | `1706x1024` after even-dimension normalization |
+| `--resolution 1024` | Set the shorter output edge to 1024px and preserve the source aspect ratio. | `1707x1024` |
 | `--resolution 2x` | Multiply both source dimensions by 2. | `640x384` |
 | `--resolution 3x` | Multiply both source dimensions by 3. | `960x576` |
 
 Shortest-edge sizing is useful when you want a predictable target class across different source
-ratios. Scale factors are useful when you want direct 2x/3x comparisons.
+ratios. Scale factors are useful when you want direct 2x/3x comparisons. Image restoration keeps
+the requested geometry exactly — `--resolution 1x` returns the input dimensions pixel-for-pixel
+with no resampling or cropping, so restored output overlays its source without any shift.
 
 SeedVR2 is a diffusion super-resolution/restoration model, so it may also denoise and reconstruct
 detail. If the target is only slightly larger than the source, the result can mainly demonstrate
@@ -517,6 +519,20 @@ tiled VAE encoding or the same tiled image path for smaller outputs. Video resto
 
 See [Image Upscaling](upscaling.md) for a checked-in 5x SeedVR2 comparison where the original
 source is enlarged to the generated output resolution for side-by-side assessment.
+
+## Why Does A SeedVR2 Restored Image Show A Fine Mesh Texture?
+
+On content dominated by smooth gradients or darkness — night scenes, astrophotography, fog —
+SeedVR2's official one-step inference retains a small residue of its sampling noise, which
+decodes as a faint regular texture aligned to an 8-pixel grid and can erase the faintest real
+detail. MLX-Gen detects this automatically: the default `--steps` mode measures the artifact in
+the one-step output and re-runs the restoration at 4 steps only when it is present, dissolving
+the regular pattern into irregular film-like grain and keeping faint structure better. The
+metadata sidecar records the decision as `steps_mode` with the measured residue. If you still
+see the texture, force `--steps 4` explicitly. Some synthesized micro-texture remains on content
+this far outside the model's training data, so for archival astrophotography a dedicated
+astronomical denoiser is still the better tool. See "Steps for Flat or Dark Content" in
+[Image Upscaling](upscaling.md).
 
 ## Can SeedVR2 Restore Video?
 
@@ -739,6 +755,24 @@ For A14B text-to-video, `1280x720`, `832x480`, `448x256`, and `432x240` are alre
 of 16. Plain A14B video-to-video follows that same requested-canvas rule. For TI2V-5B, use at least `832x480` for visual prompt checks; smaller canvases are useful for
 route checks only. Use the
 recommended/native size, frame count, and step count when judging visual quality.
+
+## Why Does A Long Image-To-Video Clip Return To Its First Frame?
+
+Wan 2.2 image-to-video is trained at 81 frames, and the conditioning image is the trajectory's
+only anchor. Beyond roughly the trained length, the motion tends to reverse and settle back
+toward the first frame — a ping-pong ending that appears across implementations of these models,
+not just MLX-Gen, and that prompts alone do not reliably prevent. A measured example: the same
+request at 121 frames returned to a 0.91 frame-similarity with its start, while the identical
+81-frame request held its final pose.
+
+To get long clips without the loop-back:
+
+- keep a single image-to-video shot at or below 81 frames;
+- for longer results, chain shots with SVI continuation or context-frame conditioning instead of
+  raising `--frames` on one shot;
+- use first/last-frame bracketing when the ending must differ from the start;
+- distilled low-step LoRA profiles make the effect stronger on long shots, so prefer full-step
+  runs when a long single shot is unavoidable.
 
 ## Does Wan Support Video-To-Video Editing?
 

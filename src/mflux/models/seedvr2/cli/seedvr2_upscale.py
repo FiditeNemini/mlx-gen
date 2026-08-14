@@ -1014,6 +1014,7 @@ def main():
                                 resolution=args.resolution,
                                 softness=args.softness,
                                 color_correction_mode=args.color_correction,
+                                num_inference_steps=args.steps,
                             )
                             events.emit_save()
                             result.save(

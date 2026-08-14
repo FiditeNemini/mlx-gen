@@ -154,6 +154,10 @@ class CommandLineParser(argparse.ArgumentParser):
     def add_seedvr2_upscale_arguments(self) -> None:
         self.supports_image_generation = True
         self.require_prompt = False
+        # SeedVR2 restoration resolves steps itself: None means the automatic
+        # single-step-plus-measured-refinement mode, so the generation-model step
+        # default must not be filled in after parsing.
+        self.steps_auto_default = True
         seedvr2_group = self.add_argument_group("SeedVR2 upscale configuration")
         input_group = seedvr2_group.add_mutually_exclusive_group(required=True)
         input_group.add_argument(
@@ -173,6 +177,12 @@ class CommandLineParser(argparse.ArgumentParser):
         seedvr2_group.add_argument("--auto-seeds", type=int, default=-1, help="Auto generate N entropy seeds (random ints between 0 and 10,000,000).")
         seedvr2_group.add_argument("--resolution", "-r", type=int_or_special_value, default=384, help="Target resolution for the shortest edge (pixels) or scale factor (e.g., '2x'). For video, omitting --resolution defaults to 1x.")
         seedvr2_group.add_argument("--softness", type=float, default=0.0, help="Value between 0.0 (off, factor 1) and 1.0 (max, factor 8). Default: 0.0.")
+        seedvr2_group.add_argument(
+            "--steps",
+            type=int,
+            default=None,
+            help="Denoising steps for image restoration. Default is automatic: the official single step, plus a 4-step refinement only when the output measurably shows the one-step noise texture that flat or dark content can produce. Pass an explicit value (1-4) to force a fixed step count. Image inputs only.",
+        )
         seedvr2_group.add_argument(
             "--color-correction",
             choices=["wavelet", "lab", "off"],
@@ -580,7 +590,11 @@ class CommandLineParser(argparse.ArgumentParser):
         ):
             self.error("--image-strength requires --image-path.")
 
-        if self.supports_image_generation and getattr(namespace, "steps", None) is None:
+        if (
+            self.supports_image_generation
+            and not getattr(self, "steps_auto_default", False)
+            and getattr(namespace, "steps", None) is None
+        ):
             model_name = getattr(namespace, "model", None)
             namespace.steps = _model_step_default(model_name, getattr(namespace, "base_model", None))
         if self.supports_image_generation and getattr(namespace, "steps", None) is not None and namespace.steps < 1:

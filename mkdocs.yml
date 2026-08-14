@@ -1,0 +1,66 @@
+site_name: MLX-Gen
+site_description: Generative image and video runtimes for Apple Silicon (MLX).
+site_url: https://www.lpalbou.info/mlx-gen/
+repo_url: https://github.com/lpalbou/mlx-gen
+repo_name: lpalbou/mlx-gen
+edit_uri: edit/main/docs/
+
+docs_dir: docs-site
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Documentation Index: documentation-index.md
+  - Guides:
+      - Image Edit Modes: image-edit-modes.md
+      - Edit Capabilities: edit-capabilities.md
+      - Masked Editing: masked-editing.md
+      - Qwen Localized Editing: qwen-localized-editing.md
+      - Qwen Route Matrix: qwen-route-matrix.md
+      - Reframe & Outpaint: reframe-outpaint.md
+      - Bernini-R 1.3B: bernini.md
+      - LoRA: lora.md
+      - Quantization: quantization.md
+      - Model Management: model-management.md
+      - HuggingFace Publishing: huggingface-publishing.md
+      - Python Integration: python-integration.md
+      - Recommendations: recommendations.md
+  - Reference:
+      - API: api.md
+      - Architecture: architecture.md
+      - FAQ: faq.md
+      - Troubleshooting: troubleshooting.md
+      - Release Process: release.md
+      - Changelog: changelog.md

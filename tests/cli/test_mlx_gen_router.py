@@ -6100,7 +6100,9 @@ def test_wan_cli_applies_ti2v_5b_defaults(monkeypatch):
     assert observed["init"]["model_config"] is wan_generate.ModelConfig.wan2_2_ti2v_5b()
     assert observed["generate"]["width"] == 1280
     assert observed["generate"]["height"] == 704
-    assert observed["generate"]["num_frames"] == 121
+    # 81 is the family-wide default shot length (A14B trains at 81 frames and
+    # ping-pongs beyond it); TI2V-5B's native 121 stays reachable via --frames.
+    assert observed["generate"]["num_frames"] == 81
     assert observed["generate"]["fps"] == 24
     assert observed["generate"]["num_inference_steps"] == 50
     assert observed["generate"]["guidance"] == 5.0
