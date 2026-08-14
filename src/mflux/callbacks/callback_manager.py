@@ -8,6 +8,7 @@ from mflux.callbacks.instances.depth_saver import DepthImageSaver
 from mflux.callbacks.instances.memory_saver import MemorySaver
 from mflux.callbacks.instances.stepwise_handler import StepwiseHandler
 from mflux.models.common.config.config import Config
+from mflux.models.common.preview.preview_decoder import PreviewDecoder
 from mflux.utils.runtime_memory import RuntimeMemory
 
 
@@ -71,6 +72,7 @@ class CallbackManager:
                 model=model,
                 latent_creator=latent_creator,
                 output_dir=args.stepwise_image_output_dir,
+                preview_decoder=PreviewDecoder.resolve(model, mode=getattr(args, "preview_decoder", "auto")),
             )
             model.callbacks.register(handler)
 

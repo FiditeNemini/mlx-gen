@@ -31,6 +31,15 @@ class ImageUtil:
         return resolve_collision_free_path(path=path, overwrite=overwrite)
 
     @staticmethod
+    def to_pil_image(decoded_latents: mx.array) -> PIL.Image.Image:
+        """Convert decoded latents to a PIL image without generation metadata.
+
+        Use this for previews and other in-flight frames; `to_image` remains the
+        entry point for finished outputs that carry metadata.
+        """
+        return ImageUtil._numpy_to_pil(ImageUtil._to_numpy(ImageUtil._denormalize(decoded_latents)))
+
+    @staticmethod
     def to_image(
         decoded_latents: mx.array,
         config: Config,

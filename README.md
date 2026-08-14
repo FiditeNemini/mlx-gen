@@ -91,7 +91,10 @@ The main capabilities are:
   (same-seed A/B sheets for the image and T2V/I2V rows, a bounded multi-seed matrix for the
   video-to-video row). Those Lightning examples are documented against MLX-Gen q8 packages, not
   arbitrary external FP8 checkpoints. Bonsai LoRA stays fail-closed;
-- shared progress events for applications embedding MLX-Gen.
+- shared progress events for applications embedding MLX-Gen;
+- step-wise generation previews with published tiny autoencoders for the FLUX.1 and FLUX.2 latent
+  spaces, making continuous live preview practical for interactive applications
+  (see [Generation Previews](docs/previews.md)).
 
 Use `mlxgen capabilities --model ...` before long image-edit runs. Capability output describes the
 available route; validation reports and contact sheets describe whether an exact source handle or

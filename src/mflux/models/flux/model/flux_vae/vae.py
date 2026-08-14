@@ -10,6 +10,8 @@ class VAE(nn.Module):
     shift_factor: int = 0.1159
     spatial_scale = 8
     latent_channels = 16
+    # Identifies the latent space for preview-decoder lookup (see models/common/preview).
+    latent_space = "flux.1"
 
     def __init__(self):
         super().__init__()

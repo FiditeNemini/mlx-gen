@@ -17,10 +17,12 @@ class StepwiseHandler(BeforeLoopCallback, InLoopCallback, InterruptCallback):
         model,
         output_dir: str,
         latent_creator,
+        preview_decoder=None,
     ):
         self.model = model
         self.output_dir = Path(output_dir)
         self.latent_creator = latent_creator
+        self.preview_decoder = preview_decoder
         self.step_wise_images: list[PIL.Image.Image | GeneratedImage] = []
 
         if self.output_dir:
@@ -84,7 +86,9 @@ class StepwiseHandler(BeforeLoopCallback, InLoopCallback, InterruptCallback):
         time_steps: tqdm,
     ) -> None:
         unpack_latents = self.latent_creator.unpack_latents(latents=latents, height=config.height, width=config.width)
-        if hasattr(self.model.vae, "decode_packed_latents"):
+        if self.preview_decoder is not None:
+            stepwise_decoded = self.preview_decoder.decode(unpack_latents, vae=self.model.vae)
+        elif hasattr(self.model.vae, "decode_packed_latents"):
             stepwise_decoded = self.model.vae.decode_packed_latents(unpack_latents)
         else:
             stepwise_decoded = self.model.vae.decode(unpack_latents)

@@ -368,6 +368,38 @@ For CLI integrations, prefer `mlxgen ... --json-events` over parsing human stdou
 model `complete` to `generated`, then emit `save` and final `complete` only after the output file
 is written. Wan failure events include `diagnostics_path` when a failure manifest is produced.
 
+## Live Preview Frames
+
+Progress events report where a run is; live previews show what it currently looks like. Register
+an in-loop callback, decode the step's latents with `PreviewDecoder`, and hand the resulting
+`PIL.Image` to your interface. Resolving the decoder once, before generation, keeps the loop cheap:
+
+```python
+from mflux.models.common.preview.preview_decoder import PreviewDecoder
+from mflux.utils.image_util import ImageUtil
+
+preview_decoder = PreviewDecoder.resolve(model, mode="auto")
+
+
+class LivePreview:
+    def call_in_loop(self, t, seed, prompt, latents, config, time_steps):
+        unpacked = LatentCreator.unpack_latents(latents=latents, height=config.height, width=config.width)
+        decoded = (
+            preview_decoder.decode(unpacked, vae=model.vae)
+            if preview_decoder is not None
+            else model.vae.decode(unpacked)
+        )
+        display(ImageUtil.to_pil_image(decoded))
+
+
+model.callbacks.register(LivePreview())
+```
+
+`PreviewDecoder.resolve(..., mode="auto")` returns a tiny decoder when one is published for the
+model's latent space and returns `None` otherwise, so applications should keep the full-VAE
+fallback shown above. Use the latent creator belonging to the model family you loaded. See
+[Generation Previews](previews.md) for supported families, measured fidelity, and decode costs.
+
 ## Threading
 
 MLX model instances should be treated as stateful runtime objects. Applications that multiplex user requests should serialize access to a loaded model instance unless they have tested a narrower concurrency model for that specific backend.

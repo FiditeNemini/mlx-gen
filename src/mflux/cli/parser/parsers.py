@@ -340,6 +340,17 @@ class CommandLineParser(argparse.ArgumentParser):
         self.add_argument("--replace", type=boolean_flag_value, nargs="?", const=True, default=True, help="Replace the target output file when it already exists. Use --replace false or --no-replace to keep the existing file and save to a suffixed path. Default is true.")
         self.add_argument("--no-replace", action="store_false", dest="replace", help="Do not replace an existing output file; save to the next suffixed filename instead.")
         self.add_argument('--stepwise-image-output-dir', type=str, default=None, help='[EXPERIMENTAL] Output dir to write step-wise images and their final composite image to. This feature may change in future versions.')
+        self.add_argument(
+            "--preview-decoder",
+            choices=["auto", "tiny", "full"],
+            default="auto",
+            help=(
+                "How to render step-wise preview images. tiny uses the published tiny autoencoder for the "
+                "model's latent space (roughly 12-18x faster than the full VAE, approximate detail); full "
+                "uses the model's own VAE; auto (default) picks tiny when one is available for the family "
+                "and falls back to full. Final outputs are always decoded with the full VAE."
+            ),
+        )
 
     def add_image_outpaint_arguments(self, required=False) -> None:
         self.supports_image_outpaint = True

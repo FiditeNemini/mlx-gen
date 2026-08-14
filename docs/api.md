@@ -888,6 +888,7 @@ Useful options:
 | `--drop-audio` | Opt out of the default audio-preservation contract and publish a silent restored MP4 intentionally. |
 | `--force-unsafe-video-memory` | Bypass the conservative SeedVR2 safe-video profile. Use only when you are intentionally accepting the risk of a high-memory run. |
 | `--metadata` | Write a `.metadata.json` sidecar with final output dimensions, source dimensions, seed, and model details. |
+| `--preview-decoder` | How `--stepwise-image-output-dir` renders previews: `auto` (default) uses the published tiny autoencoder for the model's latent space when available and falls back to the full VAE, `tiny` requires it, `full` always uses the model's own VAE. Final outputs are always full-VAE decoded. See [Generation Previews](previews.md). |
 
 For video inputs:
 

@@ -572,6 +572,7 @@ Spatial-scale sanity outputs at 1280x704, 17 frames, and 20 steps:
 
 ## Next Steps
 
+- See [Generation Previews](previews.md) to watch a generation as it forms, with tiny-decoder previews and the application integration path.
 - See [Model Management](model-management.md) for the full download, prepare, and runtime failure contract.
 - See [API And CLI](api.md) for the supported command surface and Python integration notes.
 - See [Spaceship Snow Workflow](examples/spaceship-snow.md) for a reproducible image and Wan A14B video example with included assets.

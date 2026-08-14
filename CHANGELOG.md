@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-08-15
+
+Generation previews with tiny autoencoders.
+
+### Added
+
+- **Step-wise generation previews with tiny autoencoders.** `--stepwise-image-output-dir` renders
+  previews with the published tiny decoder for the model's latent space: `madebyollin/taef1` for
+  the FLUX.1 latent space (flux, Z-Image) and `madebyollin/taef2` for the FLUX.2 latent space
+  (FLUX.2 Klein, ERNIE-Image, Bonsai). Measured on M5 Max at `512x512` with FLUX.2 Klein 4B q8,
+  a frame decodes in 19 ms versus 203 ms through the full VAE, so previewing every step costs
+  about 8% extra wall time instead of about 86% — which makes continuous live preview practical
+  for interactive applications. Other families preview through the full VAE.
+- **`--preview-decoder`** selects `auto` (default: tiny decoder when one is published for the
+  family and downloaded, full VAE otherwise), `tiny` (required, errors when unavailable), or
+  `full`. Final outputs are always decoded with the full VAE, so a run with previews enabled
+  produces a byte-identical image to the same run without them.
+- **`ImageUtil.to_pil_image(decoded_latents)`** converts decoded latents to a `PIL.Image` without
+  generation metadata, for applications rendering live preview frames. `docs/python-integration.md`
+  documents the `PreviewDecoder` callback path, and `docs/previews.md` covers supported families,
+  reproducible tiny-versus-full commands, measured fidelity, and decode costs.
+
+### Notes
+
+- Tiny decoders are mapped explicitly per latent space rather than by latent-channel count.
+  Families that share a VAE share a decoder; families without a published decoder are unaffected
+  and continue to preview through their own VAE.
+- Preview decoding is approximate by design: fidelity against the full VAE decode of the same
+  latent measures 34.8 dB PSNR (SSIM 0.975) at the final step on Z-Image Turbo, with differences
+  concentrated in fine texture. Previews are not suitable for final-quality decisions.
+
 ## [0.28.0] - 2026-08-14
 
 Wan default shot length, SeedVR2 image-restoration geometry fidelity, and documentation-site

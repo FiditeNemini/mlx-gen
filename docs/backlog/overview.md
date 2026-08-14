@@ -423,6 +423,8 @@ memory follow-up state.
 | 0109 | [Bernini task-type and guidance-mode CLI exposure](proposed/0109_bernini_task_type_cli_exposure.md) | Bernini, CLI surface | Promote when the mv2v structure-changing recipe should be CLI-reachable; low risk, surfaces existing runtime parameters. |
 | 0110 | [Bernini-R 1.3B promotion policy decision](proposed/0110_bernini_promotion_policy_decision.md) | Bernini, release policy, ADR | Promote when the team is ready to decide the tuned-recipe promotion standard; requires an ADR and reconciling backlog 0106. |
 | 0111 | [Qwen image edit instruction-scope leakage](proposed/0111_qwen_image_edit_instruction_scope_leakage.md) | Image editing, quality investigation | Promote after a controlled reproduction measures off-target change and splits model behavior from implementation drift. |
+| 0112 | [Preview the x0 estimate instead of the noisy latent](proposed/0112_x0_estimate_previews.md) | Previews, callback contract, early abort | Promote alongside any preview follow-up: this is what makes early-step previews readable, and it needs the in-loop callback to carry the denoiser's x0 estimate. |
+| 0113 | [Tiny previews for the Wan, Qwen, and FIBO latent spaces](proposed/0113_video_family_tiny_previews.md) | Previews, Wan/Qwen/FIBO, TAEHV port | Promote when video preview value is wanted: mapping is already verified by VAE lineage, the work is porting the causal TAEHV graph and validating per family. |
 ## Completed ledger
 
 | ID | Item | Area | Completed | Outcome |

@@ -1,5 +1,19 @@
 # FAQ
 
+## Can I Watch An Image While It Generates?
+
+Yes. Pass `--stepwise-image-output-dir DIR` to write one PNG per denoising step. By default those
+previews are rendered with a published tiny autoencoder for the model's latent space, which
+decodes about 11-13x faster than the model's own VAE and makes previewing every step cost roughly
+8% extra wall time instead of roughly 86%. Download a decoder once with
+`mlxgen download --model madebyollin/taef1` (FLUX.1 and Z-Image) or
+`mlxgen download --model madebyollin/taef2` (FLUX.2 Klein, ERNIE-Image, Bonsai).
+
+Use `--preview-decoder full` to render previews with the model's own VAE, or `tiny` to require the
+tiny decoder. Final outputs are always decoded with the full VAE regardless of this setting.
+Applications embedding MLX-Gen can render live preview frames through `PreviewDecoder`; see
+[Generation Previews](previews.md).
+
 ## Where Is The Save Command?
 
 Use `mlxgen prepare`.

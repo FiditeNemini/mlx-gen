@@ -10,6 +10,9 @@ class VAE(nn.Module):
     shift_factor: float = 0.1159
     spatial_scale = 8
     latent_channels = 16
+    # Z-Image generates in the FLUX.1 latent space (same channels, scale, and shift);
+    # verified empirically against this VAE's own decode before enabling previews.
+    latent_space = "flux.1"
 
     def __init__(self):
         super().__init__()

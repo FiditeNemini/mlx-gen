@@ -10,6 +10,8 @@ class Flux2VAE(nn.Module):
     scaling_factor: float = 1.0
     shift_factor: float = 0.0
     latent_channels: int = 32
+    # Identifies the latent space for preview-decoder lookup (see models/common/preview).
+    latent_space = "flux.2"
 
     def __init__(self):
         super().__init__()
@@ -39,6 +41,13 @@ class Flux2VAE(nn.Module):
         latents = mx.transpose(latents, (0, 3, 1, 2))
         decoded = self.decoder(latents)
         return decoded
+
+    def to_preview_latents(self, packed_latents: mx.array) -> mx.array:
+        """Packed in-flight latents to tiny-decoder space: unpatchified, and deliberately
+        without the BatchNorm un-normalization (tiny decoders consume model-space latents)."""
+        if packed_latents.ndim == 5:
+            packed_latents = packed_latents[:, :, 0, :, :]
+        return self._unpatchify_latents(packed_latents)
 
     def decode_packed_latents(self, packed_latents: mx.array) -> mx.array:
         if packed_latents.ndim == 5:

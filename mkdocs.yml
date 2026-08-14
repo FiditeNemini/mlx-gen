@@ -44,12 +44,15 @@ nav:
   - Getting Started: getting-started.md
   - Documentation Index: documentation-index.md
   - Guides:
+      - Generation Previews: previews.md
       - Image Edit Modes: image-edit-modes.md
       - Edit Capabilities: edit-capabilities.md
       - Masked Editing: masked-editing.md
       - Qwen Localized Editing: qwen-localized-editing.md
       - Qwen Route Matrix: qwen-route-matrix.md
       - Reframe & Outpaint: reframe-outpaint.md
+      - Wan Video: wan-video.md
+      - Image & Video Upscaling: upscaling.md
       - Bernini-R 1.3B: bernini.md
       - LoRA: lora.md
       - Quantization: quantization.md
