@@ -272,7 +272,7 @@ def _top_level_parser() -> argparse.ArgumentParser:
         epilog=(
             "Commands:\n"
             "  generate    Generate images or videos, and edit images, from a prepared or cached model.\n"
-            "  upscale     Restore or upscale images and videos with SeedVR2.\n"
+            "  upscale     Restore or upscale images and videos with SeedVR2 or SwiftVR.\n"
             "  capabilities Inspect model generation tasks, modes, and option support.\n"
             "  validation   Inspect release-validation evidence for exact model/package rows.\n"
             "  download     Explicitly download a model snapshot into the Hugging Face cache.\n"
@@ -492,7 +492,7 @@ def _run_model_command(argv: list[str]) -> None:
 
 
 def _upscale_image(argv: list[str]) -> None:
-    from mflux.models.seedvr2.cli.seedvr2_upscale import main as upscale_main
+    from mflux.models.common.cli.restore_dispatch import upscale_main
 
     previous_argv = sys.argv
     try:
@@ -619,9 +619,19 @@ def _download_model(argv: list[str]) -> None:
         _factored_download_sources(model_config) if not args.all_files else []
     )
     if not download_sources:
-        download_sources = [(repo_id, None if args.all_files else _download_patterns(model_config, repo_id), None, None)]
-    elif model_config is not None:
-        _preflight_factored_download_space(parser, model_config, download_sources)
+        download_sources = [
+            (
+                repo_id,
+                None if args.all_files else _download_patterns(model_config, repo_id),
+                None,
+                # expected_download_bytes counts the pattern-scoped subset a run needs, so
+                # it does not describe an --all-files snapshot; the preflight skips rather
+                # than checking against a number it knows is too small.
+                None if args.all_files else _expected_download_bytes(model_config),
+            )
+        ]
+    if model_config is not None and any(expected for *_, expected in download_sources):
+        _preflight_download_space(parser, model_config, download_sources)
     downloaded_paths = []
     with allow_downloads():
         for source_repo, patterns, revision, _expected_bytes in download_sources:
@@ -642,6 +652,10 @@ def _download_model(argv: list[str]) -> None:
             f"{shlex.quote(repo_id)} --reference-image reference.png "
             "--prompt 'Bring the referenced subject to life' --output video.mp4"
         )
+    elif model_config is not None and _is_swiftvr(
+        set(model_config.aliases), _model_key(repo_id, model_config.base_model)
+    ):
+        print(f"  mlxgen upscale --model {shlex.quote(repo_id)} --video-path input.mp4 --output restored.mp4")
     elif model_config is not None and _is_seedvr2(
         set(model_config.aliases), _model_key(repo_id, model_config.base_model)
     ):
@@ -656,11 +670,25 @@ def _download_model(argv: list[str]) -> None:
         )
 
 
-def _preflight_factored_download_space(
+def _expected_download_bytes(model_config: ModelConfig | None) -> int | None:
+    """Catalog byte count for a single-repository download, or ``None`` when unknown."""
+    if model_config is None:
+        return None
+    expected = model_config.transformer_overrides.get("expected_download_bytes")
+    return expected if isinstance(expected, int) and expected > 0 else None
+
+
+def _preflight_download_space(
     parser: argparse.ArgumentParser,
     model_config: ModelConfig,
     download_sources: list[tuple[str, list[str] | None, str | None, int | None]],
 ) -> None:
+    """Refuse a download that cannot fit, for any source carrying an expected size.
+
+    Sources with no declared size return early and are never guessed at: a preflight that
+    invents a number would either block a download that fits or wave through one that does
+    not.
+    """
     from huggingface_hub.constants import HF_HUB_CACHE
 
     from mflux.models.common.resolution.path_resolution import PathResolution
@@ -693,7 +721,7 @@ def _preflight_factored_download_space(
 
     missing_label = ", ".join(missing_sources)
     parser.error(
-        f"Insufficient free space for the missing factored model sources ({missing_label}). "
+        f"Insufficient free space for the missing model sources ({missing_label}). "
         f"Need at least {required_bytes / 1024**3:.2f} GiB including download headroom; "
         f"only {free_bytes / 1024**3:.2f} GiB is available at {existing_path}. "
         "Already complete pinned sources are not counted."
@@ -820,6 +848,10 @@ def _weight_definition_for(aliases: set[str], model_key: str, model_config: Mode
         from mflux.models.ernie_image.weights.ernie_image_weight_definition import ErnieImageWeightDefinition
 
         return ErnieImageWeightDefinition
+    if _is_swiftvr(aliases, model_key):
+        from mflux.models.swiftvr.weights.swiftvr_weight_definition import SwiftVRWeightDefinition
+
+        return SwiftVRWeightDefinition
     if _is_wan(aliases, model_key):
         from mflux.models.wan.weights import WanWeightDefinition
 
@@ -1191,6 +1223,10 @@ def _is_wan(aliases: set[str], model_key: str) -> bool:
 
 def _is_seedvr2(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("seedvr2") for alias in aliases) or "seedvr2" in model_key
+
+
+def _is_swiftvr(aliases: set[str], model_key: str) -> bool:
+    return any(alias.startswith("swiftvr") for alias in aliases) or "swiftvr" in model_key
 
 
 def _qwen_route(control_model: str | None = None) -> _Route:

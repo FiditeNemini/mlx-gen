@@ -4,8 +4,9 @@ import shutil
 import subprocess
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
+from functools import lru_cache
 from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -246,6 +247,30 @@ class VideoStreamWriter:
 
 
 class VideoUtil:
+    @staticmethod
+    def requested_clip_frame_count(source_probe, max_frames: int | None) -> int:
+        """Source frames available from a probe's clip start, capped by ``max_frames``.
+
+        Args:
+            source_probe: A :class:`DecodedVideoClip` probe of the source.
+            max_frames: Optional cap, or ``None`` for everything available.
+
+        Returns:
+            The number of source frames a run may consume.
+
+        Raises:
+            ValueError: If the source exposes neither a frame count nor a duration, so
+                the available length cannot be established.
+        """
+        if source_probe.source_frame_count is not None:
+            available = max(0, source_probe.source_frame_count - source_probe.clip_start_frame)
+        elif source_probe.source_duration_seconds is not None:
+            total = int(round(source_probe.source_duration_seconds * source_probe.fps))
+            available = max(1, total - source_probe.clip_start_frame)
+        else:
+            raise ValueError("Video restore requires a finite source frame count or duration.")
+        return min(max_frames, available) if max_frames is not None else available
+
     @staticmethod
     def copy_source_audio_to_video(
         *,
@@ -894,14 +919,128 @@ class VideoUtil:
         return frames, clip_start_frame or 0
 
     @staticmethod
+    def _short_stream_message(path: Path, absolute_windows: list[tuple[int, int]], decoded_frames: int) -> str:
+        """Actionable message for a source that delivers fewer frames than planned.
+
+        Reached when container metadata over-reports the frame count in a way that
+        ``_reconcile_source_frame_count`` could not catch, because the declared count and
+        the declared duration agree with each other and only the stream is short. The run
+        fails rather than silently restoring a shorter clip than asked for (ADR 0002).
+        """
+        requested_end = max((end for _, end in absolute_windows), default=0)
+        return (
+            f"Could not decode all requested video windows from {path}: the run was planned for "
+            f"{requested_end} frames but the stream stopped after {decoded_frames}. This usually means a "
+            f"truncated or partially written file whose container metadata over-reports its length. "
+            f"Re-encode the source, or cap the run with --max-frames {decoded_frames}."
+        )
+
+    @staticmethod
+    def _exact_decodable_frame_count(path: Path) -> int | None:
+        """Ground-truth decodable frame count from a full ffprobe decode pass.
+
+        Only called when container metadata is self-inconsistent: this decodes the
+        whole source, so it must not run on well-formed files.
+        """
+        ffprobe_path = shutil.which("ffprobe")
+        if ffprobe_path is None:
+            return None
+        command = [
+            ffprobe_path,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "default=nokey=1:noprint_wrappers=1",
+            str(path),
+        ]
+        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        return VideoUtil._optional_int(result.stdout.strip())
+
+    @staticmethod
+    def _reconcile_source_frame_count(path: Path, info: SourceVideoInfo) -> SourceVideoInfo:
+        """Correct a container frame count that the stream cannot actually deliver.
+
+        Some MP4 containers advertise an ``nb_frames`` larger than the number of frames
+        that decode - truncated recordings, or remuxes that keep a stale header. Planning
+        a restore from that number schedules chunks for frames that never arrive, and the
+        run fails late with an opaque decode error instead of restoring what exists.
+
+        Cross-check the declared count against ``duration * fps``. When they disagree
+        beyond rounding, resolve with an exact decode count and log the correction; the
+        count is never silently inflated, only reduced to what the stream can deliver.
+        """
+        declared = info.source_frame_count
+        duration = info.source_duration_seconds
+        if declared is None or duration is None or info.fps <= 0:
+            return info
+
+        expected = int(round(duration * info.fps))
+        tolerance = max(2, int(round(expected * 0.01)))
+        if abs(declared - expected) <= tolerance:
+            return info
+
+        try:
+            stat = path.stat()
+            identity = (str(path), stat.st_size, stat.st_mtime_ns)
+        except OSError:
+            identity = (str(path), -1, -1)
+
+        resolved = VideoUtil._resolved_frame_count(
+            identity, declared=declared, expected=expected, fps=info.fps, duration=duration
+        )
+        if resolved == declared:
+            return info
+        return replace(info, source_frame_count=resolved)
+
+    @staticmethod
+    @lru_cache(maxsize=32)
+    def _resolved_frame_count(
+        identity: tuple[str, int, int],
+        *,
+        declared: int,
+        expected: int,
+        fps: float,
+        duration: float,
+    ) -> int:
+        """Exact frame count for an inconsistent container, computed once per file state.
+
+        Cached on (path, size, mtime) because the exact count decodes the whole source and
+        ``inspect_video`` is called several times per run. Caching also keeps the warning
+        to one line per file rather than one per probe.
+        """
+        path = Path(identity[0])
+        exact = VideoUtil._exact_decodable_frame_count(path)
+        resolved = exact if exact is not None and exact > 0 else min(declared, expected)
+        if resolved != declared:
+            log.warning(
+                "Video metadata for %s declares %d frames but the stream delivers %d "
+                "(duration %.3fs at %.3f fps implies %d). Planning with %d.",
+                path.name,
+                declared,
+                resolved,
+                duration,
+                fps,
+                expected,
+                resolved,
+            )
+        return resolved
+
+    @staticmethod
     def inspect_video(path: str | Path) -> SourceVideoInfo:
-        ffprobe_info = VideoUtil._inspect_video_ffprobe(Path(path))
+        file_path = Path(path)
+        ffprobe_info = VideoUtil._inspect_video_ffprobe(file_path)
         if ffprobe_info is not None:
-            return ffprobe_info
+            return VideoUtil._reconcile_source_frame_count(file_path, ffprobe_info)
 
         import av
 
-        file_path = Path(path)
         with av.open(str(file_path)) as container:
             if len(container.streams.video) == 0:
                 raise RuntimeError(f"Could not find a video stream in {path}")
@@ -922,13 +1061,16 @@ class VideoUtil:
             )
             audio_present = len(container.streams.audio) > 0
 
-        return SourceVideoInfo(
-            fps=fps,
-            source_width=source_width,
-            source_height=source_height,
-            source_frame_count=source_frame_count,
-            source_duration_seconds=source_duration_seconds,
-            audio_present=audio_present,
+        return VideoUtil._reconcile_source_frame_count(
+            file_path,
+            SourceVideoInfo(
+                fps=fps,
+                source_width=source_width,
+                source_height=source_height,
+                source_frame_count=source_frame_count,
+                source_duration_seconds=source_duration_seconds,
+                audio_present=audio_present,
+            ),
         )
 
     @staticmethod
@@ -1150,7 +1292,7 @@ class VideoUtil:
                     )
 
         if active_windows or next_window_index < len(absolute_windows):
-            raise RuntimeError(f"Could not decode all requested video windows from {path}")
+            raise RuntimeError(VideoUtil._short_stream_message(path, absolute_windows, frame_index))
 
     @staticmethod
     def _iter_video_frame_windows_ffmpeg(
@@ -1254,7 +1396,7 @@ class VideoUtil:
             message = stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"Could not decode video frame windows from {path}: {message or return_code}")
         if active_windows or next_window_index < len(absolute_windows):
-            raise RuntimeError(f"Could not decode all requested video windows from {path}")
+            raise RuntimeError(VideoUtil._short_stream_message(path, absolute_windows, frame_index))
 
     @staticmethod
     def _latents_to_frames(decoded_latents: mx.array) -> list[PIL.Image.Image]:

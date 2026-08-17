@@ -42,6 +42,28 @@ class SeedVR2Util:
         return img_mx, true_h, true_w
 
     @staticmethod
+    def resolved_video_frame_size(
+        *,
+        source_width: int,
+        source_height: int,
+        resolution: int | ScaleFactor,
+    ) -> tuple[int, int]:
+        """Exact ``(height, width)`` that :meth:`preprocess_video_frames` will produce.
+
+        Derived by running the real resize-and-crop path on a placeholder frame instead of
+        reimplementing the arithmetic. Callers that must agree with the frames the VAE
+        actually encodes - the streamed noise provider, the memory budget, progress
+        reporting - cannot then drift from it. A parallel reimplementation is what produced
+        a streamed latent-width mismatch on sources whose scaled size is not already a
+        multiple of 16.
+        """
+        probe = Image.new("RGB", (int(source_width), int(source_height)))
+        resized, _, _ = SeedVR2Util._resize_and_soften(image=probe, resolution=resolution, softness=0.0)
+        cropped = SeedVR2Util._center_crop_to_multiple(resized, factor=16)
+        width, height = cropped.size
+        return height, width
+
+    @staticmethod
     def preprocess_video_frames(
         frames: list[Image.Image],
         resolution: int | ScaleFactor,

@@ -82,6 +82,14 @@ def main():
                     "Use `mlxgen download --model bernini-r-1.3b`; `mlxgen prepare` and "
                     "q4/q8 Bernini packages are not supported."
                 )
+            if "swiftvr" in {alias.lower() for alias in model_config.aliases} or (
+                "swiftvr" in model_config.model_name.lower()
+            ):
+                parser.error(
+                    "SwiftVR currently supports only its bf16 source route. Use "
+                    "`mlxgen download --model H-oliday/SwiftVR`; `mlxgen prepare` and quantized "
+                    "SwiftVR packages are not supported yet."
+                )
             model_class = _model_class_for_config(model_config)
         except ModelConfigError as exc:
             parser.error(

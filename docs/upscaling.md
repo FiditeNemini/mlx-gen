@@ -1,8 +1,17 @@
 # Image And Video Upscaling
 
-MLX-Gen routes SeedVR2 image and video restoration through `mlxgen upscale`. SeedVR2 is a diffusion
-restoration/upscaling model: it can increase pixel dimensions while reconstructing detail and
-smoothing low-resolution or compressed artifacts. It does not require a text prompt.
+MLX-Gen routes image and video restoration through `mlxgen upscale`, which hosts two model
+families. Select one with `--model`.
+
+- **SeedVR2** is a diffusion restoration/upscaling model: it can increase pixel dimensions while
+  reconstructing detail and smoothing low-resolution or compressed artifacts. Handles
+  `seedvr2-3b`, `seedvr2-7b`, `seedvr2-7b-sharp`, official ByteDance repos, and AbstractFramework
+  packages.
+- **SwiftVR** is a one-step restorer built on Wan2.2-TI2V-5B. It restores at the source resolution
+  only - it does not scale - and is roughly 40x faster than SeedVR2 on the same clip. Handles
+  `swiftvr` and `swiftvr-5b`. See [SwiftVR One-Step Restoration](#swiftvr-one-step-restoration).
+
+Neither family requires a text prompt.
 
 The older `mflux-upscale-seedvr2` entry point remains available for compatibility. New examples use
 `mlxgen upscale`.
@@ -382,6 +391,65 @@ The 7B source, q8 package, and q4 package passed the same checked-in `5x` profil
 The sheet below stacks the 3B and 7B results so you can compare detail reconstruction directly:
 
 ![SeedVR2 3B and 7B source, q8, and q4 5x comparison](assets/upscaling/seedvr2-3b-7b-5x-contact-sheet.jpg)
+
+## SwiftVR One-Step Restoration
+
+`swiftvr` restores video in a single forward pass per chunk rather than a diffusion trajectory. It
+is the fast route: on the comparison below it runs about 40x faster than SeedVR2 at roughly a fifth
+of the peak memory.
+
+```bash
+mlxgen upscale --model swiftvr --video-path clip.mp4 --resolution 1x --output restored.mp4
+```
+
+Route constraints, all fail-closed rather than approximated:
+
+- **Source resolution only.** SwiftVR reaches other sizes upstream by bilinear pre-upsampling of the
+  degraded input, which MLX-Gen has not matched or measured. Any `--resolution` other than `1x` is
+  refused with a message pointing at SeedVR2 rather than silently approximating it.
+- **BF16 only.** There is no q8/q4 prepared package for this route yet.
+- **Clip length is trimmed to `4a + 1`** frames by the chunk protocol; the CLI reports the trim.
+- Audio is preserved on the same terms as the SeedVR2 route.
+
+Do not read the upstream "real-time streaming" framing as an Apple Silicon claim. Measured here,
+SwiftVR restores 1080p at about 1.1 FPS - useful for offline batch work, and roughly 20x short of
+real time. It is fast relative to SeedVR2, not fast in absolute terms.
+
+### Choosing between SwiftVR and SeedVR2
+
+Measured on an M4 Max over 121 contiguous frames (5.04 s at 24 fps) of grain-heavy archival footage
+at 384x288, `1x`:
+
+| Candidate | Wall | FPS | Fidelity to source | Frames below 0.90 | Peak MLX |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SwiftVR | 11.5 s | 10.52 | 0.9588 | 0 / 121 | 11.1 GB |
+| SeedVR2-3B | 471.0 s | 0.257 | 0.9647 | 0 / 121 | 57.9 GB |
+| SeedVR2-7B | 458.8 s | 0.264 | 0.9809 | 0 / 121 | 67.8 GB |
+
+All three are temporally stable at this geometry. The quality difference is a trade-off rather than
+a ranking: **SwiftVR reinterprets texture where SeedVR2 recovers it.** On the archival source
+SwiftVR erases film grain and posterises fine ornament into smooth forms, producing a clean but
+visibly synthetic image, while SeedVR2-7B keeps the most natural texture and scores the highest
+fidelity. Judge this from the detail crops, not from a sharpness number - a plain gradient metric
+ranks SwiftVR highest precisely because posterised edges are steep.
+
+Full artifacts, including the contiguous motion strip and two magnified detail crops:
+[swiftvr-vs-seedvr2-2026-08-17](assets/validation/swiftvr-vs-seedvr2-2026-08-17/paris_121f_validation_report.md).
+
+Rules of thumb:
+
+- long material, previews, or throughput-bound batch work: **SwiftVR**;
+- archival or grain-sensitive material where fidelity matters most: **SeedVR2-7B**;
+- SeedVR2-3B sits between them and, on this clip, offered no speed advantage over 7B.
+
+### Known limitation on SeedVR2 at larger geometries
+
+SeedVR2 currently cannot restore sources at 480x360 correctly. The minimum permitted 29-frame chunk
+exceeds the host-safe memory budget at that geometry, and forcing it through with
+`--force-unsafe-video-memory` produces intermittent corrupted frames - one pixel frame in every
+latent group of four. 320x240 and 384x288 are clean. This is tracked in backlog item
+[0115](backlog/proposed/0115_seedvr2_video_decode_artifact_at_larger_geometries.md). SwiftVR is
+unaffected and restores the same source at native 480x360.
 
 ## Model Sources
 

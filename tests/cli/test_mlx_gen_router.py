@@ -57,7 +57,7 @@ def test_top_level_help_reports_version_and_release_date(monkeypatch, capsys):
     assert "MLX-Gen 9.9.9 (2099-01-01)" in help_output
     assert "Prepare local model assets and generate images or videos with MLX-Gen." in help_output
     assert "generate    Generate images or videos, and edit images" in help_output
-    assert "upscale     Restore or upscale images and videos with SeedVR2." in help_output
+    assert "upscale     Restore or upscale images and videos with SeedVR2 or SwiftVR." in help_output
 
 
 def test_generate_help_calls_out_first_frame_image_to_video(monkeypatch, capsys):
@@ -72,7 +72,7 @@ def test_generate_help_calls_out_first_frame_image_to_video(monkeypatch, capsys)
     assert "mlxgen upscale --video-path" in help_output
 
 
-def test_upscale_help_calls_out_video_restore_and_seedvr2_only(monkeypatch, capsys):
+def test_upscale_help_calls_out_both_restoration_families(monkeypatch, capsys):
     from mflux.models.seedvr2.cli import seedvr2_upscale
 
     monkeypatch.setattr(sys, "argv", ["mlxgen", "upscale", "--help"])
@@ -82,8 +82,13 @@ def test_upscale_help_calls_out_video_restore_and_seedvr2_only(monkeypatch, caps
 
     assert exc.value.code == 0
     help_output = capsys.readouterr().out
-    assert "Restore or upscale an image or video using SeedVR2" in help_output
-    assert "SeedVR2 model alias" in help_output
+    assert "Restore or upscale an image or video." in help_output
+    # The upscale command hosts two restoration families; both must be discoverable
+    # from --help, and SwiftVR must be described as source-resolution only.
+    assert "SeedVR2 provides diffusion-based" in help_output
+    assert "SwiftVR provides one-step restoration at the source" in help_output
+    assert "Restoration model handle" in help_output
+    assert "swiftvr" in help_output
 
 
 @pytest.mark.parametrize(

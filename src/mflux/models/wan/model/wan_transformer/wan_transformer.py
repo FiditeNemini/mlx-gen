@@ -126,7 +126,19 @@ class WanTransformer(nn.Module):
         block_health_context: WanBlockHealthContext | None = None,
         control_hidden_states: mx.array | None = None,
         control_hidden_states_scale: list[float] | None = None,
+        rotary_emb: tuple[mx.array, mx.array] | None = None,
     ) -> mx.array:
+        """Run the transformer over one latent chunk.
+
+        Args:
+            rotary_emb: Precomputed ``(cos, sin)`` tables shaped like the ones
+                :class:`WanRotaryPosEmbed` returns, replacing the ones this module
+                would build from the token grid. Only a route whose positions do not
+                start at zero needs them - SwiftVR restores a clip chunk by chunk
+                against one continuous temporal coordinate system - and passing them
+                keeps this module from building a second set the caller then ignores.
+                ``None`` is the ordinary Wan path.
+        """
         if (control_hidden_states is not None) != (self.vace_layers is not None):
             raise ValueError(
                 "control_hidden_states must be provided exactly when the transformer is configured with VACE layers. "
@@ -144,7 +156,14 @@ class WanTransformer(nn.Module):
         post_patch_height = height // p_h
         post_patch_width = width // p_w
 
-        rotary_emb = self.rope(hidden_states)
+        expected_tokens = post_patch_num_frames * post_patch_height * post_patch_width
+        if rotary_emb is None:
+            rotary_emb = self.rope(hidden_states)
+        elif rotary_emb[0].shape[1] != expected_tokens or rotary_emb[1].shape[1] != expected_tokens:
+            raise ValueError(
+                f"Supplied rotary tables cover {rotary_emb[0].shape[1]} tokens but the post-patch grid "
+                f"{(post_patch_num_frames, post_patch_height, post_patch_width)} holds {expected_tokens}."
+            )
         hidden_states = self._patch_embed(hidden_states)
         self._check_block_health(
             enabled=self._block_health_enabled(),

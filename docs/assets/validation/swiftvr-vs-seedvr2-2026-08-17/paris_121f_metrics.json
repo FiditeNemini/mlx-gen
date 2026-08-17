@@ -1,0 +1,62 @@
+{
+  "clip": "paris-1 excerpt, 121 frames (5.04 s) at 24 fps",
+  "geometry": "384x288, restored at 1x (no scaling)",
+  "host": "Apple M4 Max, 128 GB unified memory",
+  "generated": "2026-08-17",
+  "fidelity_metric": "per-frame Pearson correlation between restored and source luma; a corrupted frame decorrelates sharply",
+  "gradient_energy_note": "mean absolute spatial gradient. A CONTRAST/EDGE PROXY, NOT a quality score: posterisation raises it while destroying texture. Read it only alongside the detail crops.",
+  "source_gradient_energy": 9.519,
+  "candidates": [
+    {
+      "model": "swiftvr",
+      "frames": 121,
+      "wall_seconds": 11.5,
+      "fps": 10.522,
+      "speedup_vs_seedvr2_3b": 41.0,
+      "peak_mlx_gb": 11.1,
+      "physical_footprint_gb": 8.49,
+      "fidelity": {
+        "mean": 0.9588,
+        "min": 0.9377,
+        "std": 0.0084,
+        "frames_below_0_90": 0
+      },
+      "gradient_energy": 13.747,
+      "invocation_note": "BF16. No chunk flags; SwiftVR plans its own 4a+1 chunking."
+    },
+    {
+      "model": "seedvr2-3b",
+      "frames": 121,
+      "wall_seconds": 471.0,
+      "fps": 0.257,
+      "speedup_vs_seedvr2_3b": 1.0,
+      "peak_mlx_gb": 57.9,
+      "physical_footprint_gb": 7.81,
+      "fidelity": {
+        "mean": 0.9647,
+        "min": 0.9458,
+        "std": 0.0078,
+        "frames_below_0_90": 0
+      },
+      "gradient_energy": 12.893,
+      "invocation_note": "--temporal-chunk-size 29 --temporal-chunk-overlap 8 --force-unsafe-video-memory"
+    },
+    {
+      "model": "seedvr2-7b",
+      "frames": 121,
+      "wall_seconds": 458.8,
+      "fps": 0.264,
+      "speedup_vs_seedvr2_3b": 1.0,
+      "peak_mlx_gb": 67.76,
+      "physical_footprint_gb": 17.61,
+      "fidelity": {
+        "mean": 0.9809,
+        "min": 0.9656,
+        "std": 0.0053,
+        "frames_below_0_90": 0
+      },
+      "gradient_energy": 11.386,
+      "invocation_note": "--temporal-chunk-size 29 --temporal-chunk-overlap 8 --force-unsafe-video-memory"
+    }
+  ]
+}

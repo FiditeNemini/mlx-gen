@@ -1051,14 +1051,14 @@ class SeedVR2(nn.Module):
         source_height: int,
         resolution: int | ScaleFactor,
     ) -> tuple[int, int]:
-        min_side = min(source_width, source_height)
-        target_res = resolution.get_scaled_value(min_side) if isinstance(resolution, ScaleFactor) else resolution
-        scale = float(target_res) / float(min_side)
-        width = max(16, (int(source_width * scale) // 2) * 2)
-        height = max(16, (int(source_height * scale) // 2) * 2)
-        width = max(16, width - (width % 16))
-        height = max(16, height - (height % 16))
-        return height, width
+        # Delegate rather than recompute: every caller of this helper needs the size the
+        # VAE will actually see, and a parallel implementation silently diverged from
+        # preprocess_video_frames for ScaleFactor resolutions.
+        return SeedVR2Util.resolved_video_frame_size(
+            source_width=source_width,
+            source_height=source_height,
+            resolution=resolution,
+        )
 
     def _build_restore_config(
         self,

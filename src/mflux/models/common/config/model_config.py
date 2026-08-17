@@ -11,6 +11,20 @@ WAN_DEFAULT_NEGATIVE_PROMPT = (
     "杂乱的背景，三条腿，背景人很多，倒着走"
 )
 
+# The seven architecture-shape keys of the Wan 2.2 TI2V-5B transformer. SwiftVR is a
+# fine-tune of exactly this model - all 825 checkpoint tensors match stock Wan in name,
+# shape and dtype - so both catalog entries read the numbers from here rather than
+# restating them and risking a silent divergence.
+WAN_2_2_TI2V_5B_TRANSFORMER_SHAPE = {
+    "in_channels": 48,
+    "out_channels": 48,
+    "num_layers": 30,
+    "num_attention_heads": 24,
+    "attention_head_dim": 128,
+    "ffn_dim": 14336,
+    "patch_size": [1, 2, 2],
+}
+
 # Shared by the ByteDance source entry and the AbstractFramework BF16 repack
 # entry; per-entry keys (component sources, revision pins, download byte
 # expectations) are layered on top by each catalog entry.
@@ -298,6 +312,11 @@ class ModelConfig:
     @lru_cache
     def bernini_r_1_3b() -> "ModelConfig":
         return AVAILABLE_MODELS["bernini-r-1.3b"]
+
+    @staticmethod
+    @lru_cache
+    def swiftvr() -> "ModelConfig":
+        return AVAILABLE_MODELS["swiftvr"]
 
     def x_embedder_input_dim(self) -> int:
         if "Fill" in self.model_name:
@@ -844,13 +863,7 @@ AVAILABLE_MODELS = {
         supports_guidance=True,
         requires_sigma_shift=False,
         transformer_overrides={
-            "in_channels": 48,
-            "out_channels": 48,
-            "num_layers": 30,
-            "num_attention_heads": 24,
-            "attention_head_dim": 128,
-            "ffn_dim": 14336,
-            "patch_size": [1, 2, 2],
+            **WAN_2_2_TI2V_5B_TRANSFORMER_SHAPE,
             "expand_timesteps": True,
             "has_transformer_2": False,
             "boundary_ratio": None,
@@ -1137,5 +1150,68 @@ AVAILABLE_MODELS = {
             "num_heads": 64,
             "vocab_size": 256384,
         },
+    ),
+    # SwiftVR one-step video restoration. The transformer is a fine-tune of Wan 2.2
+    # TI2V-5B and is tensor-identical to it, so the shape keys come from the shared
+    # constant above; everything Wan-specific that SwiftVR does not have - the 3D VAE,
+    # the flow-matching sampler, guidance, the negative prompt, image-to-video - is
+    # deliberately absent rather than inherited. base_model stays None: three separate
+    # string-matching surfaces (prepare backend selection, download patterns, family
+    # inference) build a token key from aliases + model_name + base_model, and naming
+    # Wan there would silently reroute SwiftVR into the Wan family.
+    "swiftvr": ModelConfig(
+        priority=31,
+        aliases=[
+            "swiftvr",
+            "swiftvr-5b",
+        ],
+        model_name="H-oliday/SwiftVR",
+        base_model=None,
+        controlnet_model=None,
+        custom_transformer_model=None,
+        num_train_steps=1000,
+        max_sequence_length=512,
+        # One forward pass at a constant timestep: no sampler, no CFG, no negative prompt.
+        supports_guidance=False,
+        requires_sigma_shift=False,
+        transformer_overrides={
+            **WAN_2_2_TI2V_5B_TRANSFORMER_SHAPE,
+            "text_dim": 4096,
+            "freq_dim": 256,
+            "rope_max_seq_len": 1024,
+            "cross_attn_norm": True,
+            "eps": 1e-06,
+            "added_kv_proj_dim": None,
+            # Mask-free shifted-window self-attention. The window size is a SwiftVR code
+            # default, not checkpoint metadata: transformer/config.json carries no
+            # enable_swa or self_attn_window_hw key, so it is pinned here to stay auditable.
+            "swiftvr_window_size": [16, 16],
+            "swiftvr_shift_alternate_layers": True,
+            "swiftvr_inference_timestep": 1000.0,
+            # ReAE replaces the Wan 3D VAE entirely: 40.95M parameters against 704.69M,
+            # reproducing the same 48-channel, 16x spatial, 4x temporal latent contract.
+            "reae_config": {
+                "patch_size": 2,
+                "latent_channels": 48,
+                "width_mult": 2,
+                "decoder_time_upscale": [True, True],
+                "decoder_space_upscale": [True, True, True],
+            },
+            # Run defaults the CLI and SwiftVR.restore_video_to_path read through
+            # SwiftVRInitializer.runtime_settings; there is no code-side copy of either.
+            # The padded-canvas multiple is deliberately NOT here: it is a structural
+            # consequence of the ReAE and patch-embed geometry, fixed by the weights, and
+            # lives once in SwiftVRUtil.SPATIAL_PAD_MULTIPLE.
+            "default_clip_len": 24,
+            "default_dit_overlap": 0,
+            "task": "video-to-video",
+            "supports_video_to_video": True,
+            "supports_image_to_video": False,
+            "expected_download_bytes": 20_167_236_128,
+            "download_headroom_bytes": 2 * 1024**3,
+        },
+        # No text encoder at all: a frozen 512-token prompt embedding ships with the
+        # checkpoint and cross-attention runs against it.
+        text_encoder_overrides={},
     ),
 }

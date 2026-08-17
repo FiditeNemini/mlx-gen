@@ -27,6 +27,13 @@ class WanAttention(nn.Module):
         self.kv_inner_dim = self.inner_dim if cross_attention_dim_head is None else cross_attention_dim_head * heads
         self.scale = self.dim_head**-0.5
 
+        # Optional self-attention token-routing override. None keeps the global mask-free
+        # attention below, which is the only behaviour for every Wan route; SwiftVR's MFSWA
+        # installs a strategy here after weights are applied. A plain Python attribute is
+        # deliberate: MLX's parameters()/children() traversal ignores it, so a strategy
+        # holding index arrays never reaches ModelSaver or quantization.
+        self.self_attention_strategy = None
+
         self.to_q = nn.Linear(dim, self.inner_dim, bias=True)
         self.to_k = nn.Linear(dim, self.kv_inner_dim, bias=True)
         self.to_v = nn.Linear(dim, self.kv_inner_dim, bias=True)
@@ -51,6 +58,13 @@ class WanAttention(nn.Module):
         block_health_context: Any | None = None,
     ) -> mx.array:
         attention_name = attention_name or "attention"
+        if self.self_attention_strategy is not None:
+            if encoder_hidden_states is not None or self.cross_attention_dim_head is not None:
+                raise ValueError(
+                    f"{attention_name}: self_attention_strategy is valid on self-attention only, "
+                    "but this module received encoder_hidden_states or is a cross-attention module."
+                )
+            return self.self_attention_strategy(self, hidden_states, rotary_emb, attention_name, block_health_context)
         health_enabled = self._block_health_enabled()
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states

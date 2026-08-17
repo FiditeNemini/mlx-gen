@@ -15,6 +15,7 @@ from mflux.cli.defaults import defaults as ui_defaults
 from mflux.cli.output_paths import format_output_template, normalize_output_template, resolve_output_path
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.cli.runtime_events import CliRuntimeEventStream, cli_print, emit_cli_failure_event_for_argv
+from mflux.models.common.cli.restore_dispatch import resolve_restore_family
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.download_policy import DownloadRequiredError, is_huggingface_repo_id
 from mflux.models.common.vae.tiling_config import TilingConfig
@@ -86,7 +87,7 @@ class SeedVR2VideoRunLock:
             self.handle.close()
             self.handle = None
             raise RuntimeError(
-                "Another SeedVR2 video restore is already running in mlx-gen. "
+                "Another video restore is already running in mlx-gen. "
                 "Wait for it to finish or override with --force-unsafe-video-memory."
             ) from exc
         self.handle.write(f"{datetime.now().isoformat()} pid-lock\n")
@@ -320,15 +321,14 @@ def _estimate_seedvr2_output_size(
     source_height: int,
     resolution: int | ScaleFactor,
 ) -> tuple[int, int]:
-    min_side = min(source_width, source_height)
-    if isinstance(resolution, ScaleFactor):
-        target_res = resolution.get_scaled_value(min_side)
-    else:
-        target_res = resolution
-    scale = target_res / min_side
-    width = max(2, (int(source_width * scale) // 2) * 2)
-    height = max(2, (int(source_height * scale) // 2) * 2)
-    return height, width
+    # The preflight line and the memory plan must quote the geometry the VAE will actually
+    # receive. This used to recompute the scale independently and reported a size the run
+    # never produced (480x360 at 1x was printed as 468x352 against an actual 480x352).
+    return SeedVR2Util.resolved_video_frame_size(
+        source_width=source_width,
+        source_height=source_height,
+        resolution=resolution,
+    )
 
 
 def _aligned_chunk_size(max_frames: int) -> int:
@@ -855,15 +855,20 @@ def _run_video_with_fresh_model(
 def main():
     # 1. Parse command line arguments
     parser = CommandLineParser(
-        description="Restore or upscale an image or video using SeedVR2 diffusion-based super-resolution."
+        description=(
+            "Restore or upscale an image or video. SeedVR2 provides diffusion-based "
+            "super-resolution with scaling; SwiftVR provides one-step restoration at the "
+            "source resolution."
+        )
     )
     parser.add_general_arguments()
     parser.add_model_arguments(require_model_arg=False)
     for action in parser._actions:
         if action.dest == "model":
             action.help = (
-                "SeedVR2 model alias (seedvr2, seedvr2-3b, seedvr2-7b, or seedvr2-7b-sharp), an official "
-                "SeedVR2 Hugging Face repo, an AbstractFramework SeedVR2 package, or a local path."
+                "Restoration model handle. SeedVR2: seedvr2, seedvr2-3b, seedvr2-7b, seedvr2-7b-sharp, an "
+                "official SeedVR2 Hugging Face repo, or an AbstractFramework SeedVR2 package. "
+                "SwiftVR: swiftvr or swiftvr-5b. A local path also works."
             )
             break
     parser.add_seedvr2_upscale_arguments()
@@ -895,8 +900,19 @@ def main():
         cli_print("SeedVR2 video mode: enabling --low-ram automatically.", json_events=bool(args.json_events))
         args.low_ram = True
 
+    # `mlxgen upscale` already picked this main() by family, but this entry point is also
+    # reachable directly as `mflux-upscale-seedvr2`. Resolving through the shared
+    # dispatcher keeps both paths on one classifier and lets an unknown handle name both
+    # restoration families. `_resolve_seedvr2_model` is still what resolves every SeedVR2
+    # handle and still what raises for an unknown one.
     try:
-        model_config, resolved_model_path = _resolve_seedvr2_model(args.model, args.model_path)
+        route = resolve_restore_family(args.model, args.model_path)
+        if route.family != "seedvr2":
+            raise ValueError(
+                f"{args.model!r} names the {route.family} model family, which this entry point cannot "
+                "run. Use `mlxgen upscale` instead, which dispatches by --model."
+            )
+        model_config, resolved_model_path = route.model_config, route.model_path
     except ValueError as exc:
         print(f"{parser.prog}: error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
