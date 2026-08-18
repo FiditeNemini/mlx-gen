@@ -7,6 +7,7 @@ from copy import copy
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import mlx.core as mx
 
@@ -51,7 +52,37 @@ SUPPORTED_VIDEO_SUFFIXES = {
 }
 
 DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB = 8.0
-SEEDVR2_OFFICIAL_BOUNDED_FRAME_LIMIT = 121
+
+# The options SeedVR2 cannot honour for a given input kind, as data rather than as an
+# ad-hoc if-chain. These are the refusals that state a *capability* of the route -- the
+# image route has no clip window, and the video route has no VAE tiling -- as opposed to
+# the numeric argument-shape checks below them in `main`, which validate the shape of a
+# value the route does accept. The restoration capability record is the intended home for
+# these strings; keeping them in one ordered mapping is what lets them move there verbatim
+# without re-typing, and keeps `mlxgen capabilities` and this parser quoting one text.
+#
+# Unlike SwiftVR, whose refusals are unconditional and therefore family-level, every
+# SeedVR2 refusal is conditional on the input kind, so the mapping is keyed by input kind
+# first. Insertion order is the reporting order: a command that breaks several rules still
+# reports the same first error it reported before this mapping existed.
+SEEDVR2_UNSUPPORTED_OPTIONS: dict[str, dict[str, str]] = {
+    "image": {
+        "--start-seconds/--max-frames": ("--start-seconds and --max-frames are only supported with --video-path."),
+    },
+    "video": {
+        "--vae-tiling": (
+            "--vae-tiling is not supported for SeedVR2 video restore. Use --low-ram and temporal chunking instead."
+        ),
+    },
+}
+
+# How each rule above is detected on the parsed namespace. Detection is argparse's
+# business and stays here; the message text is the contract's. Keyed by the same rule id,
+# so a rule cannot be declared without a detector or detected without a message.
+_SEEDVR2_OPTION_DETECTORS: dict[str, Callable[[object], bool]] = {
+    "--start-seconds/--max-frames": lambda args: args.start_seconds != 0.0 or args.max_frames is not None,
+    "--vae-tiling": lambda args: bool(args.vae_tiling),
+}
 
 
 @dataclass(frozen=True)
@@ -252,6 +283,17 @@ def _provided_options(argv: list[str]) -> set[str]:
             continue
         index += 1
     return provided
+
+
+def _reject_unsupported_options(parser, args, *, input_kind: str) -> None:
+    """Refuse the options this family cannot honour for ``input_kind``.
+
+    Reports the first violated rule in declaration order, which is the order the
+    equivalent if-chain reported before these rules became data.
+    """
+    for rule_id, message in SEEDVR2_UNSUPPORTED_OPTIONS[input_kind].items():
+        if _SEEDVR2_OPTION_DETECTORS[rule_id](args):
+            parser.error(message)
 
 
 def _validate_batch_output_collisions(
@@ -881,12 +923,15 @@ def main():
     if not image_paths and not video_paths:
         cli_print("No images or videos to upscale.", json_events=bool(args.json_events))
         return
-    if image_paths and (args.start_seconds != 0.0 or args.max_frames is not None):
-        parser.error("--start-seconds and --max-frames are only supported with --video-path.")
-    if video_paths and args.vae_tiling:
-        parser.error(
-            "--vae-tiling is not supported for SeedVR2 video restore. Use --low-ram and temporal chunking instead."
-        )
+    # `--image-path` and `--video-path` are a required mutually exclusive group, so
+    # exactly one of these runs, and it runs in the same position the two inlined rules
+    # used to occupy.
+    if image_paths:
+        _reject_unsupported_options(parser, args, input_kind="image")
+    if video_paths:
+        _reject_unsupported_options(parser, args, input_kind="video")
+    # Below here the checks validate the *shape* of a value the route does accept, which
+    # is argument validation rather than a capability of the family, so they stay inline.
     if args.temporal_chunk_size <= 0:
         parser.error("--temporal-chunk-size must be greater than zero.")
     if args.temporal_chunk_overlap < 0:

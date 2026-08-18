@@ -756,9 +756,9 @@ and the source duration plus requested fps may resolve fewer `4n+1` frames. Use
 | `--guidance-2` | Optional low-noise guidance scale for Wan A14B `transformer_2`. If both guidance flags are omitted, model-specific two-stage defaults are used. If `--guidance` is set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`. It is rejected for single-transformer Wan models. |
 | `--flow-shift` | Flow-matching scheduler shift. Defaults to the selected Wan model config. TI2V-5B and Bernini default to `5.0`; A14B defaults to `3.0`. For new 480p-class TI2V-5B checks such as `832x480`, pass `--flow-shift 3`. Python callers use `flow_shift=...`. |
 | `--last-image` | Wan A14B image-to-video only (experimental on Wan 2.2): a second anchor image the clip should END near, alongside the `--image-path` first frame (diffusers `last_image` first+last bracket conditioning). The last image maps through the same resolved canvas and `--resize-mode` as the first frame — match their aspect ratios. Requires `--image-path`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video. Recorded in metadata (`last_image_path`) and replayed by `--config-from-metadata`; advertised as `supports_last_image` on the `wan.first-frame` capability row. Official first+last training exists for Wan 2.1 (FLF2V); on Wan 2.2 A14B the shipped probe measured end-frame adherence at MAE 4.6/255 vs the target (baseline without the flag: 56.1) with no mid-clip artifacts on one Lightning 4-step storyboard pair — treat broader recipes as unverified (backlog item 0097 records the bounds). |
-| `--context-frames` | Wan A14B image-to-video only (EXPERIMENTAL zero-shot): the ordered frames that FOLLOW `--image-path` in the motion being continued. The conditioned head becomes `[--image-path, *--context-frames]`, so a continuation clip inherits the predecessor's real momentum instead of restarting from one frozen frame (the multi-frame handover used by SkyReels-V2/SVI-class pipelines). Pass 4, 8, or 12 frames — the head must fill whole 4x VAE latent groups (5, 9, or 13 conditioned frames); passing the start frame here too is the common misuse and fails on that count check. Requires `--image-path`; needs `--frames >= head + 4`; composes with `--last-image`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video — CLI rejects before weight load. All frames map through the same canvas and `--resize-mode` as the first frame. Recorded in metadata (`context_image_paths`), replayed by `--config-from-metadata`, advertised as `supports_context_frames` on the `wan.first-frame` capability row. The field was introduced in schema 6; the current capabilities payload is schema 8. Measured zero-shot on a Lightning 4-step continuation pair (backlog 0102): the K=5 head carried the source clip's motion speed (seam magnitude ratio 0.90 vs the single-frame baseline's 1.90 = double-speed restart) with a mild ~2-frame flare/exposure step at the conditioned-to-free boundary (luma delta ~3.2/255 vs the source clip's own max 1.15; visually mild, structurally clean). Treat as a storyboard continue-seam tool, not a validated general feature. |
+| `--context-frames` | Wan A14B image-to-video only (EXPERIMENTAL zero-shot): the ordered frames that FOLLOW `--image-path` in the motion being continued. The conditioned head becomes `[--image-path, *--context-frames]`, so a continuation clip inherits the predecessor's real momentum instead of restarting from one frozen frame (the multi-frame handover used by SkyReels-V2/SVI-class pipelines). Pass 4, 8, or 12 frames — the head must fill whole 4x VAE latent groups (5, 9, or 13 conditioned frames); passing the start frame here too is the common misuse and fails on that count check. Requires `--image-path`; needs `--frames >= head + 4`; composes with `--last-image`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video — CLI rejects before weight load. All frames map through the same canvas and `--resize-mode` as the first frame. Recorded in metadata (`context_image_paths`), replayed by `--config-from-metadata`, advertised as `supports_context_frames` on the `wan.first-frame` capability row. The field was introduced in schema 6; the current capabilities payload is schema 9. Measured zero-shot on a Lightning 4-step continuation pair (backlog 0102): the K=5 head carried the source clip's motion speed (seam magnitude ratio 0.90 vs the single-frame baseline's 1.90 = double-speed restart) with a mild ~2-frame flare/exposure step at the conditioned-to-free boundary (luma delta ~3.2/255 vs the source clip's own max 1.15; visually mild, structurally clean). Treat as a storyboard continue-seam tool, not a validated general feature. |
 | `--context-noise` | Optional noise on the `--context-frames` conditioned head, `0-1000` timestep-like scale (SkyReels `addnoise_condition` precedent, ~20 is the community default). Applied in latent space to the head only, deterministic per seed, recorded in metadata (`context_noise`) and replayed. In the shipped zero-shot probe it did not reduce the boundary flare (backlog 0102); it exists so adapter recipes (SVI-class) that expect conditioning noise can be reproduced exactly. Requires `--context-frames`. |
-| `--svi-anchor-image` | Wan A14B image-to-video only (EXPERIMENTAL): SVI 2.0 Pro chain conditioning (Stable Video Infinity, ICLR'26, trained for Wan 2.2 A14B i2v). One persistent anchor image is re-injected into EVERY clip of a chain as `[anchor_latent, motion_latent?, zero-latents]` — identity from the anchor, momentum from the previous clip's exported latent, TRUE zero-latent padding (not the stock zero-frame VAE encode; the conventions are mutually unintelligible, which is why the mode and the LoRA pair gate each other loudly in both directions). Replaces `--image-path`; conflicts with `--image-path`, `--last-image`, `--context-frames`, `--video-path`; rejected on TI2V-5B and VACE before weight load. Requires `--svi-lora-high`/`--svi-lora-low`. Every SVI run exports `<output>.svi_latent.safetensors` for the next clip and records `svi_*` metadata including `svi_assembly_trim_frames` (drop that many frames of every CONTINUATION clip at assembly: `1 + 4 x count`). Use a unique seed per clip. Advertised as `supports_svi` on the `wan.first-frame` capability row. The field was introduced in schema 7; the current capabilities payload is schema 8. |
+| `--svi-anchor-image` | Wan A14B image-to-video only (EXPERIMENTAL): SVI 2.0 Pro chain conditioning (Stable Video Infinity, ICLR'26, trained for Wan 2.2 A14B i2v). One persistent anchor image is re-injected into EVERY clip of a chain as `[anchor_latent, motion_latent?, zero-latents]` — identity from the anchor, momentum from the previous clip's exported latent, TRUE zero-latent padding (not the stock zero-frame VAE encode; the conventions are mutually unintelligible, which is why the mode and the LoRA pair gate each other loudly in both directions). Replaces `--image-path`; conflicts with `--image-path`, `--last-image`, `--context-frames`, `--video-path`; rejected on TI2V-5B and VACE before weight load. Requires `--svi-lora-high`/`--svi-lora-low`. Every SVI run exports `<output>.svi_latent.safetensors` for the next clip and records `svi_*` metadata including `svi_assembly_trim_frames` (drop that many frames of every CONTINUATION clip at assembly: `1 + 4 x count`). Use a unique seed per clip. Advertised as `supports_svi` on the `wan.first-frame` capability row. The field was introduced in schema 7; the current capabilities payload is schema 9. |
 | `--svi-motion-latent` | The `*.svi_latent.safetensors` exported by the PREVIOUS clip's SVI run: its trailing latent entries hand the motion over losslessly (never a pixel round-trip). Omit on the first clip of a chain. The chain must keep one canvas end to end (mismatch rejected at load). `--svi-motion-latent-count` (default `1`, the reference recipe) selects how many trailing entries carry over. Requires `--svi-anchor-image`. Continuation segments beyond 65 frames print a trained-length advisory (community-measured color shifts). |
 | `--svi-lora-high`, `--svi-lora-low` | The SVI 2.0 Pro error-recycling LoRA pair (high/low-noise experts; official weights `vita-video-gen/svi-model:version-2.0/SVI_Wan2.2-I2V-A14B_{high,low}_noise_lora_v2.0_pro.safetensors`). Loaded at fixed scale 1.0 under a STRICT key-match contract: any unmatched key aborts the load (`unmatched_key_count == 0` per file; verified 800/800 on the official pack) — a partially applied SVI LoRA silently corrupts the convention. Both-or-neither; requires `--svi-anchor-image` (the pack corrupts non-SVI runs and is rejected for them); re-fused automatically on per-item high-noise expert reloads. Composes with the Lightning 4-step pair through the ordinary `--lora-paths`/`--lora-scales`: the author-documented coexistence sets lightx2v HIGH scale to 0.5-0.6 (1.0 weakens dynamics/text-following and snaps back to the anchor) and keeps lightx2v LOW at 1.0. |
 | `--video`, `--video-path` | One source video for the public Wan video-to-video routes. The SDEdit-style route (with `--video-strength`, optionally a mask) is limited to `Wan2.2-T2V-A14B`. Wan VACE uses learned control conditioning. Bernini uses the video as an independently VAE-encoded packed source, selects V2V without references or RV2V with them, and has no warm start. TI2V-5B and I2V-A14B reject source-video input. |
@@ -836,14 +836,62 @@ Example outputs at 1280x704, 17 frames, and 20 steps:
 These panels are examples at the model's spatial scale. Evaluate final visual quality with the
 recommended full-resolution, frame-count, and step-count settings for your target model.
 
-## SeedVR2 Upscale Command
+## Restoration Commands
 
-SeedVR2 image and video restoration use `mlxgen upscale`. The public video CLI path uses
-sequential temporal chunking, defaults video restore to `1x` when `--resolution` is omitted,
-enables `--low-ram` automatically, and fails closed on enlarged video output unless you explicitly
-pass `--force-unsafe-video-memory`. See [Image Upscaling](upscaling.md) for a reproducible 5x
-image comparison plus the accepted June 21 five-second Eiffel `1x` and `2x` 3B/7B validation
-bundles.
+`mlxgen upscale` hosts two promptless restoration families. Select one with `--model`:
+
+| Family | Handles | Images | Video | Scaling | Quantization |
+| --- | --- | --- | --- | --- | --- |
+| SeedVR2 | `seedvr2`, `seedvr2-3b`, `seedvr2-7b`, `seedvr2-7b-sharp`, official repos, AbstractFramework packages | yes | yes | yes | q8 / q4 packages |
+| SwiftVR | `swiftvr`, `swiftvr-5b` | no | yes | source resolution only (`1x`) | none (bf16) |
+
+Restoration routes are described by the `restoration` array of `mlxgen capabilities`, alongside the
+`capabilities` array that describes `mlxgen generate` routes. An empty array means the model is not
+routable through that command, not that the model is unsupported.
+
+```sh
+mlxgen capabilities --model swiftvr
+mlxgen capabilities --family seedvr2
+```
+
+Each restoration row carries the route contract in machine-readable form, so a caller does not need
+to match handle strings to learn what a model accepts:
+
+| Field | Meaning |
+| --- | --- |
+| `id`, `handler_id` | Canonical route identity, for example `swiftvr.restore-video`. |
+| `command` | The command that serves the route (`mlxgen upscale`). |
+| `accepted_media` | `["image"]` or `["video"]`. One row per accepted input kind. |
+| `max_images`, `max_videos` | Input counts the route accepts. `max_images: 0` states that a family cannot restore stills. |
+| `supports_scaling`, `scale_factors` | Whether the route can enlarge, and which factors it accepts. |
+| `supports_quantization`, `quantization_bits`, `weight_precision` | Quantized package support and the precision the route runs at. |
+| `frame_multiple`, `frame_remainder`, `min_frames`, `max_frames` | Clip-length contract. SwiftVR reports `4` and `1`, so a clip must satisfy `frames % 4 == 1`. |
+| `chunk_strategy`, `chunk_size_*`, `chunk_overlap_*` | Temporal chunking contract and whether the user may set it. |
+| `supports_audio_passthrough`, `color_correction_modes`, `supports_steps`, `supports_softness` | Per-route option support. |
+
+The public video CLI path uses sequential temporal chunking, defaults video restore to `1x` when
+`--resolution` is omitted, enables `--low-ram` automatically, and fails closed on enlarged video
+output unless you explicitly pass `--force-unsafe-video-memory`. See
+[Image And Video Upscaling](upscaling.md) for the reproducible 5x image comparison, the accepted
+five-second Eiffel `1x` and `2x` 3B/7B bundles, and the SwiftVR/SeedVR2 comparison.
+
+### Python restoration routes
+
+Both families expose the same write-to-disk route names, so a caller selects a route by input kind
+rather than by model family:
+
+| Route | SeedVR2 | SwiftVR |
+| --- | --- | --- |
+| `restore_image_to_path(...)` | yes | not offered |
+| `restore_video_to_path(...)` | yes | yes |
+| `generate_image(...)` | yes (in-memory) | not offered |
+
+`restore_video_to_path` shares an identical keyword-only core across both families
+(`video_path`, `resolution`, `output_path`, `start_seconds`, `max_frames`, `color_correction_mode`,
+`drop_audio`, `export_json_metadata`, `overwrite`, `validate_health`, `restore_metadata`,
+`enforce_memory_budget`) and returns the `Path` written. Family-specific axes are additional
+keywords: `seed`, `softness` and the `temporal_chunk_*` controls on SeedVR2; `clip_len` and
+`dit_overlap` on SwiftVR.
 
 ```sh
 mlxgen upscale \

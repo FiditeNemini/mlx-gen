@@ -23,6 +23,13 @@ from mflux.cli.parser.parsers import CommandLineParser
 from mflux.cli.runtime_events import CliRuntimeEventStream, cli_print, emit_cli_failure_event_for_argv
 from mflux.models.common.config.model_config import ModelConfig
 from mflux.models.common.download_policy import DownloadRequiredError, is_huggingface_repo_id
+from mflux.models.common.restore_capabilities import (
+    INPUT_VIDEO,
+    RestoreCapability,
+    RestoreFamilyCapabilities,
+    get_restore_capabilities,
+    require_capability,
+)
 from mflux.models.seedvr2.cli.seedvr2_upscale import (
     DEFAULT_SEEDVR2_VIDEO_CACHE_LIMIT_GB,
     SeedVR2VideoRunLock,
@@ -99,7 +106,7 @@ def resolve_swiftvr_model(model_arg: str | None, model_path: str | None) -> tupl
 
 def _plan_swiftvr_restore(
     *,
-    model_config: ModelConfig,
+    capability: RestoreCapability,
     source_probe,
     requested_frames: int,
     resolution: int | ScaleFactor,
@@ -109,16 +116,22 @@ def _plan_swiftvr_restore(
 ) -> SwiftVRRestorePlan:
     """Resolve geometry and the chunk plan before any weights are loaded.
 
+    The frame ceiling comes from ``capability``, which derives it from the catalog's
+    rotary table, rather than from a second copy of that arithmetic here. The route keeps
+    its own ``_assert_clip_length_supported`` guard: it is a public Python API and must
+    fail closed without the CLI.
+
     Raises:
         ValueError: If the request is outside the supported envelope.
     """
+    # `aligned_frame_count` already refuses anything below one frame, so the only way
+    # this predicate can fail is the declared ceiling.
     aligned_frames = aligned_frame_count(requested_frames)
-    rope_max_seq_len = int((model_config.transformer_overrides or {}).get("rope_max_seq_len", 1024))
-    frame_limit = SwiftVRUtil.max_supported_source_frames(rope_max_seq_len)
-    if aligned_frames > frame_limit:
+    if not capability.allows_source_frame_count(aligned_frames):
         raise ValueError(
-            f"SwiftVR can restore at most {frame_limit} source frames in one run, but this request covers "
-            f"{aligned_frames}. Split the clip with --start-seconds and --max-frames, then join the outputs."
+            f"SwiftVR can restore at most {capability.max_source_frames} source frames in one run, but this "
+            f"request covers {aligned_frames}. Split the clip with --start-seconds and --max-frames, then "
+            "join the outputs."
         )
 
     target_height, target_width = SwiftVRUtil.output_canvas(
@@ -173,53 +186,39 @@ def _print_swiftvr_preflight(video_path: Path, source_probe, plan: SwiftVRRestor
         cli_print(f"SwiftVR warning: {warning}", json_events=json_events)
 
 
-def _reject_unsupported_options(parser: CommandLineParser, args, provided: set[str]) -> None:
-    """Reject flags SwiftVR cannot honour, naming what to use instead."""
-    if args.image_path:
-        parser.error(
-            "SwiftVR restores video only. Its chunk protocol, causal autoencoder state and decoder head "
-            "trim are defined over a clip, and MLX-Gen has no evidence for a single-frame route. Use "
-            "--video-path for SwiftVR, or --model seedvr2-3b to restore images."
-        )
-    if args.quantize is not None:
-        parser.error(
-            f"--quantize {args.quantize} does not apply to SwiftVR, which runs only its bf16 source "
-            "route. At 8 bits Wan's q8 sensitivity policy spares every quantizable module in this "
-            "architecture, so the run would be labelled quantized while staying bf16; at 4 bits the "
-            "quantized condition embedder fails inside the Wan timestep projection. Re-run without "
-            "--quantize, or use --model seedvr2-3b, which has quantized packages."
-        )
-    if args.vae_tiling:
-        parser.error(
-            "--vae-tiling does not apply to SwiftVR. It replaces the Wan 3D VAE with ReAE, which decodes "
-            "one latent frame at a time and has no tiling path."
-        )
-    if "--steps" in provided:
-        parser.error(
-            "--steps does not apply to SwiftVR: restoration is a single forward pass per chunk at a fixed "
-            "timestep, with no sampler to step. Use --model seedvr2-3b if you want a multi-step restore."
-        )
-    for option in ("--temporal-chunk-size", "--temporal-chunk-overlap"):
-        if option in provided:
-            parser.error(
-                f"{option} does not apply to SwiftVR. That is SeedVR2's memory-chunking axis; SwiftVR uses "
-                "its own fixed FIRST/MIDDLE/LAST protocol with a clip length of 4a + 1."
-            )
-    if "--softness" in provided:
-        parser.error(
-            "--softness does not apply to SwiftVR. It is a SeedVR2 degradation control with no counterpart "
-            "in a one-step restoration."
-        )
-    if getattr(args, "stepwise_image_output_dir", None):
-        parser.error(
-            "--stepwise-image-output-dir does not apply to SwiftVR: one forward pass per chunk leaves no "
-            "denoise trajectory to preview."
-        )
-    if len(args.seed) > 1:
-        parser.error(
-            "SwiftVR restoration is deterministic - one forward pass at a fixed timestep with no noise - so "
-            "multiple seeds would produce identical files. Pass a single --seed, or omit it."
-        )
+# How argparse reveals that an option was used. Three shapes are needed and none of them
+# belong in the capability record, which must not learn argparse: a truthy attribute, a
+# not-None attribute, and a count. Everything else is answered by the option token simply
+# appearing on the command line, which is what the fallback below checks.
+_OPTION_DETECTORS = {
+    "--image-path": lambda args, provided: bool(args.image_path),
+    "--quantize": lambda args, provided: args.quantize is not None,
+    "--vae-tiling": lambda args, provided: bool(args.vae_tiling),
+    "--stepwise-image-output-dir": lambda args, provided: bool(getattr(args, "stepwise_image_output_dir", None)),
+    "--seed": lambda args, provided: len(args.seed) > 1,
+}
+
+
+def _reject_unsupported_options(
+    parser: CommandLineParser,
+    args,
+    provided: set[str],
+    capabilities: RestoreFamilyCapabilities,
+) -> None:
+    """Reject flags SwiftVR cannot honour, naming what to use instead.
+
+    The messages are the family's declared contract rather than literals typed here, so
+    the CLI and the capability record cannot drift into disagreeing about what SwiftVR
+    refuses. Iteration order is the record's insertion order, which preserves the order
+    the old if-chain reported in: a command breaking several rules names the same first
+    problem it always did.
+    """
+    for option, message in capabilities.unsupported_options.items():
+        detect = _OPTION_DETECTORS.get(option) or (lambda args, provided, token=option: token in provided)
+        if detect(args, provided):
+            # ``replace`` rather than ``format``: a message containing a literal brace
+            # would otherwise raise here, which is the worst possible moment for it.
+            parser.error(message.replace("{value}", str(args.quantize)))
 
 
 def _load_swiftvr_model(
@@ -347,7 +346,15 @@ def main() -> None:
     args = parser.parse_args()
     provided = _provided_options(sys.argv[1:])
 
-    _reject_unsupported_options(parser, args, provided)
+    # The declared contract for this family. `upscale_main()` already picked this
+    # `main()` by family, so fetching it needs no model resolution and it can run before
+    # `resolve_swiftvr_model` - a rejected flag then costs nothing.
+    capabilities = get_restore_capabilities(family="swiftvr")
+    _reject_unsupported_options(parser, args, provided, capabilities)
+    # Asked of the contract rather than assumed. When SwiftVR gains a measured image
+    # route this is where the second capability is picked up, and the --image-path
+    # refusal disappears on its own because the refusals are the record's.
+    video_capability = require_capability(capabilities, INPUT_VIDEO)
 
     video_paths = _expand_video_paths(args.video_path) if args.video_path else []
     if not video_paths:
@@ -384,7 +391,7 @@ def main() -> None:
             source_probe = VideoUtil.read_video_clip(video_path, start_seconds=args.start_seconds, max_frames=1)
             video_probes[video_path] = source_probe
             plan = _plan_swiftvr_restore(
-                model_config=model_config,
+                capability=video_capability,
                 source_probe=source_probe,
                 requested_frames=VideoUtil.requested_clip_frame_count(source_probe, args.max_frames),
                 resolution=args.resolution,

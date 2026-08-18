@@ -167,6 +167,52 @@ class TestReAEDecoderParity:
         )
         print(f"\nReAE decoder shared-latents: {result}")
 
+    def test_single_frame_clip_matches_reference(self, torch_reae, mlx_reae):
+        """A one-frame clip round-trips identically on both sides.
+
+        ``t = 1`` is a legal ``4a + 1`` length and the CLI can be handed a one-frame video,
+        so the codec must be correct there, but every other case in this file is 9, 16 or
+        25 frames. The single frame is the degenerate end of the protocol: the encoder
+        replicates it to fill a 4-frame slice, one latent comes out, and the decoder's
+        3-frame head trim has to leave exactly one frame rather than consuming the only
+        real one. That makes it the shape most likely to hide an off-by-one, and the shape
+        whose output quality is used to justify withholding a SwiftVR image route - a
+        justification that only holds if the port is faithful here.
+        """
+        import mlx.core as mx
+        import torch
+
+        clip = seeded_clip(frames=1, height=64, width=64, seed=17)
+        reference_spec, mflux_spec = paired_chunk_specs(1, FULL_PROTOCOL_CLIP_LEN)[0]
+
+        reference_tae = _torch_streaming_tae(torch_reae)
+        with torch.no_grad():
+            reference_latents = reference_tae.encode_chunk_fixed(torch.from_numpy(clip), reference_spec)
+            reference_frames = reference_tae.decode_chunk_fixed(reference_latents, reference_spec)
+
+        codec = ReAEStreamingCodec(mlx_reae)
+        candidate_latents = codec.encode_chunk(mx.array(nchw_to_nhwc(clip)), mflux_spec)
+        candidate_frames = codec.decode_chunk(mx.array(nchw_to_nhwc(reference_latents.numpy())), mflux_spec)
+
+        assert reference_frames.shape[1] == 1, "a one-frame clip must decode back to one frame"
+
+        encode_result = assert_parity(
+            nhwc_to_nchw(candidate_latents),
+            reference_latents,
+            label="ReAE encoder (single-frame clip)",
+            max_relative=MAX_RELATIVE,
+            min_cosine=MIN_COSINE,
+        )
+        decode_result = assert_parity(
+            nhwc_to_nchw(candidate_frames),
+            reference_frames,
+            label="ReAE decoder (single-frame clip)",
+            max_relative=MAX_RELATIVE,
+            min_cosine=MIN_COSINE,
+        )
+        print(f"\nReAE single-frame encode: {encode_result}")
+        print(f"ReAE single-frame decode: {decode_result}")
+
     def test_streaming_decoder_matches_reference_across_all_chunk_types(self, torch_reae, mlx_reae):
         """FIRST -> MIDDLE -> LAST decode, including the one-shot head trim on FIRST.
 

@@ -1,0 +1,55 @@
+{
+  "generated": "2026-08-18",
+  "host": "Apple M4 Max, 128 GB unified memory",
+  "question": "Does SwiftVR restore a single frame acceptably? A one-frame clip is a legal 4a+1 input and completes, so the route is gated on output quality rather than on whether it runs.",
+  "method": "Each source downscaled to a 256px short edge and JPEG-crushed to quality 32. SwiftVR restored the identical frame as a one-frame video through --video-path at 1x. SeedVR2-3B restored the same PNG through its image route at 1x. Correlation is per-image Pearson on luma against the degraded source.",
+  "samples": [
+    {
+      "source": "dog",
+      "subject": "Animal face",
+      "geometry": "256x410",
+      "candidates": {
+        "swiftvr_one_frame": {
+          "corr_to_degraded_source": 0.9607,
+          "gradient_energy": 16.034
+        },
+        "seedvr2_3b_image": {
+          "corr_to_degraded_source": 0.9532,
+          "gradient_energy": 17.686
+        }
+      }
+    },
+    {
+      "source": "glasses",
+      "subject": "Human face, eyewear",
+      "geometry": "454x256",
+      "candidates": {
+        "swiftvr_one_frame": {
+          "corr_to_degraded_source": 0.9722,
+          "gradient_energy": 6.339
+        },
+        "seedvr2_3b_image": {
+          "corr_to_degraded_source": 0.9836,
+          "gradient_energy": 5.656
+        }
+      }
+    },
+    {
+      "source": "lowres",
+      "subject": "Detailed scene",
+      "geometry": "426x256",
+      "candidates": {
+        "swiftvr_one_frame": {
+          "corr_to_degraded_source": 0.9843,
+          "gradient_energy": 6.083
+        },
+        "seedvr2_3b_image": {
+          "corr_to_degraded_source": 0.9836,
+          "gradient_energy": 7.122
+        }
+      }
+    }
+  ],
+  "reading": "SwiftVR's one-frame output is visibly degraded on every sample: facial structure collapses and colour desaturates. Correlation does not capture this - SwiftVR scores at or above SeedVR2 on some samples while being clearly worse, which is why the sheet is the evidence and the number is not. Cause: restoring a single frame seeds the causal autoencoder state from a replicated frame instead of real temporal context.",
+  "conclusion": "SwiftVR's image route stays withheld. Stills route to SeedVR2."
+}

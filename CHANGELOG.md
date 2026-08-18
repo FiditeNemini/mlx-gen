@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-08-18
+
+SwiftVR one-step restoration, and a capability contract for both restoration families.
+
+### Added
+
+- **SwiftVR one-step video restoration** through `mlxgen upscale --model swiftvr`. SwiftVR is a
+  one-step restorer on a Wan2.2-TI2V-5B backbone (`H-oliday/SwiftVR`, Apache-2.0), so the existing
+  Wan transformer serves it through three additive seams and only the mask-free shifted-window
+  attention, the restoration-aware autoencoder, and the causal chunk protocol are new. Measured on
+  an M4 Max over 121 frames at 384x288 at `1x`: 11.5 s at 11.1 GB peak MLX, against 471.0 s at
+  57.9 GB for SeedVR2-3B and 458.8 s at 67.8 GB for SeedVR2-7B. The route restores at the source
+  resolution only, runs bf16 only, and trims clip length to `4a + 1` frames while reporting the
+  trim. Ported against the reference implementation with numerical parity at cosine 1.00000000 in
+  fp32 for the transformer block, the windowed attention, and the autoencoder, including across
+  chunk boundaries.
+- **A restoration capability contract.** `mlxgen capabilities` now emits a `restoration` array
+  beside the existing `capabilities` array, and `--family` accepts `seedvr2` and `swiftvr`. Each
+  route row reports canonical identity, `accepted_media`, `max_images`/`max_videos`,
+  `supports_scaling` and `scale_factors`, `supports_quantization` and `weight_precision`, the
+  `frame_multiple`/`frame_remainder` clip contract, and the temporal chunking contract. Asking
+  whether a restoration model accepts stills is now a field lookup (`max_images`) rather than a
+  handle-string match. Capabilities `schema_version` moves 8 -> 9.
+- **`SeedVR2.restore_image_to_path(...)`**, the write-to-disk image route that pairs with
+  `restore_video_to_path(...)`. It is a thin adapter over `generate_image(...)` and adds no
+  restoration behaviour. Both families now name their write-to-disk routes the same way, so a
+  caller selects a route by input kind rather than by model family.
+- **A five-second SwiftVR/SeedVR2 comparison bundle** under
+  `docs/assets/validation/swiftvr-vs-seedvr2-2026-08-17/`: restored clips for all three candidates,
+  a four-panel comparison video, a contiguous motion strip, two magnified detail crops, metrics, and
+  a validation report.
+
+### Fixed
+
+- **Video runs no longer fail on sources whose container over-reports its frame count.** Some MP4
+  containers keep every sample while an edit list shortens playback, so `nb_frames` counts more
+  frames than the stream will decode and a restore planned from that number died mid-run with
+  `Could not decode all requested video windows`. The frame count is now cross-checked against
+  `duration * fps` and, when the two disagree beyond rounding, resolved with an exact decode count
+  cached per file. Well-formed sources are unaffected and pay nothing. A stream that is short while
+  its metadata is self-consistent still fails, but now names the mismatch and suggests
+  `--max-frames`.
+- **SeedVR2 video restore works at 480x360-class geometries that previously could not run.** Three
+  code paths computed the restored geometry independently and disagreed for scale-factor
+  resolutions: for a 480x360 source at `1x` the CLI preflight reported 468x352 and the runtime noise
+  provider used 464x352 while preprocessing produced 480x352, so the streamed noise provider
+  allocated latents 58 wide against an encode 60 wide and the run raised
+  `SeedVR2 streamed video noise slice shape mismatch`. All three now derive the geometry from the
+  preprocessing path, and the preflight reports the geometry the VAE actually receives.
+
+### Notes
+
+- SwiftVR restores video only. A single frame is a legal clip for its chunk protocol and does run,
+  but it restores stills measurably worse than SeedVR2 on identical input - acceptable at 1:1, with
+  facial features losing structure under magnification - because the causal autoencoder state is
+  seeded from a replicated frame rather than real temporal context. Stills route to SeedVR2, with a
+  three-subject contact sheet, face detail crop and metrics in the validation bundle.
+- SwiftVR has no learned upscaler. Upstream reaches larger outputs by bilinear-resizing the degraded
+  input and restoring at that size; MLX-Gen has not matched or measured that step, so `--resolution`
+  other than `1x` is refused rather than approximated. Resize the source yourself and restore at
+  `1x` for the same order of operations, or use SeedVR2 for a learned upscale.
+- On Apple Silicon SwiftVR is an offline batch route, not a real-time one: 1080p measures about
+  1.1 FPS on an M4 Max. Upstream's real-time framing describes datacenter GPUs.
+- SwiftVR reinterprets texture where SeedVR2 recovers it. On grain-heavy archival material SwiftVR
+  produces a clean but visibly synthetic image while SeedVR2-7B keeps the most natural texture and
+  scores the highest fidelity to the source. Choose SwiftVR for throughput and SeedVR2-7B for
+  fidelity, and read the detail crops rather than a sharpness metric.
+- Restoration at 480x352 with SeedVR2 exceeds the host-safe memory budget for its minimum permitted
+  29-frame chunk, and forcing it through produces intermittent corrupted frames. 320x240 and
+  384x288 are clean. Tracked in backlog item 0115.
+- Consumers reading `mlxgen capabilities` should accept `schema_version` 9. The `capabilities` array
+  is unchanged for every generation route; the addition is the sibling `restoration` array.
+
 ## [0.29.0] - 2026-08-15
 
 Generation previews with tiny autoencoders.

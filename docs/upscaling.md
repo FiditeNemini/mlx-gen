@@ -13,6 +13,25 @@ families. Select one with `--model`.
 
 Neither family requires a text prompt.
 
+| | SeedVR2 | SwiftVR |
+| --- | --- | --- |
+| Images | yes | no |
+| Video | yes | yes |
+| Scaling | yes | source resolution only (`1x`) |
+| Quantization | q8 / q4 packages | none (bf16) |
+
+Both families declare what they accept, so you can check a route before starting a run:
+
+```sh
+mlxgen capabilities --model swiftvr
+mlxgen capabilities --family seedvr2
+```
+
+The `restoration` array reports accepted media, input counts, scale factors, the clip-length
+contract, and quantization support for every route. See
+[Restoration Commands](api.md#restoration-commands) for the field reference and the Python route
+names.
+
 The older `mflux-upscale-seedvr2` entry point remains available for compatibility. New examples use
 `mlxgen upscale`.
 
@@ -414,6 +433,44 @@ Route constraints, all fail-closed rather than approximated:
 Do not read the upstream "real-time streaming" framing as an Apple Silicon claim. Measured here,
 SwiftVR restores 1080p at about 1.1 FPS - useful for offline batch work, and roughly 20x short of
 real time. It is fast relative to SeedVR2, not fast in absolute terms.
+
+### Why SwiftVR restores video but not stills
+
+SwiftVR's chunk protocol accepts a single frame: `t = 1` is a legal `4a + 1` clip, it plans as one
+chunk, and the decoder's three-frame head trim leaves exactly one frame. A one-frame clip therefore
+runs to completion through `--video-path`.
+
+Output quality is what withholds the route. Restoring a single frame seeds the causal autoencoder
+state from a replicated frame instead of real temporal context. At 1:1 the restored frame is
+acceptable but soft; under magnification facial features lose structure, with eyes flattening into
+smudges and fine texture smoothing over. SeedVR2's image route resolves the same detail cleanly on
+identical input, so stills route there.
+
+Measured across three subjects:
+[contact sheet](assets/validation/swiftvr-vs-seedvr2-2026-08-17/swiftvr_single_frame_contact_sheet.png),
+[face detail crop at 3.4x](assets/validation/swiftvr-vs-seedvr2-2026-08-17/swiftvr_single_frame_detail_crop_face.png),
+[metrics](assets/validation/swiftvr-vs-seedvr2-2026-08-17/swiftvr_single_frame_metrics.json).
+Read the sheets rather than the correlation column: SwiftVR scores higher than SeedVR2 on two of the
+three samples while being visibly worse, so the number does not separate the two routes.
+
+Restore stills with `--model seedvr2-3b`.
+
+### Reaching other output sizes
+
+SwiftVR has no learned upscaler. Upstream reaches larger outputs by resizing the degraded input with
+bilinear interpolation and restoring at that size, so the model always restores at whatever
+resolution it is handed. MLX-Gen has not matched or measured that pre-upsampling step, so
+`--resolution` other than `1x` is refused rather than approximated.
+
+If you want a larger SwiftVR output today, do the resize yourself and restore at `1x`:
+
+```sh
+ffmpeg -i clip.mp4 -vf scale=iw*2:ih*2 upscaled.mp4
+mlxgen upscale --model swiftvr --video-path upscaled.mp4 --resolution 1x --output restored.mp4
+```
+
+That is the same order of operations upstream performs. For a learned upscale, use SeedVR2, which
+reconstructs detail while increasing pixel dimensions.
 
 ### Choosing between SwiftVR and SeedVR2
 

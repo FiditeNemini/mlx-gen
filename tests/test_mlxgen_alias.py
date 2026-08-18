@@ -9,19 +9,17 @@ def test_mlxgen_exposes_mflux_api_without_replacing_its_package_identity():
 
 
 def test_mlxgen_submodule_import_matches_mflux():
-    from mlxgen.models.z_image import ZImageTurbo as MlxgenZImageTurbo
-
     from mflux.models.z_image import ZImageTurbo as MfluxZImageTurbo
+    from mlxgen.models.z_image import ZImageTurbo as MlxgenZImageTurbo
 
     assert MlxgenZImageTurbo is MfluxZImageTurbo
 
 
 def test_mlxgen_submodule_import_does_not_replace_mflux_parent_package():
-    from mlxgen.models.z_image import ZImageTurbo as MlxgenZImageTurbo
-
     import mflux
     import mflux.models.common
     from mflux.models.z_image import ZImageTurbo as MfluxZImageTurbo
+    from mlxgen.models.z_image import ZImageTurbo as MlxgenZImageTurbo
 
     assert MlxgenZImageTurbo is MfluxZImageTurbo
     assert mflux.models.__name__ == "mflux.models"
@@ -30,9 +28,6 @@ def test_mlxgen_submodule_import_does_not_replace_mflux_parent_package():
 
 
 def test_mlxgen_public_family_exports_cover_qwen_and_fibo():
-    from mlxgen.models.fibo import FIBO, FIBOEdit
-    from mlxgen.models.qwen import QwenImage, QwenImageControlNet, QwenImageEdit
-
     from mflux.models.fibo import (
         FIBO as MfluxFIBO,
         FIBOEdit as MfluxFIBOEdit,
@@ -42,6 +37,8 @@ def test_mlxgen_public_family_exports_cover_qwen_and_fibo():
         QwenImageControlNet as MfluxQwenImageControlNet,
         QwenImageEdit as MfluxQwenImageEdit,
     )
+    from mlxgen.models.fibo import FIBO, FIBOEdit
+    from mlxgen.models.qwen import QwenImage, QwenImageControlNet, QwenImageEdit
 
     assert QwenImage is MfluxQwenImage
     assert QwenImageControlNet is MfluxQwenImageControlNet

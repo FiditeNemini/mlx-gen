@@ -11,7 +11,7 @@
 - `docs/README.md`: documentation tree index.
 - `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, SeedVR2 image/video restoration and upscaling, and Wan video examples.
 - `docs/architecture.md`: system overview and model-file lifecycle diagrams, package shape, command boundaries, runtime failure contract, quantization policy, and the Python integration boundary.
-- `docs/api.md`: public CLI, generation routing, public tasks and internal modes, image/video/reference input roles, Bernini R2V/RV2V/V2V options, Wan video controls, SeedVR2 upscaling, runtime events, metadata, and the capability schema (`schema_version` 8, including reference-image bounds).
+- `docs/api.md`: public CLI, generation routing, public tasks and internal modes, image/video/reference input roles, Bernini R2V/RV2V/V2V options, Wan video controls, SeedVR2 and SwiftVR restoration, runtime events, metadata, and the capability schema (`schema_version` 9, including reference-image bounds and the `restoration` route rows).
 - `docs/image-edit-modes.md`: plain-language guide to latent img2img, edit-reference, masked edit/inpaint, structured control, multi-reference, generative reframe, and outpaint, including what each mode preserves and what to expect from the output.
 - `docs/masked-editing.md`: canonical masked-edit reference — request contract, per-model route matrix with proof grades (Qwen edit/base, Z-Image Turbo, FLUX.2 Klein, video masks; non-turbo Z-Image masked edit is withdrawn for now), per-family behavior including the tunable base-Qwen `--mask-strength` warm start and `effective_steps` metadata, and route selection advice.
 - `docs/qwen-route-matrix.md`: current MLX-Gen route truth for Qwen Image and Qwen Image Edit, mapping public `mlxgen` capability ids to the upstream Diffusers Qwen pipeline families and to the proof surfaces that already exist.
@@ -234,9 +234,32 @@ unsupported through unified `mlxgen generate` in the current release.
 
 ---
 
-## SeedVR2 Upscaling
+## Restoration And Upscaling
 
-SeedVR2 image and video restoration use `mlxgen upscale`. It is not routed through `mlxgen generate`.
+`mlxgen upscale` hosts two promptless restoration families, selected with `--model`. Neither is
+routed through `mlxgen generate`.
+
+- SeedVR2 (`seedvr2`, `seedvr2-3b`, `seedvr2-7b`, `seedvr2-7b-sharp`, official ByteDance repos,
+  AbstractFramework packages) restores images and video and can scale. Quantized q8/q4 packages
+  exist.
+- SwiftVR (`swiftvr`, `swiftvr-5b`) restores video in one step at the source resolution on a
+  Wan2.2-TI2V-5B backbone. It does not restore stills, does not scale, and runs bf16 only. Clip
+  length must satisfy `frames % 4 == 1`; the CLI trims and reports the trim. Measured on an M4 Max
+  over 121 frames at 384x288, SwiftVR restored in 11.5 s against 471.0 s for SeedVR2-3B and 458.8 s
+  for SeedVR2-7B, at 11.1 GB peak MLX against 57.9 GB and 67.8 GB. SwiftVR reinterprets texture
+  where SeedVR2 recovers it, so it is the throughput route rather than the fidelity route, and it is
+  an offline batch route on Apple Silicon rather than a real-time one (1080p measures about
+  1.1 FPS).
+
+Both families are described by the `restoration` array of `mlxgen capabilities`, which reports
+`accepted_media`, `max_images`/`max_videos`, `supports_scaling` and `scale_factors`,
+`supports_quantization` and `weight_precision`, the `frame_multiple`/`frame_remainder` clip
+contract, and the temporal chunking contract. `max_images: 0` is how a family states that it cannot
+restore stills, so a caller never has to match handle strings.
+
+In Python, both families expose `restore_video_to_path(...)` with an identical keyword-only core,
+and SeedVR2 additionally exposes `restore_image_to_path(...)` alongside the in-memory
+`generate_image(...)`. A caller selects a route by input kind rather than by model family.
 
 `--resolution` accepts either an integer shorter-edge target or a scale factor:
 
@@ -366,7 +389,7 @@ and text/video-to-video before the weight load. `--context-noise <0-1000>` (Pyth
 head in latent space, deterministic per seed. Both are recorded in metadata
 (`context_image_paths`, `context_noise`), replayed by `--config-from-metadata`, and advertised
 as the additive `supports_context_frames` field on the `wan.first-frame` capability row
-(introduced in capabilities schema 6; current payload schema 8). EXPERIMENTAL zero-shot behavior with a measured probe
+(introduced in capabilities schema 6; current payload schema 9). EXPERIMENTAL zero-shot behavior with a measured probe
 (backlog 0102): the K=5 head carried seam motion speed (magnitude ratio 0.90 vs the
 single-frame baseline's 1.90 double-speed restart) at the cost of a mild ~2-frame
 flare/exposure step at the conditioned-to-free boundary; hosts assembling films should trim
@@ -385,7 +408,7 @@ aborts; the pack is likewise rejected on non-SVI runs). Conflicts with `--image-
 load; continuations >65 frames warn. Metadata records `svi_*` truth including
 `svi_assembly_trim_frames` (drop that many leading frames of each continuation at assembly:
 `1 + 4 x count`); hosts gate on the additive `supports_svi` capability field (capabilities
-schema 7; current payload schema 8). Use a unique seed per clip; author-documented Lightning coexistence sets
+schema 7; current payload schema 9). Use a unique seed per clip; author-documented Lightning coexistence sets
 lightx2v HIGH scale 0.5-0.6, LOW 1.0.
 
 `--denoising-step-list 1000 750 500 250` (Python: `denoising_step_list=[...]`) runs an exact

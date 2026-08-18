@@ -6,8 +6,8 @@
 
 MLX-Gen is a local image and video generation runtime for Apple Silicon and MLX. It exposes
 `mlxgen` for text-to-image, image-to-image, text-to-video, image-to-video, model download, model
-preparation, SeedVR2 image/video restoration and upscaling, optimized quantized model variants, and application progress
-callbacks.
+preparation, SeedVR2 and SwiftVR image/video restoration and upscaling, optimized quantized model
+variants, and application progress callbacks.
 
 > [!IMPORTANT]
 > MLX-Gen started as a fork of [mflux](https://github.com/filipstrand/mflux). Most credit for the
@@ -72,11 +72,16 @@ The main capabilities are:
   qualitatively accepted with committed proof (full prompts and contact sheets in
   `docs/assets/validation/bernini-r-1.3b-2026-08-11/`), and tuned recipes for the remaining
   rows are documented in `docs/bernini.md`;
-- SeedVR2 image and video restoration through `mlxgen upscale`, with official 3B/7B source
-  support including the dedicated `seedvr2-7b-sharp` route, published q8/q4 packages,
-  shortest-edge target sizing, explicit scale factors such as `2x` and `3x`, streamed restore for
-  longer clips, preserved source FPS, a conservative host-safe default video profile, and
-  published five-second `1x` and `2x` validation bundles for the 3B/7B video path;
+- image and video restoration through `mlxgen upscale`, which hosts two families selected with
+  `--model` and describes both in the `restoration` array of `mlxgen capabilities`:
+  - SeedVR2 for images and video with scaling, covering official 3B/7B source support including the
+    dedicated `seedvr2-7b-sharp` route, published q8/q4 packages, shortest-edge target sizing,
+    explicit scale factors such as `2x` and `3x`, streamed restore for longer clips, preserved
+    source FPS, a conservative host-safe default video profile, and published five-second `1x` and
+    `2x` validation bundles for the 3B/7B video path;
+  - SwiftVR for one-step video restoration at the source resolution on a Wan2.2-TI2V-5B backbone,
+    measured at roughly 40x SeedVR2 throughput on the same clip at a fifth of the peak memory, with
+    a published five-second three-way comparison bundle;
 - explicit `download` and `prepare` workflows for local MLX-Gen model packages;
 - JSON model capability inspection before starting a heavy run;
 - strict route-specific LoRA routing and adapter application checks, with model-card compatibility

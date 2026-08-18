@@ -185,6 +185,7 @@ class SeedVR2(nn.Module):
         softness: float = 0.0,
         color_correction_mode: str = "wavelet",
         num_inference_steps: int | None = None,
+        restore_metadata: dict | None = None,
     ) -> GeneratedImage:
         if num_inference_steps is not None and num_inference_steps < 1:
             raise ValueError("SeedVR2 image restoration requires at least 1 inference step.")
@@ -279,6 +280,7 @@ class SeedVR2(nn.Module):
                 "color_correction_mode": color_correction_mode,
                 "steps_mode": steps_mode,
                 **self._seedvr2_metadata(),
+                **(restore_metadata or {}),
             }
             if auto_steps and math.isfinite(residue_pct):
                 extra_metadata["one_step_residue_pct"] = round(residue_pct, 2)
@@ -302,6 +304,70 @@ class SeedVR2(nn.Module):
         mx.clear_cache()
         gc.collect()
         return generated_image
+
+    def restore_image_to_path(
+        self,
+        *,
+        seed: int,
+        image_path: str | Path,
+        resolution: int | ScaleFactor,
+        output_path: str | Path,
+        softness: float = 0.0,
+        color_correction_mode: str = "wavelet",
+        num_inference_steps: int | None = None,
+        export_json_metadata: bool = False,
+        overwrite: bool = True,
+        embed_metadata: bool = False,
+        restore_metadata: dict | None = None,
+    ) -> Path:
+        """Restore a single image and write it to ``output_path``.
+
+        This completes a pairing the class already had for video and was missing for
+        images: :meth:`generate_image` returns the restored frame in memory the way
+        :meth:`generate_video` does, and this is the write-to-disk route that mirrors
+        :meth:`restore_video_to_path` -- keyword-only, ``output_path``-taking, returning
+        the path actually written. Both restoration families name their routes the same
+        way, so a caller selects a route by input kind rather than by model family.
+
+        It is a thin adapter over :meth:`generate_image` and adds no restoration
+        behaviour of its own. ``seed``, ``softness`` and ``num_inference_steps`` are the
+        SeedVR2-specific axes, exactly as ``seed`` and ``softness`` are the SeedVR2
+        extras on the shared video core; a family without them does not accept them.
+
+        Args:
+            seed: Entropy seed for the initial noise latents.
+            image_path: Source image.
+            resolution: Target output size; SeedVR2 scales, so any factor is accepted.
+            output_path: Destination file.
+            softness: Pre-restoration source softening.
+            color_correction_mode: Post-restoration tone transfer mode.
+            num_inference_steps: Fixed step count. ``None`` keeps the automatic policy
+                (the official single step, refined only when the one-step lattice residue
+                is measurably present).
+            export_json_metadata: Write a sidecar metadata file.
+            overwrite: Replace an existing output file.
+            embed_metadata: Embed the metadata in the written image.
+            restore_metadata: Extra key/value pairs to record in the output metadata.
+
+        Returns:
+            The path actually written. This differs from ``output_path`` when
+            ``overwrite`` is False and a file is already present there.
+        """
+        generated_image = self.generate_image(
+            seed=seed,
+            image_path=image_path,
+            resolution=resolution,
+            softness=softness,
+            color_correction_mode=color_correction_mode,
+            num_inference_steps=num_inference_steps,
+            restore_metadata=restore_metadata,
+        )
+        return generated_image.save(
+            output_path,
+            export_json_metadata=export_json_metadata,
+            overwrite=overwrite,
+            embed_metadata=embed_metadata,
+        )
 
     def generate_video(
         self,

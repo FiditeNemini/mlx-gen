@@ -283,6 +283,7 @@ def _top_level_parser() -> argparse.ArgumentParser:
             "  mlxgen generate --model wan2.2-ti2v-5b --prompt 'A city timelapse'\n"
             "  mlxgen upscale --model seedvr2-3b --image-path input.png --resolution 2x --output upscaled.png\n"
             "  mlxgen capabilities --model flux2-klein-4b\n"
+            "  mlxgen capabilities --model swiftvr\n"
             "  mlxgen validation --model AbstractFramework/qwen-image-edit-2509-8bit\n"
             "  mlxgen download --model Qwen/Qwen-Image\n"
             "  mlxgen prepare --model Qwen/Qwen-Image --path ./models/qwen-image-8bit --quantize 8\n"
@@ -505,13 +506,18 @@ def _upscale_image(argv: list[str]) -> None:
 def _show_capabilities(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         prog="mlxgen capabilities",
-        description="Inspect the public tasks, internal modes, and option support for a model.",
+        description=(
+            "Inspect the public tasks, internal modes, and option support for a model. Generation "
+            "routes are listed under 'capabilities'; promptless restoration routes (mlxgen upscale) "
+            "are listed under 'restoration'. An empty array means the model is not routable through "
+            "that command, not that the model is unsupported."
+        ),
     )
     parser.add_argument("--model", "-m", required=True, help="Model alias, Hugging Face repo, or local model path.")
     parser.add_argument("--base-model", default=None, help="Base model hint for custom repositories or local paths.")
     parser.add_argument(
         "--family",
-        choices=["qwen", "flux2", "fibo", "z-image", "ernie-image", "wan", "bonsai"],
+        choices=["qwen", "flux2", "fibo", "z-image", "ernie-image", "wan", "bonsai", "seedvr2", "swiftvr"],
         default=None,
         help="Override model-family detection for local paths or custom repo names.",
     )

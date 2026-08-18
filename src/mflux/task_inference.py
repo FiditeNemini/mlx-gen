@@ -45,7 +45,10 @@ VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
 # v7: additive supports_svi row field (0103), same additive-field convention:
 # hosts gate SVI 2.0 Pro anchor/motion-latent conditioning on this field.
 # v8: reference images are a role separate from primary image inputs (ADR 0007).
-CAPABILITIES_SCHEMA_VERSION = 8
+# v9: restoration routes are a second top-level row array (`restoration`);
+# `capabilities` stays empty for restoration-only families, so an empty
+# `capabilities` means "not routable through mlxgen generate", never "unsupported".
+CAPABILITIES_SCHEMA_VERSION = 9
 QWEN_CONTROL_UNION_MODEL = "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
 QWEN_CONTROL_INPAINT_MODEL = "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
 # Untrusted inferred identities that earned native masked edit through an exact smoke proof.
@@ -65,6 +68,23 @@ MODE_FIRST_FRAME_I2V = "first-frame-i2v"
 MODE_LATENT_VIDEO = "latent-video"
 MODE_REFERENCE_VIDEO = "reference-video"
 MODE_REFERENCE_VIDEO_EDIT = "reference-video-edit"
+# Restoration modes. Deliberately absent from PUBLIC_TASKS/VALID_TASKS: restoration
+# reuses the existing public task strings (image-to-image, video-to-video) that the
+# routes already emit as progress labels, and it is never routable through
+# `mlxgen generate` (ADR 0006 keeps the prompt-driven and promptless surfaces apart).
+MODE_RESTORE_IMAGE = "restore-image"
+MODE_RESTORE_VIDEO = "restore-video"
+
+RESTORE_FAMILIES = ("seedvr2", "swiftvr")
+
+# SeedVR2 temporal-chunk request defaults. These mirror the --temporal-chunk-size /
+# --temporal-chunk-overlap defaults declared in
+# mflux/cli/parser/parsers.py::add_seedvr2_upscale_arguments. They are duplicated here
+# only because the parser owns the literals today; hoisting them into SeedVR2Util (next
+# to VIDEO_MIN_PRODUCTION_STREAMING_*) and reading them from there is the follow-up that
+# removes this second copy.
+SEEDVR2_DEFAULT_TEMPORAL_CHUNK_SIZE = 49
+SEEDVR2_DEFAULT_TEMPORAL_CHUNK_OVERLAP = 16
 
 I2I_MODE_ALIASES = {
     None: I2I_MODE_AUTO,
@@ -186,12 +206,149 @@ class GenerationCapability:
 
 
 @dataclass(frozen=True)
+class RestorationCapability:
+    """One promptless restoration route: what it accepts, and what it refuses.
+
+    A separate row type from :class:`GenerationCapability` on purpose. That dataclass
+    carries ~32 generation-only fields (image strength, masks, controlnet, outpaint,
+    reframe, LoRA profiles, SVI anchors, canvas policies) which are all meaningless for a
+    promptless restorer, and ``resolve_generation_plan`` filters over that exact type.
+    Only the two proven cardinality predicates are mirrored, byte-for-byte in semantics,
+    so consumer code that already gates on them keeps working.
+
+    Every field here earns its place by one of two rules: some route or CLI currently
+    raises on the corresponding option, or the value is a hard numeric limit a caller
+    cannot discover without a failed preflight.
+    """
+
+    id: str
+    public_task: str
+    mode: str
+    handler_id: str
+    command: str = "mlxgen upscale"
+    # Cardinality.
+    min_images: int = 0
+    max_images: int | None = 0
+    min_videos: int = 0
+    max_videos: int | None = 0
+    # Geometry.
+    supports_scaling: bool = False
+    # None means "any positive factor accepted"; a tuple pins the accepted set.
+    scale_factors: tuple[str, ...] | None = None
+    supports_short_side_resolution: bool = False
+    default_resolution: str = "1x"
+    dimension_multiple: int | None = None
+    max_canvas_pixels: int | None = None
+    # Precision.
+    supports_quantization: bool = False
+    quantization_bits: tuple[int, ...] = ()
+    weight_precision: str | None = None
+    # Sampling.
+    supports_steps: bool = False
+    steps_min: int | None = None
+    steps_max: int | None = None
+    supports_multi_seed: bool = False
+    # Clip window and source frame protocol.
+    supports_clip_window: bool = False
+    min_frames: int | None = None
+    max_frames: int | None = None
+    frame_multiple: int | None = None
+    frame_remainder: int | None = None
+    # Chunking.
+    chunk_strategy: str | None = None
+    chunk_options_user_settable: bool = False
+    chunk_size_default: int | None = None
+    chunk_size_min: int | None = None
+    chunk_size_multiple: int | None = None
+    chunk_size_remainder: int | None = None
+    chunk_overlap_default: int | None = None
+    chunk_overlap_min: int | None = None
+    chunk_overlap_multiple: int | None = None
+    # Post-processing and IO.
+    supports_softness: bool = False
+    supports_vae_tiling: bool = False
+    color_correction_modes: tuple[str, ...] = ()
+    default_color_correction: str | None = None
+    supports_audio_passthrough: bool = False
+
+    @property
+    def accepted_media(self) -> tuple[str, ...]:
+        """Media kinds this row accepts, derived rather than stored so it cannot drift."""
+        media = []
+        if self.max_images is None or self.max_images > 0:
+            media.append("image")
+        if self.max_videos is None or self.max_videos > 0:
+            media.append("video")
+        return tuple(media)
+
+    def allows_image_count(self, image_count: int) -> bool:
+        if image_count < self.min_images:
+            return False
+        return self.max_images is None or image_count <= self.max_images
+
+    def allows_video_count(self, video_count: int) -> bool:
+        if video_count < self.min_videos:
+            return False
+        return self.max_videos is None or video_count <= self.max_videos
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "public_task": self.public_task,
+            "mode": self.mode,
+            "handler_id": self.handler_id,
+            "command": self.command,
+            "accepted_media": list(self.accepted_media),
+            "min_images": self.min_images,
+            "max_images": self.max_images,
+            "min_videos": self.min_videos,
+            "max_videos": self.max_videos,
+            "supports_scaling": self.supports_scaling,
+            "scale_factors": None if self.scale_factors is None else list(self.scale_factors),
+            "supports_short_side_resolution": self.supports_short_side_resolution,
+            "default_resolution": self.default_resolution,
+            "dimension_multiple": self.dimension_multiple,
+            "max_canvas_pixels": self.max_canvas_pixels,
+            "supports_quantization": self.supports_quantization,
+            "quantization_bits": list(self.quantization_bits),
+            "weight_precision": self.weight_precision,
+            "supports_steps": self.supports_steps,
+            "steps_min": self.steps_min,
+            "steps_max": self.steps_max,
+            "supports_multi_seed": self.supports_multi_seed,
+            "supports_clip_window": self.supports_clip_window,
+            "min_frames": self.min_frames,
+            "max_frames": self.max_frames,
+            "frame_multiple": self.frame_multiple,
+            "frame_remainder": self.frame_remainder,
+            "chunk_strategy": self.chunk_strategy,
+            "chunk_options_user_settable": self.chunk_options_user_settable,
+            "chunk_size_default": self.chunk_size_default,
+            "chunk_size_min": self.chunk_size_min,
+            "chunk_size_multiple": self.chunk_size_multiple,
+            "chunk_size_remainder": self.chunk_size_remainder,
+            "chunk_overlap_default": self.chunk_overlap_default,
+            "chunk_overlap_min": self.chunk_overlap_min,
+            "chunk_overlap_multiple": self.chunk_overlap_multiple,
+            "supports_softness": self.supports_softness,
+            "supports_vae_tiling": self.supports_vae_tiling,
+            "color_correction_modes": list(self.color_correction_modes),
+            "default_color_correction": self.default_color_correction,
+            "supports_audio_passthrough": self.supports_audio_passthrough,
+        }
+
+
+@dataclass(frozen=True)
 class ModelCapabilities:
     schema_version: int
     family: str
     label: str
     model_name: str | None
     capabilities: tuple[GenerationCapability, ...]
+    # Promptless restoration routes (`mlxgen upscale`). Empty for every generation
+    # family; `capabilities` is empty for every restoration-only family. The two arrays
+    # are disjoint by design and neither emptiness means "unsupported model".
+    restoration: tuple[RestorationCapability, ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -200,6 +357,7 @@ class ModelCapabilities:
             "label": self.label,
             "model_name": self.model_name,
             "capabilities": [capability.to_dict() for capability in self.capabilities],
+            "restoration": [capability.to_dict() for capability in self.restoration],
         }
 
 
@@ -649,7 +807,8 @@ def _resolve_model_identity(
     if resolved_family is None:
         raise TaskInferenceError(
             f"Could not infer a supported backend from model {model!r}. "
-            "Pass family='qwen', 'flux2', 'fibo', 'z-image', 'ernie-image', 'wan', or 'bonsai'."
+            "Pass family='qwen', 'flux2', 'fibo', 'z-image', 'ernie-image', 'wan', 'bonsai', "
+            "'seedvr2', or 'swiftvr'."
         )
 
     trusted_identity_sources = {"catalog", "explicit_base", "official_prepared", "provided", "provided_derived"}
@@ -732,7 +891,206 @@ def _capabilities_for(identity: _ModelIdentity) -> ModelCapabilities:
         return _fibo_capabilities(identity)
     if family == "wan":
         return _wan_capabilities(identity)
+    if family == "seedvr2":
+        return _seedvr2_capabilities(identity)
+    if family == "swiftvr":
+        return _swiftvr_capabilities(identity)
     raise TaskInferenceError(f"Unsupported generation family {family!r}.")
+
+
+def _seedvr2_label(identity: _ModelIdentity) -> str:
+    # Variant identity comes from trusted aliases only, mirroring
+    # seedvr2_upscale._seedvr2_variant_name. seedvr2-7b and seedvr2-7b-sharp share the
+    # model_name "ByteDance-Seed/SeedVR2-7B", so model_name cannot tell them apart, and a
+    # path substring is not evidence (ADR 0070). An unprovable variant degrades to the
+    # bare family label; the rows are identical across variants, so nothing is claimed.
+    aliases = {alias.lower() for alias in identity.aliases}
+    if "seedvr2-7b-sharp" in aliases or "seedvr2-7b-sharp-fp16" in aliases:
+        return "SeedVR2 7B Sharp"
+    if "seedvr2-7b" in aliases:
+        return "SeedVR2 7B"
+    if "seedvr2-3b" in aliases or "seedvr2" in aliases:
+        return "SeedVR2 3B"
+    return "SeedVR2"
+
+
+def _seedvr2_quantization_bits() -> tuple[int, ...]:
+    # The weight applier carries no SeedVR2-specific bit restriction, so the accepted set
+    # is exactly the CLI's shared --quantize choices. Imported lazily: `import mflux` must
+    # stay free of the CLI defaults chain.
+    from mflux.cli.defaults import defaults as ui_defaults
+
+    return tuple(sorted(ui_defaults.QUANTIZE_CHOICES))
+
+
+def _seedvr2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    # Streaming chunk floors are read from the module that enforces them rather than
+    # copied, so a retune cannot make the payload lie. Lazy: seedvr2_util pulls PIL.
+    from mflux.models.seedvr2.variants.upscale.seedvr2_util import SeedVR2Util
+
+    quantization_bits = _seedvr2_quantization_bits()
+    shared = {
+        "handler_id": "seedvr2.upscale",
+        "supports_scaling": True,
+        "scale_factors": None,
+        "supports_short_side_resolution": True,
+        "dimension_multiple": 16,
+        "max_canvas_pixels": None,
+        "supports_quantization": True,
+        "quantization_bits": quantization_bits,
+        # No astype in the SeedVR2 weight definition: runtime dtype is the on-disk dtype,
+        # which is a property of the package, not of the route.
+        "weight_precision": None,
+        "supports_multi_seed": True,
+        "supports_softness": True,
+        "color_correction_modes": ("wavelet", "lab", "off"),
+        "default_color_correction": "wavelet",
+    }
+    return ModelCapabilities(
+        schema_version=CAPABILITIES_SCHEMA_VERSION,
+        family="seedvr2",
+        label=_seedvr2_label(identity),
+        model_name=identity.model_name,
+        capabilities=(),
+        restoration=(
+            RestorationCapability(
+                id="seedvr2.restore-image",
+                public_task=IMAGE_TO_IMAGE,
+                mode=MODE_RESTORE_IMAGE,
+                min_images=1,
+                max_images=1,
+                min_videos=0,
+                max_videos=0,
+                default_resolution="384",
+                # generate_image enforces only steps >= 1; the "1-4" in --steps help is
+                # guidance and stays in the docs (ADR 0003), not in the contract.
+                supports_steps=True,
+                steps_min=1,
+                steps_max=None,
+                supports_clip_window=False,
+                supports_vae_tiling=True,
+                supports_audio_passthrough=False,
+                **shared,
+            ),
+            RestorationCapability(
+                id="seedvr2.restore-video",
+                public_task=VIDEO_TO_VIDEO,
+                mode=MODE_RESTORE_VIDEO,
+                min_images=0,
+                max_images=0,
+                min_videos=1,
+                max_videos=1,
+                # Video overrides the 384 parser default when --resolution is omitted.
+                default_resolution="1x",
+                # Neither restore_video_to_path nor generate_video takes a step count.
+                supports_steps=False,
+                supports_clip_window=True,
+                min_frames=1,
+                max_frames=None,
+                # The route pads the request via padded_video_frame_count instead of
+                # constraining it; only --temporal-chunk-size carries the 4n+1 rule.
+                frame_multiple=None,
+                frame_remainder=None,
+                chunk_strategy="streaming-overlap",
+                chunk_options_user_settable=True,
+                chunk_size_default=SEEDVR2_DEFAULT_TEMPORAL_CHUNK_SIZE,
+                # The floors bite only once chunking actually engages (chunk_size below
+                # the clip's frame count); a whole-shot restore is exempt.
+                chunk_size_min=SeedVR2Util.VIDEO_MIN_PRODUCTION_STREAMING_CHUNK_FRAMES,
+                chunk_size_multiple=4,
+                chunk_size_remainder=1,
+                chunk_overlap_default=SEEDVR2_DEFAULT_TEMPORAL_CHUNK_OVERLAP,
+                chunk_overlap_min=SeedVR2Util.VIDEO_MIN_PRODUCTION_STREAMING_OVERLAP_FRAMES,
+                chunk_overlap_multiple=4,
+                supports_vae_tiling=False,
+                supports_audio_passthrough=True,
+                **shared,
+            ),
+        ),
+    )
+
+
+def _swiftvr_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
+    # Lazy imports: both modules sit behind the SwiftVR package __init__, which builds the
+    # model classes. No weights are loaded, but `import mflux` must not pay for it.
+    from mflux.models.swiftvr.swiftvr_initializer import SwiftVRInitializer
+    from mflux.models.swiftvr.variants.upscale.swiftvr_util import (
+        MAX_ANALYSED_CANVAS_PIXELS,
+        SPATIAL_PAD_MULTIPLE,
+        SwiftVRUtil,
+    )
+
+    # An unresolved local checkpoint still gets the protocol constants, which are fixed by
+    # the weights rather than by the handle. The catalog entry is the fallback source.
+    model_config = identity.model_config or ModelConfig.swiftvr()
+    overrides = model_config.transformer_overrides or {}
+    if "rope_max_seq_len" not in overrides:
+        raise TaskInferenceError(
+            f"SwiftVR catalog entry {model_config.model_name!r} is missing transformer_overrides "
+            "['rope_max_seq_len'], so MLX-Gen cannot state the longest supported clip. Add the key "
+            "rather than letting the capability payload invent a frame ceiling."
+        )
+    try:
+        # The single source for the run defaults; it raises rather than inventing a value.
+        runtime_settings = SwiftVRInitializer.runtime_settings(model_config)
+    except ValueError as exc:
+        raise TaskInferenceError(str(exc)) from exc
+
+    return ModelCapabilities(
+        schema_version=CAPABILITIES_SCHEMA_VERSION,
+        family="swiftvr",
+        label="SwiftVR 5B",
+        model_name=identity.model_name,
+        capabilities=(),
+        restoration=(
+            RestorationCapability(
+                id="swiftvr.restore-video",
+                public_task=VIDEO_TO_VIDEO,
+                mode=MODE_RESTORE_VIDEO,
+                handler_id="swiftvr.restore",
+                min_images=0,
+                max_images=0,
+                min_videos=1,
+                max_videos=1,
+                # 1x only. SwiftVRUtil.output_canvas is the enforcement site and owns the
+                # actionable message; this row describes, it does not re-implement.
+                supports_scaling=False,
+                scale_factors=("1x",),
+                supports_short_side_resolution=False,
+                default_resolution="1x",
+                dimension_multiple=SPATIAL_PAD_MULTIPLE,
+                max_canvas_pixels=MAX_ANALYSED_CANVAS_PIXELS,
+                supports_quantization=False,
+                quantization_bits=(),
+                weight_precision="bf16",
+                supports_steps=False,
+                # One forward pass at a fixed timestep: no noise, so no seed axis.
+                supports_multi_seed=False,
+                supports_clip_window=True,
+                min_frames=1,
+                max_frames=SwiftVRUtil.max_supported_source_frames(int(overrides["rope_max_seq_len"])),
+                frame_multiple=4,
+                frame_remainder=1,
+                chunk_strategy="fixed-causal",
+                # clip_len / dit_overlap stay Python-API parameters; the CLI rejects
+                # --temporal-chunk-size and --temporal-chunk-overlap.
+                chunk_options_user_settable=False,
+                chunk_size_default=runtime_settings.clip_len,
+                chunk_size_min=4,
+                chunk_size_multiple=4,
+                chunk_size_remainder=0,
+                chunk_overlap_default=runtime_settings.dit_overlap,
+                chunk_overlap_min=0,
+                chunk_overlap_multiple=None,
+                supports_softness=False,
+                supports_vae_tiling=False,
+                color_correction_modes=("wavelet", "lab", "off"),
+                # swiftvr_restore.py overrides the shared wavelet default.
+                default_color_correction="off",
+                supports_audio_passthrough=True,
+            ),
+        ),
+    )
 
 
 def _ordinary_i2i_canvas_contract() -> dict:
@@ -1507,6 +1865,13 @@ def _infer_family(aliases: set[str], model_key: str) -> str | None:
         return "z-image"
     if _is_ernie(aliases, model_key):
         return "ernie-image"
+    # Restoration families are matched BEFORE _is_wan. SwiftVR runs on a Wan2.2-TI2V-5B
+    # backbone and _is_wan matches any "wan" substring, so a checkpoint whose handle
+    # mentions wan would otherwise be handed a generation contract for a restorer.
+    if _is_seedvr2(aliases, model_key):
+        return "seedvr2"
+    if _is_swiftvr(aliases, model_key):
+        return "swiftvr"
     if _is_wan(aliases, model_key):
         return "wan"
     return None
@@ -1640,3 +2005,11 @@ def _is_ernie(aliases: set[str], model_key: str) -> bool:
 
 def _is_wan(aliases: set[str], model_key: str) -> bool:
     return any(alias.startswith("wan") for alias in aliases) or "wan" in model_key
+
+
+def _is_seedvr2(aliases: set[str], model_key: str) -> bool:
+    return any(alias.lower().startswith("seedvr2") for alias in aliases) or "seedvr2" in model_key
+
+
+def _is_swiftvr(aliases: set[str], model_key: str) -> bool:
+    return any(alias.lower().startswith("swiftvr") for alias in aliases) or "swiftvr" in model_key
