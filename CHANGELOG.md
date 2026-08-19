@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-08-19
+
+Adversarial post-release audit of 0.30.0: two capability-contract corrections, dispatcher
+precedence, and diagnostics fixes. No new features.
+
+### Fixed
+
+- **The SwiftVR capability row no longer declares color-correction modes the route refuses.**
+  `color_correction_modes` on `swiftvr.restore-video` read `["wavelet", "lab", "off"]` while the
+  route accepts only `"off"`; a host offering the declared flag saw the refusal only after the 5B
+  weight load, as an uncaught error. The row now reads `["off"]`, and the CLI refuses
+  `--color-correction wavelet|lab` at parse time with the route's own wording, before any weights
+  are read.
+- **An explicit SeedVR2 alias wins over directory contents again.** `--model seedvr2-3b --path
+  <directory holding a SwiftVR checkpoint>` classified as SwiftVR, silently running a different
+  model family than the one named; at 0.29.0 the alias ignored `--path` entirely. Positive SeedVR2
+  recognition now precedes the by-content directory probe. By-content detection is unchanged when
+  no positive handle is given.
+- **`seedvr2.restore-image` no longer declares `dimension_multiple: 16`.** The image route accepts
+  any geometry, pads internally, and crops back to the exact requested size, so the row now reads
+  `1`; the video row keeps `16`, which its center-crop actually enforces.
+- **Short-stream diagnostics are exact.** The pyav fallback reported one frame fewer than the
+  stream delivered and could crash instead of raising the actionable error when nothing decoded;
+  the suggested `--max-frames` cap is now clip-relative, so it is correct under `--start-seconds`
+  on both decode backends.
+- **Documentation showed a `capabilities` invocation that has never worked.** `mlxgen capabilities
+  --family seedvr2` requires `--model` (`--family` is a detection override for local paths, as at
+  0.29.0); the examples now use `--model seedvr2-3b`.
+
+### Notes
+
+- The restoration capability record gains `color_correction_modes` per route;
+  `RESTORE_CAPABILITIES_SCHEMA_VERSION` moves 1 -> 2. The `mlxgen capabilities` payload keeps
+  `schema_version` 9: only declared values were corrected, no payload field changed shape.
+- `SEEDVR2_HANDLES` is now defined beside `SWIFTVR_HANDLES` in the dispatch module and re-exported
+  from `restore_capabilities` unchanged.
+- New regression tests pin all of the above: declared color modes against the route guard, alias
+  precedence over directory contents, short-stream counts on both backends, and `{value}`
+  interpolation in refusal messages.
+
 ## [0.30.0] - 2026-08-18
 
 SwiftVR one-step restoration, and a capability contract for both restoration families.

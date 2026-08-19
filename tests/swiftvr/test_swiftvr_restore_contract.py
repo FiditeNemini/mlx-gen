@@ -119,7 +119,19 @@ class TestQuantizationIsRefused:
     def test_the_cli_refuses_it_at_parse_time(self, flag, bits):
         result = _run_cli("--model", "swiftvr", "--video-path", "a.mp4", flag, bits)
         assert result.returncode != 0
-        assert "does not apply to SwiftVR" in result.stderr
+        assert f"--quantize {bits} does not apply to SwiftVR" in result.stderr
+        # The record's message carries a {value} token that the CLI must interpolate;
+        # an unformatted token reaching the user is a wiring bug this line pins.
+        assert "{value}" not in result.stderr
+
+    @pytest.mark.parametrize("mode", ["wavelet", "lab"])
+    def test_an_unsupported_color_correction_is_refused_at_parse_time(self, mode):
+        """The route guard would raise the same incapability only after the 5B weight
+        load; the CLI must say it before any weights are read (ADR 0002)."""
+        result = _run_cli("--model", "swiftvr", "--video-path", "a.mp4", "--color-correction", mode)
+        assert result.returncode != 0
+        assert "SwiftVR does not apply color correction" in result.stderr
+        assert "seedvr2-3b" in result.stderr
 
     def test_the_reason_given_for_refusing_q8_is_true(self):
         """The message claims Wan's q8 policy spares every quantizable module here. If it

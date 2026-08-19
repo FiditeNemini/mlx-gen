@@ -24,7 +24,7 @@ Both families declare what they accept, so you can check a route before starting
 
 ```sh
 mlxgen capabilities --model swiftvr
-mlxgen capabilities --family seedvr2
+mlxgen capabilities --model seedvr2-3b
 ```
 
 The `restoration` array reports accepted media, input counts, scale factors, the clip-length

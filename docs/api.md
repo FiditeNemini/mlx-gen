@@ -851,7 +851,7 @@ routable through that command, not that the model is unsupported.
 
 ```sh
 mlxgen capabilities --model swiftvr
-mlxgen capabilities --family seedvr2
+mlxgen capabilities --model seedvr2-3b
 ```
 
 Each restoration row carries the route contract in machine-readable form, so a caller does not need
@@ -866,6 +866,8 @@ to match handle strings to learn what a model accepts:
 | `supports_scaling`, `scale_factors` | Whether the route can enlarge, and which factors it accepts. |
 | `supports_quantization`, `quantization_bits`, `weight_precision` | Quantized package support and the precision the route runs at. |
 | `frame_multiple`, `frame_remainder`, `min_frames`, `max_frames` | Clip-length contract. SwiftVR reports `4` and `1`, so a clip must satisfy `frames % 4 == 1`. |
+| `dimension_multiple` | Output-geometry constraint. `16` on the SeedVR2 video row: restored frames are center-cropped to multiples of 16, matching the official pipeline. `1` on the image rows: any requested size is legal and the output preserves it exactly. |
+| `color_correction_modes`, `default_color_correction` | Exactly the `--color-correction` values the route accepts. SwiftVR reports `["off"]`: the reference pipeline writes the decoder output unchanged, and the CLI refuses other modes at parse time. |
 | `chunk_strategy`, `chunk_size_*`, `chunk_overlap_*` | Temporal chunking contract and whether the user may set it. |
 | `supports_audio_passthrough`, `color_correction_modes`, `supports_steps`, `supports_softness` | Per-route option support. |
 

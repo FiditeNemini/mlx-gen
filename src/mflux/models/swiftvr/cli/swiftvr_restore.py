@@ -369,6 +369,17 @@ def main() -> None:
     # plain SwiftVR run or silently apply an unmeasured transfer.
     if "--color-correction" not in provided:
         args.color_correction = "off"
+    elif args.color_correction not in video_capability.color_correction_modes:
+        # Refuse at parse time, before the 5B weight load: the route guard
+        # (SwiftVR._assert_supported_options) would raise the same incapability only
+        # after minutes of loading. Same wording, same alternatives.
+        parser.error(
+            f"SwiftVR does not apply color correction, so --color-correction {args.color_correction} "
+            "cannot be honoured. The reference pipeline writes the decoder output unchanged, and "
+            "MLX-Gen has not measured a color transfer against it for this model. Pass "
+            "--color-correction off for SwiftVR, or use --model seedvr2-3b, whose restore path has a "
+            "validated wavelet and LAB transfer."
+        )
     if not args.low_ram:
         args.low_ram = True
     if args.mlx_cache_limit_gb is None:

@@ -12,6 +12,7 @@ import pytest
 from mflux.cli import mlx_gen
 from mflux.models.common.cli.restore_dispatch import (
     classify_restore_family,
+    is_seedvr2_handle,
     peek_restore_family,
     resolve_restore_family,
 )
@@ -115,6 +116,27 @@ def test_unknown_repo_id_keeps_the_seedvr2_sentence_and_names_swiftvr():
     message = str(exc.value)
     assert message.startswith("Unsupported SeedVR2 model handle")
     assert "swiftvr" in message.lower()
+
+
+def test_a_seedvr2_alias_beats_swiftvr_directory_contents(tmp_path):
+    """--model seedvr2-3b --path <dir holding reae.safetensors> must stay SeedVR2.
+
+    At v0.29.0 the alias branch ignored --path entirely; letting the marker file win
+    would silently run a different model family than the one the user typed (ADR 0002).
+    Regressed in the first 0.30.0 dispatcher, which probed directories before checking
+    positive SeedVR2 handles.
+    """
+    checkpoint = tmp_path / "swiftvr-checkpoint"
+    checkpoint.mkdir()
+    (checkpoint / "reae.safetensors").write_bytes(b"x")
+    # Positive recognition only. With no handle (None) or a mere substring match, the
+    # by-content directory detection is the intended behaviour, not a substitution.
+    positive_handles = [handle for handle in SEEDVR2_HANDLES if handle is not None and is_seedvr2_handle(handle)]
+    assert len(positive_handles) >= 12, positive_handles  # the guard must guard something
+    for handle in positive_handles:
+        assert classify_restore_family(handle, str(checkpoint)) == "seedvr2", handle
+    route = resolve_restore_family("seedvr2-3b", str(checkpoint))
+    assert route.family == "seedvr2"
 
 
 def test_local_swiftvr_directory_is_detected(tmp_path):

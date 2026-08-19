@@ -26,6 +26,41 @@ RestoreFamily = Literal["seedvr2", "swiftvr"]
 # unknown-handle failure.
 SWIFTVR_HANDLES = frozenset({"swiftvr", "swiftvr-5b", "h-oliday/swiftvr"})
 
+# Positive SeedVR2 recognition. Deliberately NOT "anything SeedVR2's resolver accepts":
+# the resolver owns the unknown-handle error, so this set covers only the handles that
+# name SeedVR2 outright. AbstractFramework packages are matched by prefix below.
+SEEDVR2_HANDLES = frozenset(
+    {
+        "seedvr2",
+        "seedvr2-3b",
+        "seedvr2-7b",
+        "seedvr2-7b-sharp",
+        "seedvr2-7b-sharp-fp16",
+        "bytedance-seed/seedvr2-3b",
+        "bytedance-seed/seedvr2_3b",
+        "bytedance-seed/seedvr2-7b",
+        "bytedance-seed/seedvr2_7b",
+        "numz/seedvr2_comfyui",
+    }
+)
+
+
+def is_seedvr2_handle(model: str | None) -> bool:
+    """True when ``model`` positively names SeedVR2: an alias, official repo or package.
+
+    This recognition must win over any directory probe. At v0.29.0 a SeedVR2 alias
+    ignored ``--path`` entirely, so a dispatcher that lets directory contents overrule
+    an explicit alias silently substitutes another family for the one the user typed
+    (ADR 0002).
+    """
+    normalized = model.strip().lower() if model else ""
+    if normalized in SEEDVR2_HANDLES:
+        return True
+    return normalized.startswith("abstractframework/seedvr2-3b-") or normalized.startswith(
+        "abstractframework/seedvr2-7b-"
+    )
+
+
 # A local SwiftVR checkpoint is recognised by the autoencoder that replaces the Wan 3D
 # VAE; no other family in the catalog ships this file.
 SWIFTVR_MARKER_FILE = "reae.safetensors"
@@ -89,6 +124,12 @@ def classify_restore_family(model_arg: str | None, model_path: str | None) -> Re
     """
     if model_arg is not None and model_arg.strip().lower() in SWIFTVR_HANDLES:
         return "swiftvr"
+    if is_seedvr2_handle(model_arg):
+        # An explicit SeedVR2 alias must win over directory contents: at v0.29.0 the
+        # alias branch ignored --path entirely, and letting a SwiftVR marker file
+        # overrule the handle the user typed would silently run a different model
+        # family (ADR 0002).
+        return "seedvr2"
 
     for candidate in (model_path, model_arg):
         if not _looks_like_swiftvr_directory(candidate):

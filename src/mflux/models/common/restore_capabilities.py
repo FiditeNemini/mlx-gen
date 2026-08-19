@@ -53,16 +53,20 @@ from dataclasses import dataclass
 from functools import lru_cache
 from types import MappingProxyType
 
+# SEEDVR2_HANDLES is re-exported (import-as-self) because 0.30.0 published it from this
+# module; the definition moved to restore_dispatch to break an import cycle.
 from mflux.models.common.cli.restore_dispatch import (
+    SEEDVR2_HANDLES as SEEDVR2_HANDLES,
     SWIFTVR_HANDLES,
     _looks_like_seedvr2_directory,
     _looks_like_swiftvr_directory,
+    is_seedvr2_handle,
 )
 from mflux.models.common.config.model_config import ModelConfig
 
 # Bumped when a field is added, renamed or given a new meaning. Mirrors the additive
 # convention `task_inference.CAPABILITIES_SCHEMA_VERSION` documents for the generate side.
-RESTORE_CAPABILITIES_SCHEMA_VERSION = 1
+RESTORE_CAPABILITIES_SCHEMA_VERSION = 2
 
 INPUT_IMAGE = "image"
 INPUT_VIDEO = "video"
@@ -73,25 +77,6 @@ SCALE_SCALABLE = "scalable"
 SCALE_SOURCE_ONLY = "source-only"
 
 RESTORE_FAMILIES = ("seedvr2", "swiftvr")
-
-# Handles that positively name a restoration family. Deliberately NOT
-# `classify_restore_family`, which returns "seedvr2" for every unrecognised handle by
-# design so that SeedVR2's resolver owns the unknown-handle error: routing an inspection
-# surface through it would answer "seedvr2" for --model flux2-klein-4b.
-SEEDVR2_HANDLES = frozenset(
-    {
-        "seedvr2",
-        "seedvr2-3b",
-        "seedvr2-7b",
-        "seedvr2-7b-sharp",
-        "seedvr2-7b-sharp-fp16",
-        "bytedance-seed/seedvr2-3b",
-        "bytedance-seed/seedvr2_3b",
-        "bytedance-seed/seedvr2-7b",
-        "bytedance-seed/seedvr2_7b",
-        "numz/seedvr2_comfyui",
-    }
-)
 
 # The nine refusals SwiftVR owes the user, in the order the CLI's if-chain reported them
 # so that a command violating several still names the same first problem. Every message
@@ -187,6 +172,9 @@ class RestoreCapability:
             the source-size rule is enforced by ``SwiftVRUtil.output_canvas``.
         max_source_frames: Hard ceiling on source frames for a video row, or ``None``
             when the route streams without one.
+        color_correction_modes: Exactly the ``--color-correction`` values the route
+            accepts. The route guard enforces the same set post-load; the CLI reads this
+            field to refuse anything else at parse time, before any weight load.
     """
 
     id: str
@@ -194,6 +182,7 @@ class RestoreCapability:
     route_method: str
     scale_mode: str
     max_source_frames: int | None = None
+    color_correction_modes: tuple[str, ...] = ("wavelet", "lab", "off")
 
     def allows_source_frame_count(self, frame_count: int) -> bool:
         """Whether this capability accepts a clip of ``frame_count`` source frames.
@@ -215,6 +204,7 @@ class RestoreCapability:
             "route_method": self.route_method,
             "scale_mode": self.scale_mode,
             "max_source_frames": self.max_source_frames,
+            "color_correction_modes": list(self.color_correction_modes),
         }
 
 
@@ -336,9 +326,7 @@ def _match_restore_family(model: str | None, model_path: str | None) -> str | No
     normalized = model.strip().lower() if model else ""
     if normalized in SWIFTVR_HANDLES:
         return "swiftvr"
-    if normalized in SEEDVR2_HANDLES:
-        return "seedvr2"
-    if normalized.startswith("abstractframework/seedvr2-3b-") or normalized.startswith("abstractframework/seedvr2-7b-"):
+    if is_seedvr2_handle(model):
         return "seedvr2"
 
     # A local checkpoint is identified by its contents, which is far stronger evidence
@@ -443,6 +431,9 @@ def _swiftvr_capabilities() -> RestoreFamilyCapabilities:
                 # Derived, never copied: the ceiling moves with the catalog's rotary
                 # table, and a literal here would start lying the day that changes.
                 max_source_frames=SwiftVRUtil.max_supported_source_frames(rope_max_seq_len),
+                # The route guard refuses everything else; declaring more would let a
+                # host offer a flag that only fails after the 5B weight load.
+                color_correction_modes=("off",),
             ),
         ),
         unsupported_options=_SWIFTVR_UNSUPPORTED_OPTIONS,

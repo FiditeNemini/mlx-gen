@@ -156,9 +156,14 @@ class TestSwiftVRRefusalsAreData:
 class TestFrameContract:
     """SwiftVR's 4a+1 clip rule and frame ceiling are declared, not just enforced downstream."""
 
-    def test_swiftvr_frame_ceiling_is_declared(self):
+    def test_swiftvr_frame_ceiling_is_declared_and_derived_from_the_rotary_table(self):
+        # Not `x is None or x > 0` - that is satisfiable by every value the field can
+        # hold. The ceiling must exist for SwiftVR and match the enforcement source.
+        from mflux.models.swiftvr.variants.upscale.swiftvr_util import SwiftVRUtil
+
         video = require_capability(get_restore_capabilities(family="swiftvr"), INPUT_VIDEO)
-        assert video.max_source_frames is None or video.max_source_frames > 0
+        assert video.max_source_frames is not None
+        assert video.max_source_frames == SwiftVRUtil.max_supported_source_frames(1024)
 
     def test_allows_source_frame_count_accepts_one_frame_clip(self):
         video = require_capability(get_restore_capabilities(family="swiftvr"), INPUT_VIDEO)
@@ -169,6 +174,36 @@ class TestFrameContract:
         if video.max_source_frames is not None:
             assert video.allows_source_frame_count(video.max_source_frames) is True
             assert video.allows_source_frame_count(video.max_source_frames + 1) is False
+
+
+class TestColorCorrectionTruth:
+    """The declared color-correction modes must be exactly what the route accepts.
+
+    This is the drift that shipped in 0.30.0: the payload row declared wavelet/lab for
+    SwiftVR while the route guard refused them - only after the 5B weight load.
+    """
+
+    def test_swiftvr_declares_only_off(self):
+        video = require_capability(get_restore_capabilities(family="swiftvr"), INPUT_VIDEO)
+        assert tuple(video.color_correction_modes) == ("off",)
+
+    def test_payload_row_agrees_with_the_record(self):
+        from mflux.task_inference import get_model_capabilities
+
+        record = require_capability(get_restore_capabilities(family="swiftvr"), INPUT_VIDEO)
+        payload = get_model_capabilities(model="swiftvr").to_dict()["restoration"][0]
+        assert tuple(payload["color_correction_modes"]) == tuple(record.color_correction_modes)
+
+    def test_declared_modes_are_exactly_what_the_route_guard_accepts(self):
+        from mflux.models.swiftvr.variants.upscale.swiftvr import SwiftVR
+
+        video = require_capability(get_restore_capabilities(family="swiftvr"), INPUT_VIDEO)
+        for mode in video.color_correction_modes:
+            SwiftVR._assert_supported_options(dit_overlap=0, color_correction_mode=mode)
+        for refused in ("wavelet", "lab"):
+            assert refused not in video.color_correction_modes
+            with pytest.raises(ValueError):
+                SwiftVR._assert_supported_options(dit_overlap=0, color_correction_mode=refused)
 
 
 def test_schema_version_is_declared():

@@ -75,8 +75,6 @@ MODE_REFERENCE_VIDEO_EDIT = "reference-video-edit"
 MODE_RESTORE_IMAGE = "restore-image"
 MODE_RESTORE_VIDEO = "restore-video"
 
-RESTORE_FAMILIES = ("seedvr2", "swiftvr")
-
 # SeedVR2 temporal-chunk request defaults. These mirror the --temporal-chunk-size /
 # --temporal-chunk-overlap defaults declared in
 # mflux/cli/parser/parsers.py::add_seedvr2_upscale_arguments. They are duplicated here
@@ -934,7 +932,6 @@ def _seedvr2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
         "supports_scaling": True,
         "scale_factors": None,
         "supports_short_side_resolution": True,
-        "dimension_multiple": 16,
         "max_canvas_pixels": None,
         "supports_quantization": True,
         "quantization_bits": quantization_bits,
@@ -970,6 +967,11 @@ def _seedvr2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 supports_clip_window=False,
                 supports_vae_tiling=True,
                 supports_audio_passthrough=False,
+                # Any geometry is legal: the route pads to the VAE's multiple internally
+                # and crops back, so the output preserves the requested size exactly
+                # (`1x` is pixel-identical). A 16 here would tell hosts to refuse legal
+                # requests or predict a 16-multiple output that never arrives.
+                dimension_multiple=1,
                 **shared,
             ),
             RestorationCapability(
@@ -1004,6 +1006,9 @@ def _seedvr2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 chunk_overlap_multiple=4,
                 supports_vae_tiling=False,
                 supports_audio_passthrough=True,
+                # Video output IS constrained: frames are center-cropped to multiples
+                # of 16, matching the official pipeline.
+                dimension_multiple=16,
                 **shared,
             ),
         ),
@@ -1084,8 +1089,11 @@ def _swiftvr_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 chunk_overlap_multiple=None,
                 supports_softness=False,
                 supports_vae_tiling=False,
-                color_correction_modes=("wavelet", "lab", "off"),
-                # swiftvr_restore.py overrides the shared wavelet default.
+                # The route accepts exactly one mode: the reference pipeline writes the
+                # decoder output unchanged, and SwiftVR._assert_supported_options refuses
+                # wavelet/lab. Declaring them here would invite a host to offer a flag
+                # that only fails after the 5B weight load.
+                color_correction_modes=("off",),
                 default_color_correction="off",
                 supports_audio_passthrough=True,
             ),

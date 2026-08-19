@@ -919,20 +919,32 @@ class VideoUtil:
         return frames, clip_start_frame or 0
 
     @staticmethod
-    def _short_stream_message(path: Path, absolute_windows: list[tuple[int, int]], decoded_frames: int) -> str:
+    def _short_stream_message(
+        path: Path,
+        absolute_windows: list[tuple[int, int]],
+        decoded_frames: int,
+        start_frame: int = 0,
+    ) -> str:
         """Actionable message for a source that delivers fewer frames than planned.
 
         Reached when container metadata over-reports the frame count in a way that
         ``_reconcile_source_frame_count`` could not catch, because the declared count and
         the declared duration agree with each other and only the stream is short. The run
         fails rather than silently restoring a shorter clip than asked for (ADR 0002).
+
+        ``decoded_frames`` counts frames decoded from the stream head; ``start_frame`` is
+        the clip offset, so both the reported plan and the suggested ``--max-frames`` are
+        converted to clip-relative counts - the units the flag actually takes.
         """
         requested_end = max((end for _, end in absolute_windows), default=0)
+        planned = max(0, requested_end - start_frame)
+        delivered = max(0, decoded_frames - start_frame)
+        offset_note = f" (counts are relative to the requested start frame {start_frame})" if start_frame else ""
         return (
             f"Could not decode all requested video windows from {path}: the run was planned for "
-            f"{requested_end} frames but the stream stopped after {decoded_frames}. This usually means a "
+            f"{planned} frames but the stream delivered {delivered}{offset_note}. This usually means a "
             f"truncated or partially written file whose container metadata over-reports its length. "
-            f"Re-encode the source, or cap the run with --max-frames {decoded_frames}."
+            f"Re-encode the source, or cap the run with --max-frames {delivered}."
         )
 
     @staticmethod
@@ -973,8 +985,10 @@ class VideoUtil:
         run fails late with an opaque decode error instead of restoring what exists.
 
         Cross-check the declared count against ``duration * fps``. When they disagree
-        beyond rounding, resolve with an exact decode count and log the correction; the
-        count is never silently inflated, only reduced to what the stream can deliver.
+        beyond rounding, resolve with an exact decode count and log the correction. The
+        exact count is the ground truth and is followed in either direction - a
+        container can under-report as well as over-report - and every correction is
+        logged, never applied silently.
         """
         declared = info.source_frame_count
         duration = info.source_duration_seconds
@@ -1248,7 +1262,9 @@ class VideoUtil:
             video_stream = container.streams.video[0]
             active_windows: list[dict] = []
             next_window_index = 0
+            decoded_frames = 0
             for frame_index, frame in enumerate(container.decode(video_stream)):
+                decoded_frames = frame_index + 1
                 while (
                     next_window_index < len(absolute_windows) and absolute_windows[next_window_index][0] == frame_index
                 ):
@@ -1292,7 +1308,7 @@ class VideoUtil:
                     )
 
         if active_windows or next_window_index < len(absolute_windows):
-            raise RuntimeError(VideoUtil._short_stream_message(path, absolute_windows, frame_index))
+            raise RuntimeError(VideoUtil._short_stream_message(path, absolute_windows, decoded_frames, start_frame))
 
     @staticmethod
     def _iter_video_frame_windows_ffmpeg(
@@ -1396,7 +1412,7 @@ class VideoUtil:
             message = stderr.decode("utf-8", errors="replace").strip()
             raise RuntimeError(f"Could not decode video frame windows from {path}: {message or return_code}")
         if active_windows or next_window_index < len(absolute_windows):
-            raise RuntimeError(VideoUtil._short_stream_message(path, absolute_windows, frame_index))
+            raise RuntimeError(VideoUtil._short_stream_message(path, absolute_windows, frame_index, start_frame))
 
     @staticmethod
     def _latents_to_frames(decoded_latents: mx.array) -> list[PIL.Image.Image]:
