@@ -453,7 +453,7 @@ def _parser() -> argparse.ArgumentParser:
             "Wan video routes), --quantize, --lora-paths, --lora-scales, "
             "--mask-path, --controlnet-image-path, --controlnet-strength, --metadata, "
             "--config-from-metadata/-C, --output, --replace, --frames, --fps, --guidance-2, "
-            "--flow-shift, --video-strength, --video-mask-path, --reframe-padding, --outpaint-padding, --low-ram, --debug, "
+            "--flow-shift, --video-strength, --video-mask-path, --reframe-padding, --outpaint-padding, --outpaint-fill, --outpaint-fill-color, --low-ram, --debug, "
             "--tensor-health-check-interval, --json-events, --embed-metadata, --no-validate-health (video routes), "
             "--keep-text-encoder, --no-prompt-cache, --compile-transformer, and "
             "--release-inactive-denoiser/--no-release-inactive-denoiser (Wan routes), "

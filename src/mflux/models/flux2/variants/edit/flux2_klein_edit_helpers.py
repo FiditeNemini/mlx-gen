@@ -269,6 +269,51 @@ class _Flux2KleinEditHelpers:
         )
 
     @staticmethod
+    def outpaint_generated_gaps(canvas: OutpaintCanvas) -> tuple[int, int, int, int]:
+        # Per-side count of NEW canvas pixels, as (left, top, right, bottom). This is the
+        # ground truth rather than `canvas.padding` alone: OutpaintUtil rounds the target
+        # dimensions up to a multiple of 16, so a side requested as 0 can still carry a few
+        # pixels of synthetic filler on the right/bottom. Left/top always equal
+        # padding.left/padding.top; right/bottom are padding plus that rounding sliver.
+        return (
+            max(0, canvas.paste_left),
+            max(0, canvas.paste_top),
+            max(0, canvas.target_width - canvas.paste_left - canvas.source_width),
+            max(0, canvas.target_height - canvas.paste_top - canvas.source_height),
+        )
+
+    @staticmethod
+    def outpaint_preserve_box(*, canvas: OutpaintCanvas, transition_px: int = 24) -> tuple[int, int, int, int]:
+        # The transition band exists so the model can blend NEW canvas into the source across
+        # the seam. A side with nothing new on it has no seam, so it gets no inset: insetting
+        # unconditionally handed real source pixels to the model for free (with
+        # `--outpaint-padding "0%,10%,100%,10%"` the top 24 canvas rows - the top of the
+        # subject's head - were marked fully editable and regenerated).
+        #
+        # The inset is also capped at the size of the gap, so a side that only gained a few
+        # pixels from the dimension round-up never sacrifices more source than it adds.
+        #
+        # transition_px stays ABSOLUTE and does not scale with the canvas: the latent grid is
+        # always canvas/16, so 24 canvas px is 1.5 latent cells at every resolution (measured:
+        # the post-resize seam profile is identical at 256x256 and 4096x4096).
+        gap_left, gap_top, gap_right, gap_bottom = _Flux2KleinEditHelpers.outpaint_generated_gaps(canvas)
+        # Per-axis half-extent cap keeps opposing insets from meeting (left+right <= width - 2).
+        max_inset_x = max(0, canvas.source_width // 2 - 1)
+        max_inset_y = max(0, canvas.source_height // 2 - 1)
+        preserve_left = canvas.paste_left + min(transition_px, gap_left, max_inset_x)
+        preserve_top = canvas.paste_top + min(transition_px, gap_top, max_inset_y)
+        preserve_right = canvas.paste_left + canvas.source_width - min(transition_px, gap_right, max_inset_x)
+        preserve_bottom = canvas.paste_top + canvas.source_height - min(transition_px, gap_bottom, max_inset_y)
+        if preserve_right <= preserve_left or preserve_bottom <= preserve_top:
+            return (
+                canvas.paste_left,
+                canvas.paste_top,
+                canvas.paste_left + canvas.source_width,
+                canvas.paste_top + canvas.source_height,
+            )
+        return preserve_left, preserve_top, preserve_right, preserve_bottom
+
+    @staticmethod
     def prepare_outpaint_edit_mask(
         *,
         canvas: OutpaintCanvas,
@@ -280,26 +325,7 @@ class _Flux2KleinEditHelpers:
         latent_height = height // 16
         latent_width = width // 16
         mask = Image.new("L", (canvas.target_width, canvas.target_height), color=255)
-        inset_left = min(transition_px, max(0, canvas.source_width // 2 - 1))
-        inset_top = min(transition_px, max(0, canvas.source_height // 2 - 1))
-        preserve_left = canvas.paste_left + inset_left
-        preserve_top = canvas.paste_top + inset_top
-        preserve_right = canvas.paste_left + canvas.source_width - inset_left
-        preserve_bottom = canvas.paste_top + canvas.source_height - inset_top
-        if preserve_right <= preserve_left or preserve_bottom <= preserve_top:
-            preserve_left = canvas.paste_left
-            preserve_top = canvas.paste_top
-            preserve_right = canvas.paste_left + canvas.source_width
-            preserve_bottom = canvas.paste_top + canvas.source_height
-        mask.paste(
-            0,
-            (
-                preserve_left,
-                preserve_top,
-                preserve_right,
-                preserve_bottom,
-            ),
-        )
+        mask.paste(0, _Flux2KleinEditHelpers.outpaint_preserve_box(canvas=canvas, transition_px=transition_px))
         mask = mask.resize((latent_width, latent_height), resample=Image.Resampling.BILINEAR)
         mask_array = mx.array(np.asarray(mask, dtype=np.float32) / 255.0).reshape(1, latent_height * latent_width, 1)
         if batch_size > 1:

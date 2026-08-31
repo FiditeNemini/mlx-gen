@@ -13,9 +13,9 @@ model/package status for MLX-Gen. It separates these related concepts:
 - `generative reframe`: larger-view generation with `--reframe-padding`. This is a
   zoom-out style edit, not source-preserving outpaint.
 - `canvas outpaint`: canvas extension with `--outpaint-padding`. Qwen Image Edit
-  variants still use generative canvas expansion plus adaptive source restoration. FLUX.2 Klein
-  base variants now use source-locked denoising and a narrow latent transition band instead of
-  post-generation source pasting.
+  variants use generative canvas expansion plus adaptive source restoration. FLUX.2 Klein
+  base variants use source-locked denoising and a narrow latent transition band instead of
+  post-generation source pasting, and expose the conditioning canvas through `--outpaint-fill`.
 
 If you need a plain-language guide to choosing between these modes, see
 [Image Edit Modes](image-edit-modes.md). For the current Qwen-specific route map and upstream
@@ -171,18 +171,17 @@ The 5x4 edit validation profile tests the same spaceship source across:
 | Qwen Image Edit 2511 | `Qwen/Qwen-Image-Edit-2511`, `AbstractFramework/qwen-image-edit-2511-8bit`, `AbstractFramework/qwen-image-edit-2511-4bit` | `edit-reference`, `multi-reference` | source, q8, and q4 passed the 2026-06-06 pencil/crash/composition profile | [matrix](assets/validation/qwen-edit-2511-parity-2026-06-06/qwen-image-edit-2511-source-q8-q4-parity.jpg) |
 | FIBO Edit | `briaai/Fibo-Edit` | Not supported through unified `mlxgen generate` | no public image-edit support in the current release; capability discovery fails closed | N/A |
 
-Base FLUX.2 Klein source models now have a separate starship proof set because their current
-canvas-expansion contract is different: strict outpaint is base-only, and base models do not expose
-reframe.
+Base FLUX.2 Klein source models have a separate starship proof set because their canvas-expansion
+contract is different: strict outpaint is base-only, and base models do not expose reframe.
 
 ## Reframe And Outpaint
 
 `--reframe-padding` and `--outpaint-padding` are single-image edit-reference routes. Reframe is a
-generative zoom-out workflow. Outpaint now splits by backend: Qwen Image Edit still
-uses generative canvas expansion plus adaptive source restoration, while FLUX.2 strict outpaint is
-limited to base Klein models and uses source-locked denoising with an interior transition band.
+generative zoom-out workflow. Outpaint splits by backend: Qwen Image Edit uses generative canvas
+expansion plus adaptive source restoration, while FLUX.2 strict outpaint is limited to base Klein
+models and uses source-locked denoising with an interior transition band.
 
-Exact LoRA-backed public proof now exists for:
+Exact LoRA-backed public proof exists for:
 
 - `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.reframe`
 - `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.outpaint`
@@ -213,7 +212,38 @@ canvas/mask assets, the validation manifests, and exact commands. The mixed June
 
 These workflows are not native masked fill/inpaint pipelines. Reframe remains openly generative.
 Strict FLUX.2 base outpaint aims to keep the source crop stable, but still relies on latent-space
-editing rather than direct pixel masking.
+editing rather than direct pixel masking: the source region travels through a VAE encode/decode
+round trip, so it is reproduced rather than preserved bit-for-bit. Use
+[masked editing](masked-editing.md) when a region must stay untouched.
+
+### Outpaint Capability Fields
+
+Outpaint-capable capability rows publish the conditioning-canvas contract and the validated
+envelope, so an application can read both from `mlxgen capabilities` JSON before starting a job. The
+payload carries `schema_version` 10.
+
+| Field | `flux2.outpaint` on `AbstractFramework/flux.2-klein-base-4b-8bit` | `qwen.outpaint` on `AbstractFramework/qwen-image-edit-2511-8bit` |
+| --- | --- | --- |
+| `supports_outpaint` | `true` | `true` |
+| `supports_outpaint_fill` | `true` | `false` |
+| `outpaint_fill_modes` | `["auto", "edge", "neutral", "solid", "blur"]` | `["edge"]` |
+| `outpaint_default_fill_mode` | `"auto"` | `"edge"` |
+| `outpaint_auto_edge_fill_max_stretch` | `12.0` | `null` |
+| `outpaint_recommended_lora` | `"fal/flux-2-klein-4B-outpaint-lora"` | `null` |
+| `outpaint_validated_padding` | `"5%,80%,5%,60%"` | `"5%,80%,5%,60%"` |
+| `outpaint_validated_fill_mode` | `"edge"` | `"edge"` |
+| `outpaint_validated_max_canvas_pixels` | `282880` | `282880` |
+
+`supports_outpaint_fill: false` alongside a single-entry `outpaint_fill_modes` means the fill
+algorithm is fixed for that route: the Qwen edit backend always builds an edge-extended canvas and
+takes no `--outpaint-fill` option. Rows that do not support outpaint report `supports_outpaint`
+and `supports_outpaint_fill` as `false`, empty `outpaint_fill_modes`, and `null` for the rest.
+
+The validated envelope is the padding, fill mode, and canvas size the published proof runs used.
+Outside it, outpaint is supported but unvalidated. `outpaint_recommended_lora` is optional: the
+route runs without it, and [LoRA](lora.md#flux2-klein-base-4b-outpaint) carries the A/B sheet for
+the adapter. For the option surface and the printed run line, see
+[Outpaint Conditioning Canvas](api.md#outpaint-conditioning-canvas).
 
 ### FLUX.2 Klein 4B
 

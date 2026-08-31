@@ -720,18 +720,33 @@ mlxgen generate \
   --output outpaint.png
 ```
 
-Outpaint is backend-specific. Qwen Image Edit variants still use expanded-canvas generation plus
-adaptive source restoration. Current FLUX.2 Klein strict outpaint is base-only and uses
-source-locked denoising with a narrow latent transition band instead of post-generation source
-pasting. The current proof is in [Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint)
-and [Reframe and Outpaint](reframe-outpaint.md).
+Outpaint pastes the source onto a larger canvas and asks the model to complete the added area, so
+what fills that area before denoising decides much of the result. On FLUX.2 Klein base routes you
+choose it with `--outpaint-fill {auto,edge,neutral,solid,blur}`, plus `--outpaint-fill-color` for
+`solid`. The default `auto` continues the source border texture while the padding stays within the
+depth that texture covers, switches to a blank per-side border color past that so the model
+generates new subject matter, and paints the pure-green canvas a green-border outpaint adapter
+expects when one is loaded. Every outpaint run prints the resolved fill, the canvas size, and the
+reason. The Qwen edit backend takes no fill option and always builds an edge-extended canvas. See
+[Reframe and Outpaint](reframe-outpaint.md#the-conditioning-canvas) for the mode table and the
+padding guidance, and [Image Edit Capabilities](edit-capabilities.md#reframe-and-outpaint) for the
+current proof. Outpaint cost scales with the expanded canvas and attention cost grows faster than
+canvas area, so extending in two moderate passes is cheaper and generally better than one large
+pass.
+
+Outpaint is backend-specific in how it treats the source region too. Qwen Image Edit variants use
+expanded-canvas generation plus adaptive source restoration. FLUX.2 Klein strict outpaint is
+base-only and uses source-locked denoising with a narrow latent transition band instead of
+post-generation source pasting.
 
 This is not a native fill/inpaint backend with an explicit diffusion mask, and it is not an exact
-pixel-lock guarantee. Latent I2I models, Z-Image, ERNIE, FIBO, base Qwen Image, Qwen Image 2512,
-distilled FLUX.2 Klein, Wan, SeedVR2, and unsupported edit models reject `--outpaint-padding`
-before loading weights. Exact current prepared-package outpaint proof exists for
-`AbstractFramework/flux.2-klein-base-4b-8bit`; broader package claims should still follow the
-published validation rows.
+pixel-lock guarantee: the source region travels through a VAE encode/decode round trip, so it is
+reproduced rather than preserved bit-for-bit. When a region must stay untouched, use masked editing
+(`--mask-path`, see [Masked editing](masked-editing.md)) instead. Latent I2I models, Z-Image, ERNIE,
+FIBO, base Qwen Image, Qwen Image 2512, distilled FLUX.2 Klein, Wan, SeedVR2, and unsupported edit
+models reject `--outpaint-padding` before loading weights. Exact current prepared-package outpaint
+proof exists for `AbstractFramework/flux.2-klein-base-4b-8bit`; broader package claims should still
+follow the published validation rows.
 
 For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
 to the first source image. That prevents accidental stretching, but it does not expand the original

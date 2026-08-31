@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 import mlxgen
+from mflux import task_inference
 from mflux.task_inference import (
     CANVAS_POLICY_EXACT_RESIZE,
     CANVAS_POLICY_SOURCE_ASPECT,
@@ -365,7 +366,7 @@ def test_reframe_option_is_limited_to_validated_edit_capabilities():
 def test_model_capabilities_are_publicly_inspectable():
     capabilities = mlxgen.get_model_capabilities(model="flux2-klein-4b")
 
-    assert capabilities.schema_version == 9
+    assert capabilities.schema_version == 10
     assert capabilities.family == "flux2"
     assert {capability.mode for capability in capabilities.capabilities} >= {
         MODE_TEXT_ONLY,
@@ -663,6 +664,99 @@ def test_flux2_klein_base4b_q8_outpaint_lora_status_is_exact():
 
     assert outpaint.lora_status == "validated"
     assert outpaint.lora_validation_profile == "lora_flux2_klein_base4b_q8_outpaint_2026_06_22"
+
+
+@pytest.mark.fast
+def test_flux2_outpaint_capability_publishes_the_fill_contract():
+    # The defect this locks: `supports_outpaint: true, supports_lora: true` used to be the whole
+    # story, so an application correctly concluded "outpaint supported, LoRA optional" and got a
+    # silently downgraded conditioning canvas. The fill contract must be discoverable from JSON.
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/flux.2-klein-base-4b-8bit")
+    outpaint = next(capability for capability in capabilities.capabilities if capability.id == "flux2.outpaint")
+    row = outpaint.to_dict()
+
+    assert row["supports_outpaint"] is True
+    assert row["supports_outpaint_fill"] is True
+    assert row["outpaint_fill_modes"] == ["auto", "edge", "neutral", "solid", "blur"]
+    assert row["outpaint_default_fill_mode"] == "auto"
+    assert row["outpaint_auto_edge_fill_max_stretch"] == 12.0
+    assert row["outpaint_recommended_lora"] == "fal/flux-2-klein-4B-outpaint-lora"
+    assert row["outpaint_validated_padding"] == "5%,80%,5%,60%"
+    assert row["outpaint_validated_fill_mode"] == "edge"
+    assert row["outpaint_validated_max_canvas_pixels"] == 282880
+
+
+@pytest.mark.fast
+def test_qwen_outpaint_capability_publishes_a_fixed_fill_and_no_fill_option():
+    # The Qwen edit backend has no --outpaint-fill option and always builds an edge canvas.
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/qwen-image-edit-2511-8bit")
+    outpaint = next(capability for capability in capabilities.capabilities if capability.id == "qwen.outpaint")
+    row = outpaint.to_dict()
+
+    assert row["supports_outpaint"] is True
+    assert row["supports_outpaint_fill"] is False
+    assert row["outpaint_fill_modes"] == ["edge"]
+    assert row["outpaint_default_fill_mode"] == "edge"
+    assert row["outpaint_auto_edge_fill_max_stretch"] is None
+    assert row["outpaint_recommended_lora"] is None
+    assert row["outpaint_validated_padding"] == "5%,80%,5%,60%"
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    ("model", "capability_id"),
+    [
+        ("AbstractFramework/flux.2-klein-base-4b-8bit", "flux2.edit"),
+        ("AbstractFramework/flux.2-klein-base-4b-8bit", "flux2.inpaint"),
+        ("flux2-klein-4b", "flux2.reframe"),
+        ("AbstractFramework/qwen-image-edit-2511-8bit", "qwen.edit"),
+        ("AbstractFramework/qwen-image-edit-2511-8bit", "qwen.reframe"),
+    ],
+)
+def test_non_outpaint_capabilities_expose_no_fill_contract(model, capability_id):
+    capabilities = mlxgen.get_model_capabilities(model=model)
+    row = next(capability for capability in capabilities.capabilities if capability.id == capability_id).to_dict()
+
+    assert row["supports_outpaint"] is False
+    assert row["supports_outpaint_fill"] is False
+    assert row["outpaint_fill_modes"] == []
+    assert row["outpaint_default_fill_mode"] is None
+    assert row["outpaint_auto_edge_fill_max_stretch"] is None
+    assert row["outpaint_recommended_lora"] is None
+    assert row["outpaint_validated_padding"] is None
+    assert row["outpaint_validated_fill_mode"] is None
+    assert row["outpaint_validated_max_canvas_pixels"] is None
+
+
+@pytest.mark.fast
+def test_published_outpaint_fill_contract_matches_the_cli():
+    # task_inference deliberately does not import the CLI parser (import weight), so the two
+    # copies of the contract are locked together here instead.
+    from mflux.cli.parser.parsers import OUTPAINT_FILL_AUTO, OUTPAINT_FILL_CHOICES
+    from mflux.models.flux2.cli.flux2_edit_generate import (
+        FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS,
+        _spec_matches_green_border_marker,
+    )
+    from mflux.utils.outpaint_util import OutpaintUtil
+
+    assert task_inference.FLUX2_OUTPAINT_FILL_MODES == OUTPAINT_FILL_CHOICES
+    assert task_inference.FLUX2_OUTPAINT_DEFAULT_FILL_MODE == OUTPAINT_FILL_AUTO
+    # `auto` selects the fill mode by the same stretch bound the fill itself applies, so the
+    # published contract and OutpaintUtil must never drift apart.
+    assert task_inference.FLUX2_OUTPAINT_AUTO_EDGE_FILL_MAX_STRETCH == float(OutpaintUtil.EDGE_FILL_MAX_STRETCH)
+    # The adapter the contract recommends must be one the fill resolver actually recognizes.
+    assert _spec_matches_green_border_marker(task_inference.FLUX2_OUTPAINT_RECOMMENDED_LORA)
+    assert FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS
+
+
+@pytest.mark.fast
+def test_published_outpaint_validated_envelope_matches_the_validation_registry():
+    profile = mlxgen.get_validation_profile(profile_id="reframe_outpaint_2026_06_08")
+    outpaint_notes = [record.reviewer_notes for record in profile.records if record.step == "OP"]
+
+    assert outpaint_notes
+    for note in outpaint_notes:
+        assert f"padding {task_inference.OUTPAINT_VALIDATED_PADDING}" in note
 
 
 def test_ernie_turbo_q8_text_lora_status_is_exact():

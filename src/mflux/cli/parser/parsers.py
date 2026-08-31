@@ -87,6 +87,40 @@ def image_strength_value(value: str) -> float:
     return parsed
 
 
+# Conditioning-canvas fill algorithms for --outpaint-padding. `auto` resolves to one of the
+# three concrete modes at run time and prints which one it picked; the concrete names match
+# OutpaintUtil.create_expanded_canvas(fill_mode=...).
+OUTPAINT_FILL_AUTO = "auto"
+OUTPAINT_FILL_CHOICES = (OUTPAINT_FILL_AUTO, "edge", "neutral", "solid", "blur")
+
+
+def rgb_color_value(value: str) -> tuple[int, int, int]:
+    # Accepts "R,G,B" (0-255 each) or "#rrggbb". Returns the PIL-style RGB tuple that
+    # OutpaintUtil.create_expanded_canvas(fill_color=...) expects.
+    text = str(value).strip()
+    if text.startswith("#"):
+        digits = text[1:]
+        if len(digits) != 6:
+            raise argparse.ArgumentTypeError(f"'{value}' is not a valid hex color; expected '#rrggbb'")
+        try:
+            return (int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16))
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"'{value}' is not a valid hex color; expected '#rrggbb'") from None
+    parts = [part.strip() for part in text.split(",")]
+    if len(parts) != 3:
+        raise argparse.ArgumentTypeError(f"'{value}' is not a valid color; expected 'R,G,B' or '#rrggbb'")
+    channels = []
+    for part in parts:
+        try:
+            channel = int(part)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"'{value}' is not a valid color; expected 'R,G,B' or '#rrggbb'") from None
+        if not 0 <= channel <= 255:
+            raise argparse.ArgumentTypeError(f"'{value}' has a channel outside 0-255")
+        channels.append(channel)
+    return (channels[0], channels[1], channels[2])
+
+
 def _model_config_for_parser(model_name: str | None, base_model: str | None = None) -> ModelConfig | None:
     if model_name is None:
         return None
@@ -128,6 +162,7 @@ class CommandLineParser(argparse.ArgumentParser):
         self.supports_dimension_scale_factor = False
         self.supports_image_to_image = False
         self.supports_image_outpaint = False
+        self.supports_outpaint_fill = False
         self.supports_lora = False
         self.require_model_arg = True
 
@@ -352,6 +387,42 @@ class CommandLineParser(argparse.ArgumentParser):
             ),
         )
 
+    def add_outpaint_fill_arguments(self) -> None:
+        # The conditioning-canvas fill algorithm used to be inferred from the resolved
+        # --lora-paths basenames, which made outpaint quality depend on an unrelated flag and
+        # left no way to see or choose the algorithm. It is an explicit option now.
+        self.supports_outpaint_fill = True
+        outpaint_group = self.add_argument_group("Outpaint canvas configuration")
+        outpaint_group.add_argument(
+            "--outpaint-fill",
+            dest="outpaint_fill",
+            choices=list(OUTPAINT_FILL_CHOICES),
+            default=OUTPAINT_FILL_AUTO,
+            help=(
+                "How --outpaint-padding fills the expanded conditioning canvas. "
+                "edge stretches the source border strip outward (good for continuing an existing "
+                "texture across a small border, smears at large padding); neutral paints a flat "
+                "per-side border color taken from the source, so the model generates new subject "
+                "matter without a hard seam; solid paints one flat color (see --outpaint-fill-color); "
+                "blur uses a blurred cover of the source. auto (default) picks solid green for a "
+                "green-border outpaint adapter, edge while every padded side stays within the depth "
+                "the border strip covers, and neutral past that. The resolved mode, the canvas size "
+                "and the reason are printed on stderr for every outpaint run."
+            ),
+        )
+        outpaint_group.add_argument(
+            "--outpaint-fill-color",
+            dest="outpaint_fill_color",
+            type=rgb_color_value,
+            default=None,
+            help=(
+                "Fill color for --outpaint-fill solid, as 'R,G,B' (0-255 per channel) or '#rrggbb'. "
+                "Only meaningful with solid; edge, neutral and blur derive their canvas from the "
+                "source. Default is 0,255,0 for a green-border outpaint adapter and the source "
+                "image's mean border color otherwise."
+            ),
+        )
+
     def add_image_outpaint_arguments(self, required=False) -> None:
         self.supports_image_outpaint = True
         self.add_argument("--image-outpaint-padding", type=str, default=None, required=required, help="For outpainting mode: CSS-style box padding values to extend the canvas of image specified by--image-path. E.g. '20', '50%%'")
@@ -529,6 +600,27 @@ class CommandLineParser(argparse.ArgumentParser):
                 if namespace.image_outpaint_padding is None:
                     namespace.image_outpaint_padding = prior_gen_metadata.get("image_outpaint_padding", None)
 
+            # Outpaint fill contract replay: metadata records the RESOLVED fill mode and color
+            # next to outpaint_padding, so a -C replay reproduces the same conditioning canvas
+            # instead of re-running `auto` against a possibly different source. Explicit args win.
+            if self.supports_outpaint_fill:
+                fill_from_metadata = prior_gen_metadata.get("outpaint_fill", None)
+                if fill_from_metadata is not None and namespace.outpaint_fill == self.get_default("outpaint_fill"):
+                    if fill_from_metadata not in OUTPAINT_FILL_CHOICES:
+                        self.error(
+                            f"Invalid outpaint_fill in metadata: '{fill_from_metadata}'. "
+                            f"Expected one of {', '.join(OUTPAINT_FILL_CHOICES)}."
+                        )
+                    namespace.outpaint_fill = fill_from_metadata
+                color_from_metadata = prior_gen_metadata.get("outpaint_fill_color", None)
+                if color_from_metadata is not None and namespace.outpaint_fill_color is None:
+                    if isinstance(color_from_metadata, (list, tuple)):
+                        color_from_metadata = ",".join(str(channel) for channel in color_from_metadata)
+                    try:
+                        namespace.outpaint_fill_color = rgb_color_value(str(color_from_metadata))
+                    except argparse.ArgumentTypeError as exc:
+                        self.error(f"Invalid outpaint_fill_color in metadata: {exc}")
+
         # Only require model if we're not in training mode and require_model_arg is True
         if hasattr(namespace, "model") and namespace.model is None and not has_training_args and self.require_model_arg:
             self.error("--model / -m must be provided, or 'model' must be specified in the config file.")
@@ -623,6 +715,14 @@ class CommandLineParser(argparse.ArgumentParser):
             # parse and normalize any acceptable 1,2,3,4-tuple box value to 4-tuple
             namespace.image_outpaint_padding = box_values.BoxValues.parse(namespace.image_outpaint_padding)
             print(f"{namespace.image_outpaint_padding=}")
+
+        # Keep the pre-resolution request. LoraResolution.resolve() rewrites a repo spec such as
+        # "fal/flux-2-klein-4B-outpaint-lora" or "org/repo:file.safetensors" into a concrete cache
+        # file path, which erases the adapter identity a caller asked for. Consumers that need to
+        # recognize a specific adapter (the green-border outpaint LoRA) must be able to match the
+        # requested spec, not only whatever basename resolution happened to land on.
+        if self.supports_lora and hasattr(namespace, "lora_paths"):
+            namespace.requested_lora_paths = list(namespace.lora_paths or [])
 
         # Resolve lora paths from library if needed
         if self.supports_lora and hasattr(namespace, "lora_paths") and namespace.lora_paths:

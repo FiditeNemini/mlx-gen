@@ -10,6 +10,29 @@ import PIL.ImageStat
 from mflux.utils.box_values import AbsoluteBoxValues, BoxValues
 from mflux.utils.image_util import ImageUtil
 
+# Edge fill samples a thin strip from the source border and bicubically stretches it
+# across the padded extent. The stretch factor is what decides whether the result is a
+# plausible continuation or a field of 1-D streaks, so it is the quantity that gets
+# bounded - not the strip size.
+#
+# _EDGE_BASE_STRIP_CAP reproduces the historical strip (source_extent // 8, capped at
+# 32 px). _EDGE_MAX_STRETCH is the largest upsample factor the strip is allowed to
+# take: every recorded outpaint/reframe validation run sits at or below 10.91x, so 12
+# keeps the whole validated envelope bit-identical while capping anything past it.
+#
+# A bigger strip alone cannot fix deep padding: the artefact is lateral structure
+# replicated along the expansion axis, not missing detail, and a 12x smear is still a
+# smear. So once a side runs past _edge_reach() px - the depth the base strip covers at
+# the bound - the fill also cross-fades toward the neutral border-colour background,
+# with an amplitude gated by the overshoot. Inside the reach the gate is zero and the
+# canvas is bit-identical to the pre-fix implementation.
+_EDGE_BASE_STRIP_CAP = 32
+_EDGE_MAX_STRETCH = 12
+_EDGE_BASE_BLUR_CAP = 8
+_EDGE_BLUR_DIVISOR = 24
+_NEUTRAL_BLUR_DIVISOR = 8
+_NEUTRAL_BLUR_CAP = 64
+
 
 @dataclass(frozen=True)
 class OutpaintCanvas:
@@ -25,6 +48,10 @@ class OutpaintCanvas:
 
 
 class OutpaintUtil:
+    # Public mirror of _EDGE_MAX_STRETCH for callers that select a fill mode and for the
+    # capability contract in mflux.task_inference, which cannot import this module (PIL).
+    EDGE_FILL_MAX_STRETCH = _EDGE_MAX_STRETCH
+
     @staticmethod
     def create_expanded_canvas(
         *,
@@ -78,7 +105,23 @@ class OutpaintUtil:
         canvas: OutpaintCanvas,
         feather_px: int | None = None,
         restore_threshold: float = 12.0,
+        preserve_source: bool | None = None,
     ) -> PIL.Image.Image:
+        """Blend the untouched source crop back over the generated canvas.
+
+        `preserve_source` states the intent directly:
+
+        * ``True``  - always paste the source back (used with an explicit feather).
+        * ``False`` - never paste; the caller's model path already locked the source
+          region in latent space and a post-blend would only fight it.
+        * ``None``  - adaptive: paste only when the generated region still matches the
+          source within `restore_threshold` mean absolute difference.
+
+        `restore_threshold` stays accepted for the existing call sites. A negative
+        value is the legacy spelling of ``preserve_source=False``; it used to work by
+        accident, because a mean absolute difference is never below zero and so the
+        "diverged too much, skip the paste" guard could never be false.
+        """
         if generated_image.size != (canvas.target_width, canvas.target_height):
             raise ValueError(
                 "Outpaint output size changed unexpectedly: "
@@ -90,6 +133,11 @@ class OutpaintUtil:
         if source.size != (canvas.source_width, canvas.source_height):
             raise ValueError("Source image size changed during outpaint generation.")
 
+        mode = OutpaintUtil._resolve_preservation_mode(
+            preserve_source=preserve_source,
+            feather_px=feather_px,
+            restore_threshold=restore_threshold,
+        )
         composited = generated_image.convert("RGB").copy()
         restore_difference = OutpaintUtil._source_region_difference(
             generated_image=composited,
@@ -97,19 +145,33 @@ class OutpaintUtil:
             paste_left=canvas.paste_left,
             paste_top=canvas.paste_top,
         )
-        if feather_px is None and restore_difference > restore_threshold:
-            composited.outpaint_preservation_applied = False
-            composited.outpaint_source_restore_difference = restore_difference
-            return composited
-
-        composited.paste(
-            source,
-            (canvas.paste_left, canvas.paste_top),
-            OutpaintUtil._source_mask(source=source, feather_px=feather_px),
-        )
-        composited.outpaint_preservation_applied = True
+        applied = mode == "always" or (mode == "adaptive" and restore_difference <= restore_threshold)
+        if applied:
+            composited.paste(
+                source,
+                (canvas.paste_left, canvas.paste_top),
+                OutpaintUtil._source_mask(source=source, feather_px=feather_px),
+            )
+        composited.outpaint_preservation_applied = applied
+        composited.outpaint_preservation_mode = mode
         composited.outpaint_source_restore_difference = restore_difference
         return composited
+
+    @staticmethod
+    def _resolve_preservation_mode(
+        *,
+        preserve_source: bool | None,
+        feather_px: int | None,
+        restore_threshold: float,
+    ) -> str:
+        if preserve_source is not None:
+            return "always" if preserve_source else "never"
+        if feather_px is not None:
+            return "always"
+        if restore_threshold < 0:
+            # Legacy sentinel from the strict FLUX.2 outpaint route: "never post-blend".
+            return "never"
+        return "adaptive"
 
     @staticmethod
     def attach_metadata(
@@ -201,8 +263,16 @@ class OutpaintUtil:
                 paste_top=paste_top,
                 fill_color=fill_color,
             )
+        if fill_mode == "neutral":
+            return OutpaintUtil._create_neutral_background(
+                source=source.convert("RGB"),
+                target_width=target_width,
+                target_height=target_height,
+                paste_left=paste_left,
+                paste_top=paste_top,
+            )
         if fill_mode != "blur":
-            raise ValueError("fill_mode must be 'edge', 'blur', or 'solid'.")
+            raise ValueError("fill_mode must be 'edge', 'neutral', 'blur', or 'solid'.")
 
         background = PIL.ImageOps.fit(
             source,
@@ -229,13 +299,19 @@ class OutpaintUtil:
         top = paste_top
         right = max(0, target_width - paste_left - source.width)
         bottom = max(0, target_height - paste_top - source.height)
-        strip_x = max(1, min(32, source.width // 8))
-        strip_y = max(1, min(32, source.height // 8))
+        strip_left, strip_right, strip_top, strip_bottom = OutpaintUtil._edge_strip_extents(
+            source_width=source.width,
+            source_height=source.height,
+            left=left,
+            right=right,
+            top=top,
+            bottom=bottom,
+        )
 
         if left > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((0, 0, strip_x, source.height)),
+                    source.crop((0, 0, strip_left, source.height)),
                     (left, source.height),
                 ),
                 (0, top),
@@ -243,7 +319,7 @@ class OutpaintUtil:
         if right > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((source.width - strip_x, 0, source.width, source.height)),
+                    source.crop((source.width - strip_right, 0, source.width, source.height)),
                     (right, source.height),
                 ),
                 (paste_left + source.width, top),
@@ -251,7 +327,7 @@ class OutpaintUtil:
         if top > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((0, 0, source.width, strip_y)),
+                    source.crop((0, 0, source.width, strip_top)),
                     (source.width, top),
                 ),
                 (left, 0),
@@ -259,7 +335,7 @@ class OutpaintUtil:
         if bottom > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((0, source.height - strip_y, source.width, source.height)),
+                    source.crop((0, source.height - strip_bottom, source.width, source.height)),
                     (source.width, bottom),
                 ),
                 (left, paste_top + source.height),
@@ -272,14 +348,224 @@ class OutpaintUtil:
             top=top,
             right=right,
             bottom=bottom,
-            strip_x=strip_x,
-            strip_y=strip_y,
+            strip_left=strip_left,
+            strip_right=strip_right,
+            strip_top=strip_top,
+            strip_bottom=strip_bottom,
         )
         border = max(left, top, right, bottom)
         if border <= 0:
             return canvas
-        blur_radius = min(8, max(2, border // 24))
+
+        canvas = canvas.filter(PIL.ImageFilter.GaussianBlur(radius=OutpaintUtil._edge_blur_radius(border)))
+        fade = OutpaintUtil._edge_fade_mask(
+            target_width=target_width,
+            target_height=target_height,
+            source_width=source.width,
+            source_height=source.height,
+            paste_left=left,
+            paste_top=top,
+        )
+        if fade is None:
+            return canvas
+        return PIL.Image.composite(
+            OutpaintUtil._create_neutral_background(
+                source=source,
+                target_width=target_width,
+                target_height=target_height,
+                paste_left=left,
+                paste_top=top,
+            ),
+            canvas,
+            fade,
+        )
+
+    @staticmethod
+    def edge_fill_reach(extent: int) -> int:
+        """Padding depth edge fill covers on a source side of `extent` px.
+
+        Public because callers choosing a fill mode need the same bound the fill itself
+        uses. Padding at or below the reach is a texture continuation at or under
+        `_EDGE_MAX_STRETCH`; past it the fill starts cross-fading to the neutral
+        background because a stretched strip stops carrying usable structure.
+        """
+        return OutpaintUtil._edge_reach(extent)
+
+    @staticmethod
+    def _edge_base_strip(extent: int) -> int:
+        """The historical strip depth: an eighth of the source side, capped at 32 px."""
+        return max(1, min(_EDGE_BASE_STRIP_CAP, extent // 8))
+
+    @staticmethod
+    def _edge_reach(extent: int) -> int:
+        """Padding depth the base strip covers without exceeding the validated stretch."""
+        return OutpaintUtil._edge_base_strip(extent) * _EDGE_MAX_STRETCH
+
+    @staticmethod
+    def _edge_strip_extents(
+        *,
+        source_width: int,
+        source_height: int,
+        left: int,
+        right: int,
+        top: int,
+        bottom: int,
+    ) -> tuple[int, int, int, int]:
+        """Per-side strip depths that keep the bicubic stretch at or below the bound.
+
+        The strip only grows once the padded extent passes what the base strip can
+        cover; it can never exceed the source side, so very deep padding still runs
+        above the bound - that regime is handled by the fade in `_edge_fade_mask`.
+        """
+        return (
+            OutpaintUtil._edge_strip(source_width, left),
+            OutpaintUtil._edge_strip(source_width, right),
+            OutpaintUtil._edge_strip(source_height, top),
+            OutpaintUtil._edge_strip(source_height, bottom),
+        )
+
+    @staticmethod
+    def _edge_strip(extent: int, pad: int) -> int:
+        base = OutpaintUtil._edge_base_strip(extent)
+        if pad <= 0:
+            return base
+        needed = (pad + _EDGE_MAX_STRETCH - 1) // _EDGE_MAX_STRETCH
+        return max(1, min(extent, max(base, needed)))
+
+    @staticmethod
+    def _edge_blur_radius(border: int) -> int:
+        """Seam softener for the pasted strips - deliberately still capped at 8 px.
+
+        This filter runs over the whole background at one radius, so it is driven by
+        the deepest side and cannot be aimed at the side that needs it. Lifting the cap
+        in step with the padding was measured on the 768x766 / 100%-bottom case: it
+        moved the deep band's streak amplitude by 6% (10.47 -> 9.83) while washing out
+        the 76 px left band, which is well inside the validated envelope, by 22%
+        (41.48 -> 32.43). The scaling that actually removes streaks is spatial, and
+        lives in `_edge_fade_mask` plus the neutral background's own radius.
+        """
+        return min(_EDGE_BASE_BLUR_CAP, max(2, border // _EDGE_BLUR_DIVISOR))
+
+    @staticmethod
+    def _edge_fade_mask(
+        *,
+        target_width: int,
+        target_height: int,
+        source_width: int,
+        source_height: int,
+        paste_left: int,
+        paste_top: int,
+    ) -> PIL.Image.Image | None:
+        """Weight of the neutral background over the stretched strip, by distance.
+
+        Per side the fade ramps linearly from 0 at the source seam to
+        `min(1, (pad - reach) / reach)` at the outer edge: the amplitude is gated by
+        how far the padding overshoots what the strip can honestly cover, and the
+        shape keeps the seam itself untouched. A side inside its reach contributes
+        nothing, so the whole validated envelope stays bit-identical, and the gate
+        grows continuously past it rather than switching on at a threshold.
+        """
+        right = max(0, target_width - paste_left - source_width)
+        bottom = max(0, target_height - paste_top - source_height)
+        reach_x = OutpaintUtil._edge_reach(source_width)
+        reach_y = OutpaintUtil._edge_reach(source_height)
+        if max(paste_left, right) <= reach_x and max(paste_top, bottom) <= reach_y:
+            return None
+
+        mask = PIL.Image.new("L", (target_width, target_height), 0)
+        nearest = PIL.Image.Resampling.NEAREST
+        if paste_left > 0:
+            ramp = OutpaintUtil._distance_ramp(paste_left, reach_x, outward=False)
+            mask.paste(ramp.resize((paste_left, target_height), resample=nearest), (0, 0))
+        if right > 0:
+            ramp = OutpaintUtil._distance_ramp(right, reach_x, outward=True)
+            mask.paste(ramp.resize((right, target_height), resample=nearest), (paste_left + source_width, 0))
+        vertical = PIL.Image.new("L", (target_width, target_height), 0)
+        if paste_top > 0:
+            ramp = OutpaintUtil._distance_ramp(paste_top, reach_y, outward=False, vertical=True)
+            vertical.paste(ramp.resize((target_width, paste_top), resample=nearest), (0, 0))
+        if bottom > 0:
+            ramp = OutpaintUtil._distance_ramp(bottom, reach_y, outward=True, vertical=True)
+            vertical.paste(ramp.resize((target_width, bottom), resample=nearest), (0, paste_top + source_height))
+        return PIL.ImageChops.lighter(mask, vertical)
+
+    @staticmethod
+    def _distance_ramp(extent: int, reach: int, *, outward: bool, vertical: bool = False) -> PIL.Image.Image:
+        gate = min(1.0, max(0.0, (extent - reach) / max(1, reach)))
+        values = []
+        for index in range(extent):
+            distance = index + 1 if outward else extent - index
+            weight = gate * distance / extent
+            values.append(max(0, min(255, round(255 * weight))))
+        ramp = PIL.Image.new("L", (1, extent) if vertical else (extent, 1))
+        ramp.putdata(values)
+        return ramp
+
+    @staticmethod
+    def _border_colors(source: PIL.Image.Image) -> dict[str, tuple[int, int, int]]:
+        """Mean RGB of the source strip adjacent to each side."""
+        width, height = source.size
+        strip_x = OutpaintUtil._edge_base_strip(width)
+        strip_y = OutpaintUtil._edge_base_strip(height)
+
+        def mean(box: tuple[int, int, int, int]) -> tuple[int, int, int]:
+            channels = PIL.ImageStat.Stat(source.crop(box)).mean
+            return tuple(int(round(value)) for value in channels[:3])
+
+        return {
+            "left": mean((0, 0, strip_x, height)),
+            "right": mean((width - strip_x, 0, width, height)),
+            "top": mean((0, 0, width, strip_y)),
+            "bottom": mean((0, height - strip_y, width, height)),
+        }
+
+    @staticmethod
+    def _create_neutral_background(
+        *,
+        source: PIL.Image.Image,
+        target_width: int,
+        target_height: int,
+        paste_left: int,
+        paste_top: int,
+    ) -> PIL.Image.Image:
+        """Flat per-side border colour, softened so band junctions carry no hard edge."""
+        colors = OutpaintUtil._border_colors(source)
+        left = paste_left
+        top = paste_top
+        right = max(0, target_width - paste_left - source.width)
+        bottom = max(0, target_height - paste_top - source.height)
+        overall = tuple(int(round(value)) for value in PIL.ImageStat.Stat(source).mean[:3])
+        canvas = PIL.Image.new("RGB", (target_width, target_height), overall)
+
+        if left > 0:
+            canvas.paste(colors["left"], (0, top, left, top + source.height))
+        if right > 0:
+            canvas.paste(colors["right"], (left + source.width, top, target_width, top + source.height))
+        if top > 0:
+            canvas.paste(colors["top"], (left, 0, left + source.width, top))
+        if bottom > 0:
+            canvas.paste(colors["bottom"], (left, top + source.height, left + source.width, target_height))
+        for corner_box, sides in (
+            ((0, 0, left, top), ("left", "top")),
+            ((left + source.width, 0, target_width, top), ("right", "top")),
+            ((0, top + source.height, left, target_height), ("left", "bottom")),
+            (
+                (left + source.width, top + source.height, target_width, target_height),
+                ("right", "bottom"),
+            ),
+        ):
+            if corner_box[2] > corner_box[0] and corner_box[3] > corner_box[1]:
+                canvas.paste(OutpaintUtil._blend_colors(colors[sides[0]], colors[sides[1]]), corner_box)
+
+        border = max(left, top, right, bottom)
+        if border <= 0:
+            return canvas
+        blur_radius = max(2, min(_NEUTRAL_BLUR_CAP, border // _NEUTRAL_BLUR_DIVISOR))
         return canvas.filter(PIL.ImageFilter.GaussianBlur(radius=blur_radius))
+
+    @staticmethod
+    def _blend_colors(first: tuple[int, int, int], second: tuple[int, int, int]) -> tuple[int, int, int]:
+        return tuple(int(round((a + b) / 2)) for a, b in zip(first, second))
 
     @staticmethod
     def _paste_corner_extensions(
@@ -290,18 +576,20 @@ class OutpaintUtil:
         top: int,
         right: int,
         bottom: int,
-        strip_x: int,
-        strip_y: int,
+        strip_left: int,
+        strip_right: int,
+        strip_top: int,
+        strip_bottom: int,
     ) -> None:
         if left > 0 and top > 0:
             canvas.paste(
-                OutpaintUtil._resized_patch(source.crop((0, 0, strip_x, strip_y)), (left, top)),
+                OutpaintUtil._resized_patch(source.crop((0, 0, strip_left, strip_top)), (left, top)),
                 (0, 0),
             )
         if right > 0 and top > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((source.width - strip_x, 0, source.width, strip_y)),
+                    source.crop((source.width - strip_right, 0, source.width, strip_top)),
                     (right, top),
                 ),
                 (left + source.width, 0),
@@ -309,7 +597,7 @@ class OutpaintUtil:
         if left > 0 and bottom > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((0, source.height - strip_y, strip_x, source.height)),
+                    source.crop((0, source.height - strip_bottom, strip_left, source.height)),
                     (left, bottom),
                 ),
                 (0, top + source.height),
@@ -317,7 +605,9 @@ class OutpaintUtil:
         if right > 0 and bottom > 0:
             canvas.paste(
                 OutpaintUtil._resized_patch(
-                    source.crop((source.width - strip_x, source.height - strip_y, source.width, source.height)),
+                    source.crop(
+                        (source.width - strip_right, source.height - strip_bottom, source.width, source.height)
+                    ),
                     (right, bottom),
                 ),
                 (left + source.width, top + source.height),
@@ -329,6 +619,13 @@ class OutpaintUtil:
 
     @staticmethod
     def _source_mask(source: PIL.Image.Image, feather_px: int | None) -> PIL.Image.Image:
+        """Alpha for pasting the source crop back.
+
+        Reached from the post-blend routes only - the Qwen edit route and the
+        non-base FLUX.2 outpaint route, both of which run `preserve_source=None`
+        (adaptive). The strict FLUX.2 base-model route resolves to
+        `preserve_source=False` and never pastes, so it never builds a mask.
+        """
         if feather_px is None:
             if min(source.width, source.height) < 64:
                 return PIL.Image.new("L", source.size, 255)

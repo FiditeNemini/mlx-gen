@@ -143,6 +143,85 @@ accept that the model may reshape or recompose the source. When the exact canvas
 aspect ratio than the source, add `--resize-mode crop` (center-crop) or `--resize-mode pad`
 (letterbox) to map the source onto it without distortion; the default `resize` stretches to fill.
 
+## Outpainted Area Comes Back As Streaks Instead Of New Content
+
+The space `--outpaint-padding` added returns as directional streaks, or as a smeared continuation of
+the source border, rather than as new subject matter.
+
+The likely cause is edge fill running deeper than it covers. Edge fill builds the conditioning
+canvas by stretching a strip of the source border outward across the padded area, so it continues an
+existing texture rather than inventing one. The depth that strip covers is the *edge-fill reach*;
+past it, the same strip is stretched far enough to read as one-dimensional streaks.
+
+Check which canvas the run used. Every outpaint run prints its resolved canvas on stderr before
+denoising:
+
+```text
+Outpaint: fill=edge, canvas 928x1536 from source 768x766, padding top=0 right=76 bottom=766 left=76.
+```
+
+A second line names the reason whenever `--outpaint-fill auto` chose the mode, including the padding
+depth and the edge-fill reach it was measured against. Add `--metadata` to keep the same values in
+the JSON sidecar as `outpaint_fill`, `outpaint_fill_reason`, `outpaint_edge_fill_reach_px`, and
+`outpaint_edge_fill_overreach`. To read the route contract without running a job:
+
+```sh
+mlxgen capabilities --model AbstractFramework/flux.2-klein-base-4b-8bit
+```
+
+The `flux2.outpaint` row reports `supports_outpaint_fill`, `outpaint_fill_modes`,
+`outpaint_default_fill_mode`, and `outpaint_recommended_lora`.
+
+On FLUX.2 Klein base routes, ask for a blank conditioning canvas so the model generates instead of
+continuing a texture:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-base-4b-8bit \
+  --image portrait.png \
+  --outpaint-padding "0%,10%,100%,10%" \
+  --outpaint-fill neutral \
+  --prompt "Extend this portrait downward to reveal the lower part of the body: the same subject in the same clothing, same lighting, same background." \
+  --steps 20 \
+  --guidance 4 \
+  --seed 1234 \
+  --output extended.png
+```
+
+Two further routes to better deep-padding results:
+
+- Load the recommended outpaint adapter. Download it first, because generation does not download
+  LoRA files. `--outpaint-fill auto` then paints the pure-green canvas the adapter is trained on:
+
+  ```sh
+  mlxgen download --model fal/flux-2-klein-4B-outpaint-lora --all-files
+
+  mlxgen generate \
+    --model AbstractFramework/flux.2-klein-base-4b-8bit \
+    --image input.png \
+    --outpaint-padding "5%,80%,5%,60%" \
+    --prompt "Fill the green spaces according to the image" \
+    --steps 20 \
+    --guidance 4 \
+    --seed 8612 \
+    --lora-paths fal/flux-2-klein-4B-outpaint-lora:flux-outpaint-lora.safetensors \
+    --lora-scales 1.0 \
+    --output outpaint.png
+  ```
+
+- Extend in two moderate passes instead of one large one. Each pass gives the model a nearby edge to
+  work from and runs on a smaller canvas, and outpaint attention cost grows faster than canvas area.
+  This is also the route on Qwen Image Edit, which always builds an edge-extended canvas and takes
+  no fill option.
+
+`--outpaint-padding` computes the output size from the source and the padding, so do not add
+`--width`, `--height`, or `--canvas-policy` to any of these commands.
+
+To confirm the fix, rerun with the same seed and read the first stderr line: it should report the
+fill you asked for, and the added area should contain new content rather than stretched border
+texture. See [Reframe and Outpaint](reframe-outpaint.md#the-conditioning-canvas) for the full mode
+table and padding guidance.
+
 ## Wan Video Quality Looks Weak At Tiny Sizes
 
 Wan2.2 supports TI2V-5B text-to-video, TI2V-5B first-frame image-to-video, T2V-A14B text-to-video, T2V-A14B prompt-guided video-to-video (plain or masked with `--video-mask-path`), and I2V-A14B image-to-video. Very small or very short runs are useful for quick command checks, but they are not quality settings.

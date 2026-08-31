@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-08-31
+
+Outpaint conditioning-canvas contract.
+
+### Added
+
+- **`--outpaint-fill {auto,edge,neutral,solid,blur}`** selects the canvas `--outpaint-padding`
+  pastes the source onto before denoising, on FLUX.2 Klein base routes. `edge` stretches the source
+  border strip outward, `neutral` paints a flat per-side border color sampled from the source,
+  `solid` takes a color from the new `--outpaint-fill-color` (`R,G,B` or `#rrggbb`), and `blur`
+  uses a blurred scaled copy. Both options round-trip through `-C` generation metadata.
+- **`auto` (the default) selects the fill from the padding depth and the loaded adapter.** It keeps
+  `edge` while every padded side stays within the depth the border strip covers, switches to
+  `neutral` past that so the model generates new subject matter instead of continuing a stretched
+  strip, and switches to `solid` green when a green-border outpaint adapter is loaded. Every
+  outpaint run prints the resolved fill mode, the canvas size, and the reason.
+- **Outpaint capability fields.** `supports_outpaint_fill`, `outpaint_fill_modes`,
+  `outpaint_default_fill_mode`, `outpaint_auto_edge_fill_max_stretch`, `outpaint_recommended_lora`,
+  `outpaint_validated_padding`, `outpaint_validated_fill_mode`, and
+  `outpaint_validated_max_canvas_pixels` are published on outpaint-capable capability records, so
+  an application can read the conditioning-canvas contract and the validated envelope from
+  `mlxgen capabilities` JSON. Capability `schema_version` is now `10`.
+- **Generation metadata** records `outpaint_fill`, `outpaint_fill_color`, `outpaint_fill_requested`,
+  `outpaint_fill_reason`, `outpaint_edge_fill_reach_px`, and `outpaint_edge_fill_overreach`.
+
+### Changed
+
+- **Edge fill bounds how far it stretches the sampled border strip.** Padding deeper than the strip
+  covers grows the strip instead of the stretch, and cross-fades toward the neutral background. All
+  published reframe and outpaint validation profiles are inside that bound and their conditioning
+  canvases are unchanged.
+- **The outpaint transition band is derived per side.** A side with no padding keeps its source
+  pixels locked instead of surrendering a band of them to regeneration.
+
+### Notes
+
+- Outpaint composites the source through a VAE encode/decode round trip rather than pasting the
+  original pixels back, so the source region is reproduced, not preserved bit-for-bit. Use
+  `--outpaint-fill` and padding depth to control the generated area; use masked editing
+  (`--mask-path`, see [Masked Editing](docs/masked-editing.md)) when a region must stay untouched.
+- Outpaint cost scales with the expanded canvas, and attention cost grows faster than canvas area.
+  Extending in two moderate passes is cheaper and generally better than one large pass.
 ## [0.30.1] - 2026-08-19
 
 Adversarial post-release audit of 0.30.0: two capability-contract corrections, dispatcher

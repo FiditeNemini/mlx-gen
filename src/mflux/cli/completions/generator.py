@@ -94,6 +94,9 @@ class CompletionGenerator:
                 default=None,
                 help="CSS-style top,right,bottom,left padding for strict or canvas-guided outpaint.",
             )
+            # Mirrors flux2_edit_generate.main(): --outpaint-fill / --outpaint-fill-color are
+            # defined only on the FLUX.2 edit backend, so only this completion advertises them.
+            parser.add_outpaint_fill_arguments()
             parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
             parser.add_output_arguments()
 

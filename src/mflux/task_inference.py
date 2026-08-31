@@ -48,7 +48,40 @@ VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
 # v9: restoration routes are a second top-level row array (`restoration`);
 # `capabilities` stays empty for restoration-only families, so an empty
 # `capabilities` means "not routable through mlxgen generate", never "unsupported".
-CAPABILITIES_SCHEMA_VERSION = 9
+# v10: additive outpaint conditioning-canvas fields, same additive-field convention: hosts read
+# the fill contract instead of inferring it from adapter filenames.
+CAPABILITIES_SCHEMA_VERSION = 10
+
+# Outpaint conditioning-canvas contract. Outpaint quality is decided by which canvas the source
+# is pasted onto before denoising, and that used to be inferred from --lora-paths basenames, so a
+# host reading `supports_outpaint: true, supports_lora: true` could not tell that omitting the
+# adapter silently downgraded the algorithm. These constants publish the coupling.
+#
+# The concrete names match OutpaintUtil.create_expanded_canvas(fill_mode=...) and the
+# --outpaint-fill choices in mflux.cli.parser.parsers; test_task_inference locks them together.
+FLUX2_OUTPAINT_FILL_MODES = ("auto", "edge", "neutral", "solid", "blur")
+FLUX2_OUTPAINT_DEFAULT_FILL_MODE = "auto"
+# `auto` keeps edge fill while every padded side stays within OutpaintUtil.edge_fill_reach() and
+# switches to a blank canvas past it. Edge fill stretches a source border strip across the
+# padding, so the bound that matters is the stretch factor, not the padding as a fraction of the
+# source: the published profile runs 80% single-side padding at 10.9x and is validated.
+# Mirrors OutpaintUtil.EDGE_FILL_MAX_STRETCH. Duplicated rather than imported because
+# outpaint_util pulls PIL, which test_import_hygiene keeps off the `import mflux` chain.
+# test_task_inference locks the two values together.
+FLUX2_OUTPAINT_AUTO_EDGE_FILL_MAX_STRETCH = 12.0
+# Measured to materially improve the strict-outpaint route; trained on a pure-green canvas, which
+# is why `auto` switches to solid green when it is loaded.
+FLUX2_OUTPAINT_RECOMMENDED_LORA = "fal/flux-2-klein-4B-outpaint-lora"
+# The Qwen edit backend has no --outpaint-fill option and always builds an edge-extended canvas.
+QWEN_OUTPAINT_FILL_MODES = ("edge",)
+QWEN_OUTPAINT_DEFAULT_FILL_MODE = "edge"
+# Release-validation envelope. Every recorded outpaint validation run in this repository (profile
+# reframe_outpaint_2026_06_08 and the FLUX.2 Klein base starship profile) uses this one padding
+# value on a single 432x240 source, producing a 1040x272 canvas, with edge fill and no adapter.
+# Outside this envelope there is no recorded evidence for any fill mode.
+OUTPAINT_VALIDATED_PADDING = "5%,80%,5%,60%"
+OUTPAINT_VALIDATED_FILL_MODE = "edge"
+OUTPAINT_VALIDATED_MAX_CANVAS_PIXELS = 282880
 QWEN_CONTROL_UNION_MODEL = "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
 QWEN_CONTROL_INPAINT_MODEL = "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
 # Untrusted inferred identities that earned native masked edit through an exact smoke proof.
@@ -127,6 +160,26 @@ class GenerationCapability:
     supports_control_image: bool = False
     supports_control_mask: bool = False
     supports_outpaint: bool = False
+    # Whether the route accepts the explicit --outpaint-fill / --outpaint-fill-color options.
+    # False with a single-entry outpaint_fill_modes means the fill algorithm is fixed.
+    supports_outpaint_fill: bool = False
+    # Conditioning-canvas fill algorithms the route accepts. All-empty/None on routes where
+    # supports_outpaint is False.
+    outpaint_fill_modes: tuple[str, ...] = ()
+    # Fill mode that runs when --outpaint-fill is omitted.
+    outpaint_default_fill_mode: str | None = None
+    # With outpaint_default_fill_mode "auto": the largest bicubic stretch edge fill is allowed to
+    # apply to the sampled border strip. Padding deeper than strip * this factor switches auto to
+    # a blank canvas. None when the route has no auto policy.
+    outpaint_auto_edge_fill_max_stretch: float | None = None
+    # Adapter measured to give the best outpaint results on this route. Optional, not required:
+    # supports_lora stays the authority on whether LoRA loads at all.
+    outpaint_recommended_lora: str | None = None
+    # Padding envelope that release validation actually covers, and the fill mode those recorded
+    # runs used. Outside this envelope outpaint is supported but unvalidated.
+    outpaint_validated_padding: str | None = None
+    outpaint_validated_fill_mode: str | None = None
+    outpaint_validated_max_canvas_pixels: int | None = None
     supports_reframe: bool = False
     supports_lora: bool = False
     control_model: str | None = None
@@ -185,6 +238,14 @@ class GenerationCapability:
             "supports_control_image": self.supports_control_image,
             "supports_control_mask": self.supports_control_mask,
             "supports_outpaint": self.supports_outpaint,
+            "supports_outpaint_fill": self.supports_outpaint_fill,
+            "outpaint_fill_modes": list(self.outpaint_fill_modes),
+            "outpaint_default_fill_mode": self.outpaint_default_fill_mode,
+            "outpaint_auto_edge_fill_max_stretch": self.outpaint_auto_edge_fill_max_stretch,
+            "outpaint_recommended_lora": self.outpaint_recommended_lora,
+            "outpaint_validated_padding": self.outpaint_validated_padding,
+            "outpaint_validated_fill_mode": self.outpaint_validated_fill_mode,
+            "outpaint_validated_max_canvas_pixels": self.outpaint_validated_max_canvas_pixels,
             "supports_reframe": self.supports_reframe,
             "supports_lora": self.supports_lora,
             "control_model": self.control_model,
@@ -1110,6 +1171,42 @@ def _ordinary_i2i_canvas_contract() -> dict:
     }
 
 
+def _outpaint_capability_kwargs(
+    *,
+    supports_outpaint: bool,
+    fill_modes: tuple[str, ...] = (),
+    default_fill_mode: str | None = None,
+    supports_fill_option: bool = False,
+    auto_edge_fill_max_stretch: float | None = None,
+    recommended_lora: str | None = None,
+) -> dict:
+    # Mirrors _lora_capability_kwargs: one place decides the whole field group so a route can
+    # never advertise half a contract (outpaint supported, fill contract silently missing).
+    if not supports_outpaint:
+        return {
+            "supports_outpaint": False,
+            "supports_outpaint_fill": False,
+            "outpaint_fill_modes": (),
+            "outpaint_default_fill_mode": None,
+            "outpaint_auto_edge_fill_max_stretch": None,
+            "outpaint_recommended_lora": None,
+            "outpaint_validated_padding": None,
+            "outpaint_validated_fill_mode": None,
+            "outpaint_validated_max_canvas_pixels": None,
+        }
+    return {
+        "supports_outpaint": True,
+        "supports_outpaint_fill": supports_fill_option,
+        "outpaint_fill_modes": fill_modes,
+        "outpaint_default_fill_mode": default_fill_mode,
+        "outpaint_auto_edge_fill_max_stretch": auto_edge_fill_max_stretch,
+        "outpaint_recommended_lora": recommended_lora,
+        "outpaint_validated_padding": OUTPAINT_VALIDATED_PADDING,
+        "outpaint_validated_fill_mode": OUTPAINT_VALIDATED_FILL_MODE,
+        "outpaint_validated_max_canvas_pixels": OUTPAINT_VALIDATED_MAX_CANVAS_PIXELS,
+    }
+
+
 def _lora_capability_kwargs(
     *,
     identity: _ModelIdentity,
@@ -1283,7 +1380,12 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="qwen.edit",
                 min_images=1,
                 max_images=1,
-                supports_outpaint=True,
+                **_outpaint_capability_kwargs(
+                    supports_outpaint=True,
+                    fill_modes=QWEN_OUTPAINT_FILL_MODES,
+                    default_fill_mode=QWEN_OUTPAINT_DEFAULT_FILL_MODE,
+                    supports_fill_option=False,
+                ),
                 **_lora_capability_kwargs(identity=identity, capability_id="qwen.outpaint", supports_lora=True),
                 **i2i_canvas,
             ),
@@ -1495,7 +1597,14 @@ def _flux2_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                 handler_id="flux2.edit",
                 min_images=1,
                 max_images=1,
-                supports_outpaint=is_base_model,
+                **_outpaint_capability_kwargs(
+                    supports_outpaint=is_base_model,
+                    fill_modes=FLUX2_OUTPAINT_FILL_MODES,
+                    default_fill_mode=FLUX2_OUTPAINT_DEFAULT_FILL_MODE,
+                    supports_fill_option=True,
+                    auto_edge_fill_max_stretch=FLUX2_OUTPAINT_AUTO_EDGE_FILL_MAX_STRETCH,
+                    recommended_lora=FLUX2_OUTPAINT_RECOMMENDED_LORA,
+                ),
                 supports_reframe=not is_base_model,
                 **_lora_capability_kwargs(
                     identity=identity,

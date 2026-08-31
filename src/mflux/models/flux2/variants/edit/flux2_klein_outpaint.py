@@ -143,6 +143,15 @@ class Flux2KleinOutpaint(nn.Module):
                     sigmas=config.scheduler.sigmas,
                     timestep=t,
                 ).astype(latents.dtype)
+                # Latent-space lock only. It cannot preserve the source pixel-exactly and no
+                # amount of mask tightening will change that: Flux2's VAE decoder couples the
+                # whole canvas globally (GroupNorm in every resnet block plus the mid-block
+                # self-attention), so changing the padded region moves the source region too.
+                # Measured on the 768x766 / 928x1536 case with a perfect hard binary lock and
+                # clean latents held exactly: source-region drift 10.64 mean-abs (0-255), and
+                # 4.7-7.8 even in the centre 128x128, hundreds of pixels from any seam - while
+                # the VAE encode/decode round-trip on its own costs only 1.35. Pixel-space
+                # restoration after decode is the only route to a preserved source.
                 latents = ((1.0 - editable_mask) * preserved_latents + editable_mask * latents).astype(latents.dtype)
                 ctx.in_loop(t, latents)
                 mx.eval(latents)

@@ -21,7 +21,7 @@ edit should I expect from each mode?" For the current Qwen-specific route map, u
 | Use an edge map or pose guide to fix the layout while generating from text | structured control | Use a route that advertises `supports_control_image=true` and pass `--controlnet-image-path`. This is not the same as source-image edit. |
 | Use one image for structure and another for style, material, or lighting | `multi-reference` | The first image anchors geometry; later images contribute additional references. |
 | Reveal more of the scene around the source image | `generative reframe` | The model generates a wider view. It may redraw parts of the source image while composing the larger scene. |
-| Extend the canvas beyond the crop while trying to keep the source region stable | `outpaint` | The model fills new space around the source image. This is the closest MLX-Gen route to source-preserving extension, but it is still generative. |
+| Extend the canvas beyond the crop while trying to keep the source region stable | `outpaint` | The model fills new space around the source image, starting from a conditioning canvas you can select on FLUX.2 Klein base routes. This is the closest MLX-Gen route to source-preserving extension, but it is still generative. |
 
 Use `mlxgen capabilities --model <model>` before a long run. Not every model supports every mode.
 
@@ -283,8 +283,8 @@ scene.
 Use outpaint when the main goal is extending beyond the crop while keeping the existing source
 region as stable as the backend allows.
 
-Outpaint is still generative, but it is more source-preserving than reframe. MLX-Gen currently
-uses backend-specific strategies:
+Outpaint is still generative, but it is more source-preserving than reframe. MLX-Gen uses
+backend-specific strategies:
 
 - Qwen Image Edit variants use a larger conditioning canvas and adaptive source restoration.
 - FLUX.2 Klein base variants use source-locked denoising with a narrow latent transition band.
@@ -301,6 +301,10 @@ This mode is not an exact guarantee of:
 - native masked fill/inpaint semantics;
 - zero reinterpretation at the source boundary.
 
+The source region travels through a VAE encode/decode round trip rather than being pasted back, so
+it is reproduced, not preserved bit-for-bit. When a region must stay untouched, use masked editing
+(`--mask-path`, see [Masked editing](masked-editing.md)).
+
 Example:
 
 ```sh
@@ -315,8 +319,53 @@ mlxgen generate \
 ```
 
 Expected result: the newly added space is generated around the source crop. The center should stay
-more stable than in reframe, especially on the current FLUX.2 base route, but the result is still
-not a literal source-paste guarantee.
+more stable than in reframe, especially on the FLUX.2 base route, but the result is still not a
+literal source-paste guarantee.
+
+### The Conditioning Canvas
+
+Outpaint pastes your source onto a larger canvas and asks the model to complete the added area, so
+what fills that area before denoising decides much of what you get back. On FLUX.2 Klein base routes
+you choose it with `--outpaint-fill`:
+
+| Mode | What it paints | What to expect |
+| --- | --- | --- |
+| `auto` (default) | Picks one of the modes below from the padding depth and the loaded adapter, and prints which and why. | A sensible canvas without thinking about it. |
+| `edge` | Stretches the source border strip outward. | A continuation of the texture already at the border. Deeper than that strip covers, it reads as directional streaks. |
+| `neutral` | A flat per-side border color sampled from the source. | Nothing for the model to continue, so it generates new subject matter, without a hard color step at the seam. |
+| `solid` | One flat color, from `--outpaint-fill-color` (`R,G,B` or `#rrggbb`). | An exact canvas color, for example the one an adapter was trained on. |
+| `blur` | A blurred, scaled copy of the source. | A soft background suggestion rather than a blank one. |
+
+Two practical rules follow from that:
+
+- **Match the fill to the padding depth.** Edge fill continues a texture; it does not invent one.
+  For a small border it is the better canvas. For a lot of new space — revealing a full body from a
+  head-and-shoulders portrait, say — a blank canvas plus a descriptive prompt is what generates new
+  subject matter, and `auto` switches to it on its own.
+- **Extend in steps rather than in one jump.** Outpaint cost scales with the expanded canvas and
+  attention cost grows faster than canvas area, so two moderate passes are cheaper and generally
+  better than one large pass. This is also the route on Qwen Image Edit, which always builds an
+  edge-extended canvas and takes no fill option.
+
+Naming the mode explicitly:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-base-4b-8bit \
+  --image portrait.png \
+  --outpaint-padding "0%,10%,100%,10%" \
+  --outpaint-fill neutral \
+  --prompt "Extend this portrait downward to reveal the lower part of the body: the same subject in the same clothing, same lighting, same background." \
+  --steps 20 \
+  --guidance 4 \
+  --seed 1234 \
+  --output extended.png
+```
+
+`--outpaint-padding` computes the output size from the source and the padding, so do not pass
+`--width`, `--height`, or `--canvas-policy` with it. For the reasoning behind `auto`, the printed
+run line, and the published capability contract, see
+[Reframe and Outpaint](reframe-outpaint.md#the-conditioning-canvas).
 
 ## Practical Advice
 
@@ -326,6 +375,8 @@ not a literal source-paste guarantee.
 - Use `multi-reference` when one image is not enough to describe the target.
 - Use `reframe` when you want a wider composition and accept generative recomposition.
 - Use `outpaint` when you want extension around the crop and source stability matters.
+- Use `--outpaint-fill` to match the conditioning canvas to how much space you are adding: edge fill
+  for a small border, a blank canvas for a lot of new subject matter.
 
 For exact route support, use `mlxgen capabilities --model <model>`.
 For visual release evidence on exact models and packages, use

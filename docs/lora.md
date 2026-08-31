@@ -205,8 +205,6 @@ mlxgen generate \
   --image docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png \
   --outpaint-padding "5%,80%,5%,60%" \
   --prompt "Fill the green spaces according to the image" \
-  --width 1040 \
-  --height 272 \
   --steps 20 \
   --guidance 4 \
   --seed 8612 \
@@ -215,9 +213,12 @@ mlxgen generate \
   --output flux2_base4b_q8_outpaint_with_lora.png
 ```
 
-The base route already supports outpaint without a LoRA. This exact validated row exists to prove
-the dedicated outpaint adapter on the same green-canvas route and seed, not to claim that
-`flux2.outpaint` needs a LoRA to function at all.
+`flux2.outpaint` runs without a LoRA. This row exists to prove the dedicated outpaint adapter on
+the same green-canvas route and seed. The adapter is the recommended configuration for the route
+and is published as `outpaint_recommended_lora` on the capability record: it improves results
+generally, and most when the padding adds a large amount of new space. When it is loaded,
+`--outpaint-fill auto` paints the pure-green canvas the adapter is trained on. See
+[Reframe and Outpaint](reframe-outpaint.md) for the conditioning-canvas options.
 
 ## Lightning Caveat For Qwen
 

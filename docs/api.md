@@ -66,8 +66,10 @@ mlxgen capabilities --model flux2-klein-4b
 ```
 
 The JSON includes each route-supported public task, internal mode, image count, route handler, and
-option support. Capabilities schema 8 adds `min_reference_images` and `max_reference_images` so
-applications can keep semantic references separate from primary `--image` inputs. Route support
+option support. The payload carries `schema_version` 10. It reports `min_reference_images` and
+`max_reference_images` so applications can keep semantic references separate from primary `--image`
+inputs, and the outpaint conditioning-canvas contract described in
+[Outpaint Conditioning Canvas](#outpaint-conditioning-canvas). Route support
 means MLX-Gen knows how to dispatch and validate options; it is not a claim that a model/package
 passed visual release QA. Applications can use the same contract from Python through
 `get_model_capabilities(...)` and `resolve_generation_plan(...)`. For custom
@@ -295,7 +297,7 @@ For a plain-language guide to what each mode is good at, see
 | Localized masked edit / inpaint | `edit-reference` with mask support | one image + one mask | pass `--mask-path` on a model that supports masked edit or inpaint | No |
 | Reference composition from several images | `multi-reference` | two or more images | repeat `--image` on a model that supports multi-reference I2I; or pass `--i2i-mode multi-reference` | No |
 | Generative reframe / zoom-out | `edit-reference` with reframe support | one image | pass `--reframe-padding` on a model whose capability has `supports_reframe=true` | No |
-| Backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true` | No |
+| Backend-specific outpaint | `edit-reference` with outpaint support | one image | pass `--outpaint-padding` on a model whose capability has `supports_outpaint=true`; add `--outpaint-fill` where the capability has `supports_outpaint_fill=true` | No |
 
 ### Structured Control Images
 
@@ -491,11 +493,85 @@ proof for FLUX.2 Klein base `4B/9B` is documented in
 [Reframe and Outpaint](reframe-outpaint.md).
 
 This is not the same as a native fill/inpaint pipeline that receives an explicit diffusion mask.
-It is not an exact pixel-lock guarantee. MLX-Gen still keeps lower-level FLUX.1 Fill support
-separate from the current unified edit-reference canvas route. Z-Image, ERNIE, FIBO, base Qwen
-Image, Qwen Image 2512, distilled FLUX.2 Klein, latent I2I routes, video routes, and SeedVR2
-reject `--outpaint-padding` before loading weights. Base FLUX.2 Klein source models now pass a
-published starship proof set; prepared base q8/q4 package proof is still pending.
+It is not an exact pixel-lock guarantee: the source region travels through a VAE encode/decode round
+trip, so it is reproduced rather than preserved bit-for-bit. Use masked editing (`--mask-path`, see
+[Masked editing](masked-editing.md)) when a region must stay untouched. MLX-Gen keeps lower-level
+FLUX.1 Fill support separate from the unified edit-reference canvas route. Z-Image, ERNIE, FIBO,
+base Qwen Image, Qwen Image 2512, distilled FLUX.2 Klein, latent I2I routes, video routes, and
+SeedVR2 reject `--outpaint-padding` before loading weights. Base FLUX.2 Klein source models carry a
+published starship proof set; prepared base q8/q4 package proof is pending.
+
+`--outpaint-padding` computes `--width` and `--height` from the source image and the padding and
+runs the canvas at `exact-resize`, so it rejects `--width`, `--height`, and `--canvas-policy`. It
+also cannot be combined with `--reframe-padding` or `--mask-path`.
+
+### Outpaint Conditioning Canvas
+
+Outpaint pastes the source onto a larger canvas and asks the model to complete the added area. What
+fills that area before denoising is selectable on routes that advertise
+`supports_outpaint_fill=true`, which is the FLUX.2 Klein base outpaint route. The Qwen edit backend
+takes no fill option and always builds an edge-extended canvas.
+
+| Option | Behavior |
+| --- | --- |
+| `--outpaint-fill` | How `--outpaint-padding` fills the expanded conditioning canvas: `auto` (default), `edge`, `neutral`, `solid`, or `blur`. `edge` stretches the source border strip outward, which continues an existing texture across the padding. `neutral` paints a flat per-side border color sampled from the source, which leaves nothing to continue so the model generates new subject matter, with no hard color step at the seam. `solid` paints one flat color. `blur` paints a blurred, scaled copy of the source. `auto` keeps `edge` while every padded side stays within the depth the border strip covers (the edge-fill reach), switches to `neutral` past that, and switches to `solid` green when a green-border outpaint adapter is loaded, because those adapters are trained to paint into a pure-green canvas. Requires `--outpaint-padding`. Recorded in metadata and replayed by `--config-from-metadata`. |
+| `--outpaint-fill-color` | The color for `--outpaint-fill solid`, as `R,G,B` (0-255 per channel) or `#rrggbb`. `edge`, `neutral`, and `blur` derive their canvas from the source and ignore it. Without it, `solid` uses `0,255,0` when a green-border outpaint adapter is loaded and the source's mean border color otherwise. Requires `--outpaint-padding`. Recorded in metadata and replayed by `--config-from-metadata`. |
+
+Every outpaint run prints the resolved canvas to stderr before denoising, and names the reason when
+`auto` chose the mode:
+
+```text
+Outpaint: fill=neutral, canvas 928x1536 from source 768x766, padding top=0 right=76 bottom=766 left=76.
+Outpaint: --outpaint-fill auto selected neutral because the deepest padding is bottom 766px (100% of
+the source height), 2.0x the 384px edge-fill reach; a blank canvas makes the model generate new
+subject matter instead of smearing the source border.
+```
+
+Applications can read the same contract as JSON without running a job. Capability rows carry:
+
+| Field | Meaning |
+| --- | --- |
+| `supports_outpaint_fill` | Whether the route accepts `--outpaint-fill` and `--outpaint-fill-color`. `false` with a single-entry `outpaint_fill_modes` means the fill algorithm is fixed. |
+| `outpaint_fill_modes` | The fill modes the route accepts. Empty when `supports_outpaint` is `false`. |
+| `outpaint_default_fill_mode` | The mode that runs when `--outpaint-fill` is omitted. |
+| `outpaint_auto_edge_fill_max_stretch` | With `outpaint_default_fill_mode` `auto`: the largest stretch edge fill is allowed to apply to the sampled border strip. Padding past that switches `auto` to a blank canvas. |
+| `outpaint_recommended_lora` | The adapter measured to give the best outpaint results on the route, or `null`. Optional, not required: the route runs without it. |
+| `outpaint_validated_padding`, `outpaint_validated_fill_mode`, `outpaint_validated_max_canvas_pixels` | The release-validation envelope: the padding, fill mode, and canvas size the published proof runs used. Outside it, outpaint is supported but unvalidated. |
+
+For example, `AbstractFramework/flux.2-klein-base-4b-8bit` reports `flux2.outpaint` with
+`supports_outpaint_fill: true`, `outpaint_fill_modes: ["auto", "edge", "neutral", "solid", "blur"]`,
+`outpaint_default_fill_mode: "auto"`, `outpaint_auto_edge_fill_max_stretch: 12.0`, and
+`outpaint_recommended_lora: "fal/flux-2-klein-4B-outpaint-lora"`.
+`AbstractFramework/qwen-image-edit-2511-8bit` reports `qwen.outpaint` with
+`supports_outpaint_fill: false`, `outpaint_fill_modes: ["edge"]`, and
+`outpaint_default_fill_mode: "edge"`. Both publish the same validated envelope:
+`outpaint_validated_padding: "5%,80%,5%,60%"`, `outpaint_validated_fill_mode: "edge"`, and
+`outpaint_validated_max_canvas_pixels: 282880`.
+
+Generated metadata records the resolved canvas next to `outpaint_padding`, so
+`--config-from-metadata` replays the resolved fill instead of re-running `auto`: `outpaint_fill`,
+`outpaint_fill_color`, `outpaint_fill_requested`, `outpaint_fill_reason`,
+`outpaint_edge_fill_reach_px`, and `outpaint_edge_fill_overreach`.
+
+Example, naming the fill explicitly:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-base-4b-8bit \
+  --image portrait.png \
+  --outpaint-padding "0%,10%,100%,10%" \
+  --outpaint-fill neutral \
+  --prompt "Extend this portrait downward to reveal the lower part of the body: the same subject in the same clothing, same lighting, same background." \
+  --steps 20 \
+  --guidance 4 \
+  --seed 1234 \
+  --output extended.png
+```
+
+See [Reframe and Outpaint](reframe-outpaint.md) for padding guidance, the published proof, and the
+recommended adapter, and
+[Outpainted Area Comes Back As Streaks Instead Of New Content](troubleshooting.md#outpainted-area-comes-back-as-streaks-instead-of-new-content)
+when the added area returns as stretched border texture.
 
 ### Negative Prompts
 
@@ -756,9 +832,9 @@ and the source duration plus requested fps may resolve fewer `4n+1` frames. Use
 | `--guidance-2` | Optional low-noise guidance scale for Wan A14B `transformer_2`. If both guidance flags are omitted, model-specific two-stage defaults are used. If `--guidance` is set and `--guidance-2` is omitted, the low-noise stage follows `--guidance`. It is rejected for single-transformer Wan models. |
 | `--flow-shift` | Flow-matching scheduler shift. Defaults to the selected Wan model config. TI2V-5B and Bernini default to `5.0`; A14B defaults to `3.0`. For new 480p-class TI2V-5B checks such as `832x480`, pass `--flow-shift 3`. Python callers use `flow_shift=...`. |
 | `--last-image` | Wan A14B image-to-video only (experimental on Wan 2.2): a second anchor image the clip should END near, alongside the `--image-path` first frame (diffusers `last_image` first+last bracket conditioning). The last image maps through the same resolved canvas and `--resize-mode` as the first frame — match their aspect ratios. Requires `--image-path`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video. Recorded in metadata (`last_image_path`) and replayed by `--config-from-metadata`; advertised as `supports_last_image` on the `wan.first-frame` capability row. Official first+last training exists for Wan 2.1 (FLF2V); on Wan 2.2 A14B the shipped probe measured end-frame adherence at MAE 4.6/255 vs the target (baseline without the flag: 56.1) with no mid-clip artifacts on one Lightning 4-step storyboard pair — treat broader recipes as unverified (backlog item 0097 records the bounds). |
-| `--context-frames` | Wan A14B image-to-video only (EXPERIMENTAL zero-shot): the ordered frames that FOLLOW `--image-path` in the motion being continued. The conditioned head becomes `[--image-path, *--context-frames]`, so a continuation clip inherits the predecessor's real momentum instead of restarting from one frozen frame (the multi-frame handover used by SkyReels-V2/SVI-class pipelines). Pass 4, 8, or 12 frames — the head must fill whole 4x VAE latent groups (5, 9, or 13 conditioned frames); passing the start frame here too is the common misuse and fails on that count check. Requires `--image-path`; needs `--frames >= head + 4`; composes with `--last-image`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video — CLI rejects before weight load. All frames map through the same canvas and `--resize-mode` as the first frame. Recorded in metadata (`context_image_paths`), replayed by `--config-from-metadata`, advertised as `supports_context_frames` on the `wan.first-frame` capability row. The field was introduced in schema 6; the current capabilities payload is schema 9. Measured zero-shot on a Lightning 4-step continuation pair (backlog 0102): the K=5 head carried the source clip's motion speed (seam magnitude ratio 0.90 vs the single-frame baseline's 1.90 = double-speed restart) with a mild ~2-frame flare/exposure step at the conditioned-to-free boundary (luma delta ~3.2/255 vs the source clip's own max 1.15; visually mild, structurally clean). Treat as a storyboard continue-seam tool, not a validated general feature. |
+| `--context-frames` | Wan A14B image-to-video only (EXPERIMENTAL zero-shot): the ordered frames that FOLLOW `--image-path` in the motion being continued. The conditioned head becomes `[--image-path, *--context-frames]`, so a continuation clip inherits the predecessor's real momentum instead of restarting from one frozen frame (the multi-frame handover used by SkyReels-V2/SVI-class pipelines). Pass 4, 8, or 12 frames — the head must fill whole 4x VAE latent groups (5, 9, or 13 conditioned frames); passing the start frame here too is the common misuse and fails on that count check. Requires `--image-path`; needs `--frames >= head + 4`; composes with `--last-image`; rejected on TI2V-5B (`expand_timesteps`), Wan VACE, and text/video-to-video — CLI rejects before weight load. All frames map through the same canvas and `--resize-mode` as the first frame. Recorded in metadata (`context_image_paths`), replayed by `--config-from-metadata`, advertised as `supports_context_frames` on the `wan.first-frame` capability row. The field was introduced in schema 6; the current capabilities payload is schema 10. Measured zero-shot on a Lightning 4-step continuation pair (backlog 0102): the K=5 head carried the source clip's motion speed (seam magnitude ratio 0.90 vs the single-frame baseline's 1.90 = double-speed restart) with a mild ~2-frame flare/exposure step at the conditioned-to-free boundary (luma delta ~3.2/255 vs the source clip's own max 1.15; visually mild, structurally clean). Treat as a storyboard continue-seam tool, not a validated general feature. |
 | `--context-noise` | Optional noise on the `--context-frames` conditioned head, `0-1000` timestep-like scale (SkyReels `addnoise_condition` precedent, ~20 is the community default). Applied in latent space to the head only, deterministic per seed, recorded in metadata (`context_noise`) and replayed. In the shipped zero-shot probe it did not reduce the boundary flare (backlog 0102); it exists so adapter recipes (SVI-class) that expect conditioning noise can be reproduced exactly. Requires `--context-frames`. |
-| `--svi-anchor-image` | Wan A14B image-to-video only (EXPERIMENTAL): SVI 2.0 Pro chain conditioning (Stable Video Infinity, ICLR'26, trained for Wan 2.2 A14B i2v). One persistent anchor image is re-injected into EVERY clip of a chain as `[anchor_latent, motion_latent?, zero-latents]` — identity from the anchor, momentum from the previous clip's exported latent, TRUE zero-latent padding (not the stock zero-frame VAE encode; the conventions are mutually unintelligible, which is why the mode and the LoRA pair gate each other loudly in both directions). Replaces `--image-path`; conflicts with `--image-path`, `--last-image`, `--context-frames`, `--video-path`; rejected on TI2V-5B and VACE before weight load. Requires `--svi-lora-high`/`--svi-lora-low`. Every SVI run exports `<output>.svi_latent.safetensors` for the next clip and records `svi_*` metadata including `svi_assembly_trim_frames` (drop that many frames of every CONTINUATION clip at assembly: `1 + 4 x count`). Use a unique seed per clip. Advertised as `supports_svi` on the `wan.first-frame` capability row. The field was introduced in schema 7; the current capabilities payload is schema 9. |
+| `--svi-anchor-image` | Wan A14B image-to-video only (EXPERIMENTAL): SVI 2.0 Pro chain conditioning (Stable Video Infinity, ICLR'26, trained for Wan 2.2 A14B i2v). One persistent anchor image is re-injected into EVERY clip of a chain as `[anchor_latent, motion_latent?, zero-latents]` — identity from the anchor, momentum from the previous clip's exported latent, TRUE zero-latent padding (not the stock zero-frame VAE encode; the conventions are mutually unintelligible, which is why the mode and the LoRA pair gate each other loudly in both directions). Replaces `--image-path`; conflicts with `--image-path`, `--last-image`, `--context-frames`, `--video-path`; rejected on TI2V-5B and VACE before weight load. Requires `--svi-lora-high`/`--svi-lora-low`. Every SVI run exports `<output>.svi_latent.safetensors` for the next clip and records `svi_*` metadata including `svi_assembly_trim_frames` (drop that many frames of every CONTINUATION clip at assembly: `1 + 4 x count`). Use a unique seed per clip. Advertised as `supports_svi` on the `wan.first-frame` capability row. The field was introduced in schema 7; the current capabilities payload is schema 10. |
 | `--svi-motion-latent` | The `*.svi_latent.safetensors` exported by the PREVIOUS clip's SVI run: its trailing latent entries hand the motion over losslessly (never a pixel round-trip). Omit on the first clip of a chain. The chain must keep one canvas end to end (mismatch rejected at load). `--svi-motion-latent-count` (default `1`, the reference recipe) selects how many trailing entries carry over. Requires `--svi-anchor-image`. Continuation segments beyond 65 frames print a trained-length advisory (community-measured color shifts). |
 | `--svi-lora-high`, `--svi-lora-low` | The SVI 2.0 Pro error-recycling LoRA pair (high/low-noise experts; official weights `vita-video-gen/svi-model:version-2.0/SVI_Wan2.2-I2V-A14B_{high,low}_noise_lora_v2.0_pro.safetensors`). Loaded at fixed scale 1.0 under a STRICT key-match contract: any unmatched key aborts the load (`unmatched_key_count == 0` per file; verified 800/800 on the official pack) — a partially applied SVI LoRA silently corrupts the convention. Both-or-neither; requires `--svi-anchor-image` (the pack corrupts non-SVI runs and is rejected for them); re-fused automatically on per-item high-noise expert reloads. Composes with the Lightning 4-step pair through the ordinary `--lora-paths`/`--lora-scales`: the author-documented coexistence sets lightx2v HIGH scale to 0.5-0.6 (1.0 weakens dynamics/text-following and snaps back to the anchor) and keeps lightx2v LOW at 1.0. |
 | `--video`, `--video-path` | One source video for the public Wan video-to-video routes. The SDEdit-style route (with `--video-strength`, optionally a mask) is limited to `Wan2.2-T2V-A14B`. Wan VACE uses learned control conditioning. Bernini uses the video as an independently VAE-encoded packed source, selects V2V without references or RV2V with them, and has no warm start. TI2V-5B and I2V-A14B reject source-video input. |
