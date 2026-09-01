@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-09-01
+
+Outpaint on every edit-reference route, and a Python API for it.
+
+### Added
+
+- **Strict outpaint on distilled FLUX.2 Klein 4B and 9B.** Those models now publish
+  `flux2.outpaint` alongside `flux2.reframe` and run canvas expansion through the same
+  source-locked denoising as the base models, at guidance 1.0 (the weights are step-distilled and
+  do not take CFG; the route resolves that default for you). Measured on the published starship
+  source at `5%,80%,5%,60%`: distilled 4B q8 completes in 54.6 s and distilled 9B q8 in 80.6 s on
+  an Apple M5 Max, 40-core GPU, 128 GB unified memory. Evidence:
+  `flux2_klein_outpaint_latent_lock_2026_09_01`.
+- **`mflux.outpaint`, a model-agnostic outpaint API.** `run_outpaint(...)` performs an outpaint
+  end to end from a loaded runtime; `prepare_outpaint(...)` returns an inspectable session
+  (resolved fill mode, canvas geometry, preservation strategy) for applications that own their own
+  seed loop; `prepare_reframe(...)` covers the reframe canvas. The conditioning-canvas keywords,
+  the fill policy, the preservation strategy and the recorded metadata all follow the selected
+  route, so switching model families is a change of model name. Exported lazily from `mflux` and
+  `mlxgen`, and documented in [Python Integration](docs/python-integration.md).
+- **`post_process` on `generate_outputs`/`generate_output`** runs a callable on each artifact after
+  generation and before save, so a workflow with a post-decode step reuses the runtime's seed loop,
+  progress events and save semantics instead of reimplementing them.
+- **`outpaint_preservation` capability field** states how a route keeps the source region
+  (`latent-locked-transition-band-no-postblend` or `adaptive-content-aware-source-blend`), so an
+  application can tell what to promise about the original crop before starting a job. Capability
+  `schema_version` is now `11`.
+- **An outpaint model matrix** in [Reframe And Outpaint](docs/reframe-outpaint.md): every supported
+  route on one source and one padding value, with the full prompt, per-route timings and
+  source-drift measurements, plus a reproducible command log.
+
+### Changed
+
+- **One implementation of the outpaint conditioning canvas.** The fill policy, the fail-closed
+  guard, the resolved-canvas notice and the metadata writer are shared by every backend and by the
+  Python API. Qwen outpaint runs now print the resolved canvas and record the same
+  `outpaint_fill*` metadata as the FLUX.2 routes; the canvas those runs produce is unchanged.
+- **`--outpaint-fill` and `--outpaint-fill-color` are validated against the route** before
+  dispatch. Asking a fixed-canvas route such as `qwen.outpaint` for a different fill mode now
+  reports which canvas that route uses instead of an argument-parser error.
+- **`outpaint_recommended_lora` and the `outpaint_validated_*` fields are published per route.**
+  A route advertises an adapter recommendation or a validated envelope only where evidence for
+  that route exists.
+
 ## [0.31.0] - 2026-08-31
 
 Outpaint conditioning-canvas contract.

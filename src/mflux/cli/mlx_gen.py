@@ -4,7 +4,7 @@ import shlex
 import shutil
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from mflux.cli.parser.parsers import CommandLineParser
@@ -42,6 +42,10 @@ class _Route:
     requires_image: bool
     model_override: str | None = None
     control_model: str | None = None
+    # Whether the selected route's capability row publishes supports_outpaint_fill. Only those
+    # backends declare --outpaint-fill/--outpaint-fill-color; a fixed-canvas route is given the
+    # flags' one legal value or nothing at all, so they are dropped rather than forwarded.
+    accepts_outpaint_fill: bool = False
 
 
 def main() -> None:
@@ -91,7 +95,7 @@ def _resolve_invocation(argv: list[str]) -> RouterInvocation:
     if route.requires_image and not images:
         _parser().error(f"{route.target_name} requires --image or --images.")
     reframe_argv = _reframe_forwarded_argv(args=args, images=images, forwarded=forwarded)
-    outpaint_argv = _outpaint_forwarded_argv(args=args, images=images, forwarded=forwarded)
+    outpaint_argv = _outpaint_forwarded_argv(args=args, images=images, forwarded=forwarded, route=route)
 
     normalized_argv = [route.target_name]
     # Consumed options are re-emitted from the ROUTER_OPTIONS descriptor table so a consumed flag
@@ -920,9 +924,14 @@ def _reframe_forwarded_argv(args: argparse.Namespace, images: list[str], forward
     return ["--reframe-padding", args.reframe_padding]
 
 
-def _outpaint_forwarded_argv(args: argparse.Namespace, images: list[str], forwarded: list[str]) -> list[str]:
+def _outpaint_forwarded_argv(
+    args: argparse.Namespace, images: list[str], forwarded: list[str], route: _Route
+) -> list[str]:
     if not args.has_outpaint:
+        # The fill options configure the outpaint canvas and are meaningless without it;
+        # _validate_outpaint_fill_options has already rejected them when they were passed.
         return []
+    fill_argv = _outpaint_fill_forwarded_argv(args) if route.accepts_outpaint_fill else []
     _validate_padding_value(args.outpaint_padding, option_name="--outpaint-padding")
     if len(images) != 1:
         _parser().error("--outpaint-padding requires exactly one --image or --image-path.")
@@ -933,7 +942,16 @@ def _outpaint_forwarded_argv(args: argparse.Namespace, images: list[str], forwar
     if _option_was_provided(forwarded, "--canvas-policy"):
         _parser().error("--outpaint-padding uses --canvas-policy exact-resize; do not pass --canvas-policy.")
 
-    return ["--outpaint-padding", args.outpaint_padding]
+    return ["--outpaint-padding", args.outpaint_padding, *fill_argv]
+
+
+def _outpaint_fill_forwarded_argv(args: argparse.Namespace) -> list[str]:
+    argv: list[str] = []
+    if args.outpaint_fill is not None:
+        argv.extend(["--outpaint-fill", str(args.outpaint_fill)])
+    if args.outpaint_fill_color is not None:
+        argv.extend(["--outpaint-fill-color", str(args.outpaint_fill_color)])
+    return argv
 
 
 def _validate_padding_value(padding_value: str | None, *, option_name: str) -> None:
@@ -991,15 +1009,18 @@ def _resolve_route(
             f"does not exist on the resolved {plan.family} route."
         )
     _validate_controlnet_route_options(args, plan=plan)
+    capability = _capability_row(args=args, model_config=model_config, capability_id=plan.capability_id)
+    _validate_outpaint_fill_options(args, capability=capability)
     _validate_lora_compatibility(args=args, model_config=model_config)
     _validate_family_override(args, model_config=model_config, plan=plan)
-    return _route_for_plan(
+    route = _route_for_plan(
         plan.handler_id,
         has_image=has_images,
         has_video=has_videos,
         model_override=plan.model_override,
         control_model=plan.control_model,
     )
+    return replace(route, accepts_outpaint_fill=capability is not None and capability.supports_outpaint_fill)
 
 
 def _validate_svi_route_request(args: argparse.Namespace, *, model_config: ModelConfig | None) -> None:
@@ -1036,6 +1057,57 @@ def _validate_controlnet_route_options(args: argparse.Namespace, *, plan) -> Non
 
 def _plan_accepts_explicit_controlnet_options(plan) -> bool:
     return plan.capability_id in {"qwen.control", "qwen.control-inpaint"}
+
+
+def _validate_outpaint_fill_options(args: argparse.Namespace, *, capability) -> None:
+    """Reject --outpaint-fill / --outpaint-fill-color the selected route cannot honour.
+
+    `mlxgen generate` declares both options once for every model, so whether they mean anything
+    is a property of the resolved route, not of the parser. Without this check the flags reach a
+    backend that never declared them and argparse answers with "unrecognized arguments" under a
+    program name the caller never typed.
+    """
+    if args.outpaint_fill is None and args.outpaint_fill_color is None:
+        return
+    if not args.has_outpaint:
+        _parser().error(
+            "--outpaint-fill and --outpaint-fill-color configure the --outpaint-padding conditioning "
+            "canvas. Pass --outpaint-padding, or drop these options."
+        )
+    if capability is None:
+        return
+
+    from mflux.outpaint import OutpaintError, check_outpaint_fill_options, outpaint_contract
+
+    try:
+        check_outpaint_fill_options(
+            contract=outpaint_contract(capability=capability),
+            fill=args.outpaint_fill,
+            fill_color_requested=args.outpaint_fill_color is not None,
+        )
+    except OutpaintError as exc:
+        _parser().error(str(exc))
+
+
+def _capability_row(
+    args: argparse.Namespace,
+    *,
+    model_config: ModelConfig | None,
+    capability_id: str,
+):
+    try:
+        capabilities = get_model_capabilities(
+            model=args.model,
+            model_config=model_config,
+            family=args.family,
+            base_model=args.base_model,
+        )
+    except TaskInferenceError:
+        return None
+    for capability in capabilities.capabilities:
+        if capability.id == capability_id:
+            return capability
+    return None
 
 
 def _validate_lora_compatibility(args: argparse.Namespace, model_config: ModelConfig | None) -> None:

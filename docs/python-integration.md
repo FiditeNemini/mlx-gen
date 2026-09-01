@@ -249,6 +249,108 @@ except TaskInferenceError as exc:
     print(exc)
 ```
 
+## Outpaint And Reframe
+
+Outpaint is a pipeline, not a single call: a conditioning canvas is built from the source and the
+requested padding, the model denoises that canvas, and the route's preservation strategy decides
+what happens to the source region afterwards. `run_outpaint(...)` runs the whole pipeline on a
+loaded runtime, so a host gets the same canvas, the same fill decision, and the same metadata a CLI
+run produces.
+
+```python
+from mlxgen import load_generation_model, run_outpaint
+
+loaded = load_generation_model(
+    model="AbstractFramework/flux.2-klein-base-4b-8bit",
+    image_count=1,
+    has_outpaint=True,
+)
+results = run_outpaint(
+    loaded=loaded,
+    source_image="portrait.png",  # a 768x766 source, for the printed value below
+    padding="0%,10%,100%,10%",
+    seeds=[1234],
+    prompt="Extend this portrait downward to reveal the lower part of the body.",
+    guidance=4.0,
+    num_inference_steps=20,
+    output="extended.png",
+)
+
+print(results[0].saved_path.name)
+# extended.png
+print(results[0].artifact.extra_metadata["outpaint_fill"])
+# neutral
+```
+
+Swap the model name to move routes. Distilled FLUX.2 Klein 4B/9B run the same latent-locked
+outpaint route as the base models and take `guidance=1.0`; Qwen Image Edit variants run
+expanded-canvas generation with adaptive source restoration. Omit `guidance` and each model applies
+its own default.
+
+The route decides the fill contract. Pass `fill="edge" | "neutral" | "solid" | "blur"` (and
+`fill_color=(r, g, b)` for `solid`) to name the canvas yourself on a route whose capability row has
+`supports_outpaint_fill=true`. A route with a fixed canvas accepts only the mode it publishes as
+`outpaint_default_fill_mode` and raises `OutpaintError` for anything else, naming the route.
+`outpaint_contract_for_model(model=...)` answers both questions without loading weights: it returns
+the route's `fill_modes`, `default_fill_mode`, `supports_fill_option`, `recommended_lora`, and
+`preservation`.
+
+When you own the seed loop, the save step, or want to inspect the decision before spending a
+denoise, build the session yourself. `prepare_outpaint(...)` loads no model weights: it resolves the
+route contract, chooses the fill, builds the canvas, and hands back the generation geometry.
+
+```python
+from mlxgen import load_generation_model, prepare_outpaint
+
+model_name = "AbstractFramework/flux.2-klein-base-4b-8bit"
+
+with prepare_outpaint(
+    source_image="portrait.png",  # a 768x766 source, for the printed values below
+    padding="0%,10%,100%,10%",
+    model=model_name,
+) as session:
+    print(session.fill_plan.mode, session.width, session.height)
+    # neutral 928 1536
+    print(session.notice)
+    for warning in session.warnings:
+        print(warning)
+
+    loaded = load_generation_model(model=model_name, image_count=1, has_outpaint=True)
+    generated = session.generate(
+        loaded.model,
+        seed=1234,
+        prompt="Extend this portrait downward to reveal the lower part of the body.",
+        guidance=4.0,
+        num_inference_steps=20,
+    )
+    generated.save("extended.png")
+```
+
+Building the session before loading weights is the point of the split: `session.fill_plan` and
+`session.width`/`session.height` are available for a confirmation step, and an unsupported request
+raises `OutpaintError` before any model is read from disk.
+
+`session.generate(...)` supplies the conditioning keywords the route expects and finalizes the
+artifact; everything else is yours. Identify the route with `model=`, `model_config=`, a
+`capability=` row from `get_model_capabilities(...)`, or a `contract=` from
+`outpaint_contract_for_model(...)`. The session owns a temporary workspace for the canvas, so use it
+as a context manager or call `session.close()`, and pass `workspace=...` when you want to keep the
+canvas.
+
+Generative reframe uses the same expanded canvas without a fill contract or source preservation:
+`prepare_reframe(source_image=..., padding=...)` returns a session with the same `width`, `height`,
+`canvas_policy`, `generate(...)`, and `finalize(...)` surface.
+
+`generate_outputs(...)` and `generate_output(...)` also take the hook this pipeline rides on
+directly: `post_process=<callable>` runs on each artifact after generation and before it is saved,
+which is where a host can composite, annotate, or record its own metadata and still have it land in
+the written file. `run_outpaint(...)` passes `session.finalize` through that hook, so any workflow
+with its own post-decode step keeps the wrapper's multi-seed loop, progress events and save
+semantics.
+
+See [Reframe and Outpaint](reframe-outpaint.md) for padding guidance and the published proof runs,
+and [API and CLI](api.md#outpaint-conditioning-canvas) for the published capability fields.
+
 ## Progress And Monitoring
 
 MLX-Gen exposes one lightweight progress event type for applications that need to update a UI, publish job status, or integrate with an external workflow runner. The event does not include latents or model tensors.
@@ -313,7 +415,7 @@ video = model.generate_video(
 video.save("video.mp4")
 ```
 
-For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. That same route now owns public `video-to-video`: pass `video_path`, keep `solver="unipc"`, use `video_strength` for the source-change amount, and add `video_mask_path` when you want preserved regions locked to the source. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. On that i2v route, `last_image_path=...` adds an optional second anchor the clip should end near (first+last bracket conditioning, experimental on Wan 2.2 A14B; the last image maps through the same canvas and `resize_mode` as the first frame, and every other Wan route rejects it). Also on that route, `context_image_paths=[...]` extends the conditioned head with the ordered frames that FOLLOW `image_path` in the motion being continued (4, 8, or 12 frames — heads of 5, 9, or 13 fill whole 4x latent groups), so a continuation inherits real momentum instead of restarting from one frozen frame; `context_noise=...` (0-1000, ~20) optionally perturbs that head SkyReels-style. Both are experimental zero-shot behaviors measured in backlog 0102, rejected on every non-A14B-i2v route, and hosts should gate on the `supports_context_frames` capability field (introduced in schema 6; current schema 10). For chained scenes, the same i2v route also ships SVI 2.0 Pro conditioning (backlog 0103, EXPERIMENTAL): construct the model with the SVI error-recycling LoRA pair (`svi_lora_high_path=...`, `svi_lora_low_path=...`; strict key-match, fixed scale 1.0) and call `generate_video(svi_anchor_image_path=...)` for the first clip, then add `svi_motion_latent_path=...` (the previous clip's exported latent; export with `svi_motion_latent_export_path=...`) and a NEW seed per clip for continuations — one persistent anchor carries identity, the latent handover carries momentum, and assembly must drop `svi_assembly_trim_frames` frames (metadata; 5 for the default one motion latent) from each continuation clip. SVI mode replaces `image_path` and conflicts with `last_image_path`/`context_image_paths`/`video_path`; hosts gate on `supports_svi` (introduced in schema 7; current schema 10). `denoising_step_list=[1000, 750, 500, 250]` runs an exact distill timestep grid instead of a step count on text/image-to-video routes; it is mutually exclusive with `num_inference_steps` and an explicit `flow_shift`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`. For Wan image-to-video, `width` and `height` are size targets; the model API resolves the final output canvas from the source image aspect ratio and model spatial multiples. For Wan video-to-video, `width` and `height` are the requested output canvas after Wan patch-multiple normalization.
+For Wan2.2 T2V-A14B, construct the same class with `model_config=ModelConfig.wan2_2_t2v_a14b()` or the A14B model name routed through the CLI. That same route now owns public `video-to-video`: pass `video_path`, keep `solver="unipc"`, use `video_strength` for the source-change amount, and add `video_mask_path` when you want preserved regions locked to the source. For Wan2.2 I2V-A14B, use `model_config=ModelConfig.wan2_2_i2v_a14b()` or the `Wan-AI/Wan2.2-I2V-A14B-Diffusers` model name and pass `image_path` to `generate_video()`. On that i2v route, `last_image_path=...` adds an optional second anchor the clip should end near (first+last bracket conditioning, experimental on Wan 2.2 A14B; the last image maps through the same canvas and `resize_mode` as the first frame, and every other Wan route rejects it). Also on that route, `context_image_paths=[...]` extends the conditioned head with the ordered frames that FOLLOW `image_path` in the motion being continued (4, 8, or 12 frames — heads of 5, 9, or 13 fill whole 4x latent groups), so a continuation inherits real momentum instead of restarting from one frozen frame; `context_noise=...` (0-1000, ~20) optionally perturbs that head SkyReels-style. Both are experimental zero-shot behaviors measured in backlog 0102, rejected on every non-A14B-i2v route, and hosts should gate on the `supports_context_frames` capability field (introduced in schema 6; current schema 11). For chained scenes, the same i2v route also ships SVI 2.0 Pro conditioning (backlog 0103, EXPERIMENTAL): construct the model with the SVI error-recycling LoRA pair (`svi_lora_high_path=...`, `svi_lora_low_path=...`; strict key-match, fixed scale 1.0) and call `generate_video(svi_anchor_image_path=...)` for the first clip, then add `svi_motion_latent_path=...` (the previous clip's exported latent; export with `svi_motion_latent_export_path=...`) and a NEW seed per clip for continuations — one persistent anchor carries identity, the latent handover carries momentum, and assembly must drop `svi_assembly_trim_frames` frames (metadata; 5 for the default one motion latent) from each continuation clip. SVI mode replaces `image_path` and conflicts with `last_image_path`/`context_image_paths`/`video_path`; hosts gate on `supports_svi` (introduced in schema 7; current schema 11). `denoising_step_list=[1000, 750, 500, 250]` runs an exact distill timestep grid instead of a step count on text/image-to-video routes; it is mutually exclusive with `num_inference_steps` and an explicit `flow_shift`. A14B boundary routing is handled internally. If both `guidance` and `guidance_2` are omitted, MLX-Gen uses the model's two-stage defaults. If `guidance` is provided and `guidance_2` is omitted, the low-noise `transformer_2` stage follows `guidance`. For Wan image-to-video, `width` and `height` are size targets; the model API resolves the final output canvas from the source image aspect ratio and model spatial multiples. For Wan video-to-video, `width` and `height` are the requested output canvas after Wan patch-multiple normalization.
 
 Bernini uses a dedicated renderer class and keeps references separate from first-frame images:
 

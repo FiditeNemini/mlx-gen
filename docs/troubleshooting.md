@@ -160,20 +160,22 @@ denoising:
 Outpaint: fill=edge, canvas 928x1536 from source 768x766, padding top=0 right=76 bottom=766 left=76.
 ```
 
-A second line names the reason whenever `--outpaint-fill auto` chose the mode, including the padding
-depth and the edge-fill reach it was measured against. Add `--metadata` to keep the same values in
-the JSON sidecar as `outpaint_fill`, `outpaint_fill_reason`, `outpaint_edge_fill_reach_px`, and
-`outpaint_edge_fill_overreach`. To read the route contract without running a job:
+A second line follows only when `--outpaint-fill auto` resolved the mode, and it names the reason,
+the padding depth, and the edge-fill reach the depth was measured against. A run that named its fill
+explicitly prints the first line alone. Add `--metadata` to keep the same values in the JSON sidecar
+as `outpaint_fill`, `outpaint_fill_requested`, `outpaint_fill_reason`,
+`outpaint_edge_fill_reach_px`, and `outpaint_edge_fill_overreach`. To read the route contract
+without running a job:
 
 ```sh
 mlxgen capabilities --model AbstractFramework/flux.2-klein-base-4b-8bit
 ```
 
 The `flux2.outpaint` row reports `supports_outpaint_fill`, `outpaint_fill_modes`,
-`outpaint_default_fill_mode`, and `outpaint_recommended_lora`.
+`outpaint_default_fill_mode`, `outpaint_preservation`, and `outpaint_recommended_lora`.
 
-On FLUX.2 Klein base routes, ask for a blank conditioning canvas so the model generates instead of
-continuing a texture:
+On FLUX.2 Klein routes — distilled 4B/9B and base 4B/9B alike — ask for a blank conditioning canvas
+so the model generates instead of continuing a texture:
 
 ```sh
 mlxgen generate \

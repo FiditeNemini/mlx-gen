@@ -4,6 +4,9 @@
 - Created: 2026-06-04
 - Status: Planned
 - Completed: N/A
+- Last reconciled against the code: 2026-09-01 (release 0.32.0). Sections marked
+  "Updated 2026-09-01" restate what shipped; the surrounding original planning text is kept so the
+  decision history stays readable.
 
 ## ADR status
 - Governing ADRs: [ADR 0001](../../adr/0001_runtime_smoke_validation_for_model_routes.md), [ADR 0002](../../adr/0002_no_silent_automatic_fallbacks.md)
@@ -52,9 +55,27 @@ Standard terms:
   canvas plus mask.
 
 UX rule: do not use the same option name for these two guarantees. `--reframe-padding` means a
-fully generative zoom-out that may redraw the source. `--outpaint-padding` means canvas expansion
-with edge-extended context and adaptive source blending, available only for capabilities that
-advertise `supports_outpaint=true`. Exact source locking belongs to a native fill/inpaint route.
+fully generative zoom-out that may redraw the source. `--outpaint-padding` means canvas expansion,
+available only for capabilities that advertise `supports_outpaint=true`.
+
+Updated 2026-09-01: the governing assumption that exact source locking has to come from a native
+fill/inpaint route no longer holds, and the "edge-extended context plus adaptive source blending"
+half of the rule is now one of two shipped strategies rather than the definition of the option.
+Each route publishes its own guarantee as `outpaint_preservation`:
+
+- `flux2.outpaint` publishes `latent-locked-transition-band-no-postblend`. It locks the source
+  region in latent space behind a per-side transition band for the whole denoise and never repaints
+  it afterwards (`preserve_source=False` in `_OUTPAINT_RUNTIME`, so
+  `OutpaintUtil.composite_source_region` performs no blend at all). That is exact source locking on
+  the expanded-canvas route, with no mask channel.
+- `qwen.outpaint` publishes `adaptive-content-aware-source-blend`, the originally planned contract:
+  generate the whole canvas, then paste the source back only while the generated source window is
+  still within `restore_threshold` mean absolute difference of it.
+
+A native masked fill/inpaint outpaint route is still separate future work, but it is no longer the
+only route that can promise source locking. The UX rule that survives is narrower: the option name
+must not imply a guarantee, and the guarantee must be readable off the capability row before a job
+starts.
 
 ## Current code reality
 
@@ -75,18 +96,47 @@ advertise `supports_outpaint=true`. Exact source locking belongs to a native fil
   requires exactly one source image, rejects explicit `--width`, `--height`, and
   `--canvas-policy`, validates the padding value, and is rejected unless a capability advertises
   `supports_outpaint`.
-- `src/mflux/utils/outpaint_util.py` implements the canvas outpaint helper used by the current
-  FLUX.2 and Qwen Image Edit routes. It parses CSS-style padding, builds a larger
-  edge-extended context canvas, records the source paste rectangle, creates a feathered
-  preservation mask, and performs adaptive source blending after generation.
-- `src/mflux/models/flux2/cli/flux2_edit_generate.py` and
+- Updated 2026-09-01: `src/mflux/outpaint.py` owns the model-agnostic outpaint layer. It resolves a
+  route's contract (`outpaint_contract`, `outpaint_contract_for_model`), applies the
+  conditioning-canvas fill policy (`auto`, `edge`, `neutral`, `solid`, `blur`) with a fail-closed
+  guard on a canvas measured to smear, returns a prepared `OutpaintSession` / `ReframeSession`, and
+  runs the whole pipeline on a loaded runtime through `run_outpaint(...)`. Nothing in it imports
+  argparse, so an embedding Python application gets the same canvas, fill decision, preservation
+  strategy and recorded metadata a CLI run produces. Route behaviour is read off the published
+  capability row; only unpublished mechanics (which keyword carries the canvas, the base fill
+  colour, the adapter markers that switch `auto` to a solid canvas) live in the module's
+  `_OUTPAINT_RUNTIME` table, one entry per capability id.
+- Updated 2026-09-01: `src/mflux/cli/outpaint_cli.py` is the argparse adapter.
+  `prepare_canvas_session(...)` is the only place a parsed namespace is read, and it writes the
+  derived `width`, `height` and `canvas_policy` back onto the namespace.
+- `src/mflux/utils/outpaint_util.py` keeps the canvas mechanics beneath that layer: CSS-style
+  padding parsing, canvas construction per fill mode, the bounded edge-fill reach, the source paste
+  rectangle, the composite step, and the metadata writer. `composite_source_region(...)` takes
+  `preserve_source=False` on the latent-locked FLUX.2 route (no post-blend) and the adaptive
+  threshold on the Qwen route.
+- Updated 2026-09-01: `src/mflux/models/flux2/cli/flux2_edit_generate.py` and
   `src/mflux/models/qwen/cli/qwen_image_edit_generate.py` accept `--reframe-padding` and
-  `--outpaint-padding`, build the expanded conditioning canvas in the backend, preserve side
-  placement from the padding request, set exact output dimensions from that canvas, and save
-  reframe/outpaint metadata.
-- FLUX.2 edit plus Qwen Image Edit, Qwen Image Edit 2509, and Qwen Image Edit 2511 single-image
-  capabilities now advertise `supports_outpaint=true` and `supports_reframe=true`. Other model
-  families reject `--outpaint-padding` and `--reframe-padding` before loading weights.
+  `--outpaint-padding` and delegate the canvas to `prepare_canvas_session(...)` instead of building
+  it in the backend. Each backend keeps only its own conditioning plumbing: FLUX.2 receives the
+  `OutpaintCanvas` object, Qwen receives conditioning image paths plus the resolved geometry. Side
+  placement, exact output dimensions and reframe/outpaint metadata all come from the shared session.
+- Updated 2026-09-01: `src/mflux/cli/mlx_gen.py` validates `--outpaint-fill` and
+  `--outpaint-fill-color` against the resolved route before dispatch
+  (`_validate_outpaint_fill_options` -> `check_outpaint_fill_options`). A fixed-canvas route such as
+  `qwen.outpaint` reports which canvas it uses instead of letting the flags reach a backend parser
+  that never declared them.
+- Updated 2026-09-01: outpaint and reframe are separate capability rows, not two flags on one row.
+  Distilled FLUX.2 Klein 4B/9B publish `flux2.outpaint` and `flux2.reframe`; base FLUX.2 Klein
+  4B/9B publish `flux2.outpaint` only and reject `--reframe-padding`; Qwen Image Edit, 2509 and
+  2511 publish `qwen.outpaint` and `qwen.reframe`. Each row sets exactly one of
+  `supports_outpaint` / `supports_reframe`. Other model families reject both options before loading
+  weights.
+- Updated 2026-09-01: outpaint rows also publish `supports_outpaint_fill`, `outpaint_fill_modes`,
+  `outpaint_default_fill_mode`, `outpaint_auto_edge_fill_max_stretch`, `outpaint_preservation`, and
+  the per-route `outpaint_recommended_lora` / `outpaint_validated_*` envelope. A row carries an
+  adapter recommendation or a validated envelope only where evidence for that row exists, so the
+  distilled Klein rows publish `outpaint_recommended_lora: null` while the base rows name
+  `fal/flux-2-klein-4B-outpaint-lora`. Capability `schema_version` is 11.
 - `tests/cli/test_mlx_gen_router.py` now covers FLUX.2 default edit/reference I2I, explicit
   latent I2I with `--image-strength`, multi-reference I2I, and mode/option rejection.
 - Focused router tests cover FLUX.2 and Qwen Image Edit variant reframe routing, backend canvas
@@ -115,11 +165,17 @@ advertise `supports_outpaint=true`. Exact source locking belongs to a native fil
   variation/restyle with `--image-strength`; edit/reference and multi-reference I2I do not use
   `--image-strength`; generative reframe uses `--reframe-padding`; canvas outpaint uses
   `--outpaint-padding`.
-- Qwen Image Edit, Qwen Image Edit 2509/2511, and FLUX.2 Klein Edit have current source/q8/q4
-  reframe and canvas outpaint proof in `docs/assets/validation/reframe-outpaint-2026-06-08/`.
-  FIBO Edit, ERNIE I2I, Z-Image I2I, base Qwen Image, Qwen Image 2512, and FLUX.1 Kontext should
-  not be documented as reliable unified outpaint paths unless they get their own model-backed
-  validation.
+- Updated 2026-09-01: Qwen Image Edit, Qwen Image Edit 2509/2511, and distilled FLUX.2 Klein have
+  source/q8/q4 reframe proof in `docs/assets/validation/reframe-outpaint-2026-06-08/`, and that
+  profile's Qwen outpaint rows are current. Its distilled FLUX.2 outpaint rows carry status `STALE`:
+  they ran through the edit path with an adaptive pixel blend, which is not the route those weights
+  take. Current distilled outpaint evidence is `flux2_klein_outpaint_latent_lock_2026_09_01`
+  (4B q8 and 9B q8 `PASS`, base 4B q8 `PARTIAL` as the seam control at 16 steps) plus the
+  cross-route bundle in `docs/assets/validation/outpaint-model-matrix-2026-09-01/`, which runs every
+  supported route on one 432x240 source at `5%,80%,5%,60%` and records wall time and source-region
+  drift per row. FIBO Edit, ERNIE I2I, Z-Image I2I, base Qwen Image, Qwen Image 2512, and FLUX.1
+  Kontext should not be documented as reliable unified outpaint paths unless they get their own
+  model-backed validation.
 
 ## Model capability assessment and priority
 
@@ -129,7 +185,7 @@ different guarantees.
 
 | Priority | Family/model | Current MLX-Gen status | Reframe stance | Canvas outpaint stance | Difficulty |
 | --- | --- | --- | --- | --- | --- |
-| 1 | FLUX.2 Klein Edit | Edit-reference and multi-reference I2I work and have recent validation artifacts. | Implemented and validated for 4B/9B source, q8, and q4 rows on cropped-starship zoom-out. | Implemented for 4B/9B source, q8, and q4 single-image edit routes with edge-extended canvas plus adaptive source blend. Native fill/inpaint masking remains separate. | Medium: routing/UX is straightforward, but validation must catch redraw/crop failures. |
+| 1 | FLUX.2 Klein Edit | Edit-reference and multi-reference I2I work and have recent validation artifacts. | Implemented and validated for distilled 4B/9B source, q8, and q4 rows on cropped-starship zoom-out. Base 4B/9B do not publish `flux2.reframe` and reject `--reframe-padding`. | Updated 2026-09-01: implemented on `flux2.outpaint` for distilled 4B/9B and base 4B/9B alike, with source-locked denoising behind an interior transition band and no post-generation blend, plus the selectable `--outpaint-fill` conditioning canvas. Distilled 4B/9B q8 validated on `flux2_klein_outpaint_latent_lock_2026_09_01`; base source rows validated on `flux2_klein_base_starship_2026_06_10`. Native fill/inpaint masking remains separate. | Medium: routing/UX is straightforward, but validation must catch redraw/crop failures. |
 | 2 | Qwen Image Edit / 2509 / 2511 | Edit and multi-reference work; 2511 parity was fixed and validated after the scheduler correction. | Implemented and validated for Qwen Image Edit, 2509, and 2511 source, q8, and q4 rows on cropped-starship zoom-out. | Implemented and validated for Qwen Image Edit, 2509, and 2511 source, q8, and q4 single-image edit routes with edge-extended canvas plus adaptive source blend. Native Qwen inpaint/outpaint parity remains future work. | Medium to high: strong model capability, but variant-specific prompt contracts matter. |
 | 3 | Z-Image / Z-Image Turbo | Text-to-image and latent I2I routes exist; no edit-conditioned route. | Exploratory latent recompose/reframe only, with clear warnings. Use after FLUX.2/Qwen because it may restyle or lose identity. | Not supported. | Medium: easy to route, hard to trust. |
 | 4 | ERNIE Image Turbo | Text-to-image and latent I2I route exist; Prompt Enhancer support exists. | Exploratory latent recompose/reframe only, useful if prompt adherence is strong enough. | Not supported. | Medium to high: promising instruction model, but no hard source-preservation contract. |
@@ -235,6 +291,14 @@ same preservation guarantee as canvas outpaint.
   - run the selected edit backend on the expanded canvas;
   - apply adaptive source blending only when the generated source window still matches the source;
   - save useful metadata for source path, padding, expanded dimensions, paste rectangle, and mode.
+- Updated 2026-09-01, superseding the two canvas bullets above: the new area is initialized by the
+  route's fill contract, not always from edge-extended context. Routes that publish
+  `supports_outpaint_fill=true` accept `auto`, `edge`, `neutral`, `solid` and `blur`; `auto` keeps
+  `edge` inside the measured edge-fill reach, switches to `neutral` past it, and switches to `solid`
+  green when a green-border outpaint adapter is loaded. Source preservation is per route: adaptive
+  blending on `qwen.outpaint`, latent locking with no post-blend on `flux2.outpaint`. Metadata
+  records the resolved fill, the requested fill, the reason, the edge-fill reach and overreach, the
+  preservation strategy, and the measured source-region difference alongside the geometry.
 - Fail closed for outpaint requests unless a model has proven canvas-outpaint or native-fill
   support.
 - FIBO can only be used to create source T2I images in this item. Any FIBO Edit route remains
@@ -311,6 +375,8 @@ same preservation guarantee as canvas outpaint.
   [planned item 0027](0027_fibo_edit_diffusers_parity_release_quality.md) for deferred FIBO Edit
   parity and validation.
 - `src/mflux/task_inference.py`
+- `src/mflux/outpaint.py`
+- `src/mflux/cli/outpaint_cli.py`
 - `src/mflux/cli/mlx_gen.py`
 - `src/mflux/models/flux2/variants/edit/`
 - `src/mflux/models/qwen/variants/edit/`
@@ -334,27 +400,52 @@ same preservation guarantee as canvas outpaint.
   - edit-conditioned I2I;
   - multi-reference I2I;
   - generative reframe;
-  - canvas-guided outpaint with adaptive source blending;
+  - canvas-guided outpaint, and which preservation strategy the selected route uses;
   - inpainting;
   - native fill/inpaint outpainting / image expansion.
 
 UX expected outcome: a user can tell before running whether the operation may redraw the source
-(`reframe`), is canvas-guided with adaptive blending (`outpaint`), or requires a future native
-fill/inpaint route for exact source locking.
+(`reframe`) or is canvas-guided outpaint, and in the second case which source guarantee the route
+carries. Updated 2026-09-01: that guarantee is published as `outpaint_preservation` on the
+capability row — `adaptive-content-aware-source-blend` on `qwen.outpaint`,
+`latent-locked-transition-band-no-postblend` on `flux2.outpaint` — and is repeated in the generated
+artifact's metadata.
 
 ## Current release boundary
 
-As of 2026-06-08, this item is partially implemented and remains planned for lower-confidence
-latent candidates and native fill/inpaint work. The generative reframe and canvas outpaint
-contracts are implemented for FLUX.2 Klein 4B/9B and Qwen Image Edit original, 2509, and 2511
-single-image edit capabilities. Source, q8, and q4 rows passed the cropped-starship
-`reframe_outpaint_2026_06_08` profile. The remaining work is:
+As of 2026-09-01 (release 0.32.0), this item is partially implemented and remains planned for
+lower-confidence latent candidates and native fill/inpaint work.
+
+What is implemented, by family:
+
+- Generative reframe (`supports_reframe`): distilled FLUX.2 Klein 4B/9B (`flux2.reframe`) and Qwen
+  Image Edit original/2509/2511 (`qwen.reframe`). Base FLUX.2 Klein 4B/9B do not expose it.
+- Canvas outpaint (`supports_outpaint`): every FLUX.2 Klein model — distilled 4B/9B and base 4B/9B
+  — on `flux2.outpaint` with the latent-locked, no-post-blend preservation strategy and the
+  selectable `--outpaint-fill` conditioning canvas; Qwen Image Edit original/2509/2511 on
+  `qwen.outpaint` with the fixed `edge` canvas and the adaptive source blend.
+- The shared implementation lives in `src/mflux/outpaint.py` with `src/mflux/cli/outpaint_cli.py`
+  as the argparse adapter, and is exported from `mflux` and `mlxgen` as `run_outpaint`,
+  `prepare_outpaint`, `prepare_reframe`, `outpaint_contract`, `outpaint_contract_for_model`, and
+  the `OutpaintSession` / `ReframeSession` / `OutpaintFillPlan` / `OutpaintContract` /
+  `OutpaintError` types.
+
+Evidence: `reframe_outpaint_2026_06_08` (reframe rows for both families, Qwen outpaint rows),
+`flux2_klein_base_starship_2026_06_10` (base source outpaint),
+`flux2_klein_outpaint_latent_lock_2026_09_01` (distilled 4B/9B q8 outpaint with a base 4B q8
+control), and `docs/assets/validation/outpaint-model-matrix-2026-09-01/` (every supported route on
+one source, with timings and source drift).
+
+The remaining work is:
 
 1. evaluate Z-Image and ERNIE as lower-confidence latent reframe candidates only if they can
    preserve source identity on a dedicated profile;
-2. decide whether any non-FLUX.2/Qwen edit route should get canvas outpaint support;
-3. keep native fill/inpaint outpaint separate until FLUX.1 Fill or another fill/mask backend is
-   explicitly revalidated.
+2. decide whether any non-FLUX.2/Qwen edit route should get canvas outpaint support, and whether
+   base FLUX.2 Klein should also expose reframe;
+3. keep native masked fill/inpaint outpaint separate until FLUX.1 Fill or another fill/mask backend
+   is explicitly revalidated. Note that source locking itself is no longer a reason to want it:
+   `flux2.outpaint` already delivers that on the expanded-canvas route. The open reason is a real
+   mask channel over an arbitrary region.
 
 ## Validation
 
@@ -428,8 +519,9 @@ single-image edit capabilities. Source, q8, and q4 rows passed the cropped-stars
     `validation_outputs/outpaint_2026_06_07/qwen2511_q8_outpaint_b_cropped_starship.png`.
 - Docs checks:
   - README, `docs/api.md`, `docs/getting-started.md`, `docs/faq.md`, `docs/troubleshooting.md`,
-    completions, and generated model-card examples teach reframe as generative and outpaint as
-    canvas-guided with adaptive blending, not native fill/inpaint masking.
+    `docs/reframe-outpaint.md`, completions, and generated model-card examples teach reframe as
+    generative and outpaint as canvas-guided, naming the selected route's preservation strategy
+    rather than assuming one, and neither as native fill/inpaint masking.
 
 ## Progress checklist
 
@@ -459,7 +551,14 @@ single-image edit capabilities. Source, q8, and q4 rows passed the cropped-stars
 
 Re-check the code first because routing has been changing quickly. Keep the public contract simple:
 media direction is the task, implementation is a backend mode. Prefer explicit errors over silent
-model swaps. Do not claim outpaint support for a model unless the implementation preserves an
-expanded source canvas with a mask and the output has model-backed validation evidence. Do not use
-FIBO Edit as a shortcut for this item; if FIBO becomes relevant again, resume items 0024 and 0027
-first.
+model swaps. Do not claim outpaint support for a model unless the route publishes a concrete
+`outpaint_preservation` strategy the implementation actually applies, and the exact row has
+model-backed validation evidence. Do not use FIBO Edit as a shortcut for this item; if FIBO becomes
+relevant again, resume items 0024 and 0027 first.
+
+Updated 2026-09-01: a new family is added by giving `_OUTPAINT_RUNTIME` in `src/mflux/outpaint.py`
+one entry keyed by capability id, beside a capability row that publishes the full fill and
+preservation contract. `outpaint_contract` raising for a row with no runtime entry is deliberate:
+it is what stops a new family from silently inheriting FLUX.2's latent-lock semantics. A route that
+outpaints by native masked fill rather than an expanded canvas does not fit this contract and must
+not be forced into it.

@@ -59,8 +59,8 @@ package size is the published AbstractFramework repository total.
 
 | Source model | Public task / mode | Source size | Published packages | Package sizes | Quantization status |
 | --- | --- | ---: | --- | ---: | --- |
-| FLUX.2 Klein 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-4b-4bit`<br>`flux.2-klein-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Distilled source/q8/q4 passed the June 5 edit-capability profile and the June 8 reframe profile; their June 8 outpaint rows are now stale historical evidence only. |
-| FLUX.2 Klein 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-9b-4bit`<br>`flux.2-klein-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Distilled source/q8/q4 passed the June 5 edit-capability profile and the June 8 reframe profile; their June 8 outpaint rows are stale historical evidence only. |
+| FLUX.2 Klein 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-4b-4bit`<br>`flux.2-klein-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Distilled source/q8/q4 passed the June 5 edit-capability profile and the June 8 reframe profile; the q8 package passed strict outpaint on `flux2_klein_outpaint_latent_lock_2026_09_01`. |
+| FLUX.2 Klein 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-9b-4bit`<br>`flux.2-klein-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Distilled source/q8/q4 passed the June 5 edit-capability profile and the June 8 reframe profile; the q8 package passed strict outpaint on `flux2_klein_outpaint_latent_lock_2026_09_01`. |
 | FLUX.2 Klein Base 4B | T2I, edit/reference I2I where supported by the model route | 22.1 GiB | `flux.2-klein-base-4b-4bit`<br>`flux.2-klein-base-4b-8bit` | 4.3 GiB<br>8.0 GiB | Standard MLX q4/q8 optimized packages. Current published proof covers the source model on the June 10 starship profile; prepared base q8/q4 package proof is still pending. |
 | FLUX.2 Klein Base 9B | T2I, edit/reference I2I where supported by the model route | 49.3 GiB | `flux.2-klein-base-9b-4bit`<br>`flux.2-klein-base-9b-8bit` | 8.9 GiB<br>16.6 GiB | Standard MLX q4/q8 optimized packages; inherits the source model's gated/non-commercial terms. Current published proof covers the source model on the June 10 starship profile; prepared base q8/q4 package proof is still pending. |
 | Qwen Image | T2I | 53.7 GiB | `qwen-image-4bit`<br>`qwen-image-8bit` | 16.2 GiB<br>27.5 GiB | q4 uses MLX-Gen's mixed q4/q8 Qwen policy; q8 uses the standard q8 path. |
@@ -102,10 +102,17 @@ panels where local benchmark runs have produced them.
 ## Reframe And Outpaint Package Validation
 
 The 2026-06-08 reframe/outpaint profile validates source, q8, and q4 rows for Qwen Image Edit,
-Qwen Image Edit 2509/2511, and distilled FLUX.2 Klein 4B/9B. For FLUX, treat the outpaint rows in
-that profile as stale historical evidence only; current strict FLUX outpaint is base-only.
+Qwen Image Edit 2509/2511, and distilled FLUX.2 Klein 4B/9B. Its distilled FLUX outpaint artifacts
+are retained as historical evidence for the edit path with adaptive source blending; strict FLUX.2
+Klein outpaint q8 evidence is published as `flux2_klein_outpaint_latent_lock_2026_09_01`.
 
 ![Reframe and outpaint source/q8/q4 summary](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-base-q8-q4-summary.jpg)
+
+The q8 packages are also the rows measured in the cross-route outpaint matrix. On one 432x240 source
+at `5%,80%,5%,60%`, on an Apple M5 Max: distilled Klein 4B q8 54.6 s, distilled Klein 9B q8 80.6 s,
+base Klein 4B q8 72.2 s, base Klein 9B q8 100.0 s, Qwen Image Edit 2511 q8 341.1 s. Full table,
+source-drift figures and command log in
+[Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces).
 
 Inspect the machine-readable records for a package:
 

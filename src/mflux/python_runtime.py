@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -41,6 +41,7 @@ class LoadedGenerationModel:
         overwrite: bool = False,
         progress_callback: ProgressCallback | None = None,
         save_kwargs: dict[str, Any] | None = None,
+        post_process: Callable[[Any], None] | None = None,
         **generate_kwargs: Any,
     ) -> GeneratedOutput:
         return self.generate_outputs(
@@ -49,6 +50,7 @@ class LoadedGenerationModel:
             overwrite=overwrite,
             progress_callback=progress_callback,
             save_kwargs=save_kwargs,
+            post_process=post_process,
             **generate_kwargs,
         )[0]
 
@@ -60,8 +62,16 @@ class LoadedGenerationModel:
         overwrite: bool = False,
         progress_callback: ProgressCallback | None = None,
         save_kwargs: dict[str, Any] | None = None,
+        post_process: Callable[[Any], None] | None = None,
         **generate_kwargs: Any,
     ) -> list[GeneratedOutput]:
+        """Generate one artifact per seed, optionally saving each one.
+
+        `post_process` receives each artifact right after generation and before it is saved,
+        so a caller that owns a post-generation step (compositing an outpaint source region
+        back, attaching extra metadata) keeps the wrapper's multi-seed, progress and save
+        behaviour instead of reimplementing it.
+        """
         return _RuntimeGenerationExecutor.generate_outputs(
             loaded=self,
             seeds=seeds,
@@ -69,6 +79,7 @@ class LoadedGenerationModel:
             overwrite=overwrite,
             progress_callback=progress_callback,
             save_kwargs=save_kwargs,
+            post_process=post_process,
             generate_kwargs=generate_kwargs,
         )
 
@@ -160,6 +171,7 @@ class _RuntimeGenerationExecutor:
         progress_callback: ProgressCallback | None,
         save_kwargs: dict[str, Any] | None,
         generate_kwargs: dict[str, Any],
+        post_process: Callable[[Any], None] | None = None,
     ) -> list[GeneratedOutput]:
         resolved_seeds = [int(seed) for seed in seeds]
         if not resolved_seeds:
@@ -204,6 +216,11 @@ class _RuntimeGenerationExecutor:
                 )
             try:
                 artifact = generate_method(seed=seed, **generate_kwargs)
+                if post_process is not None:
+                    # Before save on purpose: the hook is where an outpaint run composites the
+                    # source region back and records its metadata, and both have to be part of
+                    # the artifact the wrapper writes to disk.
+                    post_process(artifact)
                 saved_path = None
                 if output_path is not None:
                     _RuntimeGenerationExecutor._emit_terminal_progress(

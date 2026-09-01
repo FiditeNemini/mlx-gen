@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 
-from mflux.cli.parser.parsers import image_strength_value
+from mflux.cli.parser.parsers import OUTPAINT_FILL_CHOICES, image_strength_value
 
 
 class ForwardPolicy(Enum):
@@ -275,11 +275,39 @@ ROUTER_OPTIONS: tuple[RouterOption, ...] = (
             "help": (
                 "Canvas outpaint request: CSS-style top,right,bottom,left padding such as "
                 "'0,25%%,0,25%%'. Qwen Image Edit variants use generative canvas expansion with "
-                "adaptive source restoration. FLUX.2 strict outpaint requires a base Klein model "
-                "and uses source-locked denoising instead of generative reframe."
+                "adaptive source restoration. FLUX.2 Klein uses source-locked denoising instead of "
+                "generative reframe, on distilled and base weights alike."
             ),
         },
         metadata_keys=("outpaint_padding", "image_outpaint_padding"),
+        emitter="_outpaint_forwarded_argv",
+    ),
+    RouterOption(
+        flags=("--outpaint-fill",),
+        dest="outpaint_fill",
+        policy=ForwardPolicy.TRANSFORMED,
+        kwargs={
+            "choices": list(OUTPAINT_FILL_CHOICES),
+            "default": None,
+            "help": (
+                "How --outpaint-padding fills the expanded conditioning canvas on routes that "
+                "publish supports_outpaint_fill: auto, edge, neutral, solid, or blur. Omit it to "
+                "let the route's default fill contract decide."
+            ),
+        },
+        emitter="_outpaint_forwarded_argv",
+    ),
+    RouterOption(
+        flags=("--outpaint-fill-color",),
+        dest="outpaint_fill_color",
+        # Kept as raw text through the router: the backend parser owns the 'R,G,B' / '#rrggbb'
+        # conversion, so re-emitting the value the user typed is what keeps one validator.
+        policy=ForwardPolicy.TRANSFORMED,
+        kwargs={
+            "type": str,
+            "default": None,
+            "help": "Fill color for --outpaint-fill solid, as 'R,G,B' (0-255 per channel) or '#rrggbb'.",
+        },
         emitter="_outpaint_forwarded_argv",
     ),
 )

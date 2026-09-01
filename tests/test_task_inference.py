@@ -293,6 +293,11 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
     )
 
     flux2_outpaint = mlxgen.resolve_generation_plan(model="flux2-klein-base-4b", image_count=1, has_outpaint=True)
+    flux2_distilled_outpaint = mlxgen.resolve_generation_plan(
+        model="flux2-klein-4b",
+        image_count=1,
+        has_outpaint=True,
+    )
     qwen_outpaint = mlxgen.resolve_generation_plan(
         model="qwen-image-edit-2511",
         image_count=1,
@@ -309,15 +314,15 @@ def test_mask_and_outpaint_options_are_checked_against_capabilities():
         has_outpaint=True,
     )
     assert flux2_outpaint.capability_id == "flux2.outpaint"
+    # Distilled Klein reaches the same latent-locked outpaint route as base Klein; only the
+    # guidance default and the recorded evidence differ.
+    assert flux2_distilled_outpaint.capability_id == "flux2.outpaint"
     assert qwen_outpaint.capability_id == "qwen.outpaint"
     assert qwen_base_outpaint.capability_id == "qwen.outpaint"
     assert qwen_2509_outpaint.capability_id == "qwen.outpaint"
 
     with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
         mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_outpaint=True)
-
-    with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
-        mlxgen.resolve_generation_plan(model="flux2-klein-4b", image_count=1, has_outpaint=True)
 
     z_image_inpaint = mlxgen.resolve_generation_plan(model="z-image-turbo", image_count=1, has_mask=True)
     assert z_image_inpaint.capability_id == "z-image.inpaint"
@@ -366,7 +371,7 @@ def test_reframe_option_is_limited_to_validated_edit_capabilities():
 def test_model_capabilities_are_publicly_inspectable():
     capabilities = mlxgen.get_model_capabilities(model="flux2-klein-4b")
 
-    assert capabilities.schema_version == 10
+    assert capabilities.schema_version == 11
     assert capabilities.family == "flux2"
     assert {capability.mode for capability in capabilities.capabilities} >= {
         MODE_TEXT_ONLY,
@@ -586,6 +591,7 @@ def test_remote_looking_prepared_ids_do_not_unlock_variant_sensitive_routes():
         "flux2.edit",
         "flux2.inpaint",
         "flux2.reframe",
+        "flux2.outpaint",
         "flux2.multi-reference",
     }
     assert {capability.id for capability in fibo_remote.capabilities} == {"fibo.text"}
@@ -681,9 +687,46 @@ def test_flux2_outpaint_capability_publishes_the_fill_contract():
     assert row["outpaint_default_fill_mode"] == "auto"
     assert row["outpaint_auto_edge_fill_max_stretch"] == 12.0
     assert row["outpaint_recommended_lora"] == "fal/flux-2-klein-4B-outpaint-lora"
+    assert row["outpaint_preservation"] == "latent-locked-transition-band-no-postblend"
     assert row["outpaint_validated_padding"] == "5%,80%,5%,60%"
     assert row["outpaint_validated_fill_mode"] == "edge"
     assert row["outpaint_validated_max_canvas_pixels"] == 282880
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    "model",
+    ["flux2-klein-4b", "AbstractFramework/flux.2-klein-4b-8bit", "AbstractFramework/flux.2-klein-9b-8bit"],
+)
+def test_distilled_klein_publishes_reframe_and_outpaint_as_separate_rows(model):
+    # Reframe recomposes the source and outpaint preserves it. They are different guarantees, so
+    # distilled weights publish both rows instead of one row whose identity flips.
+    capabilities = mlxgen.get_model_capabilities(model=model)
+    ids = [capability.id for capability in capabilities.capabilities]
+
+    assert "flux2.reframe" in ids
+    assert "flux2.outpaint" in ids
+
+    reframe = next(capability for capability in capabilities.capabilities if capability.id == "flux2.reframe")
+    outpaint = next(capability for capability in capabilities.capabilities if capability.id == "flux2.outpaint")
+
+    assert reframe.supports_reframe is True
+    assert reframe.supports_outpaint is False
+    assert outpaint.supports_reframe is False
+    assert outpaint.supports_outpaint is True
+    assert outpaint.handler_id == "flux2.edit"
+    assert outpaint.outpaint_preservation == "latent-locked-transition-band-no-postblend"
+    # The green-canvas adapter proof is a base 4B q8 row; distilled rows recommend nothing.
+    assert outpaint.outpaint_recommended_lora is None
+
+
+@pytest.mark.fast
+def test_base_klein_publishes_outpaint_without_a_reframe_row():
+    capabilities = mlxgen.get_model_capabilities(model="AbstractFramework/flux.2-klein-base-4b-8bit")
+    ids = [capability.id for capability in capabilities.capabilities]
+
+    assert "flux2.outpaint" in ids
+    assert "flux2.reframe" not in ids
 
 
 @pytest.mark.fast
@@ -699,6 +742,7 @@ def test_qwen_outpaint_capability_publishes_a_fixed_fill_and_no_fill_option():
     assert row["outpaint_default_fill_mode"] == "edge"
     assert row["outpaint_auto_edge_fill_max_stretch"] is None
     assert row["outpaint_recommended_lora"] is None
+    assert row["outpaint_preservation"] == "adaptive-content-aware-source-blend"
     assert row["outpaint_validated_padding"] == "5%,80%,5%,60%"
 
 
@@ -723,6 +767,7 @@ def test_non_outpaint_capabilities_expose_no_fill_contract(model, capability_id)
     assert row["outpaint_default_fill_mode"] is None
     assert row["outpaint_auto_edge_fill_max_stretch"] is None
     assert row["outpaint_recommended_lora"] is None
+    assert row["outpaint_preservation"] is None
     assert row["outpaint_validated_padding"] is None
     assert row["outpaint_validated_fill_mode"] is None
     assert row["outpaint_validated_max_canvas_pixels"] is None
@@ -733,9 +778,9 @@ def test_published_outpaint_fill_contract_matches_the_cli():
     # task_inference deliberately does not import the CLI parser (import weight), so the two
     # copies of the contract are locked together here instead.
     from mflux.cli.parser.parsers import OUTPAINT_FILL_AUTO, OUTPAINT_FILL_CHOICES
-    from mflux.models.flux2.cli.flux2_edit_generate import (
+    from mflux.outpaint import (
         FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS,
-        _spec_matches_green_border_marker,
+        _spec_matches_marker,
     )
     from mflux.utils.outpaint_util import OutpaintUtil
 
@@ -745,7 +790,10 @@ def test_published_outpaint_fill_contract_matches_the_cli():
     # published contract and OutpaintUtil must never drift apart.
     assert task_inference.FLUX2_OUTPAINT_AUTO_EDGE_FILL_MAX_STRETCH == float(OutpaintUtil.EDGE_FILL_MAX_STRETCH)
     # The adapter the contract recommends must be one the fill resolver actually recognizes.
-    assert _spec_matches_green_border_marker(task_inference.FLUX2_OUTPAINT_RECOMMENDED_LORA)
+    assert _spec_matches_marker(
+        task_inference.FLUX2_OUTPAINT_RECOMMENDED_LORA,
+        FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS,
+    )
     assert FLUX2_GREEN_BORDER_OUTPAINT_LORA_MARKERS
 
 
@@ -1034,16 +1082,6 @@ def test_reframe_outpaint_validation_profile_reports_supported_variants():
         assert Path(record.artifact_path).exists()
         assert record.source_images == (profile.canonical_source,)
         assert Path(record.source_images[0]).exists()
-        model_name = record.model.lower()
-        if record.step == "OP" and "flux.2-klein-" in model_name and "base" not in model_name:
-            with pytest.raises(TaskInferenceError, match="outpaint-padding is only supported"):
-                mlxgen.resolve_generation_plan(
-                    model=record.model,
-                    image_count=1,
-                    has_reframe=False,
-                    has_outpaint=True,
-                )
-            continue
         plan = mlxgen.resolve_generation_plan(
             model=record.model,
             image_count=1,

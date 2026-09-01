@@ -12,16 +12,16 @@ the source image size. For example, `5%,80%,5%,60%` adds a small top/bottom bord
 the right, and a large extension to the left.
 
 `--reframe-padding` is always a generative edit workflow. `--outpaint-padding` is backend-specific:
-Qwen Image Edit uses generative canvas expansion with adaptive source restoration, while FLUX.2
-Klein routes strict outpaint through base Klein models with source-locked denoising and a narrow
-transition band inside the source crop. Neither route is a native masked fill/inpaint pipeline, so
-review the output visually.
+Qwen Image Edit uses generative canvas expansion with adaptive source restoration, while every
+FLUX.2 Klein model — distilled 4B/9B and base 4B/9B alike — runs strict outpaint with source-locked
+denoising and a narrow transition band inside the source crop. Neither route is a native masked
+fill/inpaint pipeline, so review the output visually.
 
 ## The Conditioning Canvas
 
 Outpaint pastes your source onto a larger canvas and asks the model to complete the added area, so
-what fills that area *before* denoising decides what you get back. On FLUX.2 Klein base you choose
-that with `--outpaint-fill`:
+what fills that area *before* denoising decides what you get back. On FLUX.2 Klein you choose that
+with `--outpaint-fill`:
 
 | Mode | What it paints | Use it when |
 | --- | --- | --- |
@@ -72,16 +72,11 @@ continuation to the source; extending in two moderate passes helps for the same 
 
 ## Supported Models
 
-The historical mixed validation profile is `reframe_outpaint_2026_06_08`. It uses one cropped
-starship source image. Treat the distilled FLUX.2 outpaint rows in that profile as historical
-artifacts only; they are no longer the current FLUX.2 outpaint contract. Current source-model
-FLUX.2 Klein base proof is published separately as `flux2_klein_base_starship_2026_06_10`.
-
 | Family | Reframe | Outpaint | Notes |
 | --- | --- | --- | --- |
-| Qwen Image Edit / 2509 / 2511 | current | current | Published `reframe_outpaint_2026_06_08` profile remains representative for the base route. Exact 2511 q8 LoRA-backed reframe and outpaint rows are published separately in [LoRA](lora.md). |
-| FLUX.2 Klein 4B / 9B distilled | current | historical only | Reframe remains supported. Historical outpaint rows are stale and are no longer exposed as strict outpaint. |
-| FLUX.2 Klein Base 4B / 9B | not exposed | current | Strict FLUX.2 outpaint now requires a base Klein model. Source-model contact sheets are published, and the exact `AbstractFramework/flux.2-klein-base-4b-8bit` q8 LoRA-backed outpaint row is published separately in [LoRA](lora.md). |
+| Qwen Image Edit / 2509 / 2511 | supported | supported | Generative canvas expansion with adaptive source restoration, on the route's fixed `edge` canvas. Exact 2511 q8 LoRA-backed reframe and outpaint rows are published in [LoRA](lora.md). |
+| FLUX.2 Klein 4B / 9B distilled | supported | supported | Strict outpaint at guidance 1.0; these weights are step-distilled and do not take CFG. Evidence: `flux2_klein_outpaint_latent_lock_2026_09_01`. |
+| FLUX.2 Klein Base 4B / 9B | not exposed | supported | Strict outpaint at guidance 4.0 (true CFG). The exact `AbstractFramework/flux.2-klein-base-4b-8bit` q8 LoRA-backed outpaint row is published in [LoRA](lora.md). |
 
 These options are intentionally not exposed for base Qwen Image, Qwen Image 2512, ERNIE Image
 Turbo, Z-Image, FIBO, Bonsai, Wan, or SeedVR2. Those families are text generation, latent I2I,
@@ -94,21 +89,83 @@ Check support before running:
 mlxgen capabilities --model AbstractFramework/qwen-image-edit-2511-8bit
 ```
 
-Inspect the June 8 mixed-profile validation records for a package:
+Three validation profiles cover these workflows, all on the same cropped starship source image:
+
+| Profile | Covers |
+| --- | --- |
+| `reframe_outpaint_2026_06_08` | Qwen reframe and outpaint rows, and FLUX.2 Klein distilled reframe rows. Its distilled outpaint artifacts are retained as historical evidence for the edit path with adaptive source blending. |
+| `flux2_klein_base_starship_2026_06_10` | FLUX.2 Klein base source-model latent I2I, edit, multi-reference and strict outpaint. |
+| `flux2_klein_outpaint_latent_lock_2026_09_01` | FLUX.2 Klein distilled 4B/9B q8 strict outpaint, with a base 4B q8 control at identical settings. |
 
 ```sh
 mlxgen validation \
-  --profile reframe_outpaint_2026_06_08 \
-  --model AbstractFramework/qwen-image-edit-2511-8bit
+  --profile flux2_klein_outpaint_latent_lock_2026_09_01 \
+  --model AbstractFramework/flux.2-klein-4b-8bit
 ```
 
-Inspect the current base-source starship validation records:
+## What Each Model Produces
 
-```sh
-mlxgen validation \
-  --profile flux2_klein_base_starship_2026_06_10 \
-  --model black-forest-labs/FLUX.2-klein-base-9B
+Every supported route, run on one source image with one padding value. The source is a 432x240
+crop of a starship in a snowy canyon; `--outpaint-padding "5%,80%,5%,60%"` expands it to a
+1040x272 canvas, adding most of the new space on the left and right so the model has to invent the
+rest of the ship and the surrounding valley.
+
+![Outpaint model matrix](assets/validation/outpaint-model-matrix-2026-09-01/outpaint-model-matrix.jpg)
+
+The prompt, used for all four FLUX.2 Klein rows:
+
+```text
+Outpaint this close cropped starship image into a much wider realistic shot of the full
+spacecraft in the snowy canyon. Keep the existing compact silver spacecraft consistent, complete
+the missing nose, rounded hull, short tail, twin round rear engines, snow field, and ice cliffs in
+the newly added space. The entire ship must fit inside the final wide frame. No duplicated
+spacecraft, no repeated mountains, no text, no border.
 ```
+
+Measured on an Apple M5 Max, 40-core GPU, 128 GB unified memory. `--outpaint-fill auto` resolved
+to `edge` on every row, because the deepest padded side (345 px) is inside the 384 px edge-fill
+reach for this source.
+
+| Model | Steps | Guidance | Time | Generated drift | Source region in output |
+| --- | --- | --- | --- | --- | --- |
+| FLUX.2 Klein 4B distilled q8 | 16 | 1 | **54.6 s** | 6.01 | redrawn (latent-locked) |
+| FLUX.2 Klein 9B distilled q8 | 16 | 1 | 80.6 s | **3.72** | redrawn (latent-locked) |
+| FLUX.2 Klein Base 4B q8 | 20 | 4 | 72.2 s | 5.61 | redrawn (latent-locked) |
+| FLUX.2 Klein Base 9B q8 | 20 | 4 | 100.0 s | 4.03 | redrawn (latent-locked) |
+| Qwen Image Edit 2511 q8 | 20 | 4 | 341.1 s | 9.35 | original pixels restored |
+
+Time is the whole command including weight load.
+
+**Generated drift** is the mean absolute difference (0-255) between your original crop and the same
+region as the model generated it, recorded in every run's metadata as
+`outpaint_source_restore_difference`. It is measured **before** any restoration step, so read it
+together with the last column:
+
+- On the latent-locked FLUX.2 routes nothing is pasted afterwards, so the drift figure is what
+  ships. Lower means your crop came through the round trip more intact.
+- Qwen compares that figure against a threshold and, when it passes, pastes your original crop back
+  over the result. On this row it passed (`outpaint_source_restore_applied: true`), so Qwen's
+  output carries your original pixels exactly, and 9.35 describes what the model drew underneath,
+  not what you get.
+
+How to read this if you are choosing a route:
+
+- **Distilled Klein 4B is the fastest** and runs at guidance 1, because those weights are
+  step-distilled. It is the route to reach for first.
+- **Use Qwen when the original crop must survive untouched.** Its adaptive restoration returns your
+  exact pixels whenever the generated region stayed close enough, which the latent lock cannot
+  promise. It also accepts `--negative`, which the FLUX.2 routes do not, and that is worth using —
+  the row above needs one to stop the model growing aircraft wings. The cost is speed: roughly
+  4-6x the FLUX.2 routes here.
+- **Among the latent-locked routes, the 9B models hold the source closest**, distilled 9B most of
+  all. Choose them when you want a faithful crop without leaving FLUX.2.
+- Every route completed the ship and the valley without a visible seam at the original crop
+  boundary.
+
+Reproduce any row from the
+[command log](assets/validation/outpaint-model-matrix-2026-09-01/outpaint-model-matrix-command-log.md);
+the measurements are in
+[stats](assets/validation/outpaint-model-matrix-2026-09-01/outpaint-model-matrix-stats-m5max.json).
 
 ## Reframe Example
 
@@ -143,6 +200,24 @@ mlxgen generate \
   --output outpaint.png
 ```
 
+Distilled Klein runs the same route in fewer steps and at guidance 1.0:
+
+```sh
+mlxgen generate \
+  --model AbstractFramework/flux.2-klein-4b-8bit \
+  --image input.png \
+  --outpaint-padding "5%,80%,5%,60%" \
+  --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing subject and background outside the original frame." \
+  --steps 16 \
+  --guidance 1 \
+  --seed 42 \
+  --output outpaint.png
+```
+
+Guidance is the one setting that does not carry across the two weight families. Omit `--guidance`
+and each model takes its own default; passing a value above 1.0 to distilled Klein is rejected
+before the weights load.
+
 To add a lot of space on one side — extending a portrait downward to reveal more of the subject —
 pass the padding on that side and let `auto` pick the blank canvas, or name it explicitly:
 
@@ -162,9 +237,19 @@ mlxgen generate \
 `--outpaint-padding` computes the output size from the source and the padding, so do not pass
 `--width`, `--height`, or `--canvas-policy` with it.
 
-For Qwen Image Edit variants, MLX-Gen may still apply adaptive source restoration after generation.
-For current FLUX.2 Klein base outpaint, MLX-Gen relies on source-locked denoising with an interior
-transition band instead of pasting the original crop back over the final image.
+Qwen Image Edit variants apply adaptive source restoration after generation, pasting your original
+crop back when the generated region stayed close enough to it. Every FLUX.2 Klein route, distilled
+and base alike, relies on source-locked denoising with an interior transition band instead. Each
+route publishes which of the two it uses as `outpaint_preservation` on its capability row.
+
+## From Python
+
+Both workflows are available to embedding applications without shelling out to the CLI:
+`run_outpaint(...)` runs the whole pipeline on a loaded runtime, and `prepare_outpaint(...)` /
+`prepare_reframe(...)` build the conditioning canvas and hand back the generation geometry without
+loading model weights. The fill policy, the guard, the preservation strategy and the recorded
+metadata are the same ones the commands above use. See
+[Outpaint And Reframe](python-integration.md#outpaint-and-reframe).
 
 ## Validation Assets
 
@@ -192,11 +277,18 @@ Per-family contact sheets:
 - [FLUX.2 Klein 4B](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-4b-reframe-outpaint-matrix.jpg) - historical distilled reframe/outpaint matrix
 - [FLUX.2 Klein 9B](assets/validation/reframe-outpaint-2026-06-08/flux2-klein-9b-reframe-outpaint-matrix.jpg) - historical distilled reframe/outpaint matrix
 
-Current source-model FLUX.2 Klein base proof:
+Source-model FLUX.2 Klein base proof:
 
 - [Base 4B/9B edit and strict-outpaint matrix](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-edit-matrix.jpg)
 - [Base 4B/9B strict-outpaint seam review](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-outpaint-seams.jpg)
 - [Base 4B/9B text-to-image smoke panel](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-t2i-panel.jpg)
+
+Distilled FLUX.2 Klein strict-outpaint proof, with a base 4B q8 control at the same padding, seed
+and step count:
+
+- [Klein 4B q8](assets/validation/flux2-klein-outpaint-latent-lock-2026-09-01/flux2_klein_4b_q8_outpaint_b.png)
+- [Klein 9B q8](assets/validation/flux2-klein-outpaint-latent-lock-2026-09-01/flux2_klein_9b_q8_outpaint_b.png)
+- [Klein base 4B q8 control](assets/validation/flux2-klein-outpaint-latent-lock-2026-09-01/flux2_klein_base_4b_q8_outpaint_b.png)
 
 The exact commands and validation manifest are published with the assets:
 
@@ -204,3 +296,4 @@ The exact commands and validation manifest are published with the assets:
 - [Validation manifest](assets/validation/reframe-outpaint-2026-06-08/reframe-outpaint-validation-manifest.json)
 - [Base starship command log](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-command-log.md)
 - [Base starship validation manifest](assets/validation/flux2-klein-base-starship-2026-06-10/flux2-klein-base-starship-validation-manifest.json)
+- [Latent-lock outpaint command log](assets/validation/flux2-klein-outpaint-latent-lock-2026-09-01/outpaint-latent-lock-command-log.md)

@@ -53,7 +53,7 @@ class Flux2KleinOutpaint(nn.Module):
         prompt: str,
         canvas: OutpaintCanvas,
         num_inference_steps: int | None = None,
-        guidance: float = 4.0,
+        guidance: float | None = None,
         scheduler: str = "flow_match_euler_discrete",
         image_strength: float = 1.0,
         reference_image_paths: list[Path | str] | None = None,
@@ -61,6 +61,12 @@ class Flux2KleinOutpaint(nn.Module):
         timer = RuntimeTimer()
         if num_inference_steps is None:
             num_inference_steps = default_inference_steps(self.model_config, fallback=20)
+        # The route runs on base and distilled Klein alike, and the guidance default is the one
+        # thing that differs: base weights run true CFG, distilled weights are step-distilled and
+        # must stay at 1.0. Defaulting to a literal here silently gave distilled weights CFG.
+        if guidance is None:
+            guidance = _Flux2KleinEditHelpers.default_guidance(self.model_config)
+        _Flux2KleinEditHelpers.validate_guidance(model_config=self.model_config, guidance=guidance)
         reference_image_paths = [canvas.canvas_path] if reference_image_paths is None else reference_image_paths
         config = Config(
             model_config=self.model_config,

@@ -214,11 +214,23 @@ mlxgen generate \
 ```
 
 `flux2.outpaint` runs without a LoRA. This row exists to prove the dedicated outpaint adapter on
-the same green-canvas route and seed. The adapter is the recommended configuration for the route
-and is published as `outpaint_recommended_lora` on the capability record: it improves results
-generally, and most when the padding adds a large amount of new space. When it is loaded,
-`--outpaint-fill auto` paints the pure-green canvas the adapter is trained on. See
-[Reframe and Outpaint](reframe-outpaint.md) for the conditioning-canvas options.
+the same green-canvas route and seed. It improves results generally, and most when the padding adds
+a large amount of new space. When it is loaded, `--outpaint-fill auto` paints the pure-green canvas
+the adapter is trained on.
+
+`outpaint_recommended_lora` is published per route. It names this adapter on the FLUX.2 Klein base
+4B and base 9B `flux2.outpaint` rows, which share the base weights it was trained against;
+distilled Klein rows publish `outpaint_recommended_lora: null` and run the same route without an
+adapter. The recommendation and the LoRA validation status are separate fields: only the base 4B
+row carries `lora_status: "validated"` with
+`lora_validation_profile: "lora_flux2_klein_base4b_q8_outpaint_2026_06_22"`, which is why the table
+above lists that one row. Read both off the row you are about to use:
+
+```sh
+mlxgen capabilities --model AbstractFramework/flux.2-klein-base-4b-8bit
+```
+
+See [Reframe and Outpaint](reframe-outpaint.md) for the conditioning-canvas options.
 
 ## Lightning Caveat For Qwen
 

@@ -11,6 +11,7 @@ import mlxgen
 from mflux.cli import mlx_gen
 from mflux.cli.mlx_gen import RouterInvocation
 from mflux.models.common.download_policy import DownloadRequiredError, downloads_enabled
+from mflux.utils.outpaint_util import OutpaintUtil
 
 
 def test_generate_help_renders_padding_examples(monkeypatch, capsys):
@@ -92,13 +93,25 @@ def test_upscale_help_calls_out_both_restoration_families(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize(
-    "module_name,argv0",
+    "module_name,argv0,preservation_phrases",
     [
-        ("mflux.models.flux2.cli.flux2_edit_generate", "mflux-generate-flux2-edit"),
-        ("mflux.models.qwen.cli.qwen_image_edit_generate", "mflux-generate-qwen-edit"),
+        # Each backend's --outpaint-padding help must name the preservation strategy that route
+        # actually runs, not the other one's.
+        (
+            "mflux.models.flux2.cli.flux2_edit_generate",
+            "mflux-generate-flux2-edit",
+            ("lock the source region in latent space", "transition band"),
+        ),
+        (
+            "mflux.models.qwen.cli.qwen_image_edit_generate",
+            "mflux-generate-qwen-edit",
+            ("adaptive", "source blend"),
+        ),
     ],
 )
-def test_backend_edit_help_renders_canvas_expansion_options(module_name, argv0, monkeypatch, capsys):
+def test_backend_edit_help_renders_canvas_expansion_options(
+    module_name, argv0, preservation_phrases, monkeypatch, capsys
+):
     module = importlib.import_module(module_name)
     monkeypatch.setattr(sys, "argv", [argv0, "--help"])
 
@@ -106,11 +119,11 @@ def test_backend_edit_help_renders_canvas_expansion_options(module_name, argv0, 
         module.main()
 
     assert exc.value.code == 0
-    help_output = capsys.readouterr().out
+    help_output = " ".join(capsys.readouterr().out.split())
     assert "--reframe-padding" in help_output
     assert "--outpaint-padding" in help_output
-    assert "adaptive" in help_output
-    assert "source blend" in help_output
+    for phrase in preservation_phrases:
+        assert phrase in help_output
 
 
 def test_flux2_legacy_help_calls_out_mlxgen_generate(monkeypatch, capsys):
@@ -141,7 +154,61 @@ def test_flux2_legacy_generate_help_calls_out_mlxgen_generate(monkeypatch, capsy
     assert "mlxgen generate" in help_output
 
 
-def test_flux2_edit_backend_rejects_distilled_outpaint_before_model_load(tmp_path, monkeypatch, capsys):
+def test_flux2_edit_backend_runs_distilled_outpaint_at_guidance_one(tmp_path, monkeypatch):
+    # Distilled Klein reaches the same latent-locked outpaint model as base Klein. The one thing
+    # that must not follow it across is the base guidance default: these weights are
+    # step-distilled and CFG above 1.0 is out of distribution.
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+    observed = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_path = None
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            self.image.save(kwargs["path"])
+
+    class FakeFlux2Outpaint:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage(Image.open(kwargs["canvas"].canvas_path).convert("RGB"))
+
+    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinOutpaint", FakeFlux2Outpaint)
+    monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            "flux2-klein-4b",
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "0,25%,0,25%",
+            "--prompt",
+            "extend",
+            "--output",
+            str(output),
+        ],
+    )
+
+    flux2_edit_generate.main()
+
+    assert observed["generate"]["guidance"] == 1.0
+    assert observed["generate"]["canvas"].source_width == 128
+
+
+def test_flux2_edit_backend_rejects_cfg_on_distilled_outpaint(tmp_path, monkeypatch, capsys):
     from mflux.models.flux2.cli import flux2_edit_generate
 
     source = tmp_path / "source.png"
@@ -157,6 +224,8 @@ def test_flux2_edit_backend_rejects_distilled_outpaint_before_model_load(tmp_pat
             str(source),
             "--outpaint-padding",
             "0,25%,0,25%",
+            "--guidance",
+            "4.0",
             "--prompt",
             "extend",
         ],
@@ -165,7 +234,7 @@ def test_flux2_edit_backend_rejects_distilled_outpaint_before_model_load(tmp_pat
     with pytest.raises(SystemExit):
         flux2_edit_generate.main()
 
-    assert "requires a FLUX.2 Klein base model" in capsys.readouterr().err
+    assert "only supported for FLUX.2 base models" in capsys.readouterr().err
 
 
 def test_flux2_edit_backend_rejects_negative_prompt_with_migration_guidance(monkeypatch, capsys):
@@ -356,7 +425,7 @@ def test_qwen_backend_explicit_empty_negative_prompt_is_preserved(monkeypatch):
     assert observed["generate"]["negative_prompt"] == ""
 
 
-def test_qwen_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_path):
+def test_qwen_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_path, capsys):
     from mflux.models.qwen.cli import qwen_image_edit_generate
 
     source = tmp_path / "source.png"
@@ -371,6 +440,7 @@ def test_qwen_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pat
 
         def save(self, **kwargs):
             observed["save"] = kwargs
+            observed["extra_metadata"] = dict(getattr(self, "extra_metadata", {}))
             self.image.save(kwargs["path"])
 
     class FakeQwenEdit:
@@ -412,6 +482,21 @@ def test_qwen_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pat
     source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
     output_interior = generated.crop((5, 3, 15, 9))
     assert ImageChops.difference(output_interior, source_interior).getbbox() is None
+    # The Qwen route reports the same resolved-canvas line and records the same fill metadata as
+    # every other outpaint route; its one legal canvas is the fixed edge fill.
+    stderr = capsys.readouterr().err
+    assert "Outpaint: fill=edge, canvas 32x16 from source 12x8" in stderr
+    assert "padding top=2 right=4 bottom=2 left=4." in stderr
+    assert "--outpaint-fill auto selected" not in stderr
+    metadata = observed["extra_metadata"]
+    assert metadata["outpaint_padding"] == "2,4,2,4"
+    assert metadata["outpaint_preservation"] == "adaptive-content-aware-source-blend"
+    assert metadata["outpaint_source_restore_applied"] is True
+    assert metadata["outpaint_fill"] == "edge"
+    assert metadata["outpaint_fill_requested"] == "edge"
+    assert metadata["outpaint_fill_color"] is None
+    assert metadata["outpaint_max_side_padding"] == "right"
+    assert metadata["outpaint_edge_fill_reach_px"] == 12
 
 
 def test_qwen_edit_backend_reframe_uses_expanded_canvas(monkeypatch, tmp_path):
@@ -751,7 +836,7 @@ def test_capabilities_command_reports_wan_context_frames_on_a14b_i2v_only(capsys
     # concat i2v path as the bracket; hosts gate on this additive v6 field.
     mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-I2V-A14B-Diffusers"])
     i2v_payload = json.loads(capsys.readouterr().out)
-    assert i2v_payload["schema_version"] == 10
+    assert i2v_payload["schema_version"] == 11
     i2v_row = next(capability for capability in i2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
     assert i2v_row["supports_context_frames"] is True
     assert i2v_row["supports_svi"] is True
@@ -967,21 +1052,25 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
             observed["canvas_background"] = Image.open(kwargs["canvas"].canvas_path).convert("RGB").getpixel((1, 1))
             return FakeImage(Image.open(kwargs["canvas"].canvas_path).convert("RGB"))
 
-    original_composite_source_region = flux2_edit_generate.OutpaintUtil.composite_source_region
+    original_composite_source_region = OutpaintUtil.composite_source_region
 
-    def capturing_composite_source_region(*, generated_image, canvas, feather_px=None, restore_threshold=12.0):
+    def capturing_composite_source_region(
+        *, generated_image, canvas, feather_px=None, restore_threshold=12.0, preserve_source=None
+    ):
         observed["restore_threshold"] = restore_threshold
+        observed["preserve_source"] = preserve_source
         return original_composite_source_region(
             generated_image=generated_image,
             canvas=canvas,
             feather_px=feather_px,
             restore_threshold=restore_threshold,
+            preserve_source=preserve_source,
         )
 
     monkeypatch.setattr(flux2_edit_generate, "Flux2KleinOutpaint", FakeFlux2Outpaint)
     monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
     monkeypatch.setattr(
-        flux2_edit_generate.OutpaintUtil,
+        OutpaintUtil,
         "composite_source_region",
         staticmethod(capturing_composite_source_region),
     )
@@ -1008,6 +1097,9 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
     assert observed["generate"]["canvas"].target_width == 32
     assert observed["generate"]["canvas"].target_height == 16
     assert Path(observed["generate"]["canvas"].canvas_path).name == "outpaint_canvas.png"
+    # Both spellings are passed: preserve_source is the contract and restore_threshold is the
+    # legacy sentinel for the same "never post-blend" behavior.
+    assert observed["preserve_source"] is False
     assert observed["restore_threshold"] == -1.0
     assert observed["extra_metadata"]["outpaint_preservation"] == "latent-locked-transition-band-no-postblend"
     assert observed["extra_metadata"]["outpaint_source_restore_applied"] is False
@@ -2822,6 +2914,141 @@ def test_outpaint_padding_routes_qwen_edit():
         ]
 
 
+def test_outpaint_fill_is_rejected_with_the_route_message_on_a_fixed_canvas_route(capsys):
+    # `mlxgen generate` declares --outpaint-fill for every model, but only routes publishing
+    # supports_outpaint_fill have a backend option behind it. Without the router check the flag
+    # reached mflux-generate-qwen-edit and argparse answered "unrecognized arguments" under a
+    # program name the caller never typed.
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-edit-2511-8bit",
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "0,64,0,0",
+                "--outpaint-fill",
+                "neutral",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    error = capsys.readouterr().err
+    assert "qwen.outpaint has a fixed 'edge' conditioning canvas" in error
+    assert "does not accept an outpaint fill mode ('neutral' was requested)" in error
+    assert "unrecognized arguments" not in error
+    assert "mflux-generate-qwen-edit" not in error
+
+
+def test_outpaint_fill_color_is_rejected_on_a_fixed_canvas_route(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/qwen-image-edit-2511-8bit",
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "0,64,0,0",
+                "--outpaint-fill-color",
+                "0,255,0",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    error = capsys.readouterr().err
+    assert "qwen.outpaint has a fixed 'edge' conditioning canvas" in error
+    assert "does not accept an outpaint fill color" in error
+    assert "unrecognized arguments" not in error
+
+
+@pytest.mark.parametrize("fill", ["edge", "auto"])
+def test_outpaint_fill_naming_the_fixed_canvas_is_accepted_and_not_forwarded(fill):
+    # `edge` is the route's one legal canvas and `auto` names the run-time policy, so both are
+    # satisfiable. The backend has no option to receive them, so they must not be re-emitted.
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/qwen-image-edit-2511-8bit",
+            "--image",
+            "input.png",
+            "--outpaint-padding",
+            "0,64,0,0",
+            "--outpaint-fill",
+            fill,
+            "--prompt",
+            "extend the room",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-qwen-edit"
+    assert "--outpaint-fill" not in invocation.argv
+    assert invocation.argv[-2:] == ["--outpaint-padding", "0,64,0,0"]
+
+
+def test_outpaint_fill_is_forwarded_to_routes_that_publish_the_fill_contract():
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/flux.2-klein-base-4b-8bit",
+            "--image",
+            "input.png",
+            "--outpaint-padding",
+            "0,64,0,0",
+            "--outpaint-fill",
+            "solid",
+            "--outpaint-fill-color",
+            "0,255,0",
+            "--prompt",
+            "extend the room",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert invocation.argv[-4:] == ["--outpaint-fill", "solid", "--outpaint-fill-color", "0,255,0"]
+
+
+def test_outpaint_fill_without_outpaint_padding_is_rejected_by_the_router(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/flux.2-klein-base-4b-8bit",
+                "--image",
+                "input.png",
+                "--outpaint-fill",
+                "neutral",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    error = capsys.readouterr().err
+    assert "configure the --outpaint-padding conditioning canvas" in error
+
+
+def test_outpaint_padding_routes_distilled_flux2_edit():
+    for model in ["AbstractFramework/flux.2-klein-4b-8bit", "AbstractFramework/flux.2-klein-9b-8bit"]:
+        invocation = mlx_gen._resolve_invocation(
+            [
+                "--model",
+                model,
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "5%,80%,5%,60%",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+        assert invocation.target_name == "mflux-generate-flux2-edit"
+        assert "--outpaint-padding" in invocation.argv
+
+
 def test_outpaint_padding_is_rejected_for_latent_only_models(capsys):
     with pytest.raises(SystemExit):
         mlx_gen._resolve_invocation(
@@ -2941,21 +3168,6 @@ def test_reframe_outpaint_validation_profile_records_route_to_supported_backends
     }
     for record in profile.records:
         option = "--reframe-padding" if record.step == "RF" else "--outpaint-padding"
-        if record.step == "OP" and record.family in {"FLUX.2 Klein 4B", "FLUX.2 Klein 9B"}:
-            with pytest.raises(SystemExit):
-                mlx_gen._resolve_invocation(
-                    [
-                        "--model",
-                        record.model,
-                        "--image",
-                        str(source),
-                        option,
-                        "0,25%,0,25%",
-                        "--prompt",
-                        "expand the image",
-                    ]
-                )
-            continue
         invocation = mlx_gen._resolve_invocation(
             [
                 "--model",

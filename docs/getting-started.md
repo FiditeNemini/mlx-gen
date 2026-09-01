@@ -243,25 +243,33 @@ model to fill the larger view:
 
 ```sh
 mlxgen generate \
-  --model black-forest-labs/FLUX.2-klein-base-9B \
+  --model AbstractFramework/flux.2-klein-4b-8bit \
   --image input.png \
   --outpaint-padding "5%,80%,5%,60%" \
   --prompt "Outpaint this close crop into a wider realistic shot. Complete the missing subject and background outside the original frame." \
-  --steps 20 \
-  --guidance 4 \
+  --steps 16 \
+  --guidance 1 \
   --seed 42 \
   --output outpaint.png
 ```
 
-Outpaint is backend-specific. Qwen Image Edit variants still use an edge-extended conditioning
-canvas plus adaptive source restoration. Current FLUX.2 Klein strict outpaint is base-only and
-uses source-locked denoising with a narrow latent transition band instead of pasting the original
-crop back over the result. This is not a native fill/inpaint pipeline with an explicit diffusion
-mask, and it is not an exact pixel-lock guarantee.
+Outpaint is backend-specific. Qwen Image Edit variants use an edge-extended conditioning canvas
+plus adaptive source restoration. FLUX.2 Klein strict outpaint uses source-locked denoising with a
+narrow latent transition band instead of pasting the original crop back over the result, and runs
+on every Klein model: distilled 4B/9B at guidance 1.0 and base 4B/9B at guidance 4.0. This is not a
+native fill/inpaint pipeline with an explicit diffusion mask, and it is not an exact pixel-lock
+guarantee.
+
+Distilled Klein 4B, as used above, is the quickest route to a first result: on the published
+432x240 starship crop at `5%,80%,5%,60%`, its q8 package finishes the whole command in 54.6 s on an
+Apple M5 Max, against 341.1 s for Qwen Image Edit 2511 q8. Every supported route on that one
+source, with timings and source drift, is in
+[Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces).
 
 Validation assets for reframe and outpaint are published in
 [Image Edit Capabilities](edit-capabilities.md) and [Reframe and Outpaint](reframe-outpaint.md),
-including the 2026-06-10 FLUX.2 Klein base source-model starship proof.
+including the 2026-06-10 FLUX.2 Klein base source-model starship proof and the 2026-09-01
+latent-locked outpaint rows.
 
 For a complete image workflow with included outputs, see the
 [spaceship snow example](examples/spaceship-snow.md). It covers text-to-image, two single-image
