@@ -721,7 +721,7 @@ mlxgen generate \
 ```
 
 Outpaint pastes the source onto a larger canvas and asks the model to complete the added area, so
-what fills that area before denoising decides much of the result. On FLUX.2 Klein base routes you
+what fills that area before denoising decides much of the result. On FLUX.2 Klein routes you
 choose it with `--outpaint-fill {auto,edge,neutral,solid,blur}`, plus `--outpaint-fill-color` for
 `solid`. The default `auto` continues the source border texture while the padding stays within the
 depth that texture covers, switches to a blank per-side border color past that so the model
@@ -734,19 +734,29 @@ current proof. Outpaint cost scales with the expanded canvas and attention cost 
 canvas area, so extending in two moderate passes is cheaper and generally better than one large
 pass.
 
-Outpaint is backend-specific in how it treats the source region too. Qwen Image Edit variants use
-expanded-canvas generation plus adaptive source restoration. FLUX.2 Klein strict outpaint is
-base-only and uses source-locked denoising with a narrow latent transition band instead of
-post-generation source pasting.
+Outpaint is backend-specific in how it treats the source region too, and each route publishes which
+strategy it uses as `outpaint_preservation`. Qwen Image Edit variants use expanded-canvas generation
+plus adaptive source restoration, pasting the original crop back while the generated source window
+still matches it. FLUX.2 Klein strict outpaint uses source-locked denoising with a narrow latent
+transition band and never repaints the source region afterwards, on distilled 4B/9B at guidance 1.0
+and on base 4B/9B at guidance 4.0.
 
-This is not a native fill/inpaint backend with an explicit diffusion mask, and it is not an exact
-pixel-lock guarantee: the source region travels through a VAE encode/decode round trip, so it is
-reproduced rather than preserved bit-for-bit. When a region must stay untouched, use masked editing
-(`--mask-path`, see [Masked editing](masked-editing.md)) instead. Latent I2I models, Z-Image, ERNIE,
-FIBO, base Qwen Image, Qwen Image 2512, distilled FLUX.2 Klein, Wan, SeedVR2, and unsupported edit
-models reject `--outpaint-padding` before loading weights. Exact current prepared-package outpaint
-proof exists for `AbstractFramework/flux.2-klein-base-4b-8bit`; broader package claims should still
-follow the published validation rows.
+Neither is a native fill/inpaint backend with an explicit diffusion mask, and neither is an exact
+pixel-lock guarantee: on the FLUX.2 Klein route the source region is decoded from latents, so it is
+reproduced rather than preserved bit-for-bit, and on the Qwen route the paste back is conditional.
+When a region must stay untouched, use masked editing (`--mask-path`, see
+[Masked editing](masked-editing.md)) instead. Latent I2I models, Z-Image, ERNIE,
+FIBO, base Qwen Image, Qwen Image 2512, Wan, SeedVR2, and unsupported edit models reject
+`--outpaint-padding` before loading weights. Exact prepared-package outpaint proof exists for
+`AbstractFramework/flux.2-klein-base-4b-8bit`, `AbstractFramework/flux.2-klein-4b-8bit`, and
+`AbstractFramework/flux.2-klein-9b-8bit`; broader package claims should still follow the published
+validation rows.
+
+Every supported route, run on one source at `5%,80%,5%,60%` on an Apple M5 Max with per-route
+timings and source drift, is published in
+[Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces). Distilled Klein 4B q8 is the
+fastest row at 54.6 s; Qwen Image Edit 2511 q8 is the slowest at 341.1 s and is the only route in
+the set that accepts `--negative`.
 
 For ordinary image-to-image, the default `source-aspect` canvas policy keeps the output ratio close
 to the first source image. That prevents accidental stretching, but it does not expand the original

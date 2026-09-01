@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from mflux.callbacks.callback_manager import CallbackManager
+from mflux.cli.outpaint_cli import emit_canvas_notices, prepare_canvas_session
 from mflux.cli.output_paths import resolve_output_path
 from mflux.cli.parser.parsers import CommandLineParser
 from mflux.cli.runtime_events import CliRuntimeEventStream, cli_print
@@ -12,9 +13,7 @@ from mflux.models.qwen.variants.edit.qwen_image_edit import (
     QwenImageEdit,
     QwenImageEdit as _QwenImageEditImplementation,
 )
-from mflux.utils.dimension_resolver import CANVAS_POLICY_EXACT_RESIZE
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError, StopImageGenerationException
-from mflux.utils.outpaint_util import OutpaintCanvas, OutpaintUtil
 from mflux.utils.prompt_util import PromptUtil
 
 
@@ -104,14 +103,23 @@ def main():
 
     try:
         with TemporaryDirectory(prefix="mlxgen-outpaint-") as temporary_directory:
+            # The conditioning canvas, the fill policy, the guard and the metadata are the shared
+            # outpaint layer's; this command only supplies the parsed request and the model.
             try:
-                image_paths, outpaint_canvas, reframe_canvas = _resolve_image_paths(
+                canvas_session = prepare_canvas_session(
                     args=args,
                     source_image_paths=source_image_paths,
-                    temporary_directory=Path(temporary_directory),
+                    workspace=temporary_directory,
+                    model_config=model_config,
                 )
             except ValueError as exc:
                 parser.error(str(exc))
+            emit_canvas_notices(canvas_session)
+            image_paths = (
+                [str(path) for path in canvas_session.conditioning_image_paths]
+                if canvas_session is not None
+                else source_image_paths
+            )
 
             try:
                 for seed in args.seed:
@@ -140,24 +148,8 @@ def main():
                             scheduler=args.scheduler,
                             canvas_policy=args.canvas_policy,
                         )
-                        if outpaint_canvas is not None:
-                            image.image = OutpaintUtil.composite_source_region(
-                                generated_image=image.image,
-                                canvas=outpaint_canvas,
-                            )
-                            image.image_paths = source_image_paths
-                            OutpaintUtil.attach_metadata(
-                                generated_image=image,
-                                canvas=outpaint_canvas,
-                                padding_value=args.outpaint_padding,
-                            )
-                        if reframe_canvas is not None:
-                            image.image_paths = source_image_paths
-                            OutpaintUtil.attach_reframe_metadata(
-                                generated_image=image,
-                                canvas=reframe_canvas,
-                                padding_value=args.reframe_padding,
-                            )
+                        if canvas_session is not None:
+                            canvas_session.finalize(image)
 
                         events.emit_save()
                         image.save(
@@ -179,32 +171,6 @@ def main():
     finally:
         if memory_saver:
             cli_print(memory_saver.memory_stats(), json_events=bool(args.json_events))
-
-
-def _resolve_image_paths(
-    *,
-    args,
-    source_image_paths: list[str],
-    temporary_directory: Path,
-) -> tuple[list[str], OutpaintCanvas | None, OutpaintCanvas | None]:
-    if args.outpaint_padding is None and args.reframe_padding is None:
-        return source_image_paths, None, None
-    padding_value = args.outpaint_padding or args.reframe_padding
-    option_name = "--outpaint-padding" if args.outpaint_padding is not None else "--reframe-padding"
-    canvas_name = "outpaint_canvas.png" if args.outpaint_padding is not None else "reframe_canvas.png"
-
-    canvas = OutpaintUtil.create_expanded_canvas(
-        source_path=source_image_paths[0],
-        padding_value=padding_value,
-        output_path=temporary_directory / canvas_name,
-        option_name=option_name,
-    )
-    args.width = canvas.target_width
-    args.height = canvas.target_height
-    args.canvas_policy = CANVAS_POLICY_EXACT_RESIZE
-    if args.outpaint_padding is not None:
-        return [str(canvas.canvas_path)], canvas, None
-    return [str(canvas.canvas_path)], None, canvas
 
 
 def _validate_canvas_args(*, parser: CommandLineParser, args, source_image_paths: list[str]) -> None:

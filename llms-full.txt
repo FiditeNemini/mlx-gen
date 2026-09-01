@@ -11,15 +11,15 @@
 - `docs/README.md`: documentation tree index.
 - `docs/getting-started.md`: install, first download, model preparation, image generation, image editing, SeedVR2 image/video restoration and upscaling, and Wan video examples.
 - `docs/architecture.md`: system overview and model-file lifecycle diagrams, package shape, command boundaries, runtime failure contract, quantization policy, and the Python integration boundary.
-- `docs/api.md`: public CLI, generation routing, public tasks and internal modes, image/video/reference input roles, the `--outpaint-fill`/`--outpaint-fill-color` conditioning-canvas options, Bernini R2V/RV2V/V2V options, Wan video controls, SeedVR2 and SwiftVR restoration, runtime events, metadata, and the capability schema (`schema_version` 10, including reference-image bounds, the `restoration` route rows, and the outpaint fill contract).
+- `docs/api.md`: public CLI, generation routing, public tasks and internal modes, image/video/reference input roles, the `--outpaint-fill`/`--outpaint-fill-color` conditioning-canvas options, Bernini R2V/RV2V/V2V options, Wan video controls, SeedVR2 and SwiftVR restoration, runtime events, metadata, and the capability schema (`schema_version` 11, including reference-image bounds, the `restoration` route rows, and the outpaint fill contract).
 - `docs/image-edit-modes.md`: plain-language guide to latent img2img, edit-reference, masked edit/inpaint, structured control, multi-reference, generative reframe, and outpaint with its selectable conditioning canvas, including what each mode preserves and what to expect from the output.
 - `docs/masked-editing.md`: canonical masked-edit reference — request contract, per-model route matrix with proof grades (Qwen edit/base, Z-Image Turbo, FLUX.2 Klein, video masks; non-turbo Z-Image masked edit is withdrawn for now), per-family behavior including the tunable base-Qwen `--mask-strength` warm start and `effective_steps` metadata, and route selection advice.
 - `docs/qwen-route-matrix.md`: current MLX-Gen route truth for Qwen Image and Qwen Image Edit, mapping public `mlxgen` capability ids to the upstream Diffusers Qwen pipeline families and to the proof surfaces that already exist.
 - `docs/qwen-localized-editing.md`: plain-language guide to Qwen localized-edit routes, contrasting masked edit/inpaint, structured control, and shipped base-Qwen control-inpaint, defining ControlNet and “sidecar” in user terms, and linking the accepted proof assets.
 - `docs/previews.md`: step-wise generation previews rendered with published tiny autoencoders (`taef1` for the FLUX.1 latent space including Z-Image, `taef2` for the FLUX.2 latent space including ERNIE and Bonsai), reproducible tiny-versus-full command pairs with contact sheets, the `--preview-decoder auto|tiny|full` contract, the explicit per-latent-space availability table (mapping is never inferred from latent-channel count), measured fidelity and decode/wall-time costs on M5 Max, the `PreviewDecoder` + `ImageUtil.to_pil_image` application path for realtime preview frames, and the guarantee that final outputs are always full-VAE decoded.
 - `docs/upscaling.md`: SeedVR2 image and video restoration guide with official 3B/7B source usage, published 3B/7B q8/q4 package handles, shortest-edge and scale-factor sizing with exact-geometry image restoration (`1x` is pixel-identical to the input), automatic step selection that measures and refines the one-step noise residue on flat/dark content (`--steps` forces a fixed count), the conservative safe-video profile, the `29/8` multi-chunk video floor, accepted five-second Eiffel `1x` and `2x` 3B/7B proof bundles with readable mode labels, reproduction commands, timings/memory data, and real 5x source/output comparisons.
-- `docs/edit-capabilities.md`: image-edit and adjacent structured-control contact sheets, model/package status summaries, the published outpaint capability fields and validated envelope, and exact command logs for Qwen Image Edit, Qwen Image Edit 2509/2511, base Qwen structured control, FLUX.2 Klein, latent I2I rows, and the masked-edit 5x5 matrix grading the FLUX.2 Klein, base-Qwen native, and Z-Image non-turbo masked routes. FIBO Edit is unsupported through unified `mlxgen generate`.
-- `docs/reframe-outpaint.md`: reframe/outpaint workflows, the `--outpaint-fill` conditioning-canvas modes and how `auto` resolves them, padding guidance, exact commands, the mixed June 8 profile, the current FLUX.2 Klein base source-model starship proof, and the related validation profile ids.
+- `docs/edit-capabilities.md`: image-edit and adjacent structured-control contact sheets, model/package status summaries, the published outpaint capability fields including `outpaint_preservation` and the per-route validated envelope, and exact command logs for Qwen Image Edit, Qwen Image Edit 2509/2511, base Qwen structured control, FLUX.2 Klein, latent I2I rows, and the masked-edit 5x5 matrix grading the FLUX.2 Klein, base-Qwen native, and Z-Image non-turbo masked routes. FIBO Edit is unsupported through unified `mlxgen generate`.
+- `docs/reframe-outpaint.md`: reframe/outpaint workflows, the `--outpaint-fill` conditioning-canvas modes and how `auto` resolves them, padding guidance, exact commands, strict FLUX.2 Klein outpaint on distilled 4B/9B (guidance 1.0) and base 4B/9B (guidance 4.0), the cross-route outpaint matrix running every supported route on one source with per-route timings and source drift, and the three related validation profile ids.
 - `docs/lora.md`: route-specific LoRA capability fields, explicit adapter download, strict scale matching, exact adapter/base-model compatibility, source/no-LoRA/with-LoRA validation, exact public proof rows for current Qwen, Z-Image, FLUX.2, ERNIE, and Wan routes, including base Qwen latent, the exact `AbstractFramework/z-image-turbo-8bit` latent children's-drawing row, Qwen 2511 multi-reference/reframe/outpaint, FLUX.2 Klein 9B multi-reference, FLUX.2 Klein base 4B outpaint, direct `lightx2v/Wan2.2-Lightning` download, and explicit guidance that the validated Lightning target is the MLX-Gen q8 package rather than an arbitrary external FP8 checkpoint.
 - `docs/wan-video.md`: practical Wan2.2 T2V/I2V guidance, plain and masked prompt-guided A14B video-to-video with the exact reproducible proof commands and included artifacts, output canvas and source mapping (`--canvas-policy`, `--resize-mode`), repeat-run and application performance options (prompt-embed disk cache, resident text encoder, health-check opt-out, opt-in compiled transformer, A14B inactive-expert release), broader A14B target size families, and `101`-frame, 20 fps M5 Max comparison clips for A14B and TI2V-5B.
 - `docs/bernini.md`: experimental Bernini-R 1.3B reference-to-video and video-edit routes, pinned BF16 runtime setup and download sizes, the committed official public parity bundle with full prompts and contact sheets per upstream example row, and task-specific recipes for many-reference binding and structure-changing edits.
@@ -28,7 +28,7 @@
 - `docs/model-management.md`: explicit `download` and `prepare`, local packages, factored Bernini setup and disk preflight, matching Hugging Face handle resolution, and `DownloadRequiredError`.
 - `docs/quantization.md`: published package matrix, model-specific q8/q4/BF16 policies, Wan storage/runtime behavior, Bernini's BF16-only gate, and Bonsai ternary support.
 - `docs/huggingface-publishing.md`: generated model cards and AbstractFramework Hugging Face upload guidance.
-- `docs/python-integration.md`: embedding MLX-Gen, route-resolved runtime loading, `model_kwargs` constructor passthrough (resident text encoder, prompt-cache opt-out), runtime memory defaults for hosts (`MFLUX_MLX_CACHE_LIMIT_GB`, `-1` unlimited opt-out, host-managed `mx.set_cache_limit` detection, `MFLUX_NO_WEIGHT_PREFETCH`), Wan `last_image_path`, `context_image_paths`/`context_noise`, and `denoising_step_list` generation kwargs, `save_kwargs` including `validate_health=False`, serial multi-output reuse for unified `mlxgen generate` families, overwrite/collision behavior, SeedVR2's direct-model boundary, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
+- `docs/python-integration.md`: embedding MLX-Gen, route-resolved runtime loading, `model_kwargs` constructor passthrough (resident text encoder, prompt-cache opt-out), runtime memory defaults for hosts (`MFLUX_MLX_CACHE_LIMIT_GB`, `-1` unlimited opt-out, host-managed `mx.set_cache_limit` detection, `MFLUX_NO_WEIGHT_PREFETCH`), Wan `last_image_path`, `context_image_paths`/`context_noise`, and `denoising_step_list` generation kwargs, `save_kwargs` including `validate_health=False`, serial multi-output reuse for unified `mlxgen generate` families, overwrite/collision behavior, the outpaint/reframe pipeline (`run_outpaint`, `prepare_outpaint`, `prepare_reframe`, and the `post_process` before-save hook on `generate_outputs`), SeedVR2's direct-model boundary, progress callbacks, AbstractVision/AbstractCore integration, and threading behavior.
 - `docs/faq.md`: common conceptual questions, I2I mode selection and output sizing, SeedVR2 image/video sizing and default audio-preservation behavior, Qwen edit variants, negative prompts, reframe/outpaint, Wan resolutions, long image-to-video shot guidance (81-frame budget and continuation routes), prompting guidance, usage limits, and why MLX-Gen q8 Lightning guidance should not be generalized to arbitrary FP8 checkpoints.
 - `docs/troubleshooting.md`: user-facing failure symptoms, diagnostics, fixes including the outpaint conditioning-canvas workflow for streaked padding, and legacy `mflux-generate-*` migration guidance.
 - `docs/release.md`: release and publishing process.
@@ -146,13 +146,20 @@ source images as conditioning or references, so MLX-Gen rejects `--image-strengt
 before loading weights. Generative reframe is available through `--reframe-padding`
 for models that advertise `supports_reframe=true`; it asks the edit model to generate a larger view
 and may redraw source content. Outpaint is available through `--outpaint-padding` for
-capabilities that advertise `supports_outpaint=true`. Qwen Image Edit variants use expanded
-canvas generation plus adaptive source restoration. FLUX.2 Klein strict outpaint is
-base-only and uses source-locked denoising with a narrow latent transition band instead of
-post-generation source pasting. Published source-model proof covers
-`black-forest-labs/FLUX.2-klein-base-4B` and `black-forest-labs/FLUX.2-klein-base-9B`; prepared
-base q8/q4 package proof is narrower; the exact current prepared-package outpaint row is
-`AbstractFramework/flux.2-klein-base-4b-8bit`. Unsupported model families reject
+capabilities that advertise `supports_outpaint=true`, and each route publishes its source-region
+guarantee as `outpaint_preservation`. Qwen Image Edit variants use expanded canvas generation plus
+adaptive source restoration (`adaptive-content-aware-source-blend`): the whole canvas is generated,
+then the original crop is pasted back while the generated source window still matches it. FLUX.2
+Klein strict outpaint uses source-locked denoising with a narrow latent transition band and never
+repaints the source region afterwards (`latent-locked-transition-band-no-postblend`). It runs on
+every Klein model: distilled 4B/9B publish `flux2.outpaint` alongside `flux2.reframe` and run at
+guidance 1.0, and base 4B/9B publish `flux2.outpaint` only and run at guidance 4.0. Omit
+`--guidance` and each model takes its own default; passing a value above 1.0 to distilled Klein is
+rejected before the weights load. Published proof covers
+`black-forest-labs/FLUX.2-klein-base-4B` and `black-forest-labs/FLUX.2-klein-base-9B` as source
+models, `AbstractFramework/flux.2-klein-base-4b-8bit` as the exact base prepared-package row, and
+`AbstractFramework/flux.2-klein-4b-8bit` and `AbstractFramework/flux.2-klein-9b-8bit` as the exact
+distilled prepared-package rows. Unsupported model families reject
 `--outpaint-padding` before loading weights. `--outpaint-padding` computes `--width` and `--height`
 from the source and the padding and runs at `exact-resize`, so it rejects `--width`, `--height`,
 and `--canvas-policy`, and cannot be combined with `--reframe-padding` or `--mask-path`.
@@ -166,7 +173,7 @@ uses the official blank negative-prompt behavior for Qwen edit models when the o
 
 Outpaint pastes the source onto a larger canvas and asks the model to complete the added area, so
 what fills that area before denoising decides much of the result. Routes that advertise
-`supports_outpaint_fill=true` - the FLUX.2 Klein base outpaint route - accept `--outpaint-fill`
+`supports_outpaint_fill=true` - the FLUX.2 Klein outpaint route - accept `--outpaint-fill`
 with `auto` (default), `edge`, `neutral`, `solid`, or `blur`:
 
 - `edge` stretches the source border strip outward, continuing an existing texture across the
@@ -198,26 +205,57 @@ subject matter instead of smearing the source border.
 
 Applications can read the same contract as JSON without running a job. Outpaint-capable capability
 rows carry `supports_outpaint_fill`, `outpaint_fill_modes`, `outpaint_default_fill_mode`,
-`outpaint_auto_edge_fill_max_stretch`, `outpaint_recommended_lora`, `outpaint_validated_padding`,
-`outpaint_validated_fill_mode`, and `outpaint_validated_max_canvas_pixels`. On
+`outpaint_auto_edge_fill_max_stretch`, `outpaint_recommended_lora`, `outpaint_preservation`,
+`outpaint_validated_padding`, `outpaint_validated_fill_mode`, and
+`outpaint_validated_max_canvas_pixels`. On
 `AbstractFramework/flux.2-klein-base-4b-8bit`, `flux2.outpaint` reports
 `supports_outpaint_fill: true`, `outpaint_fill_modes: ["auto", "edge", "neutral", "solid", "blur"]`,
-`outpaint_default_fill_mode: "auto"`, `outpaint_auto_edge_fill_max_stretch: 12.0`, and
-`outpaint_recommended_lora: "fal/flux-2-klein-4B-outpaint-lora"`. On
+`outpaint_default_fill_mode: "auto"`, `outpaint_auto_edge_fill_max_stretch: 12.0`,
+`outpaint_recommended_lora: "fal/flux-2-klein-4B-outpaint-lora"`, and
+`outpaint_preservation: "latent-locked-transition-band-no-postblend"`. On
+`AbstractFramework/flux.2-klein-4b-8bit` and `AbstractFramework/flux.2-klein-9b-8bit`,
+`flux2.outpaint` reports the same contract with `outpaint_recommended_lora: null`, because the
+green-canvas adapter's A/B proof is a base row. On
 `AbstractFramework/qwen-image-edit-2511-8bit`, `qwen.outpaint` reports
-`supports_outpaint_fill: false`, `outpaint_fill_modes: ["edge"]`, and
-`outpaint_default_fill_mode: "edge"`. Both publish the same validated envelope:
-`"5%,80%,5%,60%"` padding, `edge` fill, and `282880` maximum canvas pixels. Outside that envelope
-outpaint is supported but unvalidated. `outpaint_recommended_lora` is optional; the route runs
-without it. Generated metadata records `outpaint_fill`, `outpaint_fill_color`,
-`outpaint_fill_requested`, `outpaint_fill_reason`, `outpaint_edge_fill_reach_px`, and
-`outpaint_edge_fill_overreach`.
+`supports_outpaint_fill: false`, `outpaint_fill_modes: ["edge"]`,
+`outpaint_default_fill_mode: "edge"`, and
+`outpaint_preservation: "adaptive-content-aware-source-blend"`. `outpaint_recommended_lora` and the
+`outpaint_validated_*` envelope are published per route, so a row states only its own evidence;
+these rows happen to share one envelope, `"5%,80%,5%,60%"` padding with `edge` fill and `282880`
+maximum canvas pixels. Outside that envelope outpaint is supported but unvalidated.
+`outpaint_recommended_lora` is optional; the route runs without it. A route publishing
+`supports_outpaint_fill: false` accepts only the mode named by
+`outpaint_default_fill_mode`; `mlxgen generate` refuses any other before dispatch, naming the
+capability and the fixed canvas. Generated metadata records `outpaint_fill`, `outpaint_fill_color`,
+`outpaint_fill_requested`, `outpaint_fill_reason`, `outpaint_edge_fill_reach_px`,
+`outpaint_edge_fill_overreach`, `outpaint_preservation`, and
+`outpaint_source_restore_difference`.
 
-Two limits are worth planning around. The source region travels through a VAE encode/decode round
-trip rather than being pasted back, so it is reproduced, not preserved bit-for-bit; use masked
-editing (`--mask-path`) when a region must stay untouched. Outpaint cost scales with the expanded
+Python hosts run the same pipeline through `mlxgen.run_outpaint(loaded=..., source_image=...,
+padding=..., seeds=[...], prompt=...)`, or build the canvas without loading weights through
+`mlxgen.prepare_outpaint(...)` / `mlxgen.prepare_reframe(...)` and call `session.generate(model,
+...)`. `LoadedGenerationModel.generate_outputs(..., post_process=<callable>)` is the hook that runs
+on each artifact after generation and before save.
+
+Two limits are worth planning around. First, neither preservation strategy is an exact pixel-lock
+guarantee: on the latent-locked FLUX.2 Klein route the source region is decoded from latents rather
+than pasted back, so it is reproduced and not preserved bit-for-bit, and on the adaptive Qwen route
+the paste back is conditional on the generated source window still matching the source. Every run
+records `outpaint_source_restore_difference`: the mean absolute difference (0-255) between the
+source crop and the model's own output in that region, measured before any restoration step, so it
+is comparable across both strategies. Use masked editing
+(`--mask-path`) when a region must stay untouched. Second, outpaint cost scales with the expanded
 canvas and attention cost grows faster than canvas area, so extending in two moderate passes is
 cheaper and generally better than one large pass.
+
+Measured on one 432x240 starship crop at padding `5%,80%,5%,60%` (a 1040x272 canvas, `auto`
+resolving to `edge`) on an Apple M5 Max, 40-core GPU, 128 GB unified memory: distilled Klein 4B q8
+54.6 s at source drift 6.01, distilled Klein 9B q8 80.6 s at 3.72, base Klein 4B q8 72.2 s at 5.61,
+base Klein 9B q8 100.0 s at 4.03, and Qwen Image Edit 2511 q8 341.1 s at 9.35. Time is the whole
+command including weight load. Distilled Klein 4B is the fastest route, the 9B models hold the
+source closest, and Qwen is the only route in the set that accepts a negative prompt. Full table and
+command log: `docs/reframe-outpaint.md` and
+`docs/assets/validation/outpaint-model-matrix-2026-09-01/`.
 
 ## Choosing Image Edit Modes
 
@@ -246,7 +284,7 @@ MLX-Gen exposes one public `image-to-image` task, but models can support differe
 - `generative reframe`: zoom-out style edit through `--reframe-padding`. It generates a larger
   scene and may redraw subject details inside the original crop.
 - `outpaint`: canvas extension through `--outpaint-padding`, starting from a conditioning canvas
-  that `--outpaint-fill` selects on FLUX.2 Klein base routes. It aims to keep the source region more
+  that `--outpaint-fill` selects on FLUX.2 Klein routes. It aims to keep the source region more
   stable than reframe, but it is still generative rather than a literal pixel-lock guarantee.
 
 Use `mlxgen capabilities --model <model>` to check whether the selected model supports the mode you
@@ -281,9 +319,13 @@ route.
 regular Qwen Image Edit base/q8/q4 contact sheet, the Qwen Image Edit 2511 source/q8/q4 parity
 sheet, the 5x4 distilled FLUX.2/Qwen Image Edit 2509 matrices, the 2026-06-08 reframe/outpaint
 source/q8/q4 matrices, the 2026-06-10 FLUX.2 Klein base source-model starship
-matrix and seam review, and links the exact command logs used for the validation profiles. In the
+matrix and seam review, the 2026-09-01 FLUX.2 Klein latent-locked outpaint rows, the 2026-09-01
+cross-route outpaint model matrix, and links the
+exact command logs used for the validation profiles. In the
 documented spaceship profiles, distilled FLUX.2 Klein 4B/9B q4/q8 pass latent, edit-reference,
-multi-reference, and generative reframe rows, while their old outpaint rows are stale history;
+multi-reference, and generative reframe rows; their q8 packages pass strict outpaint on the
+2026-09-01 latent-lock profile, and their 2026-06-08 outpaint artifacts are retained as historical
+evidence for the edit path with adaptive source blending;
 FLUX.2 Klein base 9B source passes latent, edit-reference, multi-reference, and strict outpaint on
 the starship case; FLUX.2 Klein base 4B source passes latent, edit-reference, and strict outpaint
 with a partial multi-reference row; Qwen Image Edit 2509 source/q8 pass the edit-reference and
@@ -449,7 +491,7 @@ and text/video-to-video before the weight load. `--context-noise <0-1000>` (Pyth
 head in latent space, deterministic per seed. Both are recorded in metadata
 (`context_image_paths`, `context_noise`), replayed by `--config-from-metadata`, and advertised
 as the additive `supports_context_frames` field on the `wan.first-frame` capability row
-(introduced in capabilities schema 6; current payload schema 10). EXPERIMENTAL zero-shot behavior with a measured probe
+(introduced in capabilities schema 6; current payload schema 11). EXPERIMENTAL zero-shot behavior with a measured probe
 (backlog 0102): the K=5 head carried seam motion speed (magnitude ratio 0.90 vs the
 single-frame baseline's 1.90 double-speed restart) at the cost of a mild ~2-frame
 flare/exposure step at the conditioned-to-free boundary; hosts assembling films should trim
@@ -468,7 +510,7 @@ aborts; the pack is likewise rejected on non-SVI runs). Conflicts with `--image-
 load; continuations >65 frames warn. Metadata records `svi_*` truth including
 `svi_assembly_trim_frames` (drop that many leading frames of each continuation at assembly:
 `1 + 4 x count`); hosts gate on the additive `supports_svi` capability field (capabilities
-schema 7; current payload schema 10). Use a unique seed per clip; author-documented Lightning coexistence sets
+schema 7; current payload schema 11). Use a unique seed per clip; author-documented Lightning coexistence sets
 lightx2v HIGH scale 0.5-0.6, LOW 1.0.
 
 `--denoising-step-list 1000 750 500 250` (Python: `denoising_step_list=[...]`) runs an exact

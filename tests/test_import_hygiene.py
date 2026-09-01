@@ -26,25 +26,44 @@ FORBIDDEN_TOP_LEVEL_MODULES = (
 )
 
 
-@pytest.mark.fast
-def test_import_mflux_stays_free_of_heavy_libraries():
+def _modules_loaded_by(statement: str) -> list[str]:
     # Same interpreter as the test venv; a fresh subprocess gives a clean
     # sys.modules snapshot without pytest's own imports polluting it.
     result = subprocess.run(
-        [sys.executable, "-c", "import mflux, sys, json; print(json.dumps(sorted(sys.modules)))"],
+        [sys.executable, "-c", f"{statement}; import sys, json; print(json.dumps(sorted(sys.modules)))"],
         check=True,
         capture_output=True,
         text=True,
     )
-    loaded_modules = json.loads(result.stdout)
+    return json.loads(result.stdout)
 
-    offenders = sorted(
+
+def _forbidden_offenders(loaded_modules: list[str]) -> list[str]:
+    return sorted(
         module
         for module in loaded_modules
         for forbidden in FORBIDDEN_TOP_LEVEL_MODULES
         if module == forbidden or module.startswith(f"{forbidden}.")
     )
+
+
+@pytest.mark.fast
+def test_import_mflux_stays_free_of_heavy_libraries():
+    offenders = _forbidden_offenders(_modules_loaded_by("import mflux"))
+
     assert not offenders, (
         f"`import mflux` pulled forbidden heavy modules: {offenders}. "
         "Keep huggingface_hub/PIL/torch-class imports function-local (see backlog 0088)."
+    )
+
+
+@pytest.mark.fast
+def test_import_mlxgen_stays_free_of_heavy_libraries():
+    # `mlxgen` copies mflux's public names eagerly, so a name that resolves through a heavy
+    # module has to stay lazy on both packages or the gate only holds for one of them.
+    offenders = _forbidden_offenders(_modules_loaded_by("import mlxgen"))
+
+    assert not offenders, (
+        f"`import mlxgen` pulled forbidden heavy modules: {offenders}. "
+        "Lazily-exported mflux names must be skipped by the mlxgen eager copy loop."
     )

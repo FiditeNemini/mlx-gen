@@ -21,7 +21,7 @@ edit should I expect from each mode?" For the current Qwen-specific route map, u
 | Use an edge map or pose guide to fix the layout while generating from text | structured control | Use a route that advertises `supports_control_image=true` and pass `--controlnet-image-path`. This is not the same as source-image edit. |
 | Use one image for structure and another for style, material, or lighting | `multi-reference` | The first image anchors geometry; later images contribute additional references. |
 | Reveal more of the scene around the source image | `generative reframe` | The model generates a wider view. It may redraw parts of the source image while composing the larger scene. |
-| Extend the canvas beyond the crop while trying to keep the source region stable | `outpaint` | The model fills new space around the source image, starting from a conditioning canvas you can select on FLUX.2 Klein base routes. This is the closest MLX-Gen route to source-preserving extension, but it is still generative. |
+| Extend the canvas beyond the crop while trying to keep the source region stable | `outpaint` | The model fills new space around the source image, starting from a conditioning canvas you can select on FLUX.2 Klein routes. This is the closest MLX-Gen route to source-preserving extension, but it is still generative. |
 
 Use `mlxgen capabilities --model <model>` before a long run. Not every model supports every mode.
 
@@ -284,10 +284,11 @@ Use outpaint when the main goal is extending beyond the crop while keeping the e
 region as stable as the backend allows.
 
 Outpaint is still generative, but it is more source-preserving than reframe. MLX-Gen uses
-backend-specific strategies:
+backend-specific strategies, and each route publishes which one it uses as `outpaint_preservation`:
 
 - Qwen Image Edit variants use a larger conditioning canvas and adaptive source restoration.
-- FLUX.2 Klein base variants use source-locked denoising with a narrow latent transition band.
+- Every FLUX.2 Klein model — distilled 4B/9B and base 4B/9B — uses source-locked denoising with a
+  narrow latent transition band. Distilled Klein runs at guidance 1.0, base Klein at 4.0.
 
 This mode is best for:
 
@@ -301,9 +302,10 @@ This mode is not an exact guarantee of:
 - native masked fill/inpaint semantics;
 - zero reinterpretation at the source boundary.
 
-The source region travels through a VAE encode/decode round trip rather than being pasted back, so
-it is reproduced, not preserved bit-for-bit. When a region must stay untouched, use masked editing
-(`--mask-path`, see [Masked editing](masked-editing.md)).
+On the FLUX.2 Klein route the source region is decoded from latents rather than pasted back, so it
+is reproduced, not preserved bit-for-bit. On the Qwen route the paste back is conditional: it
+applies only while the generated source window still matches the source. When a region must stay
+untouched, use masked editing (`--mask-path`, see [Masked editing](masked-editing.md)).
 
 Example:
 
@@ -319,14 +321,17 @@ mlxgen generate \
 ```
 
 Expected result: the newly added space is generated around the source crop. The center should stay
-more stable than in reframe, especially on the FLUX.2 base route, but the result is still not a
+more stable than in reframe, especially on the FLUX.2 Klein routes, but the result is still not a
 literal source-paste guarantee.
+[Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces) runs every supported route on
+one source and one padding value so you can compare speed and how far the source moved before
+choosing.
 
 ### The Conditioning Canvas
 
 Outpaint pastes your source onto a larger canvas and asks the model to complete the added area, so
-what fills that area before denoising decides much of what you get back. On FLUX.2 Klein base routes
-you choose it with `--outpaint-fill`:
+what fills that area before denoising decides much of what you get back. On FLUX.2 Klein routes —
+distilled and base alike — you choose it with `--outpaint-fill`:
 
 | Mode | What it paints | What to expect |
 | --- | --- | --- |

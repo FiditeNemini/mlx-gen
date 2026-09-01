@@ -13,6 +13,7 @@ from mflux.models.common.config.inference_defaults import default_inference_step
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
+from mflux.task_inference import FLUX2_OUTPAINT_FILL_MODES, OUTPAINT_FILL_AUTO
 from mflux.utils import box_values, scale_factor
 from mflux.utils.dimension_resolver import (
     CANVAS_POLICY_CHOICES,
@@ -88,10 +89,11 @@ def image_strength_value(value: str) -> float:
 
 
 # Conditioning-canvas fill algorithms for --outpaint-padding. `auto` resolves to one of the
-# three concrete modes at run time and prints which one it picked; the concrete names match
-# OutpaintUtil.create_expanded_canvas(fill_mode=...).
-OUTPAINT_FILL_AUTO = "auto"
-OUTPAINT_FILL_CHOICES = (OUTPAINT_FILL_AUTO, "edge", "neutral", "solid", "blur")
+# concrete modes at run time and prints which one it picked; the concrete names match
+# OutpaintUtil.create_expanded_canvas(fill_mode=...). The option offers the FLUX.2 route's fill
+# contract because that is the only route publishing supports_outpaint_fill, and it is read off
+# that published contract rather than restated here.
+OUTPAINT_FILL_CHOICES = FLUX2_OUTPAINT_FILL_MODES
 
 
 def rgb_color_value(value: str) -> tuple[int, int, int]:

@@ -1,3 +1,4 @@
+import importlib
 import os
 
 # Set TOKENIZERS_PARALLELISM to avoid fork warning
@@ -40,6 +41,28 @@ from mflux.task_inference import (
     resolve_task,
 )
 
+# Outpaint entry points are resolved on first use. `mflux.outpaint` reaches PIL through
+# OutpaintUtil, and `import mflux` is kept free of PIL (tests/test_import_hygiene.py), so an
+# eager import here would put that cost on every host - including the ones that never outpaint.
+_LAZY_EXPORTS = {
+    name: "mflux.outpaint"
+    for name in (
+        "OutpaintContract",
+        "OutpaintError",
+        "OutpaintFillPlan",
+        "OutpaintRequest",
+        "OutpaintSession",
+        "ReframeSession",
+        "guard_outpaint_fill_plan",
+        "outpaint_contract",
+        "outpaint_contract_for_model",
+        "prepare_outpaint",
+        "prepare_reframe",
+        "resolve_outpaint_fill_plan",
+        "run_outpaint",
+    )
+}
+
 __all__ = [
     "GenerationCapability",
     "GeneratedOutput",
@@ -50,7 +73,13 @@ __all__ = [
     "LoadedGenerationModel",
     "ModelValidation",
     "ModelCapabilities",
+    "OutpaintContract",
+    "OutpaintError",
+    "OutpaintFillPlan",
+    "OutpaintRequest",
+    "OutpaintSession",
     "REFRAME_OUTPAINT_PROFILE_ID",
+    "ReframeSession",
     "ResolvedTask",
     "RestorationCapability",
     "TaskInferenceError",
@@ -59,14 +88,34 @@ __all__ = [
     "get_model_capabilities",
     "get_model_validation",
     "get_validation_profile",
+    "guard_outpaint_fill_plan",
     "infer_task",
     "list_validation_profiles",
     "load_generation_model",
     "load_generation_model_for_plan",
     "normalize_i2i_mode",
     "normalize_task",
+    "outpaint_contract",
+    "outpaint_contract_for_model",
+    "prepare_outpaint",
+    "prepare_reframe",
     "resolve_generation_plan",
     "resolve_generation_runtime",
     "resolve_generation_runtime_for_plan",
+    "resolve_outpaint_fill_plan",
     "resolve_task",
+    "run_outpaint",
 ]
+
+
+def __getattr__(name: str):
+    module_name = _LAZY_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(importlib.import_module(module_name), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)

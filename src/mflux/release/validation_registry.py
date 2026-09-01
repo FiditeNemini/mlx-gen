@@ -51,6 +51,7 @@ _STATUS_RANK = {
 I2I_EDIT_5X4_PROFILE_ID = "i2i_edit_5x4_2026_06_05"
 REFRAME_OUTPAINT_PROFILE_ID = "reframe_outpaint_2026_06_08"
 FLUX2_KLEIN_BASE_STARSHIP_PROFILE_ID = "flux2_klein_base_starship_2026_06_10"
+FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_PROFILE_ID = "flux2_klein_outpaint_latent_lock_2026_09_01"
 BERNINI_R_1_3B_PROFILE_ID = "bernini_r_1_3b_2026_08_04"
 
 CANONICAL_SOURCE = "docs/assets/examples/spaceship-snow/01_t2i_spaceship_snow.png"
@@ -59,6 +60,7 @@ REFRAME_OUTPAINT_DIR = "docs/assets/validation/reframe-outpaint-2026-06-08"
 REFRAME_OUTPAINT_SOURCE = f"{REFRAME_OUTPAINT_DIR}/source-b-cropped-starship.png"
 FLUX2_KLEIN_BASE_STARSHIP_DIR = "docs/assets/validation/flux2-klein-base-starship-2026-06-10"
 FLUX2_KLEIN_BASE_STARSHIP_SOURCE = REFRAME_OUTPAINT_SOURCE
+FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_DIR = "docs/assets/validation/flux2-klein-outpaint-latent-lock-2026-09-01"
 LORA_VALIDATION_DIR = "docs/assets/validation/lora-2026-06-11"
 WAN_LORA_VALIDATION_DIR = "docs/assets/validation/wan-lora-2026-06-11"
 LIGHTX2V_WAN_4STEP_VALIDATION_DIR = "docs/assets/validation/lightx2v-wan-4step-2026-06-12"
@@ -192,6 +194,10 @@ def list_validation_profiles() -> tuple[ValidationProfile, ...]:
         _zimage_inpaint_profile(),
         _masked_edit_matrix_profile(),
         *_lora_profiles(),
+        # Order matters: default_validation_profile_id_for_model returns the first profile
+        # holding exact evidence for a row, and every model here already has an earlier
+        # profile, so this one adds evidence without moving any model's default.
+        _flux2_klein_outpaint_latent_lock_profile(),
     )
 
 
@@ -279,8 +285,10 @@ def _reframe_outpaint_profile() -> ValidationProfile:
         description=(
             "Manual visual QA for single-image edit-reference reframe and canvas expansion workflows. "
             "Qwen Image Edit rows remain current for reframe and outpaint. Distilled FLUX.2 Klein 4B/9B "
-            "reframe rows remain current, but their 2026-06-08 outpaint artifacts are retained as stale "
-            "historical evidence because current strict FLUX.2 outpaint now requires a base Klein model."
+            "reframe rows remain current; their 2026-06-08 outpaint artifacts are retained as stale "
+            "historical evidence for the edit path with adaptive source blending, which predates the "
+            "latent-locked strict outpaint route those models run today. Current distilled FLUX.2 "
+            f"outpaint evidence is profile {FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_PROFILE_ID}."
         ),
         records=tuple(_reframe_outpaint_records()),
     )
@@ -298,6 +306,81 @@ def _flux2_klein_base_starship_profile() -> ValidationProfile:
             "share the route surface through capabilities, but their starship contact sheets are still pending."
         ),
         records=tuple(_flux2_klein_base_starship_records()),
+    )
+
+
+def _flux2_klein_outpaint_latent_lock_profile() -> ValidationProfile:
+    return ValidationProfile(
+        id=FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_PROFILE_ID,
+        title="FLUX.2 Klein Latent-Locked Outpaint Validation",
+        canonical_source=REFRAME_OUTPAINT_SOURCE,
+        description=(
+            "Manual visual QA for strict FLUX.2 Klein outpaint on the latent-locked route, run on "
+            "distilled 4B/9B q8 packages with a base 4B q8 control at identical settings. Every row "
+            "uses padding 5%,80%,5%,60% on the 432x240 starship crop, seed 8512, 16 steps and the "
+            "route's edge conditioning canvas, so the recorded source-region drift is comparable "
+            "across weights. Guidance is each model's own default: 1.0 on step-distilled Klein, 4.0 "
+            "on base Klein. Commands: "
+            f"{FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_DIR}/outpaint-latent-lock-command-log.md."
+        ),
+        records=_flux2_klein_outpaint_latent_lock_records(),
+    )
+
+
+def _flux2_klein_outpaint_latent_lock_records() -> tuple[ValidationRecord, ...]:
+    shared = {
+        "profile_id": FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_PROFILE_ID,
+        "package_variant": "q8 prepared",
+        "step": "OP",
+        "step_label": "latent-locked strict outpaint",
+        "public_task": "image-to-image",
+        "mode": "edit-reference",
+        "source_images": (REFRAME_OUTPAINT_SOURCE,),
+        "prompt": FLUX_OUTPAINT_PROMPT,
+        "evidence_date": "2026-09-01",
+    }
+    return (
+        ValidationRecord(
+            **shared,
+            model="AbstractFramework/flux.2-klein-4b-8bit",
+            family="FLUX.2 Klein 4B",
+            status=STATUS_PASS,
+            artifact_path=f"{FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_DIR}/flux2_klein_4b_q8_outpaint_b.png",
+            reviewer_notes=(
+                "PASS at padding 5%,80%,5%,60%, seed 8512, 16 steps, guidance 1, fill edge. Expands to "
+                "a full-ship wide frame with the whole spacecraft inside the canvas and no visible "
+                "pasted source rectangle. Recorded source-region drift 6.01 against the source crop, "
+                "next to 5.69 for the base 4B q8 control at the same settings."
+            ),
+        ),
+        ValidationRecord(
+            **shared,
+            model="AbstractFramework/flux.2-klein-9b-8bit",
+            family="FLUX.2 Klein 9B",
+            status=STATUS_PASS,
+            artifact_path=f"{FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_DIR}/flux2_klein_9b_q8_outpaint_b.png",
+            reviewer_notes=(
+                "PASS at padding 5%,80%,5%,60%, seed 8512, 16 steps, guidance 1, fill edge. Whole "
+                "spacecraft inside the wide canvas, no duplicated ship and no visible pasted source "
+                "rectangle; the completed tail reads as a swept wing and fin rather than the short "
+                "tail the prompt asks for. Recorded source-region drift 3.72, the lowest of the three "
+                "rows."
+            ),
+        ),
+        ValidationRecord(
+            **shared,
+            model="AbstractFramework/flux.2-klein-base-4b-8bit",
+            family="FLUX.2 Klein Base 4B",
+            status=STATUS_PARTIAL,
+            artifact_path=f"{FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_DIR}/flux2_klein_base_4b_q8_outpaint_b.png",
+            reviewer_notes=(
+                "PARTIAL at padding 5%,80%,5%,60%, seed 8512, 16 steps, guidance 4, fill edge. Recorded "
+                "as the seam control for the distilled rows: the source region is held cleanly at "
+                "drift 5.69, but at 16 steps the completed hull runs past the right edge instead of "
+                "fitting inside the frame as the prompt asks. The base starship profile's 20-step row "
+                "is the composition evidence for these weights."
+            ),
+        ),
     )
 
 
@@ -1612,7 +1695,8 @@ def _reframe_outpaint_records() -> list[ValidationRecord]:
                     reviewer_notes=(
                         (
                             f"STALE historical artifact at padding {outpaint_padding}, seed {outpaint_seed}, {steps} steps, guidance {guidance}. "
-                            "This distilled FLUX.2 canvas expansion visibly preserved a source box and is no longer exposed as current strict outpaint support."
+                            "This distilled FLUX.2 row ran through the edit path with an adaptive pixel post-blend and let the source region drift far past the blend threshold, so it recomposed the source instead of preserving it. "
+                            f"Current distilled FLUX.2 outpaint runs the latent-locked route; see profile {FLUX2_KLEIN_OUTPAINT_LATENT_LOCK_PROFILE_ID}."
                         )
                         if is_distilled_flux
                         else (

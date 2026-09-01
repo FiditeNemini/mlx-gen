@@ -1,0 +1,85 @@
+{
+  "profile": "outpaint_model_matrix_2026_09_01",
+  "machine": "Apple M5 Max, 40-core GPU, 128 GB unified memory",
+  "source": "docs/assets/validation/reframe-outpaint-2026-06-08/source-b-cropped-starship.png",
+  "source_size": "432x240",
+  "outpaint_padding": "5%,80%,5%,60%",
+  "canvas": "1040x272",
+  "canvas_pixels": 282880,
+  "outpaint_fill_requested": "auto",
+  "outpaint_fill_resolved": "edge",
+  "edge_fill_reach_px": 384,
+  "deepest_padding_px": 345,
+  "rows": [
+    {
+      "model": "AbstractFramework/flux.2-klein-4b-8bit",
+      "label": "FLUX.2 Klein 4B (distilled, q8)",
+      "capability_id": "flux2.outpaint",
+      "preservation": "latent-locked-transition-band-no-postblend",
+      "steps": 16,
+      "guidance": 1.0,
+      "seed": 8512,
+      "wall_seconds": 54.6,
+      "artifact": "klein_4b_q8_distilled.png",
+      "generated_drift": 6.01,
+      "source_restore_applied": false
+    },
+    {
+      "model": "AbstractFramework/flux.2-klein-9b-8bit",
+      "label": "FLUX.2 Klein 9B (distilled, q8)",
+      "capability_id": "flux2.outpaint",
+      "preservation": "latent-locked-transition-band-no-postblend",
+      "steps": 16,
+      "guidance": 1.0,
+      "seed": 8512,
+      "wall_seconds": 80.6,
+      "artifact": "klein_9b_q8_distilled.png",
+      "generated_drift": 3.72,
+      "source_restore_applied": false
+    },
+    {
+      "model": "AbstractFramework/flux.2-klein-base-4b-8bit",
+      "label": "FLUX.2 Klein Base 4B (q8)",
+      "capability_id": "flux2.outpaint",
+      "preservation": "latent-locked-transition-band-no-postblend",
+      "steps": 20,
+      "guidance": 4.0,
+      "seed": 8512,
+      "wall_seconds": 72.2,
+      "artifact": "klein_base_4b_q8.png",
+      "generated_drift": 5.61,
+      "source_restore_applied": false
+    },
+    {
+      "model": "AbstractFramework/flux.2-klein-base-9b-8bit",
+      "label": "FLUX.2 Klein Base 9B (q8)",
+      "capability_id": "flux2.outpaint",
+      "preservation": "latent-locked-transition-band-no-postblend",
+      "steps": 20,
+      "guidance": 4.0,
+      "seed": 8512,
+      "wall_seconds": 100.0,
+      "artifact": "klein_base_9b_q8.png",
+      "generated_drift": 4.03,
+      "source_restore_applied": false
+    },
+    {
+      "model": "AbstractFramework/qwen-image-edit-2511-8bit",
+      "label": "Qwen Image Edit 2511 (q8)",
+      "capability_id": "qwen.outpaint",
+      "preservation": "adaptive-content-aware-source-blend",
+      "steps": 20,
+      "guidance": 4.0,
+      "seed": 8413,
+      "wall_seconds": 341.1,
+      "artifact": "qwen_image_edit_2511_q8.png",
+      "generated_drift": 9.35,
+      "source_restore_applied": true
+    }
+  ],
+  "notes": [
+    "generated_drift is the mean absolute difference (0-255) between the source crop and the same region as the model generated it, recorded in metadata as outpaint_source_restore_difference. It is measured BEFORE any restoration step.",
+    "source_restore_applied reports whether the route pasted the original crop back over the result. The latent-locked FLUX.2 routes never do, so generated_drift is what ships. Qwen does when the figure is within its threshold, so its output carries the original pixels.",
+    "Wall time is the full command including weight load, not denoise time alone."
+  ]
+}
