@@ -42,6 +42,7 @@ class LoadedGenerationModel:
         progress_callback: ProgressCallback | None = None,
         save_kwargs: dict[str, Any] | None = None,
         post_process: Callable[[Any], None] | None = None,
+        generate_method: Callable[..., Any] | None = None,
         **generate_kwargs: Any,
     ) -> GeneratedOutput:
         return self.generate_outputs(
@@ -51,6 +52,7 @@ class LoadedGenerationModel:
             progress_callback=progress_callback,
             save_kwargs=save_kwargs,
             post_process=post_process,
+            generate_method=generate_method,
             **generate_kwargs,
         )[0]
 
@@ -63,6 +65,7 @@ class LoadedGenerationModel:
         progress_callback: ProgressCallback | None = None,
         save_kwargs: dict[str, Any] | None = None,
         post_process: Callable[[Any], None] | None = None,
+        generate_method: Callable[..., Any] | None = None,
         **generate_kwargs: Any,
     ) -> list[GeneratedOutput]:
         """Generate one artifact per seed, optionally saving each one.
@@ -71,6 +74,11 @@ class LoadedGenerationModel:
         so a caller that owns a post-generation step (compositing an outpaint source region
         back, attaching extra metadata) keeps the wrapper's multi-seed, progress and save
         behaviour instead of reimplementing it.
+
+        `generate_method` replaces the model's own generate call for this run. It is called once
+        per seed as `generate_method(seed=..., **generate_kwargs)` and must return the artifact.
+        This is how a pipeline that runs the model more than once per seed - a split outpaint,
+        which denoises two canvases and hands the first to the second - rides the same loop.
         """
         return _RuntimeGenerationExecutor.generate_outputs(
             loaded=self,
@@ -81,6 +89,7 @@ class LoadedGenerationModel:
             save_kwargs=save_kwargs,
             post_process=post_process,
             generate_kwargs=generate_kwargs,
+            generate_method=generate_method,
         )
 
 
@@ -172,6 +181,7 @@ class _RuntimeGenerationExecutor:
         save_kwargs: dict[str, Any] | None,
         generate_kwargs: dict[str, Any],
         post_process: Callable[[Any], None] | None = None,
+        generate_method: Callable[..., Any] | None = None,
     ) -> list[GeneratedOutput]:
         resolved_seeds = [int(seed) for seed in seeds]
         if not resolved_seeds:
@@ -183,7 +193,8 @@ class _RuntimeGenerationExecutor:
             seeds=resolved_seeds,
             output=output,
         )
-        generate_method = _RuntimeGenerationExecutor._generate_method(loaded)
+        if generate_method is None:
+            generate_method = _RuntimeGenerationExecutor._generate_method(loaded)
         results: list[GeneratedOutput] = []
         item_count = len(resolved_seeds)
 

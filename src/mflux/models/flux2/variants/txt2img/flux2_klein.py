@@ -62,11 +62,15 @@ class Flux2Klein(nn.Module):
         scheduler: str = "flow_match_euler_discrete",
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
         resize_mode: str = "resize",
+        negative_prompt: str = "",
     ) -> GeneratedImage:
         timer = RuntimeTimer()
         if num_inference_steps is None:
             num_inference_steps = default_inference_steps(self.model_config, fallback=4)
         self._validate_guidance(guidance)
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=self.model_config, guidance=guidance, negative_prompt=negative_prompt
+        )
         # 0. Create a new config based on the model type and input parameters
         config = Config(
             model_config=self.model_config,
@@ -85,7 +89,7 @@ class Flux2Klein(nn.Module):
         # 1. Encode prompt(s)
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(
             prompt=prompt,
-            negative_prompt="",
+            negative_prompt=negative_prompt if negative_prompt is not None else "",
             guidance=guidance,
         )
 
@@ -143,7 +147,7 @@ class Flux2Klein(nn.Module):
                 config=config,
                 seed=seed,
                 prompt=prompt,
-                negative_prompt=None,
+                negative_prompt=negative_prompt if negative_prompt_embeds is not None else None,
                 quantization=self.bits,
                 lora_paths=self.lora_paths,
                 lora_scales=self.lora_scales,

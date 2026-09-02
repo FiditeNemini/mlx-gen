@@ -57,6 +57,7 @@ class Flux2KleinOutpaint(nn.Module):
         scheduler: str = "flow_match_euler_discrete",
         image_strength: float = 1.0,
         reference_image_paths: list[Path | str] | None = None,
+        negative_prompt: str = "",
     ) -> GeneratedImage:
         timer = RuntimeTimer()
         if num_inference_steps is None:
@@ -67,6 +68,9 @@ class Flux2KleinOutpaint(nn.Module):
         if guidance is None:
             guidance = _Flux2KleinEditHelpers.default_guidance(self.model_config)
         _Flux2KleinEditHelpers.validate_guidance(model_config=self.model_config, guidance=guidance)
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=self.model_config, guidance=guidance, negative_prompt=negative_prompt
+        )
         reference_image_paths = [canvas.canvas_path] if reference_image_paths is None else reference_image_paths
         config = Config(
             model_config=self.model_config,
@@ -79,9 +83,12 @@ class Flux2KleinOutpaint(nn.Module):
             scheduler=scheduler,
             canvas_policy=CANVAS_POLICY_EXACT_RESIZE,
         )
+        # The default stays "" rather than None: the encoder runs the guidance branch only when a
+        # negative prompt is present at all, and base Klein's CFG against an empty negative is
+        # what every recorded base run used.
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(
             prompt=prompt,
-            negative_prompt="",
+            negative_prompt=negative_prompt if negative_prompt is not None else "",
             guidance=guidance,
         )
 
@@ -157,15 +164,17 @@ class Flux2KleinOutpaint(nn.Module):
                     sigmas=config.scheduler.sigmas,
                     timestep=t,
                 ).astype(latents.dtype)
-                # Latent-space lock only. It cannot preserve the source pixel-exactly and no
-                # amount of mask tightening will change that: Flux2's VAE decoder couples the
-                # whole canvas globally (GroupNorm in every resnet block plus the mid-block
+                # Latent-space lock. It cannot preserve the source pixel-exactly and no amount
+                # of mask tightening will change that: Flux2's VAE decoder couples the whole
+                # canvas globally (GroupNorm in every resnet block plus the mid-block
                 # self-attention), so changing the padded region moves the source region too.
                 # Measured on the 768x766 / 928x1536 case with a perfect hard binary lock and
                 # clean latents held exactly: source-region drift 10.64 mean-abs (0-255), and
                 # 4.7-7.8 even in the centre 128x128, hundreds of pixels from any seam - while
-                # the VAE encode/decode round-trip on its own costs only 1.35. Pixel-space
-                # restoration after decode is the only route to a preserved source.
+                # the VAE encode/decode round-trip on its own costs only 1.35. The shared
+                # outpaint layer pastes the original crop back after decode for that reason;
+                # the lock's job is to keep the window it holds close enough for that paste to
+                # be safe.
                 latents = ((1.0 - editable_mask) * preserved_latents + editable_mask * latents).astype(latents.dtype)
                 ctx.in_loop(t, latents)
                 mx.eval(latents)
@@ -184,7 +193,7 @@ class Flux2KleinOutpaint(nn.Module):
                 config=config,
                 seed=seed,
                 prompt=prompt,
-                negative_prompt=None,
+                negative_prompt=negative_prompt if negative_prompt_embeds is not None else None,
                 quantization=self.bits,
                 lora_paths=self.lora_paths,
                 lora_scales=self.lora_scales,

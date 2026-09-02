@@ -75,6 +75,7 @@ def prepare_canvas_session(
             fill_color_explicit=option_was_provided(argv, "--outpaint-fill-color"),
             lora_paths=getattr(args, "lora_paths", None) or (),
             requested_lora_paths=getattr(args, "requested_lora_paths", None) or (),
+            passes=getattr(args, "outpaint_passes", None),
             workspace=workspace,
             option_name=option_name,
         )

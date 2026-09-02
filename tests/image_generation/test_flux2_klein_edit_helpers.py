@@ -335,6 +335,9 @@ def _traceable_reference_tokens(latent_height: int, latent_width: int) -> tuple[
         # Both sides padded, and the recorded validation envelope.
         ((384, 384), (624, 384), (115, 0), (0, 115, 0, 115)),
         ((432, 240), (1040, 272), (259, 12), (12, 345, 12, 259)),
+        # Two-deep-axis expansion: a deep bottom and a deep left open a free corner that shares
+        # neither a row nor a column with the source, and every latent cell in it is pure filler.
+        ((432, 240), (688, 400), (254, 0), (0, 2, 148, 254)),
     ],
 )
 def test_flux2_outpaint_reference_conditioning_carries_no_pure_filler_token(source_size, target_size, paste, padding):
@@ -576,3 +579,38 @@ def test_flux2_base_runtime_accepts_guidance_above_one():
 
     txt2img._validate_guidance(4.0)
     edit._validate_guidance(4.0)
+
+
+def _model_config(*, base: bool):
+    return SimpleNamespace(
+        model_name="AbstractFramework/flux.2-klein-base-4b-8bit" if base else "AbstractFramework/flux.2-klein-9b-8bit",
+        base_model="black-forest-labs/FLUX.2-klein-base-4B" if base else "black-forest-labs/FLUX.2-klein-9B",
+    )
+
+
+def test_flux2_negative_prompt_is_accepted_on_base_weights_under_guidance():
+    _Flux2KleinEditHelpers.validate_negative_prompt(
+        model_config=_model_config(base=True), guidance=4.0, negative_prompt="blurry"
+    )
+    # An empty or absent negative is always fine: that is the recorded base behaviour.
+    for negative in ("", None):
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=_model_config(base=True), guidance=1.0, negative_prompt=negative
+        )
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=_model_config(base=False), guidance=1.0, negative_prompt=negative
+        )
+
+
+def test_flux2_negative_prompt_is_rejected_on_distilled_weights():
+    with pytest.raises(ValueError, match="distilled weights"):
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=_model_config(base=False), guidance=1.0, negative_prompt="blurry"
+        )
+
+
+def test_flux2_negative_prompt_on_base_weights_needs_guidance_above_one():
+    with pytest.raises(ValueError, match="above 1.0"):
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=_model_config(base=True), guidance=1.0, negative_prompt="blurry"
+        )

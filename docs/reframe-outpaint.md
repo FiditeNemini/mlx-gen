@@ -49,8 +49,9 @@ Every outpaint run prints its resolved canvas:
 ```
 Outpaint: fill=neutral, canvas 928x1536 from source 768x766, padding top=0 right=76 bottom=766 left=76.
 Outpaint: --outpaint-fill auto selected neutral because the deepest padding is bottom 766px (100% of
-the source height), 2.0x the 384px edge-fill reach; a blank canvas makes the model generate new
-subject matter instead of smearing the source border.
+the source height), 2.0x the 384px edge-fill reach; the fill conditions the seam around the source
+rather than the padded region, and a blank seam does not hand the model a stretched border strip to
+continue.
 ```
 
 Applications can read the same contract as JSON without running a job — `outpaint_fill_modes`,
@@ -63,7 +64,8 @@ and the validated envelope are published on the capability record. See
 Padding is the single biggest factor in outpaint quality. Two guidelines:
 
 - **Extend in steps rather than in one jump.** Two passes of 50-70% give the model a nearby edge to
-  continue from each time, and each pass runs on a smaller canvas.
+  continue from each time, and each pass runs on a smaller canvas. A request that pads both axes
+  deeply is split into two single-axis passes for you (see below).
 - **Watch the canvas size.** Outpaint conditioning tokens scale with the canvas, and attention cost
   grows faster than area. A 1.4 MP canvas costs substantially more per step than a 0.3 MP one.
 
@@ -73,6 +75,82 @@ subject matter. A blank canvas gives the model room to invent but little guidanc
 subject continues, so at very deep padding the new content can sit away from the source edge. The
 outpaint adapter in [LoRA](lora.md) is the recommended configuration for this case and holds the
 continuation to the source; extending in two moderate passes helps for the same reason.
+
+### Deep Padding On Two Axes
+
+Padding a vertical side *and* a horizontal side deeply in the same request opens a free corner — a
+block of new canvas that shares neither a row nor a column with your source. Nothing local anchors
+that corner: every source token the model can attend to sits diagonally away from it, so the prompt
+and the model's prior fill it, and what they paint there is a second copy of the subject. Measured
+on the starship source with distilled 9B at 16 steps, three seeds per geometry, with a prompt that
+names the subject: corners of 20%, 25% and 30% on both axes are clean on every seed, 40% grows a
+second hull on one seed, and 50% and 60% duplicate on two to three seeds each
+([sweep sheet](assets/validation/outpaint-two-pass-2026-09-02/corner-sweep-9b-distilled.jpg)).
+Single-axis expansion of the same depth on the same seeds is clean, and so are four shallow sides at
+once; see [Expanding On Any Side](#expanding-on-any-side).
+
+So `--outpaint-padding` runs such a request as **two single-axis passes**: the deeper axis first
+on your source, then the other axis on that output. Every new cell then shares a row or a column
+with real content at each pass, the final canvas is exactly the one-pass canvas, and the run prints
+what it is doing:
+
+```text
+Outpaint: 2 passes because the request pads bottom 148px (62% of the source height) and right 256px
+(59% of the source width), which opens a 256x160px free corner past the 30% auto-split depth, and a
+free corner is where the model paints a second copy of the subject; two single-axis passes reach the
+same canvas with no free corner at either pass. Pass 1 pads 0,0,148,0 to 432x400; pass 2 pads
+0,256,0,0 to 688x400.
+```
+
+`--outpaint-passes` controls this: `auto` (default) splits when the shallower of the two axis
+depths exceeds the route's published `outpaint_auto_split_corner_ratio` (30% on every current
+route), `2` splits any request that pads both axes, and `1` forces a single canvas and prints a
+warning naming the corner instead. On the geometry that duplicated on three of three seeds in one
+pass, the split is clean on three of three in both mirror orientations
+([two-pass sheet](assets/validation/outpaint-two-pass-2026-09-02/two-pass-9b-distilled.jpg)).
+
+Every outpaint route on that geometry, split by `auto`, two seeds each
+([model matrix sheet](assets/validation/outpaint-two-pass-2026-09-02/model-matrix.jpg), commands in the
+[log](assets/validation/outpaint-two-pass-2026-09-02/two-pass-command-log.md)):
+
+| Route | Passes | Duplicated |
+| --- | --- | --- |
+| FLUX.2 Klein 4B distilled q8, 16 steps, guidance 1 | 2 (auto) | 0 of 2 |
+| FLUX.2 Klein 9B distilled q8, 16 steps, guidance 1 | 2 (auto) | 0 of 3, both mirror orientations |
+| FLUX.2 Klein Base 4B q8, 20 steps, guidance 4 | 2 (auto) | 0 of 2 |
+| FLUX.2 Klein Base 4B q8, 20 steps, guidance 4 | 1 (`--outpaint-passes 1`, control) | 1 of 2 |
+| FLUX.2 Klein Base 9B q8, 20 steps, guidance 4 | 2 (auto) | 0 of 2 |
+| Qwen Image Edit 2511 q8, 20 steps, guidance 4 | 2 (auto) | 0 of 1 |
+
+Every row ends with the original crop restored. The Qwen row runs with the same subject-naming
+prompt and no `--negative`; holding the source in latent space is what keeps a prompt asking for
+*a wider shot* from recomposing it
+([sheet](assets/validation/outpaint-two-pass-2026-09-02/qwen-source-lock.jpg), which also shows
+the recorded validation envelope on the same route: drift 1.37 underneath, original restored). On
+distilled 9B the split measures 7.8 and 4.4 underneath its two passes and 6.7 against the original
+([sheet](assets/validation/outpaint-two-pass-2026-09-02/base-negative-prompt.jpg), last row).
+
+A negative prompt is not a substitute for the split. Base Klein and Qwen accept one, and it steers
+what the model paints, but on the same geometry in a single pass base 4B still grew a second hull
+on one of two seeds with
+`--negative "a second spacecraft, duplicate ship, two ships, repeated hull, extra fuselage"`
+(the same sheet, first two rows). Use it for content; let the pass planner remove the corner.
+
+Two things to know about a split run:
+
+- **It costs a second denoise.** Every route restores its source after each pass, so your original
+  pixels come through a split run as they do a single one; the metadata records what each pass
+  drew underneath (`outpaint_pass_source_restore_differences`) and whether its restore applied.
+- **Prompt content still matters.** The source already conditions the model on the subject, so a
+  prompt that names it again asks for one in the new space. Describe the area being added (*"a
+  wide snowy canyon, deep snow field in the foreground, ice cliffs receding into haze"*) rather
+  than the subject. Raising `--steps` does not move duplication: it was measured at 16, 32 and 48
+  steps on every seed.
+
+`--outpaint-fill` is not the lever here on FLUX.2 Klein. Those routes lock the source in latent
+space and condition on the seam around it, so the fill decides what the seam sees and never reaches
+the free corner. FLUX.2 Klein base models and Qwen Image Edit accept `--negative`, which is where
+duplicate-subject wording belongs; distilled Klein has no guidance branch and rejects it.
 
 ## Supported Models
 
@@ -132,38 +210,32 @@ reach for this source.
 
 | Model | Steps | Guidance | Time | Generated drift | Source region in output |
 | --- | --- | --- | --- | --- | --- |
-| FLUX.2 Klein 4B distilled q8 | 16 | 1 | **8.4 s** | 10.62 | redrawn (latent-locked) |
-| FLUX.2 Klein 9B distilled q8 | 16 | 1 | 17.2 s | **4.68** | redrawn (latent-locked) |
-| FLUX.2 Klein Base 4B q8 | 20 | 4 | 22.6 s | 5.90 | redrawn (latent-locked) |
-| FLUX.2 Klein Base 9B q8 | 20 | 4 | 54.1 s | 4.88 | redrawn (latent-locked) |
+| FLUX.2 Klein 4B distilled q8 | 16 | 1 | **8.4 s** | 10.62 | original pixels restored |
+| FLUX.2 Klein 9B distilled q8 | 16 | 1 | 17.2 s | **4.68** | original pixels restored |
+| FLUX.2 Klein Base 4B q8 | 20 | 4 | 22.6 s | 5.90 | original pixels restored |
+| FLUX.2 Klein Base 9B q8 | 20 | 4 | 54.1 s | 4.88 | original pixels restored |
 | Qwen Image Edit 2511 q8 | 20 | 4 | 198.5 s | 9.35 | original pixels restored |
 
 Time is the whole command with a warm weight cache; a first run after boot adds weight-load time.
 
 **Generated drift** is the mean absolute difference (0-255) between your original crop and the same
 region as the model generated it, recorded in every run's metadata as
-`outpaint_source_restore_difference`. It is measured **before** any restoration step, so read it
-together with the last column:
-
-- On the latent-locked FLUX.2 routes nothing is pasted afterwards, so the drift figure is what
-  ships. Lower means your crop came through the round trip more intact.
-- Qwen compares that figure against a threshold and, when it passes, pastes your original crop back
-  over the result. On this row it passed (`outpaint_source_restore_applied: true`), so Qwen's
-  output carries your original pixels exactly, and 9.35 describes what the model drew underneath,
-  not what you get.
+`outpaint_source_restore_difference`. It is measured **before** the restore, so it describes what
+the model drew underneath rather than what you get: every route holds the source in latent space
+while it generates, then compares that figure against the restore threshold (24) and pastes your
+original crop back over the result when it passes, which it did on every row
+(`outpaint_source_restore_applied: true`). Lower drift means the seam the transition band
+regenerates has less to reconcile.
 
 How to read this if you are choosing a route:
 
 - **Distilled Klein 4B is by far the fastest** and runs at guidance 1, because those weights are
   step-distilled. It is the route to reach for first.
-- **Use Qwen when the original crop must survive untouched.** Its adaptive restoration returns your
-  exact pixels whenever the generated region stayed close enough, which the latent lock cannot
-  promise. It also accepts `--negative`, which the FLUX.2 routes do not, and that is worth using —
-  the row above needs one to stop the model growing aircraft wings. The cost is speed: roughly
-  4-6x the FLUX.2 routes here.
-- **Among the latent-locked routes, the 9B models hold the source closest**, distilled 9B most of
-  all. Choose them when you want a faithful crop without leaving FLUX.2; distilled 4B trades the
-  most source fidelity for its speed.
+- **Use `--negative` where you have it.** FLUX.2 Klein base models and Qwen Image Edit accept a
+  negative prompt, and the Qwen row above uses one to stop the model growing aircraft wings.
+  Qwen's cost is speed: roughly 4-6x the FLUX.2 routes here.
+- **The 9B models hold the source closest underneath**, distilled 9B most of all, so their seams
+  have the least to reconcile; distilled 4B trades the most of that for its speed.
 - Every route completed the ship and the valley without a visible seam at the original crop
   boundary.
 
@@ -246,6 +318,10 @@ Guidance is the one setting that does not carry across the two weight families. 
 and each model takes its own default; passing a value above 1.0 to distilled Klein is rejected
 before the weights load.
 
+A request that pads both axes deeply runs as two single-axis passes by default; pass
+`--outpaint-passes 1` to force one canvas or `--outpaint-passes 2` to split any two-axis request.
+See [Deep Padding On Two Axes](#deep-padding-on-two-axes).
+
 To add a lot of space on one side — extending a portrait downward to reveal more of the subject —
 pass the padding on that side and let `auto` pick the blank canvas, or name it explicitly:
 
@@ -265,18 +341,22 @@ mlxgen generate \
 `--outpaint-padding` computes the output size from the source and the padding, so do not pass
 `--width`, `--height`, or `--canvas-policy` with it.
 
-Qwen Image Edit variants apply adaptive source restoration after generation, pasting your original
-crop back when the generated region stayed close enough to it. Every FLUX.2 Klein route, distilled
-and base alike, relies on source-locked denoising with an interior transition band instead. Each
-route publishes which of the two it uses as `outpaint_preservation` on its capability row.
+Every route keeps the source the same way, published as `outpaint_preservation` on its capability
+row: the source region is held in latent space while the added area is denoised, behind a 24 px
+transition band on the sides that gained pixels (the FLUX.2 Klein routes through their own lock,
+Qwen Image Edit through its masked-edit input, a mask the run writes beside each canvas), and the
+original crop is then pasted back over the decoded result while the generated source window still
+matches it. The lock keeps that window close on every recorded run, and it is what keeps a prompt
+asking for *a wider shot* from recomposing the source; the paste is what returns your original
+pixels, with the transition band regenerated so the new area blends in.
 
 ## From Python
 
 Both workflows are available to embedding applications without shelling out to the CLI:
 `run_outpaint(...)` runs the whole pipeline on a loaded runtime, and `prepare_outpaint(...)` /
 `prepare_reframe(...)` build the conditioning canvas and hand back the generation geometry without
-loading model weights. The fill policy, the guard, the preservation strategy and the recorded
-metadata are the same ones the commands above use. See
+loading model weights. The fill policy, the pass plan (`passes="auto" | "1" | "2"`), the guard, the
+preservation strategy and the recorded metadata are the same ones the commands above use. See
 [Outpaint And Reframe](python-integration.md#outpaint-and-reframe).
 
 ## Validation Assets

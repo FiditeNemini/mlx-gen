@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-09-02
+
+Outpaint on both axes without duplicating the subject, the original crop restored on every route,
+and negative prompts on FLUX.2 Klein base weights.
+
+### Added
+
+- **`--outpaint-passes {auto,1,2}`** on every outpaint route. A request that pads a vertical side
+  and a horizontal side deeply opens a free corner sharing neither a row nor a column with the
+  source, and the model paints a second copy of the subject into it. `auto` (default) runs such a
+  request as two single-axis passes - the deeper axis first on the source, then the other axis on
+  that output - when the shallower axis depth exceeds the route's published
+  `outpaint_auto_split_corner_ratio` (0.3); `2` splits any request that pads both axes and rejects
+  one it cannot split; `1` forces a single canvas and prints a warning naming the corner. The final
+  canvas is exactly the one-pass canvas, the source keeps its position to within one dimension
+  multiple, and each pass restores its source before the next starts. Measured on a 432x240 source
+  grown 256 px on one axis and 148 px on the other with distilled 9B, three seeds per orientation:
+  the split is clean on every seed where one pass duplicated on every seed; every other outpaint
+  route is clean on the same geometry. Recorded in metadata as `outpaint_passes`,
+  `outpaint_passes_requested`, `outpaint_pass_paddings`, `outpaint_pass_fills`,
+  `outpaint_pass_reason`, `outpaint_pass_source_restore_differences` and
+  `outpaint_pass_source_restore_applied`; the resolved count replays through
+  `--config-from-metadata`.
+- **Negative prompts on FLUX.2 Klein base weights.** `--negative-prompt` / `--negative` is accepted
+  on the text-to-image, latent image-to-image, edit, masked-edit and outpaint routes of
+  `flux2-klein-base-4b`, `flux2-klein-base-9b` and their prepared packages, and runs
+  classifier-free guidance against it. It needs `--guidance` above 1.0; omitting `--guidance` with
+  a negative prompt selects the base default of 4.0. Distilled Klein weights have no guidance
+  branch and keep rejecting it, before weights load, both in `mlxgen generate` and in the backend
+  commands. Python callers pass `negative_prompt=` on every FLUX.2 Klein `generate_image`.
+- **Capability schema v12** (additive): `supports_negative_prompt` on every generation row, and
+  `outpaint_pass_modes`, `outpaint_default_passes` and `outpaint_auto_split_corner_ratio` on
+  outpaint-capable rows, so an application can predict a second pass and know whether a route takes
+  a negative prompt before starting a job.
+- **Python**: `prepare_outpaint(..., passes=...)` and `run_outpaint(..., passes=...)`;
+  `OutpaintSession.pass_plan`, `.passes`, `.pass_fill_plans`, `.geometry` (the original source in
+  the final canvas) and `.pass_canvases`; `resolve_outpaint_pass_plan(...)` and `OutpaintPassPlan`
+  for callers that plan without a session; `OutpaintUtil.source_lock_box(...)` and
+  `attach_source_lock_mask(...)`. `generate_outputs(...)` takes `generate_method=` to route a
+  multi-pass pipeline through the wrapper's seed loop.
+
+### Changed
+
+- **Every outpaint route restores the original crop.** The FLUX.2 Klein routes hold the source in
+  latent space during denoising, as before, and the shared layer then pastes the original crop back
+  over the decoded result while the generated source window still matches it, the same strategy the
+  Qwen route publishes. The FLUX.2 rows therefore publish
+  `outpaint_preservation: "adaptive-content-aware-source-blend"` instead of
+  `latent-locked-transition-band-no-postblend`, which is no longer emitted; generated metadata
+  records the new value and `outpaint_source_restore_applied: true`. Applications that matched the
+  old string should treat both values as "original crop restored".
+- **Qwen Image Edit outpaint holds the source in latent space** through its masked-edit input
+  while the padded area is denoised (a mask the run writes beside each canvas, black over the
+  source minus the same 24 px transition band the FLUX.2 lock uses). A prompt asking for a wider
+  view can no longer recompose the crop; on the recorded validation envelope the drift under the
+  restore drops from 9.35 to 1.37 with the composition unchanged. `outpaint_preservation` is
+  unchanged on Qwen rows.
+- The outpaint restore threshold is 24 mean-abs on every route (it was 12 on Qwen): a window held
+  by the latent lock measures 1.4 to 15.6 across the recorded runs, and a recomposed window,
+  which the lock now rules out, measures above 60.
+- The two-deep-axis warning fires only for a run that denoises the free corner in one pass
+  (`--outpaint-passes 1`, or a request too small to split), names why, and reports the true corner
+  after the dimension round-up.
+
 ## [0.32.1] - 2026-09-02
 
 ### Fixed

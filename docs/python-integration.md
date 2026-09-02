@@ -253,9 +253,11 @@ except TaskInferenceError as exc:
 
 Outpaint is a pipeline, not a single call: a conditioning canvas is built from the source and the
 requested padding, the model denoises that canvas, and the route's preservation strategy decides
-what happens to the source region afterwards. `run_outpaint(...)` runs the whole pipeline on a
-loaded runtime, so a host gets the same canvas, the same fill decision, and the same metadata a CLI
-run produces.
+what happens to the source region afterwards. A request that pads both axes deeply runs as two
+single-axis passes, the second on the first's output (`passes="auto"`, the default; `"1"` and
+`"2"` name the count, and `session.pass_plan` / `session.passes` report the decision before any
+weight loads). `run_outpaint(...)` runs the whole pipeline on a loaded runtime, so a host gets the
+same canvas, the same fill and pass decisions, and the same metadata a CLI run produces.
 
 ```python
 from mlxgen import load_generation_model, run_outpaint
@@ -346,12 +348,14 @@ Generative reframe uses the same expanded canvas without a fill contract or sour
 `prepare_reframe(source_image=..., padding=...)` returns a session with the same `width`, `height`,
 `canvas_policy`, `generate(...)`, and `finalize(...)` surface.
 
-`generate_outputs(...)` and `generate_output(...)` also take the hook this pipeline rides on
-directly: `post_process=<callable>` runs on each artifact after generation and before it is saved,
+`generate_outputs(...)` and `generate_output(...)` also take two hooks this pipeline rides on
+directly. `post_process=<callable>` runs on each artifact after generation and before it is saved,
 which is where a host can composite, annotate, or record its own metadata and still have it land in
-the written file. `run_outpaint(...)` passes `session.finalize` through that hook, so any workflow
-with its own post-decode step keeps the wrapper's multi-seed loop, progress events and save
-semantics.
+the written file. `generate_method=<callable>` replaces the model's own generate call for the run
+and is called once per seed as `generate_method(seed=..., **kwargs)`; `run_outpaint(...)` passes
+`session.generate` through it, so a split request denoises twice per seed and still keeps the
+wrapper's multi-seed loop, progress events and save semantics. Between passes the model emits a
+full progress cycle per pass under the same seed and item index.
 
 See [Reframe and Outpaint](reframe-outpaint.md) for padding guidance and the published proof runs,
 and [API and CLI](api.md#outpaint-conditioning-canvas) for the published capability fields.

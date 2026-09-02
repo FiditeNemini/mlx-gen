@@ -269,3 +269,134 @@ def test_cli_rejects_outpaint_fill_without_outpaint_padding(monkeypatch, tmp_pat
     message = capsys.readouterr().err
     assert "--outpaint-fill and --outpaint-fill-color configure the --outpaint-padding" in message
     assert "Pass --outpaint-padding, or drop these options." in message
+
+
+@pytest.mark.fast
+def test_cli_splits_a_deep_two_axis_request_into_passes_and_records_them(monkeypatch, tmp_path, capsys):
+    generated = _run_outpaint_cli(
+        monkeypatch,
+        tmp_path,
+        source_size=(432, 240),
+        extra_argv=["--outpaint-padding", "0,0,148,256"],
+    )
+
+    stderr = capsys.readouterr().err
+    assert "Warning: --outpaint-padding expands both axes deeply" not in stderr
+    assert "Outpaint: 2 passes because the request pads bottom 148px (62% of the source height)" in stderr
+    assert "Pass 1 pads 0,0,148,0 to 432x400; pass 2 pads 0,0,0,256 to 688x400." in stderr
+    assert "Outpaint: fill=edge, canvas 432x400 from source 432x240" in stderr
+    assert "Outpaint: pass 2 fill=edge, canvas 688x400 from source 432x400" in stderr
+    # Two denoises, one saved artifact carrying the final geometry.
+    assert [image.image.size for image in generated] == [(432, 400), (688, 400)]
+    assert generated[0].saved_to is None
+    assert generated[1].saved_to == tmp_path / "out.png"
+    metadata = generated[1].extra_metadata
+    assert metadata["outpaint_padding"] == "0,0,148,256"
+    assert metadata["outpaint_passes"] == 2
+    assert metadata["outpaint_passes_requested"] == "auto"
+    assert metadata["outpaint_pass_paddings"] == ["0,0,148,0", "0,0,0,256"]
+    assert metadata["outpaint_pass_fills"] == ["edge", "edge"]
+    assert (metadata["outpaint_target_width"], metadata["outpaint_target_height"]) == (688, 400)
+    assert (metadata["outpaint_source_paste_left"], metadata["outpaint_source_paste_top"]) == (256, 0)
+
+
+@pytest.mark.fast
+def test_cli_explicit_single_pass_warns_on_a_deep_corner_and_runs_one_canvas(monkeypatch, tmp_path, capsys):
+    generated = _run_outpaint_cli(
+        monkeypatch,
+        tmp_path,
+        source_size=(432, 240),
+        extra_argv=["--outpaint-padding", "0,0,148,256", "--outpaint-passes", "1"],
+    )
+
+    stderr = capsys.readouterr().err
+    assert "Warning: --outpaint-padding expands both axes deeply" in stderr
+    assert "because --outpaint-passes 1 was passed" in stderr
+    assert "Outpaint: 1 pass because --outpaint-passes 1 was passed explicitly." in stderr
+    assert [image.image.size for image in generated] == [(688, 400)]
+    assert generated[0].extra_metadata["outpaint_passes"] == 1
+    assert generated[0].extra_metadata["outpaint_passes_requested"] == "1"
+
+
+@pytest.mark.fast
+def test_cli_replays_the_resolved_pass_count_from_prior_metadata(monkeypatch, tmp_path):
+    metadata_path = tmp_path / "prior.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "flux2-klein-base-4b",
+                "prompt": "extend the scene",
+                "outpaint_padding": "0,0,148,256",
+                "outpaint_fill": "edge",
+                "outpaint_passes": 1,
+            }
+        )
+    )
+
+    generated = _run_outpaint_cli(
+        monkeypatch,
+        tmp_path,
+        source_size=(432, 240),
+        extra_argv=["--outpaint-padding", "0,0,148,256", "-C", str(metadata_path)],
+    )
+
+    # The recorded run was one pass; the replay must not re-decide `auto` into two.
+    assert len(generated) == 1
+    assert generated[0].extra_metadata["outpaint_passes"] == 1
+    assert generated[0].extra_metadata["outpaint_passes_requested"] == "1"
+
+
+@pytest.mark.fast
+def test_cli_replays_the_fill_request_when_a_split_run_resolved_different_fills(monkeypatch, tmp_path):
+    # A recorded split whose passes chose different fills cannot be reproduced by one explicit
+    # fill, so the replay falls back to the recorded request (`auto` is deterministic).
+    metadata_path = tmp_path / "prior.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "model": "flux2-klein-base-4b",
+                "prompt": "extend the scene",
+                "outpaint_padding": "0,0,148,256",
+                "outpaint_fill": "edge",
+                "outpaint_fill_requested": "auto",
+                "outpaint_passes": 2,
+                "outpaint_pass_fills": ["edge", "neutral"],
+            }
+        )
+    )
+
+    generated = _run_outpaint_cli(
+        monkeypatch,
+        tmp_path,
+        source_size=(432, 240),
+        extra_argv=["--outpaint-padding", "0,0,148,256", "-C", str(metadata_path)],
+    )
+
+    assert len(generated) == 2
+    assert generated[1].extra_metadata["outpaint_fill_requested"] == "auto"
+    assert generated[1].extra_metadata["outpaint_passes_requested"] == "2"
+
+
+@pytest.mark.fast
+def test_cli_rejects_outpaint_passes_without_outpaint_padding(monkeypatch, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        _run_outpaint_cli(
+            monkeypatch,
+            tmp_path,
+            source_size=(64, 64),
+            extra_argv=["--outpaint-passes", "2"],
+        )
+
+    assert "--outpaint-passes configures the --outpaint-padding run" in capsys.readouterr().err
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("command", ["mflux-generate-flux2-edit", "mflux-generate-qwen-edit"])
+def test_completion_generator_advertises_outpaint_passes_on_every_outpaint_backend(command):
+    # The pass planner is route-independent, so both expanded-canvas backends complete it.
+    generator = CompletionGenerator()
+    parser = generator.create_parser_for_command(command)
+    script = generator.generate_command_function(command, parser)
+
+    assert "--outpaint-passes" in script
+    assert "(auto 1 2)" in script

@@ -7,6 +7,7 @@ from mflux.cli.runtime_events import CliRuntimeEventStream, cli_print
 from mflux.models.common.config import ModelConfig
 from mflux.models.flux2.latent_creator.flux2_latent_creator import Flux2LatentCreator
 from mflux.models.flux2.variants import Flux2Klein
+from mflux.models.flux2.variants.edit.flux2_klein_edit_helpers import _Flux2KleinEditHelpers
 from mflux.utils.exceptions import PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
@@ -39,21 +40,27 @@ def main():
     args = parser.parse_args()
     _print_legacy_notice()
 
-    if getattr(args, "negative_prompt", ""):
-        parser.error(
-            "--negative-prompt is not supported for FLUX.2. Omit it for FLUX.2 routes. "
-            "For new integrations, call `mlxgen generate --model <flux2-model> ...` instead of "
-            "`mflux-generate-flux2`."
-        )
-
     model_name = args.model or "flux2-klein-4b"
     model_config = ModelConfig.from_name(model_name=model_name, base_model=args.base_model)
 
-    if args.guidance is None:
-        args.guidance = 1.0
     is_distilled = "base" not in model_config.model_name.lower()
+    negative_prompt = PromptUtil.read_negative_prompt(args)
+    if args.guidance is None:
+        # A negative prompt on base weights asks for the guidance branch, which only runs above
+        # 1.0; without one every FLUX.2 route defaults to 1.0.
+        wants_guidance_branch = bool(negative_prompt) and not is_distilled
+        args.guidance = _Flux2KleinEditHelpers.default_guidance(model_config) if wants_guidance_branch else 1.0
     if args.guidance != 1.0 and is_distilled:
         parser.error("--guidance is only supported for FLUX.2 base models. Use --guidance 1.0.")
+    try:
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=model_config, guidance=args.guidance, negative_prompt=negative_prompt
+        )
+    except ValueError as exc:
+        parser.error(
+            f"{exc} For new integrations, call `mlxgen generate --model <flux2-model> ...` instead of "
+            "`mflux-generate-flux2`."
+        )
 
     CallbackManager.apply_runtime_memory_options(args)
 
@@ -86,6 +93,7 @@ def main():
                 image = model.generate_image(
                     seed=seed,
                     prompt=PromptUtil.read_prompt(args),
+                    negative_prompt=negative_prompt,
                     width=args.width,
                     height=args.height,
                     guidance=args.guidance,
