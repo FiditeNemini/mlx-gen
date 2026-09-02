@@ -13,7 +13,12 @@ from mflux.models.common.config.inference_defaults import default_inference_step
 from mflux.models.common.lora.mapping.lora_loader import LoRALoader
 from mflux.models.common.resolution.lora_resolution import LoraResolution
 from mflux.models.flux.variants.in_context.utils.in_context_loras import LORA_NAME_MAP
-from mflux.task_inference import FLUX2_OUTPAINT_FILL_MODES, OUTPAINT_FILL_AUTO
+from mflux.task_inference import (
+    FLUX2_OUTPAINT_FILL_MODES,
+    OUTPAINT_DEFAULT_PASSES,
+    OUTPAINT_FILL_AUTO,
+    OUTPAINT_PASS_MODES,
+)
 from mflux.utils import box_values, scale_factor
 from mflux.utils.dimension_resolver import (
     CANVAS_POLICY_CHOICES,
@@ -94,6 +99,9 @@ def image_strength_value(value: str) -> float:
 # contract because that is the only route publishing supports_outpaint_fill, and it is read off
 # that published contract rather than restated here.
 OUTPAINT_FILL_CHOICES = FLUX2_OUTPAINT_FILL_MODES
+# --outpaint-passes is a property of the shared pass planner rather than of one route, so every
+# expanded-canvas backend declares it; the values are the published outpaint_pass_modes.
+OUTPAINT_PASS_CHOICES = OUTPAINT_PASS_MODES
 
 
 def rgb_color_value(value: str) -> tuple[int, int, int]:
@@ -165,6 +173,7 @@ class CommandLineParser(argparse.ArgumentParser):
         self.supports_image_to_image = False
         self.supports_image_outpaint = False
         self.supports_outpaint_fill = False
+        self.supports_outpaint_passes = False
         self.supports_lora = False
         self.require_model_arg = True
 
@@ -425,6 +434,27 @@ class CommandLineParser(argparse.ArgumentParser):
             ),
         )
 
+    def add_outpaint_pass_arguments(self) -> None:
+        # Declared by every backend that runs the shared outpaint layer, whether or not it also
+        # publishes a fill option: the pass planner is route-independent.
+        self.supports_outpaint_passes = True
+        self.add_argument(
+            "--outpaint-passes",
+            dest="outpaint_passes",
+            choices=list(OUTPAINT_PASS_CHOICES),
+            default=OUTPAINT_DEFAULT_PASSES,
+            help=(
+                "How many denoising passes --outpaint-padding runs. A request that pads a vertical side "
+                "and a horizontal side deeply opens a free corner sharing neither a row nor a column "
+                "with the source, and the model paints a second copy of the subject there. 2 splits the "
+                "request into one horizontal and one vertical pass, each fed the previous output, which "
+                "reaches the same canvas with no free corner; 1 forces a single pass and warns on such a "
+                "corner; auto (default) splits only past the route's published auto-split depth. The "
+                "pass plan and the reason are printed on stderr, and the resolved count is recorded in "
+                "metadata and replayed by --config-from-metadata."
+            ),
+        )
+
     def add_image_outpaint_arguments(self, required=False) -> None:
         self.supports_image_outpaint = True
         self.add_argument("--image-outpaint-padding", type=str, default=None, required=required, help="For outpainting mode: CSS-style box padding values to extend the canvas of image specified by--image-path. E.g. '20', '50%%'")
@@ -622,6 +652,31 @@ class CommandLineParser(argparse.ArgumentParser):
                         namespace.outpaint_fill_color = rgb_color_value(str(color_from_metadata))
                     except argparse.ArgumentTypeError as exc:
                         self.error(f"Invalid outpaint_fill_color in metadata: {exc}")
+
+            # Pass-plan replay: metadata records the RESOLVED pass count, so a -C replay runs the
+            # same number of passes instead of re-deciding `auto` against a possibly different
+            # source. Explicit args win. A split run whose passes resolved different fills cannot be
+            # replayed with one explicit fill, so that case replays the recorded fill *request*
+            # instead - `auto` is deterministic over the same geometry and reproduces both fills.
+            if self.supports_outpaint_passes:
+                passes_from_metadata = prior_gen_metadata.get("outpaint_passes", None)
+                if passes_from_metadata is not None and namespace.outpaint_passes == self.get_default("outpaint_passes"):
+                    passes_value = str(passes_from_metadata)
+                    if passes_value not in OUTPAINT_PASS_CHOICES:
+                        self.error(
+                            f"Invalid outpaint_passes in metadata: '{passes_from_metadata}'. "
+                            f"Expected one of {', '.join(OUTPAINT_PASS_CHOICES)}."
+                        )
+                    namespace.outpaint_passes = passes_value
+                pass_fills = prior_gen_metadata.get("outpaint_pass_fills", None)
+                if (
+                    self.supports_outpaint_fill
+                    and isinstance(pass_fills, (list, tuple))
+                    and len(set(pass_fills)) > 1
+                    and namespace.outpaint_fill == prior_gen_metadata.get("outpaint_fill", None)
+                    and prior_gen_metadata.get("outpaint_fill_requested", None) in OUTPAINT_FILL_CHOICES
+                ):
+                    namespace.outpaint_fill = prior_gen_metadata["outpaint_fill_requested"]
 
         # Only require model if we're not in training mode and require_model_arg is True
         if hasattr(namespace, "model") and namespace.model is None and not has_training_args and self.require_model_arg:

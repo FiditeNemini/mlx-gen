@@ -325,9 +325,10 @@ mlxgen generate \
   --output outpaint.png
 ```
 
-Expected result: the newly added space is generated around the source crop. The center should stay
-more stable than in reframe, especially on the FLUX.2 Klein routes, but the result is still not a
-literal source-paste guarantee.
+Expected result: the newly added space is generated around the source crop. The crop is held in
+latent space while the new area is generated and then pasted back over the result, so its interior
+is your original pixels; a narrow transition band along the seam is regenerated so the new area
+blends in.
 [Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces) runs every supported route on
 one source and one padding value so you can compare speed and how far the source moved before
 choosing.

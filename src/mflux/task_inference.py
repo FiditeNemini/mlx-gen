@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from mflux.lora_validation_registry import LORA_STATUS_UNSUPPORTED, get_lora_validation_status
 from mflux.models.common.config import ModelConfig
@@ -52,7 +52,16 @@ VALID_TASKS = {TASK_AUTO, EDIT, *PUBLIC_TASKS}
 # the fill contract instead of inferring it from adapter filenames.
 # v11: additive outpaint_preservation row field, same additive-field convention: hosts read how a
 # route keeps the source pixels instead of inferring it from the model family.
-CAPABILITIES_SCHEMA_VERSION = 11
+# v12: additive outpaint pass fields (outpaint_pass_modes, outpaint_default_passes,
+# outpaint_auto_split_corner_ratio), same additive-field convention: hosts read whether a route
+# splits a two-deep-axis request into single-axis passes, and at what depth, instead of
+# discovering the second pass from the run time. Also additive supports_negative_prompt: hosts
+# read whether a route takes --negative-prompt instead of learning it from a backend error (the
+# FLUX.2 Klein base rows accept it, the distilled rows do not). The `outpaint_preservation` value
+# set changed in the same release: every outpaint route now publishes
+# `adaptive-content-aware-source-blend`, and `latent-locked-transition-band-no-postblend` is no
+# longer emitted.
+CAPABILITIES_SCHEMA_VERSION = 12
 
 # Outpaint conditioning-canvas contract. Outpaint quality is decided by which canvas the source
 # is pasted onto before denoising, and that used to be inferred from --lora-paths basenames, so a
@@ -79,13 +88,20 @@ FLUX2_OUTPAINT_AUTO_EDGE_FILL_MAX_STRETCH = 12.0
 # Measured to materially improve the strict-outpaint route; trained on a pure-green canvas, which
 # is why `auto` switches to solid green when it is loaded.
 FLUX2_OUTPAINT_RECOMMENDED_LORA = "fal/flux-2-klein-4B-outpaint-lora"
-# How a route keeps the source pixels. The strict FLUX.2 base route locks the source in latent
-# space behind a narrow transition band, so it never post-blends; the Qwen edit route generates
-# into the expanded canvas and pastes the source back only while the generated source window still
-# matches it. A host that reads this field knows which guarantee it gets without loading weights,
-# and it is the same string recorded in generated metadata as `outpaint_preservation`.
-FLUX2_OUTPAINT_PRESERVATION = "latent-locked-transition-band-no-postblend"
-QWEN_OUTPAINT_PRESERVATION = "adaptive-content-aware-source-blend"
+# How a route keeps the source pixels. Every outpaint route now does the same two things: it holds
+# the source region in latent space behind a narrow transition band while the added area is
+# denoised (the FLUX.2 route through its own lock, the Qwen route through its masked-edit input),
+# then pastes the original crop back over the decoded result while the generated source window
+# still matches it. The latent lock alone cannot keep the source pixel-exact - the VAE decoder
+# couples the whole canvas - so the paste is what returns the original pixels, and it is safe
+# because the lock rules out the recomposition the paste would otherwise have to guard against.
+# One strategy, one published value; a host that reads this field knows which guarantee it gets
+# without loading weights, and it is the same string recorded in generated metadata as
+# `outpaint_preservation`. Until 0.33.0 the FLUX.2 rows published
+# `latent-locked-transition-band-no-postblend` and never pasted.
+OUTPAINT_PRESERVATION_ADAPTIVE_SOURCE_BLEND = "adaptive-content-aware-source-blend"
+FLUX2_OUTPAINT_PRESERVATION = OUTPAINT_PRESERVATION_ADAPTIVE_SOURCE_BLEND
+QWEN_OUTPAINT_PRESERVATION = OUTPAINT_PRESERVATION_ADAPTIVE_SOURCE_BLEND
 # The Qwen edit backend has no --outpaint-fill option and always builds an edge-extended canvas.
 QWEN_OUTPAINT_FILL_MODES = ("edge",)
 QWEN_OUTPAINT_DEFAULT_FILL_MODE = "edge"
@@ -96,6 +112,25 @@ QWEN_OUTPAINT_DEFAULT_FILL_MODE = "edge"
 OUTPAINT_VALIDATED_PADDING = "5%,80%,5%,60%"
 OUTPAINT_VALIDATED_FILL_MODE = "edge"
 OUTPAINT_VALIDATED_MAX_CANVAS_PIXELS = 282880
+# --outpaint-passes contract. A request that pads a vertical side and a horizontal side deeply
+# opens a free corner - new canvas sharing neither a row nor a column with the source - and on the
+# routes measured so far the model paints a second copy of the subject into it. Two single-axis
+# passes reach the same canvas with no free corner at either pass. `auto` splits when the corner
+# is deep enough; "1" and "2" name the count explicitly. The literals are declared here, next to
+# the fill-mode tuples, for the same reason `auto` is: the shared outpaint layer and the CLI
+# parser both need them without importing PIL.
+OUTPAINT_PASSES_AUTO = "auto"
+OUTPAINT_PASS_MODES = (OUTPAINT_PASSES_AUTO, "1", "2")
+OUTPAINT_DEFAULT_PASSES = OUTPAINT_PASSES_AUTO
+# The depth past which `auto` splits: the shallower of the two axis depths, each measured against
+# the source dimension it grows along, has to exceed this fraction. Zero on any single-axis request,
+# so those never split. Published per route as `outpaint_auto_split_corner_ratio`; None on a route
+# that never splits.
+#
+# Set from recorded runs on the FLUX.2 Klein route with a subject-bearing 432x240 source, 16 steps,
+# three seeds per geometry (docs/assets/validation/outpaint-corner-sweep-2026-09-02): see the
+# calibration note next to the FLUX.2 row for where the clean and the duplicating runs sit.
+OUTPAINT_TWO_DEEP_AXIS_RATIO = 0.30
 QWEN_CONTROL_UNION_MODEL = "InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors"
 QWEN_CONTROL_INPAINT_MODEL = "InstantX/Qwen-Image-ControlNet-Inpainting:diffusion_pytorch_model.safetensors"
 # Untrusted inferred identities that earned native masked edit through an exact smoke proof.
@@ -170,6 +205,10 @@ class GenerationCapability:
     supports_context_frames: bool = False
     # Wan A14B i2v SVI 2.0 Pro anchor/motion-latent conditioning (--svi-anchor-image, 0103).
     supports_svi: bool = False
+    # Whether the route takes --negative-prompt / --negative and uses it (classifier-free
+    # guidance against it). False where the backend rejects the option or the weights run no
+    # guidance branch: Bonsai, and FLUX.2 Klein distilled weights, which are step-distilled.
+    supports_negative_prompt: bool = False
     supports_mask: bool = False
     supports_control_image: bool = False
     supports_control_mask: bool = False
@@ -197,6 +236,15 @@ class GenerationCapability:
     outpaint_validated_padding: str | None = None
     outpaint_validated_fill_mode: str | None = None
     outpaint_validated_max_canvas_pixels: int | None = None
+    # --outpaint-passes values the route accepts, and the one that runs when it is omitted. Empty
+    # and None on routes where supports_outpaint is False.
+    outpaint_pass_modes: tuple[str, ...] = ()
+    outpaint_default_passes: str | None = None
+    # With outpaint_default_passes "auto": a request whose shallower axis depth (deepest top or
+    # bottom padding over the source height, deepest left or right padding over the source width,
+    # the smaller of the two) exceeds this fraction runs as two single-axis passes. None when the
+    # route never splits, so a host can predict a second pass before starting the job.
+    outpaint_auto_split_corner_ratio: float | None = None
     supports_reframe: bool = False
     supports_lora: bool = False
     control_model: str | None = None
@@ -254,6 +302,7 @@ class GenerationCapability:
             "supports_mask": self.supports_mask,
             "supports_control_image": self.supports_control_image,
             "supports_control_mask": self.supports_control_mask,
+            "supports_negative_prompt": self.supports_negative_prompt,
             "supports_outpaint": self.supports_outpaint,
             "supports_outpaint_fill": self.supports_outpaint_fill,
             "outpaint_fill_modes": list(self.outpaint_fill_modes),
@@ -264,6 +313,9 @@ class GenerationCapability:
             "outpaint_validated_padding": self.outpaint_validated_padding,
             "outpaint_validated_fill_mode": self.outpaint_validated_fill_mode,
             "outpaint_validated_max_canvas_pixels": self.outpaint_validated_max_canvas_pixels,
+            "outpaint_pass_modes": list(self.outpaint_pass_modes),
+            "outpaint_default_passes": self.outpaint_default_passes,
+            "outpaint_auto_split_corner_ratio": self.outpaint_auto_split_corner_ratio,
             "supports_reframe": self.supports_reframe,
             "supports_lora": self.supports_lora,
             "control_model": self.control_model,
@@ -931,6 +983,31 @@ def _is_unsupported_flux2_dev_model(model: str) -> bool:
 
 
 def _capabilities_for(identity: _ModelIdentity) -> ModelCapabilities:
+    capabilities = _family_capabilities(identity)
+    # Negative-prompt support is a property of the family and, for FLUX.2, of the weights, so it
+    # is stamped here once rather than repeated on every row constructor.
+    return replace(
+        capabilities,
+        capabilities=tuple(
+            replace(row, supports_negative_prompt=_supports_negative_prompt(identity))
+            for row in capabilities.capabilities
+        ),
+    )
+
+
+def _supports_negative_prompt(identity: _ModelIdentity) -> bool:
+    family = identity.family
+    if family == "bonsai":
+        # The backend refuses the option: the model has no guidance branch to steer.
+        return False
+    if family == "flux2":
+        # Base Klein runs true classifier-free guidance and takes a negative prompt with guidance
+        # above 1.0; distilled Klein is step-distilled and has no guidance branch on any route.
+        return _is_flux2_klein_base(identity.aliases, identity.model_key)
+    return family in {"ernie-image", "z-image", "qwen", "fibo", "wan"}
+
+
+def _family_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
     family = identity.family
     if family == "bonsai":
         return ModelCapabilities(
@@ -1201,6 +1278,7 @@ def _outpaint_capability_kwargs(
     validated_padding: str | None = None,
     validated_fill_mode: str | None = None,
     validated_max_canvas_pixels: int | None = None,
+    auto_split_corner_ratio: float | None = None,
 ) -> dict:
     # Mirrors _lora_capability_kwargs: one place decides the whole field group so a route can
     # never advertise half a contract (outpaint supported, fill contract silently missing).
@@ -1220,6 +1298,9 @@ def _outpaint_capability_kwargs(
             "outpaint_validated_padding": None,
             "outpaint_validated_fill_mode": None,
             "outpaint_validated_max_canvas_pixels": None,
+            "outpaint_pass_modes": (),
+            "outpaint_default_passes": None,
+            "outpaint_auto_split_corner_ratio": None,
         }
     if preservation is None:
         # A route that outpaints without saying how it keeps the source is exactly the half
@@ -1237,6 +1318,12 @@ def _outpaint_capability_kwargs(
         "outpaint_validated_padding": validated_padding,
         "outpaint_validated_fill_mode": validated_fill_mode,
         "outpaint_validated_max_canvas_pixels": validated_max_canvas_pixels,
+        # Every expanded-canvas route runs the shared pass planner, so the accepted values are the
+        # same on every row; only the auto-split depth is a per-route claim about measured
+        # behaviour, and None is the honest value on a route where the corner has not been measured.
+        "outpaint_pass_modes": OUTPAINT_PASS_MODES,
+        "outpaint_default_passes": OUTPAINT_DEFAULT_PASSES,
+        "outpaint_auto_split_corner_ratio": auto_split_corner_ratio,
     }
 
 
@@ -1422,6 +1509,7 @@ def _qwen_capabilities(identity: _ModelIdentity) -> ModelCapabilities:
                     validated_padding=OUTPAINT_VALIDATED_PADDING,
                     validated_fill_mode=OUTPAINT_VALIDATED_FILL_MODE,
                     validated_max_canvas_pixels=OUTPAINT_VALIDATED_MAX_CANVAS_PIXELS,
+                    auto_split_corner_ratio=OUTPAINT_TWO_DEEP_AXIS_RATIO,
                 ),
                 **_lora_capability_kwargs(identity=identity, capability_id="qwen.outpaint", supports_lora=True),
                 **i2i_canvas,
@@ -1688,6 +1776,9 @@ def _flux2_canvas_expansion_capabilities(
             validated_padding=OUTPAINT_VALIDATED_PADDING,
             validated_fill_mode=OUTPAINT_VALIDATED_FILL_MODE,
             validated_max_canvas_pixels=OUTPAINT_VALIDATED_MAX_CANVAS_PIXELS,
+            # Measured to duplicate the subject in a deep free corner on distilled 9B (3/3 seeds
+            # at 0.59) and to be clean as two single-axis passes; `auto` splits past the ratio.
+            auto_split_corner_ratio=OUTPAINT_TWO_DEEP_AXIS_RATIO,
         ),
         **_lora_capability_kwargs(identity=identity, capability_id="flux2.outpaint", supports_lora=True),
         **i2i_canvas,

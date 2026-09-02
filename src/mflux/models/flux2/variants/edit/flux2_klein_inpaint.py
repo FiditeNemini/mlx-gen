@@ -60,6 +60,7 @@ class Flux2KleinInpaint(nn.Module):
         image_strength: float | None = None,
         scheduler: str = "flow_match_euler_discrete",
         canvas_policy: str = CANVAS_POLICY_SOURCE_ASPECT,
+        negative_prompt: str = "",
     ) -> GeneratedImage:
         timer = RuntimeTimer()
         if num_inference_steps is None:
@@ -67,6 +68,9 @@ class Flux2KleinInpaint(nn.Module):
         if guidance is None:
             guidance = _Flux2KleinEditHelpers.default_guidance(self.model_config)
         _Flux2KleinEditHelpers.validate_guidance(model_config=self.model_config, guidance=guidance)
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=self.model_config, guidance=guidance, negative_prompt=negative_prompt
+        )
         if image_strength is not None:
             raise ValueError(
                 "image_strength cannot be combined with mask_path; masked edit is a separate route "
@@ -89,7 +93,7 @@ class Flux2KleinInpaint(nn.Module):
         # 1. Encode prompt(s)
         prompt_embeds, text_ids, negative_prompt_embeds, negative_text_ids = self._encode_prompt_pair(
             prompt=prompt,
-            negative_prompt="",
+            negative_prompt=negative_prompt if negative_prompt is not None else "",
             guidance=guidance,
         )
 
@@ -197,7 +201,7 @@ class Flux2KleinInpaint(nn.Module):
                 config=config,
                 seed=seed,
                 prompt=prompt,
-                negative_prompt=None,
+                negative_prompt=negative_prompt if negative_prompt_embeds is not None else None,
                 quantization=self.bits,
                 lora_paths=self.lora_paths,
                 lora_scales=self.lora_scales,

@@ -13,6 +13,7 @@ from mflux.models.qwen.variants.edit.qwen_image_edit import (
     QwenImageEdit,
     QwenImageEdit as _QwenImageEditImplementation,
 )
+from mflux.outpaint import OutpaintSession
 from mflux.utils.exceptions import ModelConfigError, PromptFileReadError, StopImageGenerationException
 from mflux.utils.prompt_util import PromptUtil
 
@@ -49,6 +50,7 @@ def main():
             "source blend when the generated source window still matches the original image."
         ),
     )
+    parser.add_outpaint_pass_arguments()
     parser.add_output_arguments()
     args = parser.parse_args()
     source_image_paths = [str(p) for p in args.image_paths]
@@ -134,22 +136,35 @@ def main():
                     events.set_output_path(output_path)
                     unsubscribe = events.subscribe_model(qwen, map_complete_to_generated=True)
                     try:
-                        image = qwen.generate_image(
-                            seed=seed,
-                            prompt=PromptUtil.read_prompt(args),
-                            negative_prompt=_read_negative_prompt(args),
-                            width=args.width,
-                            height=args.height,
-                            guidance=args.guidance,
-                            image_path=source_image_paths[0],  # Use original source for metadata
-                            image_paths=image_paths,
-                            mask_path=args.mask_path,
-                            num_inference_steps=args.steps,
-                            scheduler=args.scheduler,
-                            canvas_policy=args.canvas_policy,
-                        )
-                        if canvas_session is not None:
-                            canvas_session.finalize(image)
+                        if isinstance(canvas_session, OutpaintSession):
+                            # The session owns the canvas keywords and runs every planned pass;
+                            # the per-pass geometry is not the final --width/--height.
+                            image = canvas_session.generate(
+                                qwen,
+                                seed=seed,
+                                prompt=PromptUtil.read_prompt(args),
+                                negative_prompt=_read_negative_prompt(args),
+                                guidance=args.guidance,
+                                num_inference_steps=args.steps,
+                                scheduler=args.scheduler,
+                            )
+                        else:
+                            image = qwen.generate_image(
+                                seed=seed,
+                                prompt=PromptUtil.read_prompt(args),
+                                negative_prompt=_read_negative_prompt(args),
+                                width=args.width,
+                                height=args.height,
+                                guidance=args.guidance,
+                                image_path=source_image_paths[0],  # Use original source for metadata
+                                image_paths=image_paths,
+                                mask_path=args.mask_path,
+                                num_inference_steps=args.steps,
+                                scheduler=args.scheduler,
+                                canvas_policy=args.canvas_policy,
+                            )
+                            if canvas_session is not None:
+                                canvas_session.finalize(image)
 
                         events.emit_save()
                         image.save(
@@ -179,6 +194,8 @@ def _validate_canvas_args(*, parser: CommandLineParser, args, source_image_paths
             parser.error("--mask-path requires exactly one --image-paths value.")
         if args.outpaint_padding is not None or args.reframe_padding is not None:
             parser.error("--mask-path cannot be combined with --reframe-padding or --outpaint-padding.")
+    if _option_was_provided(sys.argv[1:], "--outpaint-passes") and args.outpaint_padding is None:
+        parser.error("--outpaint-passes configures the --outpaint-padding run. Pass --outpaint-padding, or drop it.")
     if args.outpaint_padding is None and args.reframe_padding is None:
         return
     if args.outpaint_padding is not None and args.reframe_padding is not None:

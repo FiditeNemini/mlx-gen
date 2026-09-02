@@ -64,23 +64,19 @@ def main():
         dest="outpaint_padding",
         default=None,
         help=(
-            "Strict outpaint: expand one source image by CSS-style top,right,bottom,left padding "
-            "and lock the source region in latent space behind a narrow transition band while the "
-            "added area is denoised. Guidance defaults to 4.0 on base Klein and 1.0 on distilled."
+            "Strict outpaint: expand one source image by CSS-style top,right,bottom,left padding, "
+            "lock the source region in latent space behind a narrow transition band while the "
+            "added area is denoised, then paste the original crop back where the generated window "
+            "still matches it. Guidance defaults to 4.0 on base Klein and 1.0 on distilled."
         ),
     )
     parser.add_outpaint_fill_arguments()
+    parser.add_outpaint_pass_arguments()
     parser.add_image_generator_arguments(supports_metadata_config=True, supports_dimension_scale_factor=True)
     parser.add_output_arguments()
     args = parser.parse_args()
     _print_legacy_notice()
 
-    if getattr(args, "negative_prompt", ""):
-        parser.error(
-            "--negative-prompt is not supported for FLUX.2. Omit it for FLUX.2 routes. "
-            "For new integrations, call `mlxgen generate --model <flux2-model> --image <path> ...` "
-            "instead of `mflux-generate-flux2-edit`."
-        )
     source_image_paths = [Path(p) for p in args.image_paths]
     _validate_canvas_args(parser=parser, args=args, source_image_paths=source_image_paths)
 
@@ -89,13 +85,26 @@ def main():
 
     is_base_model = _is_flux2_base_model(model_config)
     uses_masked_edit = args.mask_path is not None
+    negative_prompt = PromptUtil.read_negative_prompt(args)
     if args.guidance is None:
         # Source-locked denoising (strict outpaint, masked edit) is the one place a FLUX.2 route
         # wants the model's own guidance default instead of a flat 1.0: base weights run true CFG,
-        # and distilled weights are step-distilled and stay at 1.0.
+        # and distilled weights are step-distilled and stay at 1.0. A negative prompt on base
+        # weights asks for that guidance branch too, so it takes the base default as well.
         uses_source_locked_denoise = args.outpaint_padding is not None or uses_masked_edit
-        args.guidance = (
-            _Flux2KleinEditHelpers.default_guidance(model_config) if uses_source_locked_denoise else 1.0
+        wants_guidance_branch = uses_source_locked_denoise or (is_base_model and bool(negative_prompt))
+        args.guidance = _Flux2KleinEditHelpers.default_guidance(model_config) if wants_guidance_branch else 1.0
+    try:
+        # Base Klein runs true CFG and takes a negative prompt with guidance above 1.0; distilled
+        # Klein is step-distilled and has no guidance branch, so the option is refused there
+        # before any weight loads.
+        _Flux2KleinEditHelpers.validate_negative_prompt(
+            model_config=model_config, guidance=args.guidance, negative_prompt=negative_prompt
+        )
+    except ValueError as exc:
+        parser.error(
+            f"{exc} For new integrations, call `mlxgen generate --model <flux2-model> --image <path> ...` "
+            "instead of `mflux-generate-flux2-edit`."
         )
     model_name_lower = model_config.model_name.lower()
     base_model_lower = (model_config.base_model or "").lower()
@@ -166,6 +175,7 @@ def main():
                             image = model.generate_image(
                                 seed=seed,
                                 prompt=PromptUtil.read_prompt(args),
+                                negative_prompt=negative_prompt,
                                 image_path=image_paths[0],
                                 mask_path=args.mask_path,
                                 reference_image_paths=image_paths[1:] or None,
@@ -181,6 +191,7 @@ def main():
                                 model,
                                 seed=seed,
                                 prompt=PromptUtil.read_prompt(args),
+                                negative_prompt=negative_prompt,
                                 guidance=args.guidance,
                                 num_inference_steps=args.steps,
                                 scheduler="flow_match_euler_discrete",
@@ -189,6 +200,7 @@ def main():
                             image = model.generate_image(
                                 seed=seed,
                                 prompt=PromptUtil.read_prompt(args),
+                                negative_prompt=negative_prompt,
                                 width=args.width,
                                 height=args.height,
                                 guidance=args.guidance,
@@ -226,6 +238,8 @@ def _validate_canvas_args(*, parser: CommandLineParser, args, source_image_paths
             "--outpaint-fill and --outpaint-fill-color configure the --outpaint-padding conditioning "
             "canvas. Pass --outpaint-padding, or drop these options."
         )
+    if option_was_provided(argv, "--outpaint-passes") and args.outpaint_padding is None:
+        parser.error("--outpaint-passes configures the --outpaint-padding run. Pass --outpaint-padding, or drop it.")
     if args.mask_path is not None:
         if args.outpaint_padding is not None or args.reframe_padding is not None:
             parser.error("--mask-path cannot be combined with --reframe-padding or --outpaint-padding.")

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import PIL.Image
@@ -45,12 +45,46 @@ class OutpaintCanvas:
     paste_left: int
     paste_top: int
     padding: AbsoluteBoxValues
+    # A binary mask beside the canvas for routes that lock the source in latent space through a
+    # mask input: black over the source (minus a transition band on the sides that gained
+    # pixels), white over everything the model has to paint. None on routes that lock some other
+    # way, or not at all.
+    lock_mask_path: Path | None = None
+
+
+# Transition band between the locked source and the generated area, in canvas pixels. It is what
+# lets the model blend new content into the source across the seam, and it stays absolute rather
+# than scaling with the canvas: the latent grid is canvas/16 (FLUX.2) or canvas/8 (Qwen), so 24 px
+# is a fixed one-to-three cells at every resolution. Same value as the FLUX.2 route's own band;
+# test_outpaint_layer pins the two lock boxes together.
+SOURCE_LOCK_TRANSITION_PX = 24
 
 
 class OutpaintUtil:
     # Public mirror of _EDGE_MAX_STRETCH for callers that select a fill mode and for the
     # capability contract in mflux.task_inference, which cannot import this module (PIL).
     EDGE_FILL_MAX_STRETCH = _EDGE_MAX_STRETCH
+
+    @staticmethod
+    def expanded_canvas_size(
+        *,
+        source_width: int,
+        source_height: int,
+        padding: AbsoluteBoxValues,
+        dimension_multiple: int = 16,
+    ) -> tuple[int, int]:
+        """The canvas size a padding box produces, after the route's dimension multiple.
+
+        Public because the fill policy has to know the canvas a request would build before any
+        canvas exists on disk, and it has to be the same arithmetic `create_expanded_canvas` runs
+        rather than a second copy of it.
+        """
+        if dimension_multiple <= 0:
+            raise ValueError("dimension_multiple must be greater than zero.")
+        return (
+            OutpaintUtil._round_up(source_width + padding.left + padding.right, dimension_multiple),
+            OutpaintUtil._round_up(source_height + padding.top + padding.bottom, dimension_multiple),
+        )
 
     @staticmethod
     def create_expanded_canvas(
@@ -70,8 +104,12 @@ class OutpaintUtil:
         padding = BoxValues.parse(padding_value).normalize_to_dimensions(width=source.width, height=source.height)
         OutpaintUtil._validate_padding(padding, option_name=option_name)
 
-        target_width = OutpaintUtil._round_up(source.width + padding.left + padding.right, dimension_multiple)
-        target_height = OutpaintUtil._round_up(source.height + padding.top + padding.bottom, dimension_multiple)
+        target_width, target_height = OutpaintUtil.expanded_canvas_size(
+            source_width=source.width,
+            source_height=source.height,
+            padding=padding,
+            dimension_multiple=dimension_multiple,
+        )
         canvas = OutpaintUtil._create_background(
             source=source,
             target_width=target_width,
@@ -99,6 +137,56 @@ class OutpaintUtil:
         )
 
     @staticmethod
+    def source_lock_box(
+        *, canvas: OutpaintCanvas, transition_px: int = SOURCE_LOCK_TRANSITION_PX
+    ) -> tuple[int, int, int, int]:
+        """The canvas box a latent lock holds, as (left, top, right, bottom) in canvas pixels.
+
+        The source box, inset by the transition band only on the sides that gained new pixels: a
+        side with nothing new on it has no seam and gives up no source. The inset is capped at the
+        gap on that side (a side that only gained a round-up sliver never sacrifices more source
+        than it added) and at half the source extent, so opposing insets never meet. If the box
+        collapses anyway the whole source is held.
+        """
+        gap_left = max(0, canvas.paste_left)
+        gap_top = max(0, canvas.paste_top)
+        gap_right = max(0, canvas.target_width - canvas.paste_left - canvas.source_width)
+        gap_bottom = max(0, canvas.target_height - canvas.paste_top - canvas.source_height)
+        max_inset_x = max(0, canvas.source_width // 2 - 1)
+        max_inset_y = max(0, canvas.source_height // 2 - 1)
+        left = canvas.paste_left + min(transition_px, gap_left, max_inset_x)
+        top = canvas.paste_top + min(transition_px, gap_top, max_inset_y)
+        right = canvas.paste_left + canvas.source_width - min(transition_px, gap_right, max_inset_x)
+        bottom = canvas.paste_top + canvas.source_height - min(transition_px, gap_bottom, max_inset_y)
+        if right <= left or bottom <= top:
+            return (
+                canvas.paste_left,
+                canvas.paste_top,
+                canvas.paste_left + canvas.source_width,
+                canvas.paste_top + canvas.source_height,
+            )
+        return left, top, right, bottom
+
+    @staticmethod
+    def attach_source_lock_mask(
+        *,
+        canvas: OutpaintCanvas,
+        output_path: str | Path,
+        transition_px: int = SOURCE_LOCK_TRANSITION_PX,
+    ) -> OutpaintCanvas:
+        """Write the source-lock mask for `canvas` and return the canvas pointing at it.
+
+        White (255) is repainted, black (0) is held, matching the mask contract of the masked-edit
+        routes that consume it.
+        """
+        mask = PIL.Image.new("L", (canvas.target_width, canvas.target_height), 255)
+        mask.paste(0, OutpaintUtil.source_lock_box(canvas=canvas, transition_px=transition_px))
+        mask_path = Path(output_path)
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
+        mask.save(mask_path)
+        return replace(canvas, lock_mask_path=mask_path)
+
+    @staticmethod
     def composite_source_region(
         *,
         generated_image: PIL.Image.Image,
@@ -112,8 +200,7 @@ class OutpaintUtil:
         `preserve_source` states the intent directly:
 
         * ``True``  - always paste the source back (used with an explicit feather).
-        * ``False`` - never paste; the caller's model path already locked the source
-          region in latent space and a post-blend would only fight it.
+        * ``False`` - never paste; kept for callers that want the decoded result untouched.
         * ``None``  - adaptive: paste only when the generated region still matches the
           source within `restore_threshold` mean absolute difference.
 
@@ -156,6 +243,21 @@ class OutpaintUtil:
         composited.outpaint_preservation_mode = mode
         composited.outpaint_source_restore_difference = restore_difference
         return composited
+
+    @staticmethod
+    def source_region_difference(*, generated_image: PIL.Image.Image, canvas: OutpaintCanvas) -> float:
+        """Mean absolute difference (0-255) between the source and its window in `generated_image`.
+
+        The same measurement `composite_source_region` records, exposed for a caller that has to
+        take it before a restore changes the window.
+        """
+        source = ImageUtil.load_image(canvas.source_path)
+        return OutpaintUtil._source_region_difference(
+            generated_image=generated_image.convert("RGB"),
+            source=source,
+            paste_left=canvas.paste_left,
+            paste_top=canvas.paste_top,
+        )
 
     @staticmethod
     def _resolve_preservation_mode(
@@ -225,6 +327,15 @@ class OutpaintUtil:
             }
         )
         generated_image.extra_metadata = extra_metadata
+
+    @staticmethod
+    def validate_padding(padding: AbsoluteBoxValues, *, option_name: str = "--outpaint-padding") -> None:
+        """Raise ValueError for a negative side or a box that adds no pixels at all.
+
+        Public because the pass planner has to reject a request before it decides how to run
+        it, with the same wording the canvas builder uses.
+        """
+        OutpaintUtil._validate_padding(padding, option_name=option_name)
 
     @staticmethod
     def _validate_padding(padding: AbsoluteBoxValues, *, option_name: str) -> None:
@@ -621,10 +732,10 @@ class OutpaintUtil:
     def _source_mask(source: PIL.Image.Image, feather_px: int | None) -> PIL.Image.Image:
         """Alpha for pasting the source crop back.
 
-        Reached from the post-blend routes only - the Qwen edit route and the
-        non-base FLUX.2 outpaint route, both of which run `preserve_source=None`
-        (adaptive). The strict FLUX.2 base-model route resolves to
-        `preserve_source=False` and never pastes, so it never builds a mask.
+        Content-aware by default: the interior is pasted at near-full opacity behind a feathered
+        inset, and the source's own edges are pasted at full opacity right up to the border, so
+        the seam blends while detail survives. Every outpaint route runs `preserve_source=None`
+        (adaptive) and reaches this once the generated window is within the restore threshold.
         """
         if feather_px is None:
             if min(source.width, source.height) < 64:

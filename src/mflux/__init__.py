@@ -50,6 +50,7 @@ _LAZY_EXPORTS = {
         "OutpaintContract",
         "OutpaintError",
         "OutpaintFillPlan",
+        "OutpaintPassPlan",
         "OutpaintRequest",
         "OutpaintSession",
         "ReframeSession",
@@ -59,6 +60,7 @@ _LAZY_EXPORTS = {
         "prepare_outpaint",
         "prepare_reframe",
         "resolve_outpaint_fill_plan",
+        "resolve_outpaint_pass_plan",
         "run_outpaint",
     )
 }
@@ -76,6 +78,7 @@ __all__ = [
     "OutpaintContract",
     "OutpaintError",
     "OutpaintFillPlan",
+    "OutpaintPassPlan",
     "OutpaintRequest",
     "OutpaintSession",
     "REFRAME_OUTPAINT_PROFILE_ID",
@@ -103,6 +106,7 @@ __all__ = [
     "resolve_generation_runtime",
     "resolve_generation_runtime_for_plan",
     "resolve_outpaint_fill_plan",
+    "resolve_outpaint_pass_plan",
     "resolve_task",
     "run_outpaint",
 ]

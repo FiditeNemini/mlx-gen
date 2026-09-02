@@ -434,8 +434,11 @@ Wan video models are different: when the negative prompt is omitted, MLX-Gen use
 default negative prompt. Pass `--negative ""` or `--negative-prompt ""` only when you intentionally
 want no negative prompt.
 
-FLUX.2 is different again: FLUX.2 Klein routes do not support negative prompts in MLX-Gen. Omit
-`--negative` / `--negative-prompt` entirely for FLUX.2 runs.
+FLUX.2 Klein depends on the weights: base models accept a negative prompt on every route and run
+classifier-free guidance against it (pass `--guidance` above 1.0, or omit it and the base default
+of 4.0 applies); distilled models are step-distilled and reject `--negative` /
+`--negative-prompt` before loading weights. The `supports_negative_prompt` capability field says
+which you have.
 
 ## Should Integrations Call `mflux-generate-*` Commands Directly?
 
@@ -739,17 +742,17 @@ current proof. Outpaint cost scales with the expanded canvas and attention cost 
 canvas area, so extending in two moderate passes is cheaper and generally better than one large
 pass.
 
-Outpaint is backend-specific in how it treats the source region too, and each route publishes which
-strategy it uses as `outpaint_preservation`. Qwen Image Edit variants use expanded-canvas generation
-plus adaptive source restoration, pasting the original crop back while the generated source window
-still matches it. FLUX.2 Klein strict outpaint uses source-locked denoising with a narrow latent
-transition band and never repaints the source region afterwards, on distilled 4B/9B at guidance 1.0
-and on base 4B/9B at guidance 4.0.
+Every outpaint route keeps the source the same way, published as `outpaint_preservation`
+(`adaptive-content-aware-source-blend`): the source region is held in latent space behind a
+narrow transition band while the added area is denoised, then the original crop is pasted back
+while the generated source window still matches it. FLUX.2 Klein runs it on distilled 4B/9B at
+guidance 1.0 and on base 4B/9B at guidance 4.0; Qwen Image Edit holds the source through its
+masked-edit input.
 
-Neither is a native fill/inpaint backend with an explicit diffusion mask, and neither is an exact
-pixel-lock guarantee: on the FLUX.2 Klein route the source region is decoded from latents, so it is
-reproduced rather than preserved bit-for-bit, and on the Qwen route the paste back is conditional.
-When a region must stay untouched, use masked editing (`--mask-path`, see
+Neither is a native fill/inpaint backend with an explicit diffusion mask, and the paste back is
+conditional on the generated window staying within the restore threshold, which the latent lock
+keeps it inside in every recorded run; the transition band along the seam is regenerated so the
+new area blends in. When a region must stay untouched, use masked editing (`--mask-path`, see
 [Masked editing](masked-editing.md)) instead. Latent I2I models, Z-Image, ERNIE,
 FIBO, base Qwen Image, Qwen Image 2512, Wan, SeedVR2, and unsupported edit models reject
 `--outpaint-padding` before loading weights. Exact prepared-package outpaint proof exists for

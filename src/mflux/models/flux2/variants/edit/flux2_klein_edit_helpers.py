@@ -31,6 +31,28 @@ class _Flux2KleinEditHelpers:
         raise ValueError("guidance > 1.0 is only supported for FLUX.2 Klein base models.")
 
     @staticmethod
+    def validate_negative_prompt(*, model_config, guidance: float, negative_prompt: str | None) -> None:
+        """Reject a negative prompt the weights cannot act on.
+
+        The negative branch only runs when guidance is above 1.0 (see `_encode_prompt_pair`), so a
+        negative prompt on distilled Klein - which has no guidance branch at all - or on base Klein
+        at guidance 1.0 would be silently ignored. Saying so is better than a silent no-op.
+        """
+        if not negative_prompt:
+            return
+        if not _Flux2KleinEditHelpers.is_base_model(model_config):
+            raise ValueError(
+                "--negative-prompt is not supported for FLUX.2 Klein distilled weights: they are step-distilled "
+                "and run no classifier-free guidance branch to steer. FLUX.2 Klein base models accept it with "
+                "--guidance above 1.0."
+            )
+        if guidance is None or guidance <= 1.0:
+            raise ValueError(
+                "--negative-prompt on FLUX.2 Klein base weights needs --guidance above 1.0: the negative branch "
+                "only runs under classifier-free guidance."
+            )
+
+    @staticmethod
     def default_guidance(model_config) -> float:
         # Base models run true CFG like the source-locked outpaint route; distilled Klein
         # models are step-distilled and must stay at guidance 1.0.

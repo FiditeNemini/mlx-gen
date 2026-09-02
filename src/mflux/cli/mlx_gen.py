@@ -208,6 +208,9 @@ def _parse_router_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
     args.has_mask = _has_mask_option(argv, metadata)
     args.has_control_image = _has_controlnet_image_option(argv, metadata)
     args.has_outpaint = args.outpaint_padding is not None or _has_outpaint_option(argv, metadata)
+    args.has_negative_prompt = bool(
+        _option_value(argv, "--negative-prompt") or _option_value(argv, "--negative") or metadata.get("negative_prompt")
+    )
     args.has_reframe = args.reframe_padding is not None
     args.has_lora = _has_lora_option(argv, metadata)
     args.lora_paths = _lora_paths_from_options(argv, metadata)
@@ -469,7 +472,9 @@ def _parser() -> argparse.ArgumentParser:
             "Exact VACE and Bernini routes accept repeatable --reference-image conditioning.\n"
             "Use --mask-path for localized masked edit or inpaint on models that support masked edit or inpaint.\n"
             "Use --controlnet-image-path for structured control on a text-to-image route; it is not the same as "
-            "source-image editing."
+            "source-image editing.\n"
+            "--outpaint-passes (auto, 1, 2) decides whether a --outpaint-padding request that pads both axes "
+            "deeply runs as two single-axis passes; auto splits past the route's published depth."
         ),
     )
     add_router_options(parser)
@@ -932,6 +937,9 @@ def _outpaint_forwarded_argv(
         # _validate_outpaint_fill_options has already rejected them when they were passed.
         return []
     fill_argv = _outpaint_fill_forwarded_argv(args) if route.accepts_outpaint_fill else []
+    # The pass planner is the shared layer's, so every outpaint backend declares --outpaint-passes.
+    if args.outpaint_passes is not None:
+        fill_argv.extend(["--outpaint-passes", str(args.outpaint_passes)])
     _validate_padding_value(args.outpaint_padding, option_name="--outpaint-padding")
     if len(images) != 1:
         _parser().error("--outpaint-padding requires exactly one --image or --image-path.")
@@ -1011,6 +1019,7 @@ def _resolve_route(
     _validate_controlnet_route_options(args, plan=plan)
     capability = _capability_row(args=args, model_config=model_config, capability_id=plan.capability_id)
     _validate_outpaint_fill_options(args, capability=capability)
+    _validate_negative_prompt_option(args, capability=capability)
     _validate_lora_compatibility(args=args, model_config=model_config)
     _validate_family_override(args, model_config=model_config, plan=plan)
     route = _route_for_plan(
@@ -1059,6 +1068,29 @@ def _plan_accepts_explicit_controlnet_options(plan) -> bool:
     return plan.capability_id in {"qwen.control", "qwen.control-inpaint"}
 
 
+def _validate_negative_prompt_option(args: argparse.Namespace, *, capability) -> None:
+    """Refuse --negative-prompt on a route whose capability row does not support it.
+
+    Whether a negative prompt means anything is a property of the resolved route and, for FLUX.2
+    Klein, of the weights: base Klein runs true classifier-free guidance and takes one, distilled
+    Klein is step-distilled and has no guidance branch. Failing here names the route instead of
+    letting the backend answer after the parse.
+    """
+    if capability is None or not getattr(args, "has_negative_prompt", False):
+        return
+    if capability.supports_negative_prompt:
+        return
+    detail = ""
+    if capability.id.startswith("flux2."):
+        detail = (
+            " FLUX.2 Klein distilled weights are step-distilled and run no classifier-free guidance branch to "
+            "steer; FLUX.2 Klein base models accept it with --guidance above 1.0."
+        )
+    _parser().error(
+        f"--negative-prompt is not supported on {capability.id} for {args.model}.{detail} Drop --negative-prompt."
+    )
+
+
 def _validate_outpaint_fill_options(args: argparse.Namespace, *, capability) -> None:
     """Reject --outpaint-fill / --outpaint-fill-color the selected route cannot honour.
 
@@ -1067,9 +1099,13 @@ def _validate_outpaint_fill_options(args: argparse.Namespace, *, capability) -> 
     backend that never declared them and argparse answers with "unrecognized arguments" under a
     program name the caller never typed.
     """
-    if args.outpaint_fill is None and args.outpaint_fill_color is None:
+    if args.outpaint_fill is None and args.outpaint_fill_color is None and args.outpaint_passes is None:
         return
     if not args.has_outpaint:
+        if args.outpaint_fill is None and args.outpaint_fill_color is None:
+            _parser().error(
+                "--outpaint-passes configures the --outpaint-padding run. Pass --outpaint-padding, or drop it."
+            )
         _parser().error(
             "--outpaint-fill and --outpaint-fill-color configure the --outpaint-padding conditioning "
             "canvas. Pass --outpaint-padding, or drop these options."
@@ -1084,6 +1120,7 @@ def _validate_outpaint_fill_options(args: argparse.Namespace, *, capability) -> 
             contract=outpaint_contract(capability=capability),
             fill=args.outpaint_fill,
             fill_color_requested=args.outpaint_fill_color is not None,
+            passes=args.outpaint_passes,
         )
     except OutpaintError as exc:
         _parser().error(str(exc))

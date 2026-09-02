@@ -241,7 +241,7 @@ rather than preserved bit-for-bit. Every run records how far the source region m
 
 Outpaint-capable capability rows publish the conditioning-canvas contract and the validated
 envelope, so an application can read both from `mlxgen capabilities` JSON before starting a job. The
-payload carries `schema_version` 11.
+payload carries `schema_version` 12.
 
 | Field | `flux2.outpaint` on `flux.2-klein-base-4b-8bit` | `flux2.outpaint` on `flux.2-klein-4b-8bit` | `qwen.outpaint` on `qwen-image-edit-2511-8bit` |
 | --- | --- | --- | --- |
@@ -251,10 +251,13 @@ payload carries `schema_version` 11.
 | `outpaint_default_fill_mode` | `"auto"` | `"auto"` | `"edge"` |
 | `outpaint_auto_edge_fill_max_stretch` | `12.0` | `12.0` | `null` |
 | `outpaint_recommended_lora` | `"fal/flux-2-klein-4B-outpaint-lora"` | `null` | `null` |
-| `outpaint_preservation` | `"latent-locked-transition-band-no-postblend"` | `"latent-locked-transition-band-no-postblend"` | `"adaptive-content-aware-source-blend"` |
+| `outpaint_preservation` | `"adaptive-content-aware-source-blend"` | `"adaptive-content-aware-source-blend"` | `"adaptive-content-aware-source-blend"` |
 | `outpaint_validated_padding` | `"5%,80%,5%,60%"` | `"5%,80%,5%,60%"` | `"5%,80%,5%,60%"` |
 | `outpaint_validated_fill_mode` | `"edge"` | `"edge"` | `"edge"` |
 | `outpaint_validated_max_canvas_pixels` | `282880` | `282880` | `282880` |
+| `outpaint_pass_modes` | `["auto", "1", "2"]` | `["auto", "1", "2"]` | `["auto", "1", "2"]` |
+| `outpaint_default_passes` | `"auto"` | `"auto"` | `"auto"` |
+| `outpaint_auto_split_corner_ratio` | `0.3` | `0.3` | `0.3` |
 | `lora_status` | `"validated"` | `"mapped-unvalidated"` | `"validated"` |
 
 Base and distilled Klein publish the same conditioning-canvas contract because they run the same
@@ -269,11 +272,18 @@ naming the capability and the fixed canvas. Rows that do not support outpaint re
 `supports_outpaint` and `supports_outpaint_fill` as `false`, empty `outpaint_fill_modes`, and
 `null` for the rest.
 
+`outpaint_pass_modes` and `outpaint_default_passes` publish the `--outpaint-passes` contract, and
+`outpaint_auto_split_corner_ratio` the depth past which `auto` runs a request that pads both axes
+as two single-axis passes (the shallower of the deepest vertical padding over the source height and
+the deepest horizontal padding over the source width; `null` on a route that never splits). See
+[Deep Padding On Two Axes](reframe-outpaint.md#deep-padding-on-two-axes).
+
 `outpaint_preservation` names how the route keeps the source pixels, and is the same string the
-generated artifact records in its metadata. `latent-locked-transition-band-no-postblend` locks the
-source region during denoising and never repaints it afterwards;
-`adaptive-content-aware-source-blend` generates the whole canvas and pastes the source back while
-the generated source window still matches it.
+generated artifact records in its metadata. Every outpaint route publishes
+`adaptive-content-aware-source-blend`: the source region is held in latent space behind a narrow
+transition band while the canvas is denoised (FLUX.2 Klein through its own lock, Qwen Image Edit
+through its masked-edit input), then the original crop is pasted back while the generated source
+window still matches it.
 
 The validated envelope is the padding, fill mode, and canvas size the published proof runs used.
 Outside it, outpaint is supported but unvalidated. `outpaint_recommended_lora` is optional: the

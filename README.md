@@ -52,9 +52,10 @@ The main capabilities are:
   control where the selected model supports `--controlnet-image-path`, and route-specific
   reframe/outpaint workflows where the selected model supports them, with per-side padding that
   extends a single side, both sides of an axis, or all four in one call, a selectable outpaint
-  conditioning canvas (`--outpaint-fill`) and strict source-locked outpaint on every FLUX.2 Klein
-  model, distilled 4B/9B and base 4B/9B alike (distilled 4B q8 is the fastest measured route, at
-  54.6 s on an Apple M5 Max — see `docs/reframe-outpaint.md`);
+  conditioning canvas (`--outpaint-fill`), an automatic two-pass split for deep two-axis requests
+  (`--outpaint-passes`), and source-locked outpaint with the original crop restored on every FLUX.2
+  Klein model, distilled 4B/9B and base 4B/9B alike (distilled 4B q8 is the fastest measured route,
+  at 54.6 s on an Apple M5 Max — see `docs/reframe-outpaint.md`);
 - Wan2.2 text-to-video, image-to-video, and prompt-guided video-to-video (plain or masked via
   `--video-mask-path`, which locks everything outside the mask to the source video), including
   TI2V-5B BF16/q8 packages plus A14B T2V/I2V BF16 and mixed q8/BF16 packages; video-to-video

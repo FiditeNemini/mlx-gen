@@ -65,8 +65,9 @@ mlxgen generate \
   --output edited.png
 ```
 
-If the old integration also forwarded `--negative-prompt`, remove that option for FLUX.2. MLX-Gen
-rejects negative prompts on FLUX.2 routes by design.
+If the old integration also forwarded `--negative-prompt` to distilled FLUX.2 Klein weights, remove
+it there: those weights have no guidance branch and the option is rejected before loading. Base
+FLUX.2 Klein models accept it with `--guidance` above 1.0.
 
 ## ERNIE Images Look Cropped At Tiny Sizes
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 
-from mflux.cli.parser.parsers import OUTPAINT_FILL_CHOICES, image_strength_value
+from mflux.cli.parser.parsers import OUTPAINT_FILL_CHOICES, OUTPAINT_PASS_CHOICES, image_strength_value
 
 
 class ForwardPolicy(Enum):
@@ -307,6 +307,22 @@ ROUTER_OPTIONS: tuple[RouterOption, ...] = (
             "type": str,
             "default": None,
             "help": "Fill color for --outpaint-fill solid, as 'R,G,B' (0-255 per channel) or '#rrggbb'.",
+        },
+        emitter="_outpaint_forwarded_argv",
+    ),
+    RouterOption(
+        flags=("--outpaint-passes",),
+        dest="outpaint_passes",
+        policy=ForwardPolicy.TRANSFORMED,
+        kwargs={
+            "choices": list(OUTPAINT_PASS_CHOICES),
+            "default": None,
+            "help": (
+                "How many passes --outpaint-padding runs: auto (default) splits a request that pads a "
+                "vertical side and a horizontal side deeply into one horizontal and one vertical pass, "
+                "which removes the free corner where the model duplicates the subject; 2 always splits "
+                "such a request; 1 forces a single pass and warns on that corner."
+            ),
         },
         emitter="_outpaint_forwarded_argv",
     ),

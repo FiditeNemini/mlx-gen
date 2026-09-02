@@ -478,6 +478,10 @@ def test_qwen_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pat
     assert observed["generate"]["canvas_policy"] == "exact-resize"
     assert observed["generate"]["image_path"] == str(source)
     assert Path(observed["generate"]["image_paths"][0]).name == "outpaint_canvas.png"
+    # The Qwen route holds the source in latent space through its mask input while the padded
+    # area is denoised; the shared layer writes the mask beside the canvas.
+    assert Path(observed["generate"]["mask_path"]).name == "outpaint_canvas_mask.png"
+    assert observed["generate"]["width"] == 32 and observed["generate"]["height"] == 16
     generated = Image.open(output).convert("RGB")
     source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
     output_interior = generated.crop((5, 3, 15, 9))
@@ -836,7 +840,7 @@ def test_capabilities_command_reports_wan_context_frames_on_a14b_i2v_only(capsys
     # concat i2v path as the bracket; hosts gate on this additive v6 field.
     mlx_gen._show_capabilities(["--model", "Wan-AI/Wan2.2-I2V-A14B-Diffusers"])
     i2v_payload = json.loads(capsys.readouterr().out)
-    assert i2v_payload["schema_version"] == 11
+    assert i2v_payload["schema_version"] == 12
     i2v_row = next(capability for capability in i2v_payload["capabilities"] if capability["id"] == "wan.first-frame")
     assert i2v_row["supports_context_frames"] is True
     assert i2v_row["supports_svi"] is True
@@ -1097,12 +1101,12 @@ def test_flux2_edit_backend_outpaint_preserves_source_region(monkeypatch, tmp_pa
     assert observed["generate"]["canvas"].target_width == 32
     assert observed["generate"]["canvas"].target_height == 16
     assert Path(observed["generate"]["canvas"].canvas_path).name == "outpaint_canvas.png"
-    # Both spellings are passed: preserve_source is the contract and restore_threshold is the
-    # legacy sentinel for the same "never post-blend" behavior.
-    assert observed["preserve_source"] is False
-    assert observed["restore_threshold"] == -1.0
-    assert observed["extra_metadata"]["outpaint_preservation"] == "latent-locked-transition-band-no-postblend"
-    assert observed["extra_metadata"]["outpaint_source_restore_applied"] is False
+    # The route locks the source in latent space and the shared layer then pastes the original
+    # back adaptively, the same strategy the Qwen route publishes.
+    assert observed["preserve_source"] is None
+    assert observed["restore_threshold"] == 24.0
+    assert observed["extra_metadata"]["outpaint_preservation"] == "adaptive-content-aware-source-blend"
+    assert observed["extra_metadata"]["outpaint_source_restore_applied"] is True
     generated = Image.open(output).convert("RGB")
     source_interior = Image.open(source).convert("RGB").crop((1, 1, 11, 7))
     output_interior = generated.crop((5, 3, 15, 9))
@@ -7241,3 +7245,234 @@ def test_routed_upscale_json_events_emit_structured_remediation_for_download_req
     assert events[-1]["remediation"]["kind"] == "download-required"
     assert events[-1]["remediation"]["repo_id"] == "AbstractFramework/seedvr2-7b-8bit"
     assert "mlxgen download --model AbstractFramework/seedvr2-7b-8bit" in captured.err
+
+
+def test_outpaint_passes_is_forwarded_to_every_outpaint_route():
+    # The pass planner is the shared layer's, so the option reaches the fixed-canvas Qwen backend
+    # too, unlike --outpaint-fill which only the FLUX.2 backend declares.
+    for model, target in (
+        ("AbstractFramework/flux.2-klein-base-4b-8bit", "mflux-generate-flux2-edit"),
+        ("AbstractFramework/qwen-image-edit-2511-8bit", "mflux-generate-qwen-edit"),
+    ):
+        invocation = mlx_gen._resolve_invocation(
+            [
+                "--model",
+                model,
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "40%",
+                "--outpaint-passes",
+                "2",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+        assert invocation.target_name == target
+        assert invocation.argv[-2:] == ["--outpaint-passes", "2"]
+
+
+def test_outpaint_passes_without_outpaint_padding_is_rejected_by_the_router(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/flux.2-klein-base-4b-8bit",
+                "--image",
+                "input.png",
+                "--outpaint-passes",
+                "2",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    assert "--outpaint-passes configures the --outpaint-padding run" in capsys.readouterr().err
+
+
+def test_outpaint_passes_rejects_an_unknown_count_before_dispatch(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/flux.2-klein-base-4b-8bit",
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "40%",
+                "--outpaint-passes",
+                "3",
+                "--prompt",
+                "extend the room",
+            ]
+        )
+
+    assert "invalid choice: '3'" in capsys.readouterr().err
+
+
+def _fake_flux2_outpaint_run(monkeypatch, tmp_path, *, model: str, extra_argv: list[str]) -> dict:
+    from mflux.models.flux2.cli import flux2_edit_generate
+
+    source = tmp_path / "source.png"
+    output = tmp_path / "out.png"
+    Image.new("RGB", (128, 64), color="white").save(source)
+    observed: dict = {}
+
+    class FakeImage:
+        def __init__(self, image):
+            self.image = image
+            self.image_path = None
+            self.image_paths = None
+
+        def save(self, **kwargs):
+            self.image.save(kwargs["path"])
+
+    class FakeFlux2Outpaint:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage(Image.open(kwargs["canvas"].canvas_path).convert("RGB"))
+
+    monkeypatch.setattr(flux2_edit_generate, "Flux2KleinOutpaint", FakeFlux2Outpaint)
+    monkeypatch.setattr(flux2_edit_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2-edit",
+            "--model",
+            model,
+            "--image-paths",
+            str(source),
+            "--outpaint-padding",
+            "0,25%,0,25%",
+            "--prompt",
+            "extend",
+            "--output",
+            str(output),
+            *extra_argv,
+        ],
+    )
+    flux2_edit_generate.main()
+    return observed
+
+
+def test_flux2_edit_backend_accepts_negative_prompt_on_base_weights(monkeypatch, tmp_path):
+    observed = _fake_flux2_outpaint_run(
+        monkeypatch, tmp_path, model="flux2-klein-base-4b", extra_argv=["--negative", "duplicate spacecraft"]
+    )
+
+    # Base Klein runs true CFG: the negative reaches the model and guidance takes the base default.
+    assert observed["generate"]["negative_prompt"] == "duplicate spacecraft"
+    assert observed["generate"]["guidance"] == 4.0
+
+
+def test_flux2_edit_backend_omitted_negative_prompt_stays_empty_on_base_weights(monkeypatch, tmp_path):
+    observed = _fake_flux2_outpaint_run(monkeypatch, tmp_path, model="flux2-klein-base-4b", extra_argv=[])
+
+    # The recorded base behaviour: CFG against an empty negative, never None.
+    assert observed["generate"]["negative_prompt"] == ""
+    assert observed["generate"]["guidance"] == 4.0
+
+
+def test_flux2_edit_backend_rejects_negative_prompt_at_guidance_one_on_base_weights(monkeypatch, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        _fake_flux2_outpaint_run(
+            monkeypatch, tmp_path, model="flux2-klein-base-4b", extra_argv=["--negative", "blurry", "--guidance", "1.0"]
+        )
+
+    assert "needs --guidance above 1.0" in capsys.readouterr().err
+
+
+def test_flux2_edit_backend_rejects_negative_prompt_on_distilled_outpaint(monkeypatch, tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        _fake_flux2_outpaint_run(monkeypatch, tmp_path, model="flux2-klein-4b", extra_argv=["--negative", "blurry"])
+
+    error = capsys.readouterr().err
+    assert "not supported for FLUX.2 Klein distilled weights" in error
+    assert "base models accept it with --guidance above 1.0" in error
+
+
+def test_router_rejects_negative_prompt_on_distilled_flux2_before_dispatch(capsys):
+    with pytest.raises(SystemExit):
+        mlx_gen._resolve_invocation(
+            [
+                "--model",
+                "AbstractFramework/flux.2-klein-9b-8bit",
+                "--image",
+                "input.png",
+                "--outpaint-padding",
+                "0,25%,0,25%",
+                "--negative",
+                "blurry",
+                "--prompt",
+                "extend",
+            ]
+        )
+
+    error = capsys.readouterr().err
+    assert "--negative-prompt is not supported on flux2.outpaint" in error
+    assert "base models accept it with --guidance above 1.0" in error
+
+
+def test_router_forwards_negative_prompt_to_base_flux2(capsys):
+    invocation = mlx_gen._resolve_invocation(
+        [
+            "--model",
+            "AbstractFramework/flux.2-klein-base-4b-8bit",
+            "--image",
+            "input.png",
+            "--negative",
+            "blurry",
+            "--prompt",
+            "add sunglasses",
+        ]
+    )
+
+    assert invocation.target_name == "mflux-generate-flux2-edit"
+    assert "--negative" in invocation.argv
+    assert invocation.argv[invocation.argv.index("--negative") + 1] == "blurry"
+
+
+def test_flux2_text_backend_accepts_negative_prompt_on_base_weights(monkeypatch, tmp_path):
+    from mflux.models.flux2.cli import flux2_generate
+
+    observed: dict = {}
+
+    class FakeImage:
+        def save(self, **kwargs):
+            Path(kwargs["path"]).touch()
+
+    class FakeFlux2Klein:
+        def __init__(self, **kwargs):
+            observed["init"] = kwargs
+
+        def generate_image(self, **kwargs):
+            observed["generate"] = kwargs
+            return FakeImage()
+
+    monkeypatch.setattr(flux2_generate, "Flux2Klein", FakeFlux2Klein)
+    monkeypatch.setattr(flux2_generate.CallbackManager, "register_callbacks", lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mflux-generate-flux2",
+            "--model",
+            "flux2-klein-base-4b",
+            "--prompt",
+            "a lighthouse",
+            "--negative-prompt",
+            "blurry",
+            "--output",
+            str(tmp_path / "out.png"),
+        ],
+    )
+
+    flux2_generate.main()
+
+    assert observed["generate"]["negative_prompt"] == "blurry"
+    assert observed["generate"]["guidance"] == 4.0

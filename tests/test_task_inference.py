@@ -371,7 +371,7 @@ def test_reframe_option_is_limited_to_validated_edit_capabilities():
 def test_model_capabilities_are_publicly_inspectable():
     capabilities = mlxgen.get_model_capabilities(model="flux2-klein-4b")
 
-    assert capabilities.schema_version == 11
+    assert capabilities.schema_version == 12
     assert capabilities.family == "flux2"
     assert {capability.mode for capability in capabilities.capabilities} >= {
         MODE_TEXT_ONLY,
@@ -687,7 +687,7 @@ def test_flux2_outpaint_capability_publishes_the_fill_contract():
     assert row["outpaint_default_fill_mode"] == "auto"
     assert row["outpaint_auto_edge_fill_max_stretch"] == 12.0
     assert row["outpaint_recommended_lora"] == "fal/flux-2-klein-4B-outpaint-lora"
-    assert row["outpaint_preservation"] == "latent-locked-transition-band-no-postblend"
+    assert row["outpaint_preservation"] == "adaptive-content-aware-source-blend"
     assert row["outpaint_validated_padding"] == "5%,80%,5%,60%"
     assert row["outpaint_validated_fill_mode"] == "edge"
     assert row["outpaint_validated_max_canvas_pixels"] == 282880
@@ -715,7 +715,7 @@ def test_distilled_klein_publishes_reframe_and_outpaint_as_separate_rows(model):
     assert outpaint.supports_reframe is False
     assert outpaint.supports_outpaint is True
     assert outpaint.handler_id == "flux2.edit"
-    assert outpaint.outpaint_preservation == "latent-locked-transition-band-no-postblend"
+    assert outpaint.outpaint_preservation == "adaptive-content-aware-source-blend"
     # The green-canvas adapter proof is a base 4B q8 row; distilled rows recommend nothing.
     assert outpaint.outpaint_recommended_lora is None
 
@@ -1174,3 +1174,32 @@ def test_multi_reference_validation_records_list_reference_inputs():
         assert len(record.source_images) >= 2
         for source_image in record.source_images:
             assert Path(source_image).exists()
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("flux2-klein-base-4b", True),
+        ("flux2-klein-base-9b", True),
+        ("AbstractFramework/flux.2-klein-base-4b-8bit", True),
+        ("flux2-klein-4b", False),
+        ("AbstractFramework/flux.2-klein-9b-8bit", False),
+        ("qwen-image-edit-2511", True),
+        ("qwen-image", True),
+        ("z-image-turbo", True),
+        ("ernie-image-turbo", True),
+        ("fibo", True),
+        ("Wan-AI/Wan2.2-T2V-A14B-Diffusers", True),
+        ("bonsai", False),
+    ],
+)
+def test_capability_rows_publish_negative_prompt_support(model, expected):
+    # Base Klein runs true classifier-free guidance and takes a negative prompt; distilled Klein
+    # has no guidance branch; Bonsai's backend refuses the option. Every row of a model agrees.
+    capabilities = mlxgen.get_model_capabilities(model=model)
+
+    assert capabilities.capabilities, model
+    for capability in capabilities.capabilities:
+        assert capability.supports_negative_prompt is expected, capability.id
+        assert capability.to_dict()["supports_negative_prompt"] is expected
