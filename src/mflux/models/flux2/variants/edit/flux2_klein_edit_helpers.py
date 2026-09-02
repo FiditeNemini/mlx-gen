@@ -333,6 +333,53 @@ class _Flux2KleinEditHelpers:
         return mask_array
 
     @staticmethod
+    def outpaint_source_cell_mask(*, canvas: OutpaintCanvas, height: int, width: int) -> np.ndarray:
+        # True for every latent cell whose 16px canvas footprint holds at least one real
+        # source pixel. A cell straddling the source boundary counts as source: it carries
+        # the seam the model has to continue.
+        latent_height = height // 16
+        latent_width = width // 16
+        rows = np.zeros(latent_height, dtype=bool)
+        cols = np.zeros(latent_width, dtype=bool)
+        rows[canvas.paste_top // 16 : (canvas.paste_top + canvas.source_height - 1) // 16 + 1] = True
+        cols[canvas.paste_left // 16 : (canvas.paste_left + canvas.source_width - 1) // 16 + 1] = True
+        return rows[:, None] & cols[None, :]
+
+    @staticmethod
+    def outpaint_reference_conditioning(
+        *,
+        image_latents: mx.array | None,
+        image_latent_ids: mx.array | None,
+        canvas: OutpaintCanvas,
+        height: int,
+        width: int,
+    ) -> tuple[mx.array | None, mx.array | None]:
+        # The canvas reference tokens sit at the same (h, w) rope coordinates as the generation
+        # latents, one t index apart, and they stay clean at every step. A token for a cell that
+        # holds nothing but synthetic filler therefore hands the model a noise-free copy of the
+        # fill at exactly the position it is supposed to invent - the padded region is free in
+        # the latent lock and not free in the conditioning, and reconstructing the reference is
+        # then a perfectly good solution (the reported "un-denoised conditioning canvas": an
+        # edge-fill smear, or a flat block under `neutral`).
+        #
+        # Cells holding any real source pixel are kept, so the source, the transition band and
+        # every boundary cell still condition the run at their true positions.
+        if image_latents is None or image_latent_ids is None:
+            return image_latents, image_latent_ids
+        canvas_tokens = (height // 16) * (width // 16)
+        keep = _Flux2KleinEditHelpers.outpaint_source_cell_mask(canvas=canvas, height=height, width=width).reshape(-1)
+        if image_latents.shape[1] < canvas_tokens or bool(keep.all()):
+            return image_latents, image_latent_ids
+        indices = mx.array(np.flatnonzero(keep).astype(np.int32))
+        kept_latents = mx.take(image_latents[:, :canvas_tokens, :], indices, axis=1)
+        kept_ids = mx.take(image_latent_ids[:, :canvas_tokens, :], indices, axis=1)
+        if image_latents.shape[1] > canvas_tokens:
+            # Secondary references describe content, not the output geometry, and are untouched.
+            kept_latents = mx.concatenate([kept_latents, image_latents[:, canvas_tokens:, :]], axis=1)
+            kept_ids = mx.concatenate([kept_ids, image_latent_ids[:, canvas_tokens:, :]], axis=1)
+        return kept_latents, kept_ids
+
+    @staticmethod
     def reference_condition_dimensions(*, image_path: Path | str) -> tuple[int, int]:
         with Image.open(image_path) as image:
             width, height = image.size

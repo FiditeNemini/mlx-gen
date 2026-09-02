@@ -720,6 +720,11 @@ mlxgen generate \
   --output outpaint.png
 ```
 
+Padding takes CSS-style values in `top,right,bottom,left` order and each side is independent, so one
+call can extend a single side, both sides of an axis, or all four at different depths; `0` leaves
+that edge where it is. [Expanding On Any Side](reframe-outpaint.md#expanding-on-any-side) runs three
+source aspect ratios through eight padding configurations covering each of those shapes.
+
 Outpaint pastes the source onto a larger canvas and asks the model to complete the added area, so
 what fills that area before denoising decides much of the result. On FLUX.2 Klein routes you
 choose it with `--outpaint-fill {auto,edge,neutral,solid,blur}`, plus `--outpaint-fill-color` for

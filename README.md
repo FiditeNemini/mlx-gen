@@ -50,7 +50,8 @@ The main capabilities are:
   optional masked-area reference images on the Klein backend route — see
   `docs/masked-editing.md`), Qwen structured
   control where the selected model supports `--controlnet-image-path`, and route-specific
-  reframe/outpaint workflows where the selected model supports them, with a selectable outpaint
+  reframe/outpaint workflows where the selected model supports them, with per-side padding that
+  extends a single side, both sides of an axis, or all four in one call, a selectable outpaint
   conditioning canvas (`--outpaint-fill`) and strict source-locked outpaint on every FLUX.2 Klein
   model, distilled 4B/9B and base 4B/9B alike (distilled 4B q8 is the fastest measured route, at
   54.6 s on an Apple M5 Max — see `docs/reframe-outpaint.md`);
@@ -435,7 +436,7 @@ progress callbacks make long runs observable.
 - [Example workflow](docs/examples/spaceship-snow.md): reproducible image and video commands.
 - [Image upscaling](docs/upscaling.md): SeedVR2 sizing, published 3B/7B q8/q4 package usage, the host-safe video restore profile, published five-second Eiffel `1x` and `2x` 3B/7B validation bundles, readable tone-correction labels, and 5x source/output comparisons.
 - [Image edit capabilities](docs/edit-capabilities.md): image-edit contact sheets, exact model/package status, and command logs.
-- [Reframe and outpaint](docs/reframe-outpaint.md): `--reframe-padding` and `--outpaint-padding` routes, the `--outpaint-fill` conditioning-canvas modes and padding guidance, strict FLUX.2 Klein outpaint on distilled and base weights, and links to the exact Qwen and FLUX route proofs.
+- [Reframe and outpaint](docs/reframe-outpaint.md): `--reframe-padding` and `--outpaint-padding` routes, per-side padding across any single side or combination of sides, the `--outpaint-fill` conditioning-canvas modes and padding guidance, strict FLUX.2 Klein outpaint on distilled and base weights, and links to the exact Qwen and FLUX route proofs.
 - [Model management](docs/model-management.md): download, prepare, and run from local model files.
 - [Quantization](docs/quantization.md): q8/q4/BF16 policies and measurements.
 - [Python integration](docs/python-integration.md): route-resolved runtime loading, serial multi-output reuse for unified `mlxgen generate` families, SeedVR2's direct-model boundary, progress callbacks, and AbstractVision/AbstractCore notes.

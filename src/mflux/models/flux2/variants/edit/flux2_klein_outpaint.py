@@ -111,6 +111,14 @@ class Flux2KleinOutpaint(nn.Module):
             width=config.width,
             batch_size=latents.shape[0],
         )
+        if Path(reference_image_paths[0]) == Path(canvas.canvas_path):
+            image_latents, image_latent_ids = _Flux2KleinEditHelpers.outpaint_reference_conditioning(
+                image_latents=image_latents,
+                image_latent_ids=image_latent_ids,
+                canvas=canvas,
+                height=config.height,
+                width=config.width,
+            )
         editable_mask = _Flux2KleinEditHelpers.prepare_outpaint_edit_mask(
             canvas=canvas,
             height=config.height,

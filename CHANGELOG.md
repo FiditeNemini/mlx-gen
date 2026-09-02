@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-09-02
+
+### Fixed
+
+- **Outpaint could return the conditioning canvas instead of generated content.** On
+  `flux2.outpaint`, the padded region is released for the model to invent, but the same region was
+  also supplied as noise-free reference tokens at its own position on every step. Reconstructing
+  that reference is a valid solution to the denoising problem, so some runs returned the padding
+  essentially unchanged: a directional smear with `edge` fill, or a flat block with `neutral`.
+  Whether a given run was affected depended on the source content and the noise draw rather than on
+  the request, which is why the same padding depth could succeed on one image and fail on another.
+  The route now conditions only on canvas cells that contain real source pixels, so the whole
+  source, the transition band and every seam cell still guide the run at their true positions while
+  the invented region is genuinely free.
+
+  Measured on a 640x448 source extended 115px (Apple M5 Max, 40-core GPU, 128 GB), using padding
+  detail relative to source detail — at or above 1.0 means generated content, well below means the
+  canvas came back: the affected case moves from **0.57 to 1.54**, and an unaffected case is
+  unchanged at **1.56 to 1.57**.
+
 ## [0.32.0] - 2026-09-01
 
 Outpaint on every edit-reference route, and a Python API for it.

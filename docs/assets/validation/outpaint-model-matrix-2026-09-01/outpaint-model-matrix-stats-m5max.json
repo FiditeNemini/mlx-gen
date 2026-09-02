@@ -19,9 +19,9 @@
       "steps": 16,
       "guidance": 1.0,
       "seed": 8512,
-      "wall_seconds": 54.6,
+      "wall_seconds": 8.4,
       "artifact": "klein_4b_q8_distilled.png",
-      "generated_drift": 6.01,
+      "generated_drift": 10.62,
       "source_restore_applied": false
     },
     {
@@ -32,9 +32,9 @@
       "steps": 16,
       "guidance": 1.0,
       "seed": 8512,
-      "wall_seconds": 80.6,
+      "wall_seconds": 17.2,
       "artifact": "klein_9b_q8_distilled.png",
-      "generated_drift": 3.72,
+      "generated_drift": 4.68,
       "source_restore_applied": false
     },
     {
@@ -45,9 +45,9 @@
       "steps": 20,
       "guidance": 4.0,
       "seed": 8512,
-      "wall_seconds": 72.2,
+      "wall_seconds": 22.6,
       "artifact": "klein_base_4b_q8.png",
-      "generated_drift": 5.61,
+      "generated_drift": 5.9,
       "source_restore_applied": false
     },
     {
@@ -58,9 +58,9 @@
       "steps": 20,
       "guidance": 4.0,
       "seed": 8512,
-      "wall_seconds": 100.0,
+      "wall_seconds": 54.1,
       "artifact": "klein_base_9b_q8.png",
-      "generated_drift": 4.03,
+      "generated_drift": 4.88,
       "source_restore_applied": false
     },
     {
@@ -71,7 +71,7 @@
       "steps": 20,
       "guidance": 4.0,
       "seed": 8413,
-      "wall_seconds": 341.1,
+      "wall_seconds": 198.5,
       "artifact": "qwen_image_edit_2511_q8.png",
       "generated_drift": 9.35,
       "source_restore_applied": true
@@ -80,6 +80,7 @@
   "notes": [
     "generated_drift is the mean absolute difference (0-255) between the source crop and the same region as the model generated it, recorded in metadata as outpaint_source_restore_difference. It is measured BEFORE any restoration step.",
     "source_restore_applied reports whether the route pasted the original crop back over the result. The latent-locked FLUX.2 routes never do, so generated_drift is what ships. Qwen does when the figure is within its threshold, so its output carries the original pixels.",
-    "Wall time is the full command including weight load, not denoise time alone."
+    "Wall time is the full command with a warm weight cache. A first run after boot adds weight-load time.",
+    "Regenerated 2026-09-02 on 0.32.1."
   ]
 }

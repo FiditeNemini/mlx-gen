@@ -6,7 +6,8 @@ Every supported outpaint route, run on one source with one padding value.
 - Padding: `5%,80%,5%,60%` — expands to a 1040x272 canvas
 - Conditioning canvas: `--outpaint-fill auto` resolved to `edge` on every row (the deepest side,
   345 px on the right, is inside the 384 px edge-fill reach)
-- Machine: Apple M5 Max, 40-core GPU, 128 GB unified memory
+- Machine: Apple M5 Max, 40-core GPU, 128 GB unified memory. Times are warm-cache; a first run
+  after boot adds weight-load time.
 
 FLUX.2 Klein prompt, used for all four Klein rows:
 
@@ -18,7 +19,7 @@ the newly added space. The entire ship must fit inside the final wide frame. No 
 spacecraft, no repeated mountains, no text, no border.
 ```
 
-## FLUX.2 Klein 4B (distilled, q8) — 54.6 s
+## FLUX.2 Klein 4B (distilled, q8) — 8.4 s
 
 ```sh
 mlxgen generate \
@@ -31,7 +32,7 @@ mlxgen generate \
   --output klein_4b_q8_distilled.png
 ```
 
-## FLUX.2 Klein 9B (distilled, q8) — 80.6 s
+## FLUX.2 Klein 9B (distilled, q8) — 17.2 s
 
 ```sh
 mlxgen generate \
@@ -44,7 +45,7 @@ mlxgen generate \
   --output klein_9b_q8_distilled.png
 ```
 
-## FLUX.2 Klein Base 4B (q8) — 72.2 s
+## FLUX.2 Klein Base 4B (q8) — 22.6 s
 
 ```sh
 mlxgen generate \
@@ -57,7 +58,7 @@ mlxgen generate \
   --output klein_base_4b_q8.png
 ```
 
-## FLUX.2 Klein Base 9B (q8) — 100.0 s
+## FLUX.2 Klein Base 9B (q8) — 54.1 s
 
 ```sh
 mlxgen generate \
@@ -70,7 +71,7 @@ mlxgen generate \
   --output klein_base_9b_q8.png
 ```
 
-## Qwen Image Edit 2511 (q8) — 341.1 s
+## Qwen Image Edit 2511 (q8) — 198.5 s
 
 Qwen accepts a negative prompt and benefits from one on this source.
 

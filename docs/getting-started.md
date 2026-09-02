@@ -239,7 +239,8 @@ mlxgen generate \
 ```
 
 Use `--outpaint-padding` when you want MLX-Gen to expand the canvas and guide a supported edit
-model to fill the larger view:
+model to fill the larger view. Padding is CSS-style, in `top,right,bottom,left` order, and each side
+is independent, so one call can extend a single side, both sides of an axis, or all four:
 
 ```sh
 mlxgen generate \
