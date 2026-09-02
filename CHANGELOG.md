@@ -7,13 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-09-02
+
+Video restore routes work again on FFmpeg 9.
+
 ### Fixed
 
 - **Video restore routes on FFmpeg 9.** SeedVR2 and SwiftVR decode source frame windows through
   ffmpeg with `-vsync 0`, and FFmpeg 9.0 removed that option (deprecated since 5.1). Every restore
   run on a current Homebrew ffmpeg (9.0.1) failed at decode time with
   `Unrecognized option 'vsync'`. The decoder now passes the equivalent `-fps_mode passthrough`,
-  accepted by FFmpeg 5.1 and newer. Reported in #12.
+  accepted by FFmpeg 5.1 and newer, so FFmpeg 5.1 is the oldest supported release. Reported in
+  #12, fixed in #14.
+
+  The video encode color pipeline was re-verified on FFmpeg 9.0.1: the pinned BT.601 conversion
+  still produces YUV bytes identical to ffmpeg's default conversion at 320x240 and 1280x720, and
+  the `smpte170m` / `bt709` VUI tags are intact.
 
 ## [0.33.0] - 2026-09-02
 
