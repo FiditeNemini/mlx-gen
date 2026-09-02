@@ -11,6 +11,10 @@ Both options use CSS-style padding in `top,right,bottom,left` order. Percentages
 the source image size. For example, `5%,80%,5%,60%` adds a small top/bottom border, more space to
 the right, and a large extension to the left.
 
+Each side is independent, and `0` leaves that edge where it is. One call can therefore extend a
+single side, both sides of an axis, or all four at different depths — see
+[Expanding On Any Side](#expanding-on-any-side) for coverage across three source aspect ratios.
+
 `--reframe-padding` is always a generative edit workflow. `--outpaint-padding` is backend-specific:
 Qwen Image Edit uses generative canvas expansion with adaptive source restoration, while every
 FLUX.2 Klein model — distilled 4B/9B and base 4B/9B alike — runs strict outpaint with source-locked
@@ -128,13 +132,13 @@ reach for this source.
 
 | Model | Steps | Guidance | Time | Generated drift | Source region in output |
 | --- | --- | --- | --- | --- | --- |
-| FLUX.2 Klein 4B distilled q8 | 16 | 1 | **54.6 s** | 6.01 | redrawn (latent-locked) |
-| FLUX.2 Klein 9B distilled q8 | 16 | 1 | 80.6 s | **3.72** | redrawn (latent-locked) |
-| FLUX.2 Klein Base 4B q8 | 20 | 4 | 72.2 s | 5.61 | redrawn (latent-locked) |
-| FLUX.2 Klein Base 9B q8 | 20 | 4 | 100.0 s | 4.03 | redrawn (latent-locked) |
-| Qwen Image Edit 2511 q8 | 20 | 4 | 341.1 s | 9.35 | original pixels restored |
+| FLUX.2 Klein 4B distilled q8 | 16 | 1 | **8.4 s** | 10.62 | redrawn (latent-locked) |
+| FLUX.2 Klein 9B distilled q8 | 16 | 1 | 17.2 s | **4.68** | redrawn (latent-locked) |
+| FLUX.2 Klein Base 4B q8 | 20 | 4 | 22.6 s | 5.90 | redrawn (latent-locked) |
+| FLUX.2 Klein Base 9B q8 | 20 | 4 | 54.1 s | 4.88 | redrawn (latent-locked) |
+| Qwen Image Edit 2511 q8 | 20 | 4 | 198.5 s | 9.35 | original pixels restored |
 
-Time is the whole command including weight load.
+Time is the whole command with a warm weight cache; a first run after boot adds weight-load time.
 
 **Generated drift** is the mean absolute difference (0-255) between your original crop and the same
 region as the model generated it, recorded in every run's metadata as
@@ -150,7 +154,7 @@ together with the last column:
 
 How to read this if you are choosing a route:
 
-- **Distilled Klein 4B is the fastest** and runs at guidance 1, because those weights are
+- **Distilled Klein 4B is by far the fastest** and runs at guidance 1, because those weights are
   step-distilled. It is the route to reach for first.
 - **Use Qwen when the original crop must survive untouched.** Its adaptive restoration returns your
   exact pixels whenever the generated region stayed close enough, which the latent lock cannot
@@ -158,7 +162,8 @@ How to read this if you are choosing a route:
   the row above needs one to stop the model growing aircraft wings. The cost is speed: roughly
   4-6x the FLUX.2 routes here.
 - **Among the latent-locked routes, the 9B models hold the source closest**, distilled 9B most of
-  all. Choose them when you want a faithful crop without leaving FLUX.2.
+  all. Choose them when you want a faithful crop without leaving FLUX.2; distilled 4B trades the
+  most source fidelity for its speed.
 - Every route completed the ship and the valley without a visible seam at the original crop
   boundary.
 
@@ -166,6 +171,29 @@ Reproduce any row from the
 [command log](assets/validation/outpaint-model-matrix-2026-09-01/outpaint-model-matrix-command-log.md);
 the measurements are in
 [stats](assets/validation/outpaint-model-matrix-2026-09-01/outpaint-model-matrix-stats-m5max.json).
+
+## Expanding On Any Side
+
+Padding is independent per side, so a single request can extend one edge, both edges of an axis,
+or all four at once. Coverage across three source aspect ratios and eight padding configurations:
+
+| | |
+| --- | --- |
+| [Landscape 640x448](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-landscape.jpg) | [Square 512x512](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-square.jpg) |
+| [Portrait 448x640](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-portrait.jpg) | [Measurements](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-measurements.txt) |
+
+![Outpaint axis coverage, portrait source](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-portrait.jpg)
+
+Each sheet runs one source through: every single side, both vertical sides together, both
+horizontal sides together, all four sides, and an asymmetric four-side request. The red outline
+marks the original source, so everything outside it is generated. These runs use an **empty
+prompt** deliberately — with no instruction the model has the least to work from, so it is the
+hardest case; a descriptive prompt gives better results, not worse.
+
+The measurement beside each result is the mean absolute difference between the generated band and
+the conditioning canvas the model was given for it. It answers one question: did the model invent
+this region, or hand back the canvas? Reproduce any row from the
+[command log](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-command-log.md).
 
 ## Reframe Example
 

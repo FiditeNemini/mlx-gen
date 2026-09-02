@@ -282,6 +282,11 @@ print(results[0].artifact.extra_metadata["outpaint_fill"])
 # neutral
 ```
 
+`padding` takes the same CSS-style `top,right,bottom,left` string the CLI takes, and each side is
+independent: `"0%,10%,100%,10%"` above leaves the top edge in place, and `"0,0,25%,0"` extends only
+the bottom. One call can extend a single side, both sides of an axis, or all four at different
+depths.
+
 Swap the model name to move routes. Distilled FLUX.2 Klein 4B/9B run the same latent-locked
 outpaint route as the base models and take `guidance=1.0`; Qwen Image Edit variants run
 expanded-canvas generation with adaptive source restoration. Omit `guidance` and each model applies

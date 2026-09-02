@@ -469,7 +469,9 @@ revealing plausible missing object boundaries.
 
 Backend-specific outpaint is available for routes that advertise `supports_outpaint=true`. Use
 `--outpaint-padding` when you want MLX-Gen to build an expanded canvas and guide an edit model to
-fill the larger view:
+fill the larger view. Padding takes CSS-style values in `top,right,bottom,left` order and each side
+is independent, so one call can extend a single side, both sides of an axis, or all four at
+different depths; `0` leaves that edge where it is:
 
 ```sh
 mlxgen generate \
@@ -492,7 +494,10 @@ source-locked denoising with a narrow latent transition band and never repaints 
 afterwards (`latent-locked-transition-band-no-postblend`). Every Klein model runs it, distilled
 4B/9B at guidance 1.0 and base 4B/9B at guidance 4.0; omit `--guidance` and each takes its own
 default. [Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces) runs every supported
-route on one source and publishes the per-route timings and source drift; further proof is in
+route on one source and publishes the per-route timings and source drift, and
+[Expanding On Any Side](reframe-outpaint.md#expanding-on-any-side) runs three source aspect ratios
+through eight padding configurations covering every single side and every axis combination; further
+proof is in
 [Image Edit Capabilities](edit-capabilities.md#flux2-klein-base-4b-and-9b-source-proof).
 
 Neither strategy is a native fill/inpaint pipeline that receives an explicit diffusion mask, and
@@ -588,7 +593,7 @@ mlxgen generate \
 
 See [Reframe and Outpaint](reframe-outpaint.md) for padding guidance, the published proof, and the
 recommended adapter, and
-[Outpainted Area Comes Back As Streaks Instead Of New Content](troubleshooting.md#outpainted-area-comes-back-as-streaks-instead-of-new-content)
+[Outpainted Area Continues The Border Texture Instead Of Adding New Content](troubleshooting.md#outpainted-area-continues-the-border-texture-instead-of-adding-new-content)
 when the added area returns as stretched border texture.
 
 ### Negative Prompts

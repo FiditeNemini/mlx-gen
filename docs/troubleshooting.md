@@ -143,15 +143,16 @@ accept that the model may reshape or recompose the source. When the exact canvas
 aspect ratio than the source, add `--resize-mode crop` (center-crop) or `--resize-mode pad`
 (letterbox) to map the source onto it without distortion; the default `resize` stretches to fill.
 
-## Outpainted Area Comes Back As Streaks Instead Of New Content
+## Outpainted Area Continues The Border Texture Instead Of Adding New Content
 
-The space `--outpaint-padding` added returns as directional streaks, or as a smeared continuation of
-the source border, rather than as new subject matter.
+The space `--outpaint-padding` added returns as a stretched continuation of the source border, or as
+directional streaks, rather than as new subject matter.
 
-The likely cause is edge fill running deeper than it covers. Edge fill builds the conditioning
-canvas by stretching a strip of the source border outward across the padded area, so it continues an
-existing texture rather than inventing one. The depth that strip covers is the *edge-fill reach*;
-past it, the same strip is stretched far enough to read as one-dimensional streaks.
+What you are seeing is the conditioning canvas. `edge` fill builds it by stretching a strip of the
+source border outward across the padded area, so it continues an existing texture rather than
+inventing one. The depth that strip covers is the *edge-fill reach*; past it, the same strip is
+stretched far enough to read as one-dimensional streaks. The remedy is to pick a canvas that suits
+the padding depth, and `auto` makes that choice for you.
 
 Check which canvas the run used. Every outpaint run prints its resolved canvas on stderr before
 denoising:
@@ -219,10 +220,12 @@ Two further routes to better deep-padding results:
 `--outpaint-padding` computes the output size from the source and the padding, so do not add
 `--width`, `--height`, or `--canvas-policy` to any of these commands.
 
-To confirm the fix, rerun with the same seed and read the first stderr line: it should report the
+To confirm the result, rerun with the same seed and read the first stderr line: it should report the
 fill you asked for, and the added area should contain new content rather than stretched border
 texture. See [Reframe and Outpaint](reframe-outpaint.md#the-conditioning-canvas) for the full mode
-table and padding guidance.
+table and padding guidance, and
+[Expanding On Any Side](reframe-outpaint.md#expanding-on-any-side) for `auto` results across
+single-side, single-axis, and four-side padding on three source aspect ratios.
 
 ## Wan Video Quality Looks Weak At Tiny Sizes
 
@@ -327,9 +330,8 @@ To choose the generated image or video path, use `--output` with `mlxgen generat
 
 ## LoRA Is Missing
 
-LoRA support is route-specific. User-requested LoRAs are required: MLX-Gen no
-longer ignores a missing LoRA and continues without it. Download the LoRA repository or use a local
-`.safetensors` file path.
+LoRA support is route-specific. A requested LoRA is required: MLX-Gen fails the run rather than
+continuing without it. Download the LoRA repository or use a local `.safetensors` file path.
 
 ```sh
 mlxgen download --model RiverZ/normal-lora --all-files

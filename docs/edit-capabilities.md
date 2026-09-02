@@ -12,10 +12,11 @@ model/package status for MLX-Gen. It separates these related concepts:
 - `multi-reference`: two or more images are supplied as references for one composition.
 - `generative reframe`: larger-view generation with `--reframe-padding`. This is a
   zoom-out style edit, not source-preserving outpaint.
-- `canvas outpaint`: canvas extension with `--outpaint-padding`. Qwen Image Edit
-  variants use generative canvas expansion plus adaptive source restoration. FLUX.2 Klein
-  base variants use source-locked denoising and a narrow latent transition band instead of
-  post-generation source pasting, and expose the conditioning canvas through `--outpaint-fill`.
+- `canvas outpaint`: canvas extension with `--outpaint-padding`, independent per side. Qwen Image
+  Edit variants use generative canvas expansion plus adaptive source restoration. Every FLUX.2
+  Klein model — distilled 4B/9B and base 4B/9B — uses source-locked denoising and a narrow latent
+  transition band instead of post-generation source pasting, and exposes the conditioning canvas
+  through `--outpaint-fill`.
 
 If you need a plain-language guide to choosing between these modes, see
 [Image Edit Modes](image-edit-modes.md). For the current Qwen-specific route map and upstream
@@ -56,7 +57,7 @@ These rows used a `768x432`, 30-step, guidance `4` profile with
 
 ## Qwen Masked Edit / Inpaint
 
-MLX-Gen now exposes masked edit on the Qwen edit route through `--mask-path`. The current exact
+MLX-Gen exposes masked edit on the Qwen edit route through `--mask-path`. The current exact
 accepted proof row is:
 
 - `AbstractFramework/qwen-image-edit-2511-8bit` on `qwen.inpaint`
@@ -93,14 +94,14 @@ Exact commands and timings:
 
 ## Qwen Structured Control
 
-MLX-Gen now exposes one exact Qwen structured-control route through
+MLX-Gen exposes one exact Qwen structured-control route through
 `--controlnet-image-path`. The current accepted public row is:
 
 - `AbstractFramework/qwen-image-8bit` on `qwen.control`
 - exact sidecar: `InstantX/Qwen-Image-ControlNet-Union:diffusion_pytorch_model.safetensors`
 
 This slice is intentionally narrow. It is a text-to-image route with one control image, not a
-source-image edit route. Base-Qwen localized control-inpaint now has its own separate validated row
+source-image edit route. Base-Qwen localized control-inpaint has its own separate validated row
 below.
 
 ![Qwen Image q8 structured control proof](assets/validation/qwen-control-2026-06-15/qwen_q8_control_lightning_contact_sheet.png)
@@ -126,7 +127,7 @@ Exact commands and timings:
 
 ## Qwen Base Control-Inpaint
 
-MLX-Gen now exposes one exact base-Qwen localized control-inpaint route through the same public
+MLX-Gen exposes one exact base-Qwen localized control-inpaint route through the same public
 `image + mask + prompt` request shape. The current accepted public row is:
 
 - `AbstractFramework/qwen-image-8bit` on `qwen.control-inpaint`
@@ -220,6 +221,14 @@ drift, is published in
 [Reframe and Outpaint](reframe-outpaint.md#what-each-model-produces); the artifacts, command log
 and measurements live in
 [`outpaint-model-matrix-2026-09-01`](assets/validation/outpaint-model-matrix-2026-09-01/outpaint-model-matrix.jpg).
+
+Outpaint padding is independent per side, so one call can extend a single side, both sides of an
+axis, or all four at different depths.
+[Expanding On Any Side](reframe-outpaint.md#expanding-on-any-side) covers that surface on
+`AbstractFramework/flux.2-klein-9b-8bit`: three source aspect ratios (landscape 640x448, square
+512x512, portrait 448x640) run through eight padding configurations each, at 16 steps, guidance 1,
+seed 99 and an empty prompt. Contact sheets, per-band measurements and the command log are in
+[`outpaint-axis-coverage-2026-09-02`](assets/validation/outpaint-axis-coverage-2026-09-02/axis-coverage-command-log.md).
 
 These workflows are not native masked fill/inpaint pipelines. Reframe remains openly generative.
 Strict FLUX.2 outpaint aims to keep the source crop stable, but relies on latent-space editing
@@ -354,13 +363,13 @@ mlxgen generate \
 
 ## Z-Image Turbo Native Inpaint
 
-Z-Image Turbo now has one exact native inpaint proof row through unified `mlxgen generate`:
+Z-Image Turbo has one exact native inpaint proof row through unified `mlxgen generate`:
 
 - `AbstractFramework/z-image-turbo-8bit` on `z-image.inpaint`
 
 This is intentionally narrower than the Qwen edit surface. The accepted public proof is one
-same-prompt same-seed engine-thruster case that compares the old latent route against the new mask
-route on the same source image.
+same-prompt same-seed engine-thruster case that compares the latent route against the mask route on
+the same source image.
 
 ![Z-Image Turbo native inpaint proof](assets/validation/zimage-inpaint-2026-06-21/zimage_inpaint_contact_sheet.png)
 

@@ -313,6 +313,215 @@ def test_flux2_outpaint_mask_latent_layout_is_row_major_not_transposed():
         assert grid[row, col] == 0.0
 
 
+def _traceable_reference_tokens(latent_height: int, latent_width: int) -> tuple[mx.array, mx.array]:
+    # One token per latent cell, carrying its own flat index, with the ids
+    # prepare_reference_image_conditioning would build for the canvas reference.
+    tokens = latent_height * latent_width
+    latents = mx.array(np.arange(tokens, dtype=np.float32).reshape(1, tokens, 1))
+    ids = Flux2LatentCreator.prepare_grid_ids(
+        mx.zeros((1, 128, latent_height, latent_width), dtype=mx.float32),
+        t_coord=10,
+    )
+    return latents, ids
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    ("source_size", "target_size", "paste", "padding"),
+    [
+        # The reported A/B pair: same source, same 128px gap, opposite axes.
+        ((640, 448), (640, 576), (0, 0), (0, 0, 115, 0)),
+        ((640, 448), (768, 448), (0, 0), (0, 115, 0, 0)),
+        # Both sides padded, and the recorded validation envelope.
+        ((384, 384), (624, 384), (115, 0), (0, 115, 0, 115)),
+        ((432, 240), (1040, 272), (259, 12), (12, 345, 12, 259)),
+    ],
+)
+def test_flux2_outpaint_reference_conditioning_carries_no_pure_filler_token(source_size, target_size, paste, padding):
+    # The reported failure is the padded region coming back as the conditioning canvas.
+    # The canvas reference tokens sit at the same (h, w) rope coordinates as the generation
+    # latents, one t index apart, and stay clean at every step - so a token for a latent cell
+    # holding nothing but synthetic fill is a noise-free copy of the answer the model is meant
+    # to invent, at exactly the position it has to invent it. None may reach the transformer.
+    canvas = _outpaint_canvas(
+        source_width=source_size[0],
+        source_height=source_size[1],
+        target_width=target_size[0],
+        target_height=target_size[1],
+        paste_left=paste[0],
+        paste_top=paste[1],
+        padding=padding,
+    )
+    latent_height, latent_width = target_size[1] // 16, target_size[0] // 16
+    image_latents, image_latent_ids = _traceable_reference_tokens(latent_height, latent_width)
+
+    kept, kept_ids = _Flux2KleinEditHelpers.outpaint_reference_conditioning(
+        image_latents=image_latents,
+        image_latent_ids=image_latent_ids,
+        canvas=canvas,
+        height=target_size[1],
+        width=target_size[0],
+    )
+
+    cells = np.array(kept).reshape(-1).astype(int)
+    rows, cols = cells // latent_width, cells % latent_width
+    # Every surviving cell's 16px footprint must overlap the pasted source rectangle.
+    assert (rows * 16 < canvas.paste_top + canvas.source_height).all()
+    assert ((rows + 1) * 16 > canvas.paste_top).all()
+    assert (cols * 16 < canvas.paste_left + canvas.source_width).all()
+    assert ((cols + 1) * 16 > canvas.paste_left).all()
+    # Nothing that touches the source is dropped, so the seam still conditions the run.
+    expected_rows = (canvas.paste_top + canvas.source_height - 1) // 16 - canvas.paste_top // 16 + 1
+    expected_cols = (canvas.paste_left + canvas.source_width - 1) // 16 - canvas.paste_left // 16 + 1
+    assert kept.shape[1] == expected_rows * expected_cols
+    # The ids travel with the tokens they belong to, still at the reference t index.
+    assert np.array_equal(np.array(kept_ids)[0, :, 1], rows)
+    assert np.array_equal(np.array(kept_ids)[0, :, 2], cols)
+    assert set(np.array(kept_ids)[0, :, 0].tolist()) == {10}
+
+
+@pytest.mark.fast
+def test_flux2_outpaint_reference_conditioning_keeps_secondary_references_intact():
+    canvas = _outpaint_canvas(
+        source_width=640,
+        source_height=448,
+        target_width=768,
+        target_height=448,
+        paste_left=0,
+        paste_top=0,
+        padding=(0, 115, 0, 0),
+    )
+    latent_height, latent_width = 28, 48
+    canvas_latents, canvas_ids = _traceable_reference_tokens(latent_height, latent_width)
+    extra_latents = mx.full((1, 7, 1), -1.0, dtype=mx.float32)
+    extra_ids = mx.full((1, 7, 4), 20, dtype=mx.int32)
+
+    kept, kept_ids = _Flux2KleinEditHelpers.outpaint_reference_conditioning(
+        image_latents=mx.concatenate([canvas_latents, extra_latents], axis=1),
+        image_latent_ids=mx.concatenate([canvas_ids, extra_ids], axis=1),
+        canvas=canvas,
+        height=448,
+        width=768,
+    )
+
+    assert kept.shape[1] == 28 * 40 + 7
+    assert np.array_equal(np.array(kept[:, -7:, :]), np.array(extra_latents))
+    assert np.array_equal(np.array(kept_ids[:, -7:, :]), np.array(extra_ids))
+
+
+@pytest.mark.fast
+def test_flux2_outpaint_reference_conditioning_is_a_no_op_without_pure_filler_cells():
+    # Only the 16-multiple round-up adds pixels, and it adds less than one latent cell,
+    # so every cell still holds source and the reference stream must pass through unchanged.
+    canvas = _outpaint_canvas(
+        source_width=636,
+        source_height=444,
+        target_width=640,
+        target_height=448,
+        paste_left=0,
+        paste_top=0,
+        padding=(0, 0, 0, 0),
+    )
+    image_latents, image_latent_ids = _traceable_reference_tokens(28, 40)
+
+    kept, kept_ids = _Flux2KleinEditHelpers.outpaint_reference_conditioning(
+        image_latents=image_latents,
+        image_latent_ids=image_latent_ids,
+        canvas=canvas,
+        height=448,
+        width=640,
+    )
+
+    assert kept is image_latents
+    assert kept_ids is image_latent_ids
+
+
+@pytest.mark.fast
+def test_flux2_outpaint_route_never_conditions_on_a_pure_filler_canvas_cell(monkeypatch, tmp_path):
+    # End-to-end wiring pin for the reported failure, with no weights: run the outpaint route
+    # over a stub transformer and assert that what actually reaches the model carries no
+    # reference token for a latent cell made entirely of conditioning-canvas filler.
+    from mlx import nn
+
+    from mflux.callbacks.callback_registry import CallbackRegistry
+    from mflux.models.common.config.model_config import ModelConfig
+    from mflux.models.flux2.variants.edit.flux2_klein_outpaint import Flux2KleinOutpaint
+    from mflux.utils.outpaint_util import OutpaintUtil
+
+    source_path = tmp_path / "source.png"
+    Image.new("RGB", (640, 448), color="white").save(source_path)
+    canvas = OutpaintUtil.create_expanded_canvas(
+        source_path=source_path,
+        padding_value="0,115,0,0",
+        output_path=tmp_path / "canvas.png",
+    )
+    assert (canvas.target_width, canvas.target_height) == (768, 448)
+
+    def fake_encode_image(*, vae, image_path, height, width, tiling_config=None, resize_mode="resize", **kwargs):
+        del vae, image_path, tiling_config, resize_mode, kwargs
+        return mx.zeros((1, 32, height // 8, width // 8), dtype=mx.float32)
+
+    monkeypatch.setattr(
+        "mflux.models.flux2.variants.edit.flux2_klein_edit_helpers.LatentCreator.encode_image",
+        staticmethod(fake_encode_image),
+    )
+    monkeypatch.setattr(
+        Flux2KleinEdit,
+        "_encode_prompt_pair",
+        lambda self, *, prompt, negative_prompt, guidance: (
+            mx.zeros((1, 4, 7680), dtype=mx.float32),
+            mx.zeros((1, 4, 4), dtype=mx.int32),
+            None,
+            None,
+        ),
+    )
+
+    seen: dict = {}
+
+    def capturing_predict(**kwargs):
+        seen.update(kwargs)
+        return mx.zeros_like(kwargs["latents"])
+
+    class _FakeVAE(_FakeFlux2VAE):
+        def decode_packed_latents(self, packed_latents):
+            del packed_latents
+            return mx.zeros((1, 3, canvas.target_height, canvas.target_width), dtype=mx.float32)
+
+    model = Flux2KleinOutpaint.__new__(Flux2KleinOutpaint)
+    nn.Module.__init__(model)
+    model.model_config = ModelConfig.flux2_klein_4b()
+    model.vae = _FakeVAE()
+    model.transformer = SimpleNamespace()
+    model.tiling_config = None
+    model.prompt_cache = {}
+    model.callbacks = CallbackRegistry()
+    model.compiled_predict_cache = SimpleNamespace(get_or_build=lambda **kwargs: capturing_predict)
+    model.bits = None
+    model.lora_paths = None
+    model.lora_scales = None
+
+    model.generate_image(seed=99, prompt="", canvas=canvas, num_inference_steps=2)
+
+    latent_height, latent_width = canvas.target_height // 16, canvas.target_width // 16
+    generation_tokens = latent_height * latent_width
+    reference_ids = np.array(seen["image_latent_ids"])[0]
+    assert seen["latents"].shape[1] == generation_tokens
+    # Every reference token must sit on a latent cell that holds real source pixels. Before
+    # the fix the reference stream was the whole canvas grid, so latent columns 40-47 - the
+    # 128px of pure edge-fill smear - were handed to the model clean at every step.
+    assert reference_ids[:, 2].max() == (640 - 1) // 16
+    assert len(reference_ids) == latent_height * (640 // 16)
+    editable = np.array(
+        _Flux2KleinEditHelpers.prepare_outpaint_edit_mask(
+            canvas=canvas, height=canvas.target_height, width=canvas.target_width
+        )
+    ).reshape(latent_height, latent_width)
+    filler_only = np.zeros((latent_height, latent_width), dtype=bool)
+    filler_only[:, 640 // 16 :] = True
+    assert (editable[filler_only] == 1.0).all()  # those cells are free in the latent lock
+    assert not any(bool(filler_only[h, w]) for h, w in reference_ids[:, 1:3])  # and free in the conditioning
+
+
 @pytest.mark.fast
 def test_flux2_preserved_source_latents_match_the_post_step_noise_level():
     # scheduler.step moves latents from sigmas[t] to sigmas[t + 1], and the mask blend runs
