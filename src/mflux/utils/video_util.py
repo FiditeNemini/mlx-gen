@@ -1337,8 +1337,11 @@ class VideoUtil:
             str(path),
             "-vf",
             filter_expression,
-            "-vsync",
-            "0",
+            # Passthrough keeps a 1:1 mapping between decoded frames and the select
+            # filter's frame index. `-fps_mode` has been the name since FFmpeg 5.1;
+            # the older `-vsync 0` spelling was removed in FFmpeg 9.0.
+            "-fps_mode",
+            "passthrough",
             "-an",
             "-sn",
             "-dn",

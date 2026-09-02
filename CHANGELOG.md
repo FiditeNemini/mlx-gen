@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Video restore routes on FFmpeg 9.** SeedVR2 and SwiftVR decode source frame windows through
+  ffmpeg with `-vsync 0`, and FFmpeg 9.0 removed that option (deprecated since 5.1). Every restore
+  run on a current Homebrew ffmpeg (9.0.1) failed at decode time with
+  `Unrecognized option 'vsync'`. The decoder now passes the equivalent `-fps_mode passthrough`,
+  accepted by FFmpeg 5.1 and newer. Reported in #12.
+
 ## [0.33.0] - 2026-09-02
 
 Outpaint on both axes without duplicating the subject, the original crop restored on every route,
